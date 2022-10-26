@@ -1,0 +1,12 @@
+m|ENOLifecycleWebUI\ReviseFromWidget.mweb
+b|j|c,m
+b|c|c,m
+v|6.421.8.19260
+r|G:\R421\BSF\.
+t|win_b64\webapps\ReviseFromWidget\ReviseFromWidget.css|1568749456|348
+s|ENOLifecycleWebUI\ReviseFromWidget.mweb\src\ReviseFromWidget.css|1536154961|473
+t|win_b64\webapps\ReviseFromWidget\ReviseFromWidget.js|1567808839|36522
+s|ENOLifecycleWebUI\ReviseFromWidget.mweb\src\ReviseFromModel.js|1538656553|4429
+s|ENOLifecycleWebUI\ReviseFromWidget.mweb\src\ReviseFromWidget.js|1563542478|51386
+s|ENOLifecycleWebUI\ReviseFromWidget.mweb\src\ReviseFromController.js|1567065124|10096
+s|ENOLifecycleWebUI\ReviseFromWidget.mweb\src\NewRevisionFromTree.js|1559651268|14845

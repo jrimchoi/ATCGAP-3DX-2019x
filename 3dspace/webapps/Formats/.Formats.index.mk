@@ -1,0 +1,9 @@
+m|WebVisualization\Formats.mweb
+b|j|n,m
+b|c|c,m
+v|6.421.7.19180
+r|G:\R421\BSF\.
+t|win_b64\webapps\Formats\Formats.js|1531550814|0
+s|WebVisualization\Formats.mweb\src\Formats.js|1425399768|1
+t|win_b64\webapps\Formats\CGRFile.js|1561768698|222529
+s|WebVisualization\Formats.mweb\src\CGRFile.js|1561045877|624604

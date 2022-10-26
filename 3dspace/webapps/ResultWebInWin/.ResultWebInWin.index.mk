@@ -1,0 +1,10 @@
+m|SNResultUX\ResultWebInWin.mweb
+b|j|c,m
+b|c|c,m
+v|6.421.8.19254
+r|G:\R421\BSF\.
+t|win_b64\webapps\ResultWebInWin\ResultWebInWin.html|1562702282|23063
+s|SNResultUX\ResultWebInWin.mweb\src\ResultWebInWin.html|1562528050|23063
+t|win_b64\webapps\ResultWebInWin\ResultWebInWin.js|1568231350|24289
+s|SNResultUX\ResultWebInWin.mweb\src\ResultWebInWin.js|1567598911|51250
+s|SNResultUX\ResultWebInWin.mweb\src\ResultWebInWinAction.js|1509952484|4053

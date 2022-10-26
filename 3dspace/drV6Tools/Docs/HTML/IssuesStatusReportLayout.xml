@@ -1,0 +1,159 @@
+<document>      
+ <!-- We are going to use a template file so don't need a blank workbook --> 
+ <useBlankWorkbook>FALSE</useBlankWorkbook> 
+
+ <!-- This is the 'Type' of the Document we are going to use as a template -->
+ <templateType>Document Template</templateType> 
+
+ <!-- This is the 'Name' of the Document we are going to use as a template --> 
+ <templateName>ISS-TEMP-0001</templateName> 
+
+ <!-- This is the 'Revision' of the Document we are going to use as a template --> 
+ <templateRevision>1</templateRevision> 
+
+ <!-- This is the 'File Name' of the Document we are going to use as a template --> 
+ <templateFileName>Issues_Status_Report.xlsx</templateFileName> 
+
+ <!-- A query Filter can be used to filter (i.e. hide information we are not interested in). This report does not have a Query Filter --> 
+ <queryFilters>
+ </queryFilters>
+
+ <!-- You may have calculated cells (e.g. adding one column value to another). This forces the formulas to be refreshed in Excel once the -->
+ <!-- database export has completed --> 
+ <forceCellCalculationUpdate>true</forceCellCalculationUpdate>
+
+ <!-- The contents of one or many Worksheets are defined within here --> 
+ <workSheets>   
+
+  <!-- This section is specific to a single worksheet - in this case the 'Issue - Raw Data' Worksheet --> 
+  <!--  ##################################--> 
+  <!--  ### Issue - Raw Data WORKSHEET ###-->
+  <!--  ##################################-->  
+  <workSheet>    
+
+   <!-- This command advises that a 'new' blank worksheet is not required -->   
+   <useBlankWorksheet>FALSE</useBlankWorksheet>
+
+   <!-- This statement lets the report generator know this section is populating the 'Issues - Raw Data' Worksheet -->  
+   <workSheetName>Issues - Raw Data</workSheetName>
+
+   <!-- Values can be passed into a fixed location. In this case, specific cell locations on the template -->  
+   <!-- In this example, no data is being passed to a fixed cell but an example is included and commented out --> 
+   <fixedCells> 
+    <!-- Advising that it's Column A, row 1 which will be populated using the value from the database -->    
+    <!--<cell column="A" row="1"> -->
+
+    <!-- The name of the attribute which will be populated into the previously stated A1 cell -->
+    <!-- Note that the ID of the object which initiated the report generation activity is passed to the report generator -->
+    <!-- This means that the 'name' listed below in this case is the name of the Workspace/Project Space/Object where the -->
+    <!-- report was initiated from. -->
+
+    <!--<value>name</value> -->  
+    <!--</cell> -->
+   </fixedCells>
+
+   <!-- A Row Repeater is used to extract information from the database, and populate the rows within the report  --> 
+   <rowRepeaters>  
+
+    <!-- The contents of the row repeater start with this statement -->      
+    <rowRepeater>
+
+     <!-- As the template has a 'header row' with some formatted titles on row 1 of the template, the rows of the report start at row 2 of this worksheet --> 
+     <startRow>2</startRow> 
+
+     <!-- This defines the 'query' element of the information to be retrieved from the database to populate the spreadsheet -->  
+     <!-- In this case the equivalent of a temp bus query is being run to find all object with a 'Type' of 'Issue' -->
+     <!-- All of the 'basic' attributes held against the Issue are retreived during this query also. -->
+     <!-- The query will return only Issues with a Policy of 'Issue' which are not in a 'Closed' state -->
+     <!-- The mqlselectables require to be stated as they are not held directly as a 'basic' attribute against the object so require to be explicitly stated-->
+
+     <query queryType="temp" objectidposition="3" orderby="name" dumpdelimiter="|" typePattern="Issue" namePattern="*" revisionPattern="*" retrieveAllBasics="true" attributes="" wherePattern='policy == "Issue" &amp;&amp; current != "Closed" ' mqlSelectables="state[Create].duration,state[Assign].duration,state[Active].duration,state[Review].duration"></query> 
+
+     <!-- The attributes below are populated on each row and object is returned for -->  
+     <cells>   
+      <cell column="A">  
+       <value>name</value>
+      </cell>
+      <cell column="B">  
+       <value>description</value>
+      </cell>
+      <cell column="C">  
+       <value>Priority</value>
+      </cell>
+      <cell column="D">  
+       <value>current</value>
+      </cell>
+      <cell column="E">  
+       <value>owner</value>
+      </cell>
+      <cell column="F" type="date"> 
+       <format formatString="dd-MMM-yy" type="date">   
+        <value>Estimated Start Date</value>
+       </format>
+      </cell>    
+      <cell column="G" type="date"> 
+       <format formatString="dd-MMM-yy" type="date">    
+        <value>Estimated End Date</value>
+       </format>
+      </cell>
+
+      <!-- See 'row repeater' section for column H -->
+
+      <cell column="I">  
+       <value>state[Create].duration</value>
+      </cell>
+      <cell column="J">  
+       <value>state[Assign].duration</value>
+      </cell>   
+      <cell column="K">  
+       <value>state[Active].duration</value>
+      </cell>
+      <cell column="L">  
+       <value>state[Review].duration</value>
+      </cell>
+      <cell column="M" type="date"> 
+       <format formatString="dd-MMM-yy" type="date">   
+        <value>modified</value>
+       </format>
+      </cell>
+      <cell column="N" type="date"> 
+       <format formatString="dd-MMM-yy" type="date">    
+        <value>originated</value>
+       </format>
+      </cell>
+      <cell column="O">  
+       <value>Originator</value>
+      </cell>    
+     </cells>
+
+     <!-- A Sub Repeater expands from the object which has been found to find information related to the object. -->
+     <!-- At this point, the Issue has provided the ID  to expand along the 'Issue' Relationship -->
+     <!-- The spreadsheet may have several rows of 'Issues / Reported Against' listed at this point-->
+
+     <subRepeaters> 
+      <rowRepeater> 
+
+       <!-- This value is zero as we would like the Reported Against value to appear on the same line as the previously found Issue -->  
+       <startRow>0</startRow> 
+
+       <!-- Reported Against Value -->
+       <!-- This query finds the associated 'Reported Against' objects to list in the spreadsheet -->
+       <query queryType="expand"  objectidposition="6" relationshipidposition="8"  orderby="7" dumpdelimiter="|" >
+        expand bus ${ID} from relationship "Issue" type "*" recurse to 1 select bus id dump |
+       </query>       
+
+       <!-- The attributes of the 'Reported Against' object are populated onto the spreadsheet --> 
+       <cells> 
+        <cell column="H"> 
+         <value>name</value>
+        </cell>      
+       </cells>
+       <subRepeaters> 
+       </subRepeaters>     
+      </rowRepeater>
+     </subRepeaters>    
+    </rowRepeater>
+   </rowRepeaters>
+  </workSheet>
+ </workSheets>
+</document>
