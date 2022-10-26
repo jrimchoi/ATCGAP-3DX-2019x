@@ -1,0 +1,36 @@
+var params = proc.declareParameters(["rootids", "type", "name", "revision", "vault"],["label","labelAbort"]);
+
+if (rootids.length <= 0 )
+{
+	proc.write(label, null, "rootids is empty");
+}
+else
+{
+	var rootIdArray = JSON.parse(rootids);
+	var listPid = rootIdArray.join();
+	var fullwhere = "(physicalid matchlist '" + listPid + "' ',')";
+
+	var cmd = "temp query bus $1 $2 $3 where $4 vault $5";
+	params.addVars([type, name, revision, fullwhere, vault]);
+
+	cmd += " select";
+	cmd += " notsubstitute";
+
+  cmd +=  params.addVar("physicalid");
+	cmd +=  params.addVar("to[PLMInstance].physicalid");
+
+	cmd += " dump" + params.addVar("|");
+	cmd += " json";
+
+	mql.startTransaction(true);
+
+	mql.runAsUserAgent(function() {	
+		mql.execute(label, cmd, params);
+	});
+	
+	if (labelAbort)
+		mql.abortTransaction(null, true, labelAbort);
+	else
+		mql.abortTransaction(); 
+}
+

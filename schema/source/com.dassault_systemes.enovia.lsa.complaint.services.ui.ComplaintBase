@@ -1,0 +1,1854 @@
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+import matrix.db.AccessConstants;
+import matrix.db.Attribute;
+import matrix.db.AttributeList;
+import matrix.db.AttributeType;
+
+import com.dassault_systemes.enovia.actiontasks.ActionTasks;
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.LSALicense;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.complaint.services.PatientService;
+import com.dassault_systemes.enovia.lsa.complaint.services.ReturnFulfillmentService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ContactService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangePolicy;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangeType;
+import com.dassault_systemes.enovia.lsa.ticket.services.EventService;
+import com.dassault_systemes.enovia.lsa.ticket.services.HistoryService;
+import com.dassault_systemes.enovia.lsa.ticket.services.MyComplaintWorkQueueService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.UOMUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.i18nNow;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws ComplaintException
+	 */
+	static Map<String, Boolean> ColsInfo = new HashMap<String, Boolean>();
+
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+		super();
+		// ColsInfo.put(arg0, arg1);
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	private MyComplaintWorkQueueService getMyComplaintWorkQueueService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = (MyComplaintWorkQueueService) component
+					.getService(MyComplaintWorkQueueService.class);
+			return myComplaintWorkQueueService;
+
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets EventService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return EventService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private EventService getPQCEventService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			EventService eventService = (EventService) component.getService(EventService.class);
+			return eventService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	private static ContactService getContactService(Context context) throws ComponentException {
+		final Component LSAContactsCore = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		final ContactService service = (ContactService) LSAContactsCore.getService(ContactService.class);
+		return service;
+	}
+
+	/**
+	 * Gets PatientService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return PatientService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private PatientService getPatientService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.COLS_CORE_COMPONENT);
+			PatientService patientService = (PatientService) component.getService(PatientService.class);
+			return patientService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets HistoryService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private HistoryService getPQCHistoryService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			HistoryService historyService = (HistoryService) component.getService(HistoryService.class);
+			return historyService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets the range values for Gender
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing values for field_choices and
+	 *         field_display_choices.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldGender(Context context, String args[]) throws ComplaintException {
+		try {
+			return Helper.getAttributeRanges(context, TicketConstants.SYMBOLIC_ATTRIBUTE_GENDER);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Creates complaint,creates default event, create Contacts if does not
+	 * exist,creates Patient if any Patient related details provided,connect
+	 * Patient to default created Event, connect product to the default event,
+	 * and associate event and contact to complaint.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing value for Complaint Object Id.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createComplaint(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<String, String> complaintAttributeMap = new HashMap<String, String>();
+			Map<String, String> eventAttributeMap = new HashMap<String, String>();
+			Map<String, String> modelAttributeMap = new HashMap<String, String>();
+			StringList slExperienceCodes = FrameworkUtil.split((String) programMap.get(TicketConstants.DISPLAY_EXPERIENCE_CODE), "|");
+			String strExperienceCode = (String) slExperienceCodes.get(0);
+			String strIssueCodeList = (String) programMap.get(TicketConstants.DISPLAY_ISSUE_CODE);
+			String strIssueCode = !Helper.isNullOrEmpty(strIssueCodeList) ? (String) FrameworkUtil.split(strIssueCodeList, "|").get(0)
+					: DomainConstants.EMPTY_STRING;
+			String strProductModelId = (String) programMap.get(TicketConstants.PRODUCT_MODEL_OID);
+			String strReleasedProductId = (String) programMap.get("ReleasedProduct");
+			String timeZone = (String) programMap.get(TicketConstants.TIME_ZONE);
+			String strComplaintDateOfAwareness = (String) programMap.get(TicketConstants.FIELD_COMPLAINT_DATE_OF_AWARENESS);
+			strComplaintDateOfAwareness = !Helper.isNullOrEmpty(strComplaintDateOfAwareness)
+					? TicketUtil.getFormattedInputDate(context, strComplaintDateOfAwareness, timeZone)
+					: TicketUtil.getFormattedTodaysInputDate(context);
+			String strComplaintDateOfOccurence = (String) programMap.get(TicketConstants.FIELD_EVENT_DATE_OF_OCCURRENCE);
+			strComplaintDateOfOccurence = !Helper.isNullOrEmpty(strComplaintDateOfOccurence)
+					? TicketUtil.getFormattedInputDate(context, strComplaintDateOfOccurence, timeZone)
+					: TicketUtil.getFormattedTodaysInputDate(context);
+
+			// Attribute Map for Complaint
+			complaintAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_SOURCE),
+					(String) programMap.get(TicketConstants.FIELD_COMPLAINT_SOURCE));
+			complaintAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY),
+					(String) programMap.get(TicketConstants.FIELD_SEVERITY));
+			complaintAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_DATE_OF_AWARENESS),
+					strComplaintDateOfAwareness);
+			complaintAttributeMap.put(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Originator),
+					context.getUser());
+
+			// Attribute Map for Event
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EXPERIENCE_CODE), strExperienceCode);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_EVENT), "True");
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL),
+					(String) programMap.get(TicketConstants.FIELD_DESCRIBE_PROBLEM));
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EVENT_TIMING), "Unknown");
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ISSUE_CODE), strIssueCode);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_DATE_OF_OCCURRENCE),
+					strComplaintDateOfOccurence);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_attribute_Originator), context.getUser());
+
+			// Attribute Map for Complaint Event Product Relationship
+			modelAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SERIAL_NUMBER),
+					(String) programMap.get(TicketConstants.FIELD_SERIAL_NUMBER));
+			modelAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_DEVICE_IN_USE),
+					(String) programMap.get(TicketConstants.FIELD_DEVICE_IN_USE));
+
+			// Attribute Map for Patient
+			DomainObject dmoModel = DomainObject.newInstance(context, strProductModelId);
+			if (!Helper.isNullOrEmpty(strReleasedProductId)) {
+				dmoModel = DomainObject.newInstance(context, strReleasedProductId);
+			}
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoComplaint = complaintTicketService.createComplaintTicket(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT,
+					TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD, dmoModel, complaintAttributeMap, eventAttributeMap, modelAttributeMap);
+			if (programMap.containsKey(TicketConstants.FIELD_GENDER)) {
+				AttributeList patientAttrList = new AttributeList();
+				String dob = (String) programMap.get(TicketConstants.FIELD_DATE_OF_BIRTH);
+				String dateofbirth = DomainConstants.EMPTY_STRING;
+				if (!Helper.isNullOrEmpty(dob)) {
+					dateofbirth = Helper.getFormattedDate(context, (String) programMap.get(TicketConstants.FIELD_DATE_OF_BIRTH));
+					patientAttrList.add(new Attribute(
+							new AttributeType(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_DATE_OF_BIRTH)),
+							getStringList(dateofbirth)));
+				}
+				StringList GENDER = getStringList((String) programMap.get(TicketConstants.FIELD_GENDER));
+				StringList WEIGHT = getStringList((String) programMap.get(TicketConstants.FIELD_WEIGHT));
+				StringList ETHNICITY = getStringList((String) programMap.get(TicketConstants.FIELD_ETHNICITY));
+				Map<?, ?> requestMap = (Map<?, ?>) programMap.get("RequestValuesMap");
+				StringList RACE = getStringList((String[]) requestMap.get("Race"));
+				RACE.remove(" ");
+
+				patientAttrList.add(
+						new Attribute(new AttributeType(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_GENDER)), GENDER));
+				patientAttrList.add(
+						new Attribute(new AttributeType(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_WEIGHT)), WEIGHT));
+				patientAttrList.add(new Attribute(
+						new AttributeType(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ETHNICITY)), ETHNICITY));
+				patientAttrList.add(
+						new Attribute(new AttributeType(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_RACE)), RACE));
+
+				PatientService patientService = getPatientService(context);
+				DomainObject domPatient = patientService.createPatient(context, patientAttrList);
+
+				EventService eventService = getPQCEventService(context);
+				List<Map<?, ?>> eventListMap = eventService.getEvents(context, dmoComplaint);
+				Map eventMap = (Map) eventListMap.get(0);
+				String strEventId = (String) eventMap.get(DomainConstants.SELECT_ID);
+
+				DomainRelationship.connect(context, DomainObject.newInstance(context, strEventId),
+						PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PATIENT), domPatient);
+			}
+
+			returnMap.put("id", dmoComplaint.getObjectId());
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+
+	private StringList getStringList(String... args) {
+		StringList sl = Helper.stringList();
+		if (args.length > 0 && !args[0].isEmpty()) {
+			sl = Helper.stringList(args);
+		}
+
+		return sl;
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionCreatePatientAndConnectToComplaintEvent(Context context, String[] args) throws ComplaintException {
+		try {
+			try {
+				Helper.isLicenseAssigned(context, LSALicense.AERG);
+			}
+			catch (Exception e) {
+				return "refreshOpenerWindow()";
+			}
+
+			String PATIENT_DOB = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_PATIENT_DOB);
+			String GENDER = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_GENDER);
+			String ETHNICITY = PropertyUtil.getSchemaProperty(context, "attribute_Ethnicity");
+			String RACE = PropertyUtil.getSchemaProperty(context, "attribute_Race");
+			String WEIGHT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_WEIGHT);
+
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] strDOB = (String[]) programMap.get(TicketConstants.FIELD_DATE_OF_BIRTH);
+			String[] strGender = (String[]) programMap.get(TicketConstants.FIELD_GENDER);
+			String gender = !Helper.isNullOrEmpty(strGender[0]) ? strGender[0] : DomainConstants.EMPTY_STRING;
+			String[] strWeight = (String[]) programMap.get(TicketConstants.FIELD_WEIGHT);
+			String weight = !Helper.isNullOrEmpty(strWeight[0]) ? strWeight[0] : DomainConstants.EMPTY_STRING;
+			String[] cptID = (String[]) programMap.get("newObjectId");
+			DomainObject dmoComplaint = DomainObject.newInstance(context, cptID[0]);
+			String[] timeZone = (String[]) programMap.get(TicketConstants.TIME_ZONE);
+
+			if (!(Helper.isNullOrEmpty(strDOB) && Helper.isNullOrEmpty(gender) && Helper.isNullOrEmpty(weight))) {
+				EventService eventService = getPQCEventService(context);
+				List<Map<?, ?>> eventListMap = eventService.getEvents(context, dmoComplaint);
+				if (eventListMap.size() > 0) {
+					List<String> lsEventId = Helper.stringList();
+					for (Object object : eventListMap) {
+						Map eventMap = (Map) object;
+						String strEventId = (String) eventMap.get(DomainConstants.SELECT_ID);
+						lsEventId.add(strEventId);
+					}
+					AttributeList attrList = new AttributeList();
+					if (!Helper.isNullOrEmpty(strDOB[0]) && !Helper.isNullOrEmpty(timeZone[0])) {
+						attrList.add(
+								new Attribute(new AttributeType(PATIENT_DOB), TicketUtil.getFormattedInputDate(context, strDOB[0], timeZone[0])));
+					}
+					attrList.add(new Attribute(new AttributeType(GENDER), gender));
+
+					String[] strEthnicity = (String[]) programMap.get("Ethnicity");
+					if (!Helper.isNullOrEmpty(strEthnicity[0].trim())) {
+						attrList.add(new Attribute(new AttributeType(ETHNICITY), strEthnicity[0]));
+					}
+
+					String[] strRace = (String[]) programMap.get("Race");
+					if (!Helper.isNullOrEmpty(strRace[0].trim())) {
+						StringList slRace = new StringList(strRace);
+						attrList.add(new Attribute(new AttributeType(RACE), slRace));
+					}
+
+					String[] dimension = (String[]) programMap.get("units_Weight");
+					if (!Helper.isNullOrEmpty(dimension[0])) {
+						String strWeightValue = UOMUtil.convertToDefaultUnit(context,
+								PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_WEIGHT), weight, dimension[0]);
+						attrList.add(new Attribute(new AttributeType(WEIGHT), strWeightValue));
+					}
+					PatientService patientService = getPatientService(context);
+					DomainObject dmoPatient = patientService.createPatient(context, attrList);
+					patientService.addEventsToPatient(context, dmoPatient, lsEventId);
+				}
+			}
+			return "refreshOpenerWindow()";
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ComplaintException
+	 */
+
+	public Vector getTableLPQCPTSearchColumnAERName(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get("objectList");
+			Helper.ensureNotNull(objList, "objList");
+			ArrayList<String> columnVals = new ArrayList<String>(objList.size());
+			Iterator objListItr = objList.iterator();
+
+			while (objListItr.hasNext()) {
+				Map<?, ?> m = (Map<?, ?>) objListItr.next();
+				List<Map<?, ?>> aerML = getComplaintsAER(context, DomainObject.newInstance(context, (String) m.get(DomainObject.SELECT_ID)),
+						Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+						new String(), new String());
+				if (aerML.size() > 0) {
+					StringBuffer aer = new StringBuffer();
+					for (Map aerM : aerML) {
+						aer.append("<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+						aer.append("&amp;objectId=");
+						aer.append(XSSUtil.encodeForJavaScript(context, (String) aerM.get(DomainObject.SELECT_ID)));
+						aer.append("'");
+						aer.append(", '800', '700', 'true', 'popup')\">");
+
+						aer.append(XSSUtil.encodeForHTML(context, (String) aerM.get(DomainObject.SELECT_NAME)));
+						aer.append("</a>");
+						aer.append("<br />");
+					}
+					columnVals.add(aer.toString());
+				}
+				else {
+					columnVals.add("");
+				}
+			}
+			return new Vector<String>(columnVals);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveAssignment(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+			List<Map<?, ?>> mlAssigeeOfCpts = myComplaintWorkQueueService.getComplaintAssigneedToUser(context, PersonUtil.getPersonObjectID(context));
+
+			List<String> selectedCpts = new ArrayList();
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				selectedCpts.add(rowId.getObjectId());
+			}
+			Iterator itr = mlAssigeeOfCpts.iterator();
+			while (itr.hasNext()) {
+				Map cptMap = (Map) itr.next();
+				String assignedCptId = (String) cptMap.get(DomainObject.SELECT_ID);
+				if (selectedCpts.contains(assignedCptId)) {
+					DomainObject dmoComplaint = DomainObject.newInstance(context, assignedCptId);
+					complaintTicketService.removeApproversFromRoute(context, dmoComplaint, PersonUtil.getPersonObjectID(context));
+					String cptRelIds = (String) cptMap.get(DomainRelationship.SELECT_ID);
+					complaintTicketService.removeComplaintTicketAssignees(context, cptRelIds);
+				}
+			}
+
+			return "refreshOpenerWindow()";
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Gets HistoryService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return HistorService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private HistoryService getHistoryService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			HistoryService historyService = (HistoryService) component.getService(HistoryService.class);
+			return historyService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets the range values for Device in Use during the incident
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing values for Field_choices and
+	 *         field_display_choices.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldDeviceinUse(Context context, String args[]) throws ComplaintException {
+		try {
+			return Helper.getAttributeRanges(context, TicketConstants.SYMBOLIC_ATTRIBUTE_DEVICE_IN_USE);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Gets the range values for Complaint Severity
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing values for field_choices and
+	 *         field_display_choices.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldSeverity(Context context, String args[]) throws ComplaintException {
+		try {
+			return Helper.getAttributeRanges(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Get range values for Complaint Source
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing values for field_choices and
+	 *         field_display_choices.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldComplaintSource(Context context, String args[]) throws ComplaintException {
+		Map<String, StringList> rangeMap = new HashMap<String, StringList>();
+		try {
+			StringList strListSource = FrameworkUtil.getRanges(context,
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_SOURCE));
+			strListSource.addElement(" ");
+			strListSource.sort();
+			rangeMap.put(TicketConstants.FIELD_CHOICES, strListSource);
+			rangeMap.put(TicketConstants.FIELD_DISPLAY_CHOICES,
+					i18nNow.getAttrRangeI18NStringList(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_SOURCE),
+							strListSource, context.getSession().getLanguage()));
+			return rangeMap;
+		}
+		catch (MatrixException e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	public void setDateOfOccurance(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * This method gives stringList of person objectIds which are to be excluded
+	 * in Full search List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of ObjectIDs to exclude
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedOwnerOIDComplaint(Context context, String[] args) throws ComplaintException {
+		try {
+			StringList slOwnerExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(TicketConstants.OBJECTID);
+			String[] arrDmoComplaint = { strObjectId };
+			String strCurrentState = new String();
+			// StringList slLicense = new StringList();
+
+			// slLicense= Helper.getProductLicensee(context,
+			// Helper.LSAProducts.PQC);
+			List<Map<?, ?>> resultMap = QueryUtil.getInfo(context, arrDmoComplaint,
+					Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+			for (Object objMap : resultMap) {
+				Map<?, ?> mapOwner = (Map) objMap;
+				strCurrentState = (String) mapOwner.get(DomainConstants.SELECT_CURRENT);
+				String strOwnerName = (String) mapOwner.get(DomainConstants.SELECT_OWNER);
+				slOwnerExclusion.add(PersonUtil.getPersonObjectID(context, strOwnerName));
+			}
+			// TODO
+			// StringBuilder sbTypePattern = new StringBuilder();
+			// sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_PERSON);
+			// String strWhereExp = "current==policy_Person.state_Active";
+			// List<Map<?, ?>> returnMap = QueryUtil.findObjects(context,
+			// sbTypePattern.toString(), strWhereExp,
+			// Helper.stringList(DomainConstants.SELECT_ID));
+			// for (Object obj : returnMap) {
+			// Map personMap = (Map) obj;
+			// String strPersonId = (String)
+			// personMap.get(DomainConstants.SELECT_ID);
+			// DomainObject dmoPerson = DomainObject.newInstance(context,
+			// strPersonId);
+			// Person person = (Person) dmoPerson;
+			// StringList slRoles = new StringList();
+			// slRoles = person.getRoleAssignments(context);
+			//
+			// if (null != strCurrentState && null != slRoles) {
+			// if
+			// ((strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context,
+			// TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+			// TicketConstants.SYMBOLIC_POLICY_STATE_CREATE)))
+			// &&
+			// slRoles.contains(TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR))
+			// {
+			// slOwnerExclusion.add(strPersonId);
+			// }
+			// if
+			// ((strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context,
+			// TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+			// TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS)))
+			// &&
+			// !(slRoles.contains(TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+			// ||
+			// slRoles.contains(TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)))
+			// {
+			// slOwnerExclusion.add(strPersonId);
+			// }
+			// // if(!(slLicense.contains(strPersonId)))
+			// // slOwnerExclusion.add(strPersonId);
+			// }
+			// }
+			return slOwnerExclusion;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Excludes the already associated Assignees with the Complaint from Search
+	 * List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return list containing ids which needs to be excluded from Assignee
+	 *         search.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedAssigneeOIDComplaint(Context context, String[] args) throws ComplaintException {
+		try {
+			StringList slAssigneeExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strComplaintId = (String) programMap.get(TicketConstants.OBJECTID);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			List<Map<?, ?>> lsMapAssignee = complaintTicketService.getAssignees(context, DomainObject.newInstance(context, strComplaintId));
+			for (Map<?, ?> objInfo : lsMapAssignee) {
+				String strObjectId = (String) objInfo.get(DomainConstants.SELECT_ID);
+				slAssigneeExclusion.add(strObjectId);
+			}
+			return slAssigneeExclusion;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * adds parsons to Complaint as Assignees
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function to refresh page.
+	 * @throws PQCException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddExistingAssigneesToComplaint(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrComplaintIds = (String[]) programMap.get(TicketConstants.OBJECTID);
+			DomainObject dmoComplaint = DomainObject.newInstance(context, arrComplaintIds[0]);
+			List<String> listAssigneeIds;
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+			listAssigneeIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listAssigneeIds.add(rowId.getObjectId());
+			}
+			String[] assigneeIds = listAssigneeIds.toArray(new String[listAssigneeIds.size()]);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.addAssigneesToComplaintTicket(context, dmoComplaint, assigneeIds);
+
+			return "refreshOpener()";
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * removes the Assignees from the Complaint.
+	 * 
+	 * @param context
+	 *            ENOVIA context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to refresh page.
+	 * @throws PQCException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveComplaintAssignees(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrComplaintIds = (String[]) programMap.get(TicketConstants.OBJECTID);
+			DomainObject dmoComplaint = DomainObject.newInstance(context, arrComplaintIds[0]);
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+			List<String> listAssigneeIds = new ArrayList<String>(tableRowIds.length);
+			List<String> listAssigneeRelIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listAssigneeIds.add(rowId.getObjectId());
+				listAssigneeRelIds.add(rowId.getRelationshipId());
+			}
+			String[] assigneeIds = listAssigneeIds.toArray(new String[listAssigneeIds.size()]);
+			final String[] assigneeRelIds = listAssigneeRelIds.toArray(new String[listAssigneeRelIds.size()]);
+			final ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+
+			if (dmoComplaint.getOwner(context).getName() != context.getUser()
+					&& Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_REGULATORY_LEAD)) {
+				Helper.runWithSuperUser(context, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws ComplaintException {
+						try {
+							String[] assigneeIds = (String[]) args[1];
+							complaintTicketService.removeComplaintTicketAssignees(context, assigneeIds);
+							return null;
+						}
+						catch (Exception exception) {
+							throw new ComplaintException(exception);
+						}
+					}
+				}, complaintTicketService, assigneeRelIds);
+			}
+			else {
+				complaintTicketService.removeApproversFromRoute(context, dmoComplaint, assigneeIds);
+				complaintTicketService.removeComplaintTicketAssignees(context, assigneeRelIds);
+			}
+			// TODO
+			for (int j = assigneeIds.length - 1; j >= 0; j--) {
+				if (TicketUtil.checkUserRoles(context, DomainObject.newInstance(context, assigneeIds[j]), "role_ComplaintInvestigator")) {
+					MyComplaintWorkQueueService mycomplaintworkqueueservice = getMyComplaintWorkQueueService(context);
+					mycomplaintworkqueueservice.removeComplaintAsAssigned(context, arrComplaintIds);
+					break;
+				}
+			}
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRemoveAssignee");
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Generates the Audit Summary Report for a Complaint
+	 * 
+	 * @param context
+	 *            - The user Context.
+	 * @param args
+	 *            - Packaged args.
+	 * @return
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditSummaryReport(Context context, String[] args) throws ComplaintException {
+		HashMap<String, String> hashMap = new HashMap<String, String>();
+		MapList returnMapList = new MapList();
+		try {
+			HashMap<?, ?> programMap = JPO.unpackArgs(args);
+			String strComplaintId = (String) programMap.get(TicketConstants.OBJECTID);
+			String timeZone = "5";// (String) programMap.get("timeZone");
+			long tzOffset = Long.parseLong(timeZone);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+			hashMap.put(TicketConstants.CONTENT, myComplaintWorkQueueService.getDetailedSummaryReport(context, tzOffset, strComplaintId));
+			returnMapList.add(hashMap);
+			return returnMapList;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * provides access based field edit for Complaint.
+	 * 
+	 * @param context
+	 *            Enovia context object
+	 * @param args
+	 *            Input arguments
+	 * @return Function name to call in ExecutePostActions.jsp
+	 * @throws ComplaintException
+	 *             If operation fails
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionEditAccessFormComplaintProperties(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectID = (String[]) programMap.get(TicketConstants.OBJECTID);
+			String[] strArrFlag = new String[6];
+			strArrFlag[0] = objectID[0];
+			strArrFlag[1] = TicketUtil.isOwnerOrAssignee(context, objectID[0]).toString().toUpperCase();
+			strArrFlag[2] = TicketUtil.isOriginator(context, objectID[0]).toString().toUpperCase();
+			Boolean hasAccess = (Boolean) DomainObject.newInstance(context, objectID[0]).checkAccess(context, (short) AccessConstants.cModify);
+			strArrFlag[3] = hasAccess.toString().toUpperCase();
+			List<Map<?, ?>> resultMap = QueryUtil.getInfo(context, objectID, Helper.stringList(DomainConstants.SELECT_CURRENT));
+			for (Object object : resultMap) {
+				Map complaintMap = (Map) object;
+				strArrFlag[4] = (String) complaintMap.get(DomainConstants.SELECT_CURRENT);
+				strArrFlag[4] = strArrFlag[4].replaceAll(TicketConstants.REGEX_WHITESPACE, TicketConstants.BLANK);
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, "submitComplaintProperties", strArrFlag[0], strArrFlag[1], strArrFlag[2],
+					strArrFlag[3], strArrFlag[4]);
+
+			// strArrFlag[3] = Helper.hasRoles(context,
+			// TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER).toString().toUpperCase();
+			// strArrFlag[4] = Helper.hasRoles(context,
+			// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR).toString().toUpperCase();
+			// List<Map<?, ?>> resultMap = QueryUtil.getInfo(context, objectID,
+			// Helper.stringList(DomainConstants.SELECT_CURRENT));
+			// for (Object object : resultMap) {
+			// Map complaintMap = (Map) object;
+			// strArrFlag[5] = (String)
+			// complaintMap.get(DomainConstants.SELECT_CURRENT);
+			// strArrFlag[5] =
+			// strArrFlag[5].replaceAll(TicketConstants.REGEX_WHITESPACE,
+			// TicketConstants.BLANK);
+			// }
+			// return Helper.encodeFunctionForJavaScript(context, false,
+			// "submitComplaintProperties", strArrFlag[0], strArrFlag[1],
+			// strArrFlag[2],
+			// strArrFlag[3], strArrFlag[4], strArrFlag[5]);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Shows Number of Days the complaint object is in In Process State on My
+	 * Complaints table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return List
+	 * @throws ComplaintException
+	 * @exclude
+	 */
+	public List<String> getAgeColumn(Context context, String[] args) throws ComplaintException {
+
+		List<String> valVector = null;
+		String strOriginated = new String();
+		String strDate = new String();
+		String strState = new String();
+		String strNumberOfDays = new String();
+		try {
+			String strClosedState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+
+			String strInvalidState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_INVALID);
+
+			SimpleDateFormat dateFormat = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(), context.getLocale());
+			String strTodayDate = dateFormat.format(new Date());
+
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			valVector = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				String objId = (String) objectMap.get(DomainConstants.SELECT_ID);
+				StringList selectables = Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_ORIGINATED,
+						DomainObject.getAttributeSelect(TicketConstants.SYMBOLIC_ATTRIBUTE_CLOSED_DATE),
+						DomainObject.getAttributeSelect(TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVALIDATED_DATE));
+				List<Map<?, ?>> objInfo = QueryUtil.getInfo(context, new String[] { objId }, selectables);
+				Map mInfo = objInfo.get(0);
+				strState = (String) mInfo.get(DomainConstants.SELECT_CURRENT);
+				strOriginated = (String) mInfo.get(DomainConstants.SELECT_ORIGINATED);
+
+				if (strState.equalsIgnoreCase(strClosedState) || strState.equalsIgnoreCase(strInvalidState)) {
+					strDate = (String) mInfo.get(DomainObject.getAttributeSelect(TicketConstants.SYMBOLIC_ATTRIBUTE_CLOSED_DATE));
+					if (Helper.isNullOrEmpty(strDate))
+						strDate = (String) mInfo.get(DomainObject.getAttributeSelect(TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVALIDATED_DATE));
+
+					if (!Helper.isNullOrEmpty(strDate)) {
+						strNumberOfDays = TicketUtil.daysBetween(context, strOriginated, strDate);
+						valVector.add(strNumberOfDays);
+					}
+					else
+						valVector.add(DomainConstants.EMPTY_STRING);
+				}
+				else {
+
+					if (!Helper.isNullOrEmpty(strOriginated)) {
+						strNumberOfDays = TicketUtil.daysBetween(context, strOriginated, strTodayDate);
+						valVector.add(strNumberOfDays);
+					}
+					else
+						valVector.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return valVector;
+		}
+		catch (Exception ex) {
+			throw new ComplaintException(ex.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Converts the Complaint into Equipment Service Request
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Javascript function name to open Equipment Service Request Power
+	 *         View
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionConvertToEquipmentServiceRequest(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strComplaintId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strTypeChangeJustification = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoConverted = complaintTicketService.convertComplaintTicket(context, DomainObject.newInstance(context, strComplaintId),
+					ChangeType.EQUIPMENT_SERVICE_REQUEST, ChangePolicy.TICKET_RECORD, strTypeChangeJustification);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "openComplaintTicketPowerView", dmoConverted.getObjectId(context));
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Converts the Complaint into Inquiry
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Javascript function name to open Inquiry Power View
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionConvertToInquiry(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strComplaintId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strTypeChangeJustification = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoConverted = complaintTicketService.convertComplaintTicket(context, DomainObject.newInstance(context, strComplaintId),
+					ChangeType.INQUIRY, ChangePolicy.TICKET_RECORD, strTypeChangeJustification);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "openComplaintTicketPowerView", dmoConverted.getObjectId(context));
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Gets the Model Number for selected Model for Complaint Ticket Objects
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing Model Number Values
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> getModelNumberForModelCreateComplaint(Context context, String args[]) throws ComplaintException {
+		Helper.ensureNotEmpty(args, "args");
+		Helper.ensureNotNull(args, "args");
+		final String MODEL_NUMBER = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_MODEL_NUMBER);
+		Map resultMap = new HashMap();
+		StringList strListModNum = Helper.stringList();
+		String modNumber = "";
+		try {
+			String strType = "";
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> fieldValues = (Map<?, ?>) programMap.get(TicketConstants.FIELDVALUES);
+			Helper.ensureNotNull(fieldValues, "fieldValues");
+			String productModelOID = (String) fieldValues.get(TicketConstants.PRODUCT_MODEL_OID);
+			if (!Helper.isNullOrEmpty(productModelOID)) {
+				if ((Helper.getTypeKindOf(context, DomainObject.newInstance(context, productModelOID), TicketConstants.SYMBOLIC_TYPE_MODEL))
+						.containsValue(Boolean.TRUE)) {
+					String[] arrDmoModel = { productModelOID };
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, arrDmoModel,
+							Helper.stringList(DomainObject.getAttributeSelect(MODEL_NUMBER)));
+					for (Object obj : returnMap) {
+						Map mapModel = (Map) obj;
+						modNumber = (String) mapModel.get(DomainObject.getAttributeSelect(MODEL_NUMBER));
+					}
+					strListModNum.add(modNumber);
+					resultMap.put("RangeValues", strListModNum);
+					resultMap.put("RangeDisplayValues", strListModNum);
+					resultMap.put("SelectedValues", strListModNum.get(0));
+					resultMap.put("SelectedDisplayValue", strListModNum.get(0));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return resultMap;
+	}
+
+	/**
+	 * Connects the Complaint Ticket Object to Country with Belongs To Country
+	 * relationship
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void updateCountry(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> requestMap = (HashMap<?, ?>) programMap.get("requestMap");
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			String objectId = (String) paramMap.get("objectId");
+			String strCountryId = (String) paramMap.get("New OID");
+			if (!Helper.isNullOrEmpty(objectId) && !Helper.isNullOrEmpty(strCountryId)) {
+				DomainObject dmoComplaint = DomainObject.newInstance(context, objectId);
+				DomainObject dmoCountry = DomainObject.newInstance(context, strCountryId);
+				List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoComplaint,
+						TicketConstants.SYMBOLIC_RELATIONSHIP_BELONGS_TO_COUNTRY, TicketConstants.SYMBOLIC_TYPE_COUNTRY,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, null,
+						null);
+				StringList slRelIds = Helper.stringList();
+				for (Object obj : returnMap) {
+					Map countryMap = (Map) obj;
+					String strRelId = (String) countryMap.get(DomainRelationship.SELECT_ID);
+					slRelIds.add(strRelId);
+				}
+				QueryUtil.connectObjects(context, dmoComplaint, TicketConstants.SYMBOLIC_RELATIONSHIP_BELONGS_TO_COUNTRY, dmoCountry, slRelIds);
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public Map<?, ?> getRangeFormACTActionTaskCreateFieldAssigneeChoice(Context context, String args[]) throws ComplaintException {
+		Map<String, StringList> rangeMap = new HashMap<String, StringList>();
+		try {
+			StringList strListSourceDisplay = new StringList(2);
+			strListSourceDisplay
+					.add(Helper.getI18NString(context, Helper.StringResource.COLS, "ACTActionTaskCreate.Field.AssigneeChoice.ComplaintMember"));
+			strListSourceDisplay.add(Helper.getI18NString(context, Helper.StringResource.COLS, "ACTActionTaskCreate.Field.AssigneeChoice.AnyUser"));
+			StringList strListSource = new StringList(2);
+			strListSource.add("Complaint Member");
+			strListSource.add("Any User");
+			rangeMap.put("field_choices", strListSource);
+			rangeMap.put("field_display_choices", strListSourceDisplay);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public Boolean checkAccessOnFormACTActionTaskCreateFieldAssigneeChoice(Context context, String args[]) throws ComplaintException {
+
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			if (null != objectId
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, objectId), TicketConstants.SYMBOLIC_TYPE_COMPLAINT)
+							.containsValue(Boolean.TRUE))
+				return true;
+			return false;
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+
+	}
+
+	public void SetComplaintHandlingUnit(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get("paramMap");
+			String strNewValue = (String) paramMap.get("New Value");
+			String strOldValue = (String) paramMap.get("Old value");
+			String strComplaintId = (String) paramMap.get("objectId");
+
+			if (!strNewValue.equalsIgnoreCase(strOldValue) && (!Helper.isNullOrEmpty(strComplaintId))) {
+				ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+				DomainObject dmoComplaintTicket = DomainObject.newInstance(context, strComplaintId);
+				complaintTicketService.setOrganizationOwnership(context, dmoComplaintTicket, strNewValue);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddAssigneesToComplaints(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrCptIds = (String[]) programMap.get("cptIds");
+			String cptIds = arrCptIds[0];
+			StringList slComplaintIds = FrameworkUtil.split(cptIds, ",");
+
+			// array of complaint Ids
+			String[] arrComplaintIds = (String[]) slComplaintIds.toArray(new String[slComplaintIds.size()]);
+
+			List<String> listAssigneeIds;
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+
+			listAssigneeIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listAssigneeIds.add(rowId.getObjectId());
+			}
+			String[] assigneeIds = listAssigneeIds.toArray(new String[listAssigneeIds.size()]);
+
+			for (int i = arrComplaintIds.length - 1; i >= 0; i--) {
+				DomainObject dmoComplaint = DomainObject.newInstance(context, arrComplaintIds[i]);
+				ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+				complaintTicketService.addAssigneesToComplaintTicket(context, dmoComplaint, assigneeIds);
+			}
+			return "refreshOpener()";
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public String updateProblemDescription(Context context, String[] args) throws ComplaintException {
+		Map<?, ?> mapObject = null;
+		Iterator<?> itr = null;
+		String sDesc = null;
+		String slOrigDesc = null;
+		String eventId = null;
+		Vector<String> vcTruncList = new Vector<String>();
+		StringBuffer sbTrunDesc = new StringBuffer();
+		Map<String, String> attributeMap = new HashMap<String, String>();
+
+		try {
+			String maxSize = Helper.getProperty(context, "LQIComplaints.MyComplaints.Description.MaxTruncationSize");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map) programMap.get("paramMap");
+			slOrigDesc = (String) paramMap.get("New Value");
+			String strESRObjectId = (String) paramMap.get(TicketConstants.OBJECTID);
+
+			DomainObject strESRObject = DomainObject.newInstance(context, strESRObjectId);
+			List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, strESRObject, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT,
+					TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, null, null);
+
+			for (Map<?, ?> map : returnMap)
+				eventId = (String) map.get(DomainConstants.SELECT_ID);
+
+			DomainObject dmoEvent = DomainObject.newInstance(context, eventId);
+			attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL), slOrigDesc);
+			dmoEvent.setAttributeValues(context, attributeMap);
+
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+		return slOrigDesc;
+	}
+
+	public String getFieldInvestigationRequiredFormType_ComplaintEdit(Context context, String[] args) throws ComplaintException {
+		Helper.ensureNotNull(args, "args");
+		String strReturn = "No";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map) programMap.get("paramMap");
+			String strComplaintId = paramMap.get(TicketConstants.OBJECTID).toString();
+			Helper.ensureNotNull(strComplaintId, "strComplaintId");
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			StringBuilder sbtypePattern = new StringBuilder();
+			sbtypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+			List<Map<?, ?>> listComplaintProductEvaluation = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strComplaintId),
+					sbRelPattern.toString(), sbtypePattern.toString(), Helper.stringList(DomainObject.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 0, null, null);
+
+			DomainObject dmoComplaintProductEvaluation = null;
+			for (Object obj : listComplaintProductEvaluation) {
+				Map map = (Map) obj;
+				dmoComplaintProductEvaluation = DomainObject.newInstance(context, map.get(DomainConstants.SELECT_ID).toString());
+				Helper.ensureNotNull(dmoComplaintProductEvaluation, "dmoComplaintProductEvaluation");
+				String strInvestigationRequired = dmoComplaintProductEvaluation.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_INVESTIGATION_REQUIRED));
+				if ("yes".equalsIgnoreCase(strInvestigationRequired)) {
+					strReturn = "Yes";
+					break;
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return strReturn;
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public Map<String, String> preProcessCheckAccessOnComplaintPropertyFields(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(TicketConstants.PARAMMAP);
+			String strComplaintId = (String) paramMap.get(TicketConstants.OBJECTID);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(TicketConstants.FORMMAP);
+			MapList formFieldList = (MapList) formMap.get(TicketConstants.FIELDS);
+
+			HashMap<String, String> returnMap = new HashMap<String, String>();
+			Map<?, ?> fieldMap = null;
+			String fieldName = DomainConstants.EMPTY_STRING;
+			Map<String, String> settingsMap = null;
+
+			List<Map<?, ?>> mListInfo = QueryUtil.getInfo(context, new String[] { strComplaintId },
+					Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_POLICY));
+			String strCurrent = (String) mListInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+			String strPolicy = (String) mListInfo.get(0).get(DomainConstants.SELECT_POLICY);
+
+			final String STATE_IN_PROCESS = PropertyUtil.getSchemaProperty(context, "policy", strPolicy,
+					TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS);
+			final String STATE_CREATE = PropertyUtil.getSchemaProperty(context, "policy", strPolicy, TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+
+			boolean isQualityManager = Helper.hasRoles(context, "role_QualityManager");
+			boolean isComplaintInvestigator = Helper.hasRoles(context, "role_ComaplaintInvestigator");
+			boolean isVPLMProjectLeader = Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_VPLMProjectLeader);
+
+			for (Object object : formFieldList) {
+				fieldMap = (Map<?, ?>) object;
+				fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+				settingsMap = (Map<String, String>) fieldMap.get(TicketConstants.SETTINGS);
+				if (fieldName.equals("AwarenessDate") || fieldName.equals("DistributorAwarenessDate") || fieldName.equals("Source")
+						|| fieldName.equals("Severity") || fieldName.equals("CountryOfOrigin") || fieldName.equals("Comments")
+						|| fieldName.equals("PurchaseOrderName") || fieldName.equals("ComplaintHandlingUnit")
+						|| fieldName.equals("CustomerClosureDate")) {
+					settingsMap.put("Editable", "false");
+				}
+
+				if ((TicketUtil.isOriginator(context, strComplaintId) || isQualityManager || isVPLMProjectLeader)
+						&& (STATE_IN_PROCESS.equals(strCurrent) || STATE_CREATE.equals(strCurrent))) {
+					if ("AwarenessDate".equals(fieldName) || "Source".equals(fieldName) || "Severity".equals(fieldName)
+							|| "ComplaintHandlingUnit".equals(fieldName)) {
+						settingsMap.put("Editable", "true");
+					}
+				}
+				if (((TicketUtil.isOwnerOrAssignee(context, strComplaintId) || isQualityManager || isVPLMProjectLeader)
+						&& (STATE_IN_PROCESS.equals(strCurrent) || STATE_CREATE.equals(strCurrent)))
+						|| (isComplaintInvestigator && STATE_IN_PROCESS.equals(strCurrent))) {
+					if ("DistributorAwarenessDate".equals(fieldName) || "CountryOfOrigin".equals(fieldName) || "Comments".equals(fieldName)
+							|| "PurchaseOrderName".equals(fieldName)) {
+						settingsMap.put("Editable", "true");
+					}
+				}
+				if (((TicketUtil.isOwnerOrAssignee(context, strComplaintId) || isQualityManager || isVPLMProjectLeader)
+						&& (STATE_CREATE.equals(strCurrent) || STATE_IN_PROCESS.equals(strCurrent)))) {
+					if ("CustomerClosureDate".equals(fieldName)) {
+						settingsMap.put("Editable", "true");
+					}
+				}
+				else {
+					String strMessage = Helper.getI18NString(context, Helper.StringResource.COLS,
+							"FTComplaints.Investigation.EditInvestigation.NoAccess");
+					returnMap.put("Message", strMessage);
+					returnMap.put("Action", "Stop");
+					break;
+				}
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public StringList isTablePQCCPTMyComplaintsListColumnSeverityEditable(Context context, String[] args) throws ComplaintException {
+		try {
+			StringList slReturn = new StringList();
+			Map hmProgram = JPO.unpackArgs(args);
+			MapList mlColumnObjects = (MapList) hmProgram.get("objectList");
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+
+			for (Object omColumnObjects : mlColumnObjects) {
+				Map columnObject = (Map) omColumnObjects;
+				String columnObjectId = (String) columnObject.get(DomainConstants.SELECT_ID);
+
+				Map<String, Map<String, Boolean>> typeKindMap = Helper.getTypeKindOf(context, new String[] { columnObjectId },
+						TicketConstants.SYMBOLIC_TYPE_COMPLAINT_TICKETS);
+				if (typeKindMap.get(columnObjectId).containsValue(Boolean.TRUE)) {
+
+					DomainObject complaint = DomainObject.newInstance(context, columnObjectId);
+
+					// state should be Create/In-Process and logged in user
+					// should be originator of Complaint.
+					String state = complaint.getInfo(context, DomainConstants.SELECT_CURRENT);
+					// TODO
+					if ("Create".equalsIgnoreCase(state) || "In Process".equalsIgnoreCase(state) || "Review".equalsIgnoreCase(state)) {
+						// if (TicketUtil.isOriginator(context, columnObjectId)
+						// || Helper.hasRoles(context,
+						// TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+						// slReturn.add(Boolean.TRUE.toString());
+						// }
+						if (complaint.checkAccess(context, (short) AccessConstants.cModify)) {
+							slReturn.add(Boolean.TRUE.toString());
+						}
+						else {
+							slReturn.add(Boolean.FALSE.toString());
+						}
+					}
+					else {
+						slReturn.add(Boolean.FALSE.toString());
+					}
+				}
+				else {
+					slReturn.add(Boolean.FALSE.toString());
+				}
+			}
+			return slReturn;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> reloadFormCreateComplaintColumnReleasedProduct(Context context, String[] args) throws ComplaintException {
+		Helper.ensureNotEmpty(args, "args");
+		Helper.ensureNotNull(args, "args");
+		try {
+			Map rangeMap = new HashMap();
+			StringList modelIdList = new StringList();
+			StringList modelList = new StringList();
+			Map<?, ?> programMap1 = JPO.unpackArgs(args);
+			Map<?, ?> fieldValues = (Map<?, ?>) programMap1.get("fieldValues");
+			Helper.ensureNotNull(fieldValues, "fieldValues");
+			String strObjectId = (String) fieldValues.get("ProductModelOID");
+			if (Helper.isNullOrEmpty(strObjectId)) {
+				rangeMap.put("RangeValues", modelIdList);
+				rangeMap.put("RangeDisplayValues", modelList);
+				return rangeMap;
+			}
+			List<Map<?, ?>> mListModels = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strObjectId),
+					new StringBuffer().append("relationship_MainProduct").append(",").append("relationship_Products").toString(),
+					TicketConstants.SYMBOLIC_type_Products,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainObject.SELECT_NAME, DomainObject.SELECT_TYPE, DomainObject.SELECT_REVISION),
+					Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 1, "current==Release", new String());
+			if (mListModels.size() > 0) {
+				for (Map<?, ?> eventMap : mListModels) {
+					modelIdList.add((String) eventMap.get(DomainObject.SELECT_ID));
+					modelList.add(eventMap.get(DomainObject.SELECT_NAME) + " " + eventMap.get(DomainObject.SELECT_REVISION));
+				}
+				rangeMap.put("SelectedValues", modelIdList.get(0));
+				rangeMap.put("SelectedDisplayValue", modelList.get(0));
+			}
+			if (Helper.isNullOrEmpty(modelIdList)) {
+				rangeMap.put("SelectedValues", "");
+				rangeMap.put("SelectedDisplayValue", "");
+				rangeMap.put("RangeValues", Helper.stringList("", ""));
+				rangeMap.put("RangeDisplayValues", Helper.stringList("", ""));
+				return rangeMap;
+			}
+			rangeMap.put("RangeValues", modelIdList);
+			rangeMap.put("RangeDisplayValues", modelList);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getMyComplaintsTableRegulatoryProductPQCCPTTable(Context context, String[] args) throws ComplaintException {
+		List<Map<?, ?>> mListComplaints = null;
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+			mListComplaints = myComplaintWorkQueueService.getComplaintsAssociatedWithProduct(context, sObjectId);
+
+			return new MapList(mListComplaints);
+
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+
+	private List<Map<?, ?>> getComplaintsAER(Context context, DomainObject complaintObj, StringList paramObjSelects, StringList paramRelSelects,
+			String strWhere, String relWhere) throws ComplaintException {
+		Helper.ensureNotNull(complaintObj, "complaintObj");
+		List<Map<?, ?>> retMap = new MapList();
+		try {
+			// isLicenseAssigned = Helper.isLicenseAssigned(context,
+			// LSALicense.AERG);
+			if (!(Helper.getTypeKindOf(context, complaintObj, TicketConstants.SYMBOLIC_TYPE_COMPLAINT).containsValue(Boolean.TRUE)))
+				throw new ComplaintException("Invalid Type");
+			if (paramObjSelects == null || paramObjSelects.isEmpty()) {
+				paramObjSelects = Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_TYPE, DomainObject.SELECT_REVISION,
+						DomainObject.SELECT_NAME);
+			}
+			if (paramRelSelects == null || paramRelSelects.isEmpty()) {
+				paramRelSelects = Helper.stringList(DomainRelationship.SELECT_ID);
+			}
+			retMap = QueryUtil.getRelatedObjects(context, complaintObj,
+					(new StringBuffer()).append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_REPORT).toString(),
+					(new StringBuffer()).append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_TYPE_DERIVED_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_TYPE_ADVERSE_EVENT_REPORT).toString(),
+					paramObjSelects, paramRelSelects, false, true, strWhere, relWhere, false, true, null,
+					new Pattern(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_REPORT)), null);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return retMap;
+	}
+
+	public Boolean checkPatientFunctionalityEnablement(Context context, String[] args) throws ComplaintException, LSAException, FrameworkException {
+		ColsInfo = checkIfPatientFunctinalityEnabled(context);
+		return ColsInfo.get(TicketConstants.COLS_INSTALLATION);
+	}
+
+	private Map<String, Boolean> checkIfPatientFunctinalityEnabled(Context context) throws ComplaintException, FrameworkException, LSAException {
+		boolean isHavingAccess = false;
+		try {
+			boolean isLicenseAssigned = false;
+			boolean isAERGInstalled = Helper.isProductInstalled(context, "appVersionAERGBase");
+			try {
+				isLicenseAssigned = Helper.isLicenseAssigned(context, LSALicense.AERG);
+			}
+			catch (Exception e) {
+				isLicenseAssigned = false;
+			}
+			if (isAERGInstalled && isLicenseAssigned) {
+				isHavingAccess = true;
+				ColsInfo.put(TicketConstants.COLS_INSTALLATION, isHavingAccess);
+			}
+			else {
+				try {
+					String strEnablePatientFunctionality = PropertyUtil.getAdminProperty(context, "Type",
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_PATIENT), "isPatientEnabled");
+					if (!Helper.isNullOrEmpty(strEnablePatientFunctionality) && "Enabled".equalsIgnoreCase(strEnablePatientFunctionality)) {
+						isHavingAccess = true;
+						ColsInfo.put(TicketConstants.COLS_INSTALLATION, isHavingAccess);
+					}
+					else {
+						try {
+							// Code Removed as was not required.
+							// MqlUtil.mqlCommand(context, "demote bus $1 $2
+							// $3", "eService Trigger Program Parameters",
+							// "AttributeDateofBirthModifyAction",
+							// "updateAgeAtTimeOfEvent");
+							isHavingAccess = false;
+							ColsInfo.put(TicketConstants.COLS_INSTALLATION, isHavingAccess);
+						}
+						catch (Exception e) {
+							throw new FrameworkException(e);
+						}
+					}
+				}
+				catch (Exception e) {
+					throw new LSAException(e);
+				}
+			}
+		}
+		catch (ComplaintException e) {
+			throw new ComplaintException(e);
+		}
+		return ColsInfo;
+	}
+
+	/**
+	 * gives all the assignees associated with the Complaint.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return maplist having all Assignee Ids.
+	 * @throws PQCException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getComplaintAssignees(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strComplaintId = (String) programMap.get(TicketConstants.OBJECTID);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			List<Map<?, ?>> returnMap = complaintTicketService.getAssignees(context, DomainObject.newInstance(context, strComplaintId));
+			MapList mlAssignees = new MapList(returnMap);
+			return mlAssignees;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public Map<?, ?> getTablePQCCPTAssigneesColumnRoleRange(Context context, String[] args) throws ComplaintException {
+		try {
+			Map mapSeverity = new HashMap();
+			StringList fieldChoice = Helper.stringList(TicketConstants.ATTRIBUTE_COMPLAINT_TEAM_ROLE_VALUE_ASSIGNEE,
+					TicketConstants.ATTRIBUTE_COMPLAINT_TEAM_ROLE_VALUE_APPROVER);
+			StringList fieldDisplayChoice = Helper.stringList(
+					Helper.getI18NString(context, Helper.StringResource.AEF, "emxFramework.Range.Complaint_Team_Role.Assignee"),
+					Helper.getI18NString(context, Helper.StringResource.AEF, "emxFramework.Range.Complaint_Team_Role.Approver"));
+			mapSeverity.put(TicketConstants.FIELD_CHOICES, fieldChoice);
+			mapSeverity.put(TicketConstants.FIELD_DISPLAY_CHOICES, fieldDisplayChoice);
+			return mapSeverity;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public static StringList accessForTablePQCCPTAssigneesColumnRole(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectMap = (MapList) inputMap.get("objectList");
+			ArrayList<String> returnSL = new ArrayList<String>(objectMap.size());
+			for (Map<?, ?> object : new ArrayList<Map<?, ?>>(objectMap)) {
+				String strrole = (String) object.get(DomainObject.getAttributeSelect(
+						PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_TEAM_ROLE)) + ".value");
+				if (strrole.equalsIgnoreCase(TicketConstants.ATTRIBUTE_COMPLAINT_TEAM_ROLE_REGULATORY_VALUE)) {
+					returnSL.add(Boolean.valueOf(false).toString());
+				}
+				else {
+					returnSL.add(Boolean.valueOf(true).toString());
+				}
+			}
+			return new StringList(returnSL);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getContactsForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String objectId = getObjectId(context, programMap);
+			final ContactService contactService = getContactService(context);
+			MapList mlContacts = new MapList();
+
+			final StringList busSelects = new StringList(4);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_TYPE);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			busSelects.add(DomainConstants.SELECT_REVISION);
+
+			final String strWhere = "type != type_Reviewer && type != type_RegulatoryReviewer";
+
+			if (objectId == null || objectId.isEmpty()) {
+				mlContacts = new MapList(contactService.getContacts(context, busSelects, strWhere));
+			}
+			else {
+				mlContacts = new MapList(contactService.getContactsOfParent(context, DomainObject.newInstance(context, objectId), busSelects,
+						strWhere, Helper.stringList(DomainRelationship.SELECT_ID), ""));
+			}
+			return mlContacts;
+		}
+		catch (final Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	private String getObjectId(Context context, Map programMap) {
+		String strObjectId = DomainConstants.EMPTY_STRING;
+		Map paramMap = (HashMap) programMap.get("paramMap");
+		if (paramMap == null || paramMap.isEmpty()) {
+			Object strArrayObjectId = programMap.get("objectId");
+			if (strArrayObjectId instanceof String) {
+				strObjectId = (String) strArrayObjectId;
+			}
+			else {
+				String[] temp = (String[]) strArrayObjectId;
+				strObjectId = temp[0];
+			}
+		}
+		else {
+			strObjectId = (String) paramMap.get("objectId");
+		}
+		return strObjectId;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getEventsForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> eventMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			EventService eventService = getPQCEventService(context);
+			eventMap = eventService.getEvents(context, cptObj);
+			return new MapList(eventMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getAERForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> AERMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			AERMap = QueryUtil.getRelatedObjects(context, cptObj,
+					(new StringBuffer()).append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_REPORT).toString(),
+					(new StringBuffer()).append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_TYPE_DERIVED_EVENT).append(",")
+							.append(TicketConstants.SYMBOLIC_TYPE_ADVERSE_EVENT_REPORT).toString(),
+					Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), false, true,
+					DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING, false, true, null,
+					new Pattern(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_REPORT)), null);
+			return new MapList(AERMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getEvaluationForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> evaluationMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			evaluationMap = QueryUtil.getRelatedObjects(context, cptObj, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION,
+					TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+							DomainConstants.SELECT_CURRENT),
+					Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), false, true, (short) 0, DomainObject.EMPTY_STRING, null);
+			return new MapList(evaluationMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getReturnsForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			Component LSAPQCCore = ComponentFactory.getInstance(context, "LSACOLSCoreComponent");
+			ReturnFulfillmentService service = (ReturnFulfillmentService) LSAPQCCore.getService(ReturnFulfillmentService.class);
+			List<Map<?, ?>> returnMap = service.getReturns(context, cptObj, Helper.stringList(DomainObject.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), null, null);
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getFulfillmentsForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			Component LSAPQCCore = ComponentFactory.getInstance(context, "LSACOLSCoreComponent");
+			ReturnFulfillmentService service = (ReturnFulfillmentService) LSAPQCCore.getService(ReturnFulfillmentService.class);
+			List<Map<?, ?>> FulfillmentMap = service.getFulfillments(context, cptObj, Helper.stringList(DomainObject.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), null, null);
+			return new MapList(FulfillmentMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getATForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> actionTaskMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			final ActionTasks ACTIONTASKS = ActionTasks.getInstance();
+			actionTaskMap = ACTIONTASKS.getAllActionTask(context, cptObj,
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT, DomainObject.SELECT_TYPE,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_SCHEDULED_COMPLETION_DATE), DomainObject.SELECT_OWNER,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_INSTRUCTIONS),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_DUEDATE_OFFSET),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ALLOW_DELEGATION)),
+					Helper.stringList(DomainRelationship.SELECT_NAME, DomainRelationship.SELECT_ID), null);
+
+			return new MapList(actionTaskMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getCAPAForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> capaMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+			capaMap = QueryUtil.getRelatedObjects(context, cptObj, "relationship_DataSource",
+					(new StringBuffer()).append("type_CAPA").append(",").append("type_CAPARequest").toString(),
+					Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 1, null,
+					null);
+			return new MapList(capaMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getWhereUsedForSummaryReport(Context context, String[] args) throws ComplaintException {
+		try {
+			List<Map<?, ?>> productControlMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String cptObjectId = (String) programMap.get("objectId");
+			DomainObject cptObj = DomainObject.newInstance(context, cptObjectId);
+
+			productControlMap = QueryUtil.getRelatedObjects(context, cptObj, DomainConstants.QUERY_WILDCARD, DomainConstants.QUERY_WILDCARD,
+					Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 1,
+					DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING, DomainObject.CHECK_HIDDEN, DomainObject.PREVENT_DUPLICATES, null, null,
+					null, DomainObject.EMPTY_STRING);
+			return new MapList(productControlMap);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldRace(Context context, String args[]) throws ComplaintException {
+		Map<String, StringList> rangeMap = new HashMap<String, StringList>();
+		try {
+			StringList strListSource = FrameworkUtil.getRanges(context,
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_RACE));
+			strListSource.addElement(" ");
+			strListSource.sort();
+			rangeMap.put(TicketConstants.FIELD_CHOICES, strListSource);
+			rangeMap.put(TicketConstants.FIELD_DISPLAY_CHOICES,
+					i18nNow.getAttrRangeI18NStringList(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_RACE),
+							strListSource, context.getSession().getLanguage()));
+			rangeMap.put("field_display_value",
+					i18nNow.getAttrRangeI18NStringList(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_RACE),
+							strListSource, context.getSession().getLanguage()));
+			rangeMap.put("field_value", strListSource);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldEthnicity(Context context, String args[]) throws ComplaintException {
+		Map<String, StringList> rangeMap = new HashMap<String, StringList>();
+		try {
+			StringList strListSource = FrameworkUtil.getRanges(context,
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ETHNICITY));
+			strListSource.addElement(" ");
+			strListSource.sort();
+			rangeMap.put(TicketConstants.FIELD_CHOICES, strListSource);
+			rangeMap.put(TicketConstants.FIELD_DISPLAY_CHOICES,
+					i18nNow.getAttrRangeI18NStringList(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ETHNICITY),
+							strListSource, context.getSession().getLanguage()));
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	public Map<?, ?> getRangeFormtype_CreateComplaintFieldOutsourcingFacility(Context context, String args[]) throws ComplaintException {
+		try {
+			Map<String, StringList> ViewMap = new HashMap<String, StringList>();
+			Map<String, StringList> outsourcingFacilityRangeMap = (Map<String, StringList>) Helper.getAttributeRanges(context,
+					"attribute_OutsourcingFacility");
+			ViewMap.put("field_choices", outsourcingFacilityRangeMap.get("field_choices"));
+			ViewMap.put("field_display_choices", outsourcingFacilityRangeMap.get("field_display_choices"));
+			return ViewMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+}
+

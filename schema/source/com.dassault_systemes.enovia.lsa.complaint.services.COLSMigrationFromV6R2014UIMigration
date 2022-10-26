@@ -1,0 +1,94 @@
+
+/**
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import matrix.db.Context;
+
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MqlUtil;
+
+/**
+ * @author v8l
+ * 
+ */
+public class ${CLASSNAME} {
+
+	public void migrateUI(Context context, Logger logger) throws TicketException {
+		logger.log(Level.INFO, "Executing PQC UI Migration");
+		try {
+			mqlCommand(context, "verb on", logger);
+			mqlCommand(context, "modify menu $1 remove setting $2", logger, "PQCActions", "'Licensed Product'");
+			mqlCommand(context, "modify menu $1 !hidden add setting $2 $3 remove menu $4 remove menu $5", logger, "PQCActions", "'Registered Suite'",
+					"'Complaints'", "PQCNCRGlobalActions", "PQCCPTActions");
+			mqlCommand(context, "modify menu $1 remove menu $2", logger, "AEFGlobalSearch", "PQCSearch");
+			mqlCommand(context, "modify menu $1 add setting $2 $3", logger, "PQCCPTSearch", "'Licensed Product'", "'ENOCOLS_TP'");
+			mqlCommand(context, "modify command $1 remove user $2 remove user $3 remove user $4 remove user $5", logger, "PQCCPTSearchComplaint",
+					"Complaint Administrator", "Complaint Owner", "Complaint User", "Complaint Approver");
+			mqlCommand(context, "modify command $1 add setting $2 $3", logger, "PQCCPTSearchComplaint", "'Target Location'", "'windowshade'");
+			mqlCommand(
+					context,
+					"modify command $1 href $2",
+					logger,
+					"PQCCPTSearchComplaint",
+					"'../common/emxFullSearch.jsp?field=TYPES=type_Complaint&table=PQCCPTSearch&formInclusionList=PQCCPT_DC,PQCCPT_INV,PQCCPT_SEV,PQCCPT_S,PQCCPT_ORG,PQCCPT_COUNTRY_OF_ORIGIN,LPQCPT_RS,PQCCPT_EVENT_NAME,PQCCPT_EXP_CODE,PQCCPT_EVENT_DATE_OF_OCCURRENCE,PQCCPT_PRODUCT_MODEL,PQCCPT_PRODUCT_MODEL_NUMBER,LPQCPT_EVAL_NAME,LPQCPT_EVAL_STATUS,LPQCPT_EVAL_SEVERITY,LPQCPT_SUBMISSION_NAME&sortColumnName=Number&sortDirection=ascending&headerRepeat=0&header=FTComplaints.Complaint.SearchComplaintResults&HelpMarker=CPT51&showRMB=true'");
+			mqlCommand(context, "modify menu $1 order command $2 $3", logger, "PQCCPTSearch", "PQCCPTSearchInquiry", "2");
+			mqlCommand(context, "modify menu $1 order command $2 $3", logger, "PQCCPTSearch", "PQCCPTSearchEquipment", "3");
+			mqlCommand(
+					context,
+					"modify menu $1 remove command $2 remove command $3 remove command $4 remove command $5 add command $6 add command $7 add command $8 add command $9",
+					logger, "PQCCPTSearch", "PQCCPTSearchEvent", "PQCCPTSearchProduct", "PQCCPTSearchContact", "PQCCPTSearchCorrespondence",
+					"PQCCPTSearchReturn", "PQCCPTSearchFulfillment", "LSAContactSearch", "LSACorrespondenceSearch");
+			mqlCommand(context, "modify command $1 remove user $2 remove user $3 remove user $4 remove user $5", logger, "PQCCPTSearchInquiry",
+					"Complaint Administrator", "Complaint Owner", "Complaint User", "Complaint Approver");
+			mqlCommand(context, "modify command $1 add setting $2 $3", logger, "PQCCPTSearchInquiry", "'Target Location'", "'windowshade'");
+			mqlCommand(
+					context,
+					"modify command $1 href $2",
+					logger,
+					"PQCCPTSearchInquiry",
+					"'${COMMON_DIR}/emxFullSearch.jsp?field=TYPES=type_Inquiry&table=PQCInquiriesSearch&formInclusionList=TYPE,NAME,CURRENT,OWNER,ORIGINATED,PQC_INQUIRY_CLOSED_DATE,PQCCPT_CONTACT_NAME,PQC_INQUIRY_MODEL,PQC_INQUIRY_MODEL_NUMBER&sortColumnName=Name&sortDirection=ascending&headerRepeat=0&header=FTComplaints.Search.Header.Inquiries&HelpMarker=emxhelpsearchpqccomplaint&showRMB=true'");
+			mqlCommand(context, "modify command $1 remove user $2 remove user $3 remove user $4 remove user $5", logger, "PQCCPTSearchEquipment",
+					"Complaint Administrator", "Complaint Owner", "Complaint User", "Complaint Approver");
+			mqlCommand(context, "modify command $1 add setting $2 $3", logger, "PQCCPTSearchEquipment", "'Target Location'", "'windowshade'");
+			mqlCommand(
+					context,
+					"modify command $1 href $2",
+					logger,
+					"PQCCPTSearchEquipment",
+					"'${COMMON_DIR}/emxFullSearch.jsp?field=TYPES=type_EquipmentServiceRequest&table=PQCInquiriesSearch&formInclusionList=TYPE,NAME,CURRENT,OWNER,ORIGINATED,PQC_INQUIRY_CLOSED_DATE,PQCCPT_CONTACT_NAME,PQCCPT_COUNTRY_OF_ORIGIN,INQUIRY_MODEL&sortColumnName=Name&sortDirection=ascending&headerRepeat=0&header=FTComplaints.Search.Header.ESR&HelpMarker=emxhelpsearchpqccomplaint&showRMB=true'");
+			mqlCommand(context, "modify menu $1 label $2", logger, "PQCActions", "PQC.ComplaintNCR.Menu.Label.MyDeskComplaintNCRMenu");
+			mqlCommand(context, "modify menu $1 add command $2 add command $3 add command $4 add command $5", logger, "PQCActions",
+					"PQCCPTCreateComplaint", "PQCESRCreate", "PQCINQCreate", "PQCNCRCreate");
+			mqlCommand(context, "modify command $1 add setting $2 $3", logger, "PQCCPTDetailedSummaryReport", "'Access Expression'", "false");
+			// TODO Change Registered suite of commpand as per LPQ if Required.
+			// mqlCommand(context,
+			// "modify command PQCMigration href '../LSA/Execute.jsp?action=com.dassault_systemes.enovia.lsa.LPQ.services.LPQMigration:actionMigrate&suiteKey=LQIComplaints&HelpMarker=CPT97' add setting 'Registered Suite' 'LQIComplaints'",
+			// logger);
+		}
+		catch (Exception e) {
+			throw new TicketException(e);
+		}
+		logger.log(Level.INFO, "LPQ UI Migration Completed");
+	}
+
+	protected String mqlCommand(Context context, String command, Logger logger, String... args) throws TicketException {
+		try {
+			String uiVerbose = MqlUtil.mqlCommand(context, command, true, args);
+			logger.log(Level.INFO, uiVerbose);
+			return uiVerbose;
+		}
+		catch (FrameworkException e) {
+			throw new TicketException(e);
+		}
+
+	}
+}
+

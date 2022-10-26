@@ -1,0 +1,499 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.geographyconfiguration.EmxTableRowId;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfiguration;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfigurationException;
+import com.dassault_systemes.enovia.geographyconfiguration.Helper;
+import com.dassault_systemes.enovia.geographyconfiguration.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ * UI Service JPO for managing Language related UI
+ */
+public class ${CLASSNAME} {
+
+	private final static GeographyConfiguration	geographyConfiguration			= GeographyConfiguration.getInstance();
+	private final static String					TYPE_SYMBOLIC_LOCAL_LANGUAGE	= "type_LocalLanguage";
+
+	/**
+	 * Default constructor
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The arguments (Ignored)
+	 * @throws GeographyConfigurationException
+	 *             If operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws GeographyConfigurationException {
+		super();
+	}
+
+	/**
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param emxTableRowIds_Countries
+	 *            rows of Countries selected
+	 * @param languageIds
+	 *            List of Language Ids to be added
+	 * @return xml String for row addition in UI
+	 * @throws GeographyConfigurationException
+	 */
+	private String addLanguageToCountry(Context context, List<EmxTableRowId> emxTableRowIds_Countries, List<String> languageIds)
+			throws GeographyConfigurationException {
+		try {
+			Map<String, Boolean> areLanguagesAddedToCountry = new HashMap<String, Boolean>(languageIds.size());
+			for (EmxTableRowId emxTableRowId_Country : emxTableRowIds_Countries) {
+				DomainObject countryObj = DomainObject.newInstance(context, emxTableRowId_Country.getObjectId());
+				areLanguagesAddedToCountry = geographyConfiguration.areLanguagesAddedToCountry(context, countryObj, languageIds);
+				if (areLanguagesAddedToCountry.containsValue(Boolean.TRUE)) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertLanguageAlreadyAddedToCountry");
+				}
+			}
+			ContextUtil.startTransaction(context, true);
+			try {
+				StringBuffer newItemsXML = new StringBuffer(1024);
+				for (EmxTableRowId emxTableRowId_Country : emxTableRowIds_Countries) {
+					DomainObject countryObj = DomainObject.newInstance(context, emxTableRowId_Country.getObjectId());
+					Map<String, String> connectionInfo = geographyConfiguration.addLanguagesToCountry(context, countryObj, languageIds);
+
+					// Prepare the XML item element for all the languages under
+					// this country
+					for (String languageId : connectionInfo.keySet()) {
+						String connectionId = connectionInfo.get(languageId);
+						newItemsXML.append("<item oid=\"").append(languageId).append("\" relId=\"").append(connectionId).append("\" pid=\"")
+								.append(emxTableRowId_Country.getObjectId()).append("\" pasteBelowToRow=\"").append(emxTableRowId_Country.getLevel())
+								.append("\" />");
+					}
+				}
+				ContextUtil.commitTransaction(context);
+
+				// Prepare the final XML mxRoot element to be used in SB API
+				StringBuffer newRowXML = new StringBuffer(1024);
+				newRowXML.append("<mxRoot>");
+				newRowXML.append("<action><![CDATA[refresh]]></action>");
+				newRowXML.append("<data status=\"committed\" pasteBelowOrAbove=\"false\">");
+				newRowXML.append(newItemsXML.toString());
+				newRowXML.append("</data>");
+				newRowXML.append("</mxRoot>");
+				final String findAndReplace = FrameworkUtil.findAndReplace(newRowXML.toString(), "\"", "\\\"");
+				return Helper.encodeFunctionForJavaScript(context, true, "addRowsUnderCountriesInStructureBrowser", findAndReplace);
+			}
+			catch (Exception exp) {
+				ContextUtil.abortTransaction(context);
+				throw exp;
+			}
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param emxTableRowIds_Regions
+	 *            rows of Regions selected
+	 * @param languageIds
+	 *            List of Language Ids to be added
+	 * @return xml String for row addition in UI
+	 * @throws GeographyConfigurationException
+	 */
+	private String addLanguageToRegion(Context context, List<EmxTableRowId> emxTableRowIds_Regions, List<String> languageIds)
+			throws GeographyConfigurationException {
+		try {
+			Map<String, Boolean> areLanguagesAddedToRegion = new HashMap<String, Boolean>(languageIds.size());
+			for (EmxTableRowId emxTableRowIds_Region : emxTableRowIds_Regions) {
+				DomainObject regionObj = DomainObject.newInstance(context, emxTableRowIds_Region.getObjectId());
+				areLanguagesAddedToRegion = geographyConfiguration.areLanguagesAddedToRegion(context, regionObj, languageIds);
+				if (areLanguagesAddedToRegion.containsValue(Boolean.TRUE)) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertLanguageAlreadyAddedToRegion");
+				}
+			}
+			ContextUtil.startTransaction(context, true);
+			try {
+				StringBuffer newItemsXML = new StringBuffer(1024);
+				for (EmxTableRowId emxTableRowIds_Region : emxTableRowIds_Regions) {
+					DomainObject regionObj = DomainObject.newInstance(context, emxTableRowIds_Region.getObjectId());
+					Map<String, String> connectionInfo = geographyConfiguration.addLanguagesToRegion(context, regionObj, languageIds);
+
+					// Prepare the XML item element for all the languages under
+					// this region
+					for (String languageId : connectionInfo.keySet()) {
+						String connectionId = connectionInfo.get(languageId);
+						newItemsXML.append("<item oid=\"").append(languageId).append("\" relId=\"").append(connectionId).append("\" pid=\"")
+								.append(emxTableRowIds_Region.getObjectId()).append("\" pasteBelowToRow=\"").append(emxTableRowIds_Region.getLevel())
+								.append("\" />");
+					}
+				}
+				ContextUtil.commitTransaction(context);
+
+				// Prepare the final XML mxRoot element to be used in SB API
+				StringBuffer newRowXML = new StringBuffer(1024);
+				newRowXML.append("<mxRoot>");
+				newRowXML.append("<action><![CDATA[refresh]]></action>");
+				newRowXML.append("<data status=\"committed\" pasteBelowOrAbove=\"false\">");
+				newRowXML.append(newItemsXML.toString());
+				newRowXML.append("</data>");
+				newRowXML.append("</mxRoot>");
+				final String findAndReplace = FrameworkUtil.findAndReplace(newRowXML.toString(), "\"", "\\\"");
+				return Helper.encodeFunctionForJavaScript(context, true, "addRowsUnderRegionsInStructureBrowser", findAndReplace);
+			}
+			catch (Exception exp) {
+				ContextUtil.abortTransaction(context);
+				throw exp;
+			}
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets all the maplist of all Languages. This method is deprecated and will
+	 * be removed once LRA removed all it's reference to this method.
+	 * 
+	 * @param context
+	 *            object
+	 * @param args
+	 *            holds input arguments.
+	 * @return a MapList containing all the Languages.
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 * @deprecated done by VI5
+	 */
+	public MapList getTableLRALanguages(Context context, String[] args) throws GeographyConfigurationException {
+		return getTableGEOLanguages(context, args);
+	}
+
+	/**
+	 * Gets all the maplist of all Languages
+	 * 
+	 * @param context
+	 *            object
+	 * @param args
+	 *            holds input arguments.
+	 * @return a MapList containing all the Languages.
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableGEOLanguages(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			String TYPE_LOCAL_LANGUAGE = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_LOCAL_LANGUAGE);
+			List<Map<String, String>> languages = geographyConfiguration.getLanguages(context, null, "!type.kindof[" + TYPE_LOCAL_LANGUAGE + "]");
+			MapList languageList = new MapList(languages);
+			return languageList;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Validate the Languages selection for the AddLanguageToSelected operation
+	 * 
+	 * @param context
+	 *            object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions call
+	 * @throws GeographyConfigurationException
+	 */
+	@com.dassault_systemes.enovia.geographyconfiguration.ExecuteCallable
+	public String actionValidateAddLanguageToSelected(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] objList = (String[]) programMap.get("emxTableRowId");
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(objList);
+			List<String> idList = new ArrayList<String>();
+			for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+				idList.add(emxTableRowId.getObjectId());
+			}
+			final String TYPE_LANGUAGE = PropertyUtil.getSchemaProperty(context, "type_Language");
+			if (!Helper.isAllKindOfType(context, idList, TYPE_LANGUAGE)) {
+				return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectLanguagesOnly");
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, "getRegionsCountriesForLanguages");
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Adds Languages to Region/Countries using ExecutePostActions
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions call
+	 * @throws GeographyConfigurationException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.geographyconfiguration.ExecuteCallable
+	public String actionDoAddLanguageToSelected(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			final String TYPE_REGION = PropertyUtil.getSchemaProperty(context, "type_Region");
+			final String TYPE_COUNTRY = PropertyUtil.getSchemaProperty(context, "type_Country");
+			String return1 = "";
+			String return2 = "";
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<EmxTableRowId> emxTableRowIds_Languages = EmxTableRowId.getTableRowIds((String[]) programMap.get("emxTableRowId"));
+			List<String> languageIds = new ArrayList<String>(emxTableRowIds_Languages.size());
+			for (EmxTableRowId emxTableRowId : emxTableRowIds_Languages) {
+				languageIds.add(emxTableRowId.getObjectId());
+			}
+			if (!(programMap.containsKey("emxTableRowId_Region") || programMap.containsKey("emxTableRowId_Country"))) {
+				return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectAtLeastOneRegionCountry");
+			}
+			if ((String[]) programMap.get("emxTableRowId_Region") != null) {
+				List<EmxTableRowId> emxTableRowIds_Regions = EmxTableRowId.getTableRowIds((String[]) programMap.get("emxTableRowId_Region"));
+				List<String> regionIdList = new ArrayList<String>(emxTableRowIds_Regions.size());
+				for (EmxTableRowId emxTableRowId : emxTableRowIds_Regions) {
+					regionIdList.add(emxTableRowId.getObjectId());
+				}
+				if (!Helper.isAllKindOfType(context, regionIdList, TYPE_REGION)) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectRegionsOnly");
+				}
+				return1 = addLanguageToRegion(context, emxTableRowIds_Regions, languageIds);
+				if (return1.equalsIgnoreCase("alertLanguageAlreadyAddedToRegion")) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertLanguageAlreadyAddedToRegion");
+				}
+			}
+			if ((String[]) programMap.get("emxTableRowId_Country") != null) {
+				List<EmxTableRowId> emxTableRowIds_Countries = EmxTableRowId.getTableRowIds((String[]) programMap.get("emxTableRowId_Country"));
+				List<String> countryIdList = new ArrayList<String>(emxTableRowIds_Countries.size());
+				for (EmxTableRowId emxTableRowId : emxTableRowIds_Countries) {
+					countryIdList.add(emxTableRowId.getObjectId());
+				}
+				if (!Helper.isAllKindOfType(context, countryIdList, TYPE_COUNTRY)) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectCountriesOnly");
+				}
+				return2 = addLanguageToCountry(context, emxTableRowIds_Countries, languageIds);
+				if (return2.equalsIgnoreCase("alertLanguageAlreadyAddedToCountry")) {
+					return Helper.encodeFunctionForJavaScript(context, false, "alertLanguageAlreadyAddedToCountry");
+				}
+			}
+			return return1 + ";" + return2 + ";";
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the language range values for Range function depending on Country
+	 * field value
+	 * 
+	 * @param context
+	 *            ENOVIA context object
+	 * @param args
+	 *            args holds input arguments.
+	 * @return Map <?, ?> containing the return range Map
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	public Map<?, ?> getLanguageRange(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			StringList languageIds = new StringList(0);
+			StringList langaugeNames = new StringList(0);
+			Map rangeMap = new HashMap();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> fieldMap = (Map<?, ?>) programMap.get("fieldMap");
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			final String REL_BELONGSTOCOUNTRY = PropertyUtil.getSchemaProperty(context, "relationship_BelongsToCountry");
+			String objectId = (String) paramMap.get("objectId");
+			if (!Helper.isNullOrEmpty(objectId)) {
+				DomainObject domObj = DomainObject.newInstance(context, objectId);
+				Map<String, String> relatedCountryMap = domObj.getRelatedObject(context, REL_BELONGSTOCOUNTRY, true, new StringList(
+						DomainConstants.SELECT_ID), null);
+				DomainObject country = DomainObject.newInstance(context, relatedCountryMap.get(DomainConstants.SELECT_ID));
+				String policyLanguage = PropertyUtil.getSchemaProperty(context, "policy_Language");
+				String whereExpression = "current==" + PropertyUtil.getSchemaProperty(context, "policy", policyLanguage, "state_Active");
+				List<Map<String, String>> languageMapList = geographyConfiguration.getLanguagesOfCountry(context, country, null, whereExpression);
+				if (languageMapList.isEmpty() || languageMapList.size() == 0) {
+					languageIds.add("");
+					langaugeNames.add("");
+				}
+				for (Map<?, ?> languageMap : languageMapList) {
+					languageIds.add((String) languageMap.get(DomainConstants.SELECT_ID));
+					langaugeNames.add((String) languageMap.get(DomainConstants.SELECT_NAME));
+				}
+			}
+			rangeMap.put("field_choices", languageIds);
+			rangeMap.put("field_display_choices", langaugeNames);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the language range values for a) Range function depending on field
+	 * values obtained from a Structure Browser table column
+	 * 
+	 * @param context
+	 *            ENOVIA context object
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map <?, ?> containing the return range Map
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	 
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> getLanguageRangeForSBTable(Context context, String[] args) throws GeographyConfigurationException {
+		Map rangeMap = new HashMap();
+		StringList languageIds = new StringList(0);
+		StringList langaugeNames = new StringList(0);
+		final String TYPE_COUNTRY = PropertyUtil.getSchemaProperty(context, "type_Country");
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> columnValues = (Map<?, ?>) programMap.get("columnValues");
+			if (columnValues != null) {
+				String countryName = (String) columnValues.get("Country");
+				if (!Helper.isNullOrEmpty(countryName)) {
+					MapList countryList = DomainObject.findObjects(context, TYPE_COUNTRY, countryName, "-", DomainConstants.QUERY_WILDCARD,
+							DomainConstants.QUERY_WILDCARD, "", true, new StringList(DomainConstants.SELECT_ID));
+					String countryId = (String) ((HashMap) countryList.get(0)).get(DomainConstants.SELECT_ID);
+					DomainObject country = DomainObject.newInstance(context, countryId);
+					String policyLanguage = PropertyUtil.getSchemaProperty(context, "policy_Language");
+					String whereExpression = "current==" + PropertyUtil.getSchemaProperty(context, "policy", policyLanguage, "state_Active");
+					List<Map<String, String>> languageMapList = geographyConfiguration.getLanguagesOfCountry(context, country, null, whereExpression);
+					if (languageMapList.isEmpty() || languageMapList.size() == 0) {
+						languageIds.add("");
+						langaugeNames.add("");
+					}
+					for (Map<?, ?> languageMap : languageMapList) {
+						languageIds.add((String) languageMap.get(DomainConstants.SELECT_ID));
+						langaugeNames.add((String) languageMap.get(DomainConstants.SELECT_NAME));
+					}
+					rangeMap.put("RangeValues", languageIds);
+					rangeMap.put("RangeDisplayValue", langaugeNames);
+				}
+			}
+			else {
+				languageIds.add("");
+				langaugeNames.add("");
+				rangeMap.put("RangeValues", languageIds);
+				rangeMap.put("RangeDisplayValue", langaugeNames);
+			}
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the language range values for b) Reload funtion depending on field
+	 * values obtained from a Form field
+	 * 
+	 * @param context
+	 *            ENOVIA context object
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map <?, ?> containing the return range Map
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> getReloadLanguageRangeForForm(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			final String TYPE_COUNTRY = PropertyUtil.getSchemaProperty(context, "type_Country");
+			StringList languageIds = new StringList(0);
+			StringList langaugeNames = new StringList(0);
+			Map rangeMap = new HashMap();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> fieldValues = (Map<?, ?>) programMap.get("fieldValues");
+			String templateId = null;
+			if (fieldValues != null) {
+				templateId = (String) fieldValues.get("SelectTemplate");
+			}
+			if (fieldValues != null) {
+				String countryId = (String) fieldValues.get("CountryOID");
+				if (Helper.isNullOrEmpty(countryId)) {
+					String countryName = ((String) fieldValues.get("Country")).trim();
+					MapList countryList = DomainObject.findObjects(context, TYPE_COUNTRY, countryName, "-", DomainConstants.QUERY_WILDCARD,
+							DomainConstants.QUERY_WILDCARD, "", true, new StringList(DomainConstants.SELECT_ID));
+					if (!Helper.isNullOrEmpty(countryList)) {
+						countryId = (String) ((HashMap) countryList.get(0)).get(DomainConstants.SELECT_ID);
+					}
+					else {
+						countryId = (String) fieldValues.get("Country");
+					}
+				}
+				if (!Helper.isNullOrEmpty(countryId)) {
+					DomainObject country = DomainObject.newInstance(context, countryId);
+					String policyLanguage = PropertyUtil.getSchemaProperty(context, "policy_Language");
+					String whereExpression = "current==" + PropertyUtil.getSchemaProperty(context, "policy", policyLanguage, "state_Active");
+					List<Map<String, String>> languageMapList = geographyConfiguration.getLanguagesOfCountry(context, country, null, whereExpression);
+					if (languageMapList.isEmpty() || languageMapList.size() == 0) {
+						languageIds.add("");
+						langaugeNames.add("");
+					}
+					for (Map<?, ?> languageMap : languageMapList) {
+						languageIds.add((String) languageMap.get(DomainConstants.SELECT_ID));
+						langaugeNames.add((String) languageMap.get(DomainConstants.SELECT_NAME));
+					}
+				}
+				rangeMap.put("RangeValues", languageIds);
+				rangeMap.put("RangeDisplayValues", langaugeNames);
+			}
+			else {
+				languageIds.add("");
+				langaugeNames.add("");
+				rangeMap.put("field_choices", languageIds);
+				rangeMap.put("field_display_choices", langaugeNames);
+			}
+
+			if (!Helper.isNullOrEmpty(templateId)) {
+				DomainObject dmoSubmissionTemplate = DomainObject.newInstance(context, templateId);
+				List<Map<?, ?>> mlLanguages = QueryUtil.getRelatedObjects(context, dmoSubmissionTemplate, "relationship_Language", "type_Language",
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME), Helper.stringList(), false, true, (short) 0, "",
+						"");
+
+				final String SELECT_LANGUAGE_ID = "from[" + PropertyUtil.getSchemaProperty(context, "relationship_Language") + "].to.id";
+				final String SELECT_LANGUAGE_NAME = "from[" + PropertyUtil.getSchemaProperty(context, "relationship_Language") + "].to.name";
+				StringList selectables = Helper.stringList(SELECT_LANGUAGE_ID, SELECT_LANGUAGE_NAME);
+				Map<?, ?> mpInfo = dmoSubmissionTemplate.getInfo(context, selectables);
+				String languageId = (String) mpInfo.get(SELECT_LANGUAGE_ID);
+				String languageName = (String) mpInfo.get(SELECT_LANGUAGE_NAME);
+				StringList slLanugageID = FrameworkUtil.split(languageId, "|");
+				StringList slLanugageName = FrameworkUtil.split(languageName, "|");
+				rangeMap.put("SelectedValues", languageId);
+				rangeMap.put("SelectedDisplayValues", languageName);
+			}
+
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+}
+

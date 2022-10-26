@@ -1,0 +1,355 @@
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.audittrail.AuditTrailConstants;
+import com.dassault_systemes.enovia.audittrail.AuditTrailUtil;
+import com.dassault_systemes.enovia.audittrail.service.AuditTrailService;
+import com.dassault_systemes.enovia.audittrail.service.impl.AuditTrailServiceImpl;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UIUtil;
+public class ${CLASSNAME} {
+
+
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditTrailsHistoryTable(Context context, String args[]) throws Exception {
+
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String structuralHistory = (String) programMap.get(AuditTrailConstants.STRUCTURAL_HISTORY);
+			String strFilterSearch = (String) programMap.get(AuditTrailConstants.SELECT_SEARCHFILTER);
+			boolean isStructuralHistory=false;
+			if (UIUtil.isNullOrEmpty(strFilterSearch))
+				strFilterSearch = DomainConstants.EMPTY_STRING;
+			if(UIUtil.isNotNullAndNotEmpty(structuralHistory))
+				isStructuralHistory = Boolean.valueOf(structuralHistory);
+
+			String mode = (String) programMap.get(AuditTrailConstants.MODE);
+
+			String startDateFromInput = (String) programMap.get(AuditTrailConstants.AUDIT_HISTORY_START_DATE);
+			String endDateFromInput = (String) programMap.get(AuditTrailConstants.AUDIT_HISTORY_END_DATE);
+
+			String startDateInput = DomainConstants.EMPTY_STRING;
+			String endDateInput = DomainConstants.EMPTY_STRING;
+
+			SimpleDateFormat mxDateFrmt = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), context.getLocale());
+			double iClientTimeOffset = (new Double((String) programMap.get("timeZone"))).doubleValue();
+			Locale locale = (Locale) programMap.get("localeObj");
+
+
+			if (UIUtil.isNotNullAndNotEmpty(startDateFromInput)) {
+
+				String formattedDisplayDateValue = eMatrixDateFormat.getFormattedInputDateTime(context, startDateFromInput, "12:00:00 AM",
+						iClientTimeOffset, locale);
+				Date Startdate1 = eMatrixDateFormat.getJavaDate(formattedDisplayDateValue, context.getLocale());
+				startDateInput = mxDateFrmt.format(Startdate1);
+
+				// Date Startdate =
+				// eMatrixDateFormat.getJavaDate(startDateFromInput,
+				// context.getLocale());
+				// startDateInput = mxDateFrmt.format(Startdate);
+			}
+			if (UIUtil.isNotNullAndNotEmpty(endDateFromInput)) {
+
+				String formattedDisplayDateValue = eMatrixDateFormat.getFormattedInputDateTime(context, endDateFromInput, "11:59:59 PM",
+						iClientTimeOffset, locale);
+				Date Enddate1 = eMatrixDateFormat.getJavaDate(formattedDisplayDateValue, context.getLocale());
+				endDateInput = mxDateFrmt.format(Enddate1);
+
+				// Date Enddate =
+				// eMatrixDateFormat.getJavaDate(endDateFromInput,
+				// context.getLocale());
+				// endDateInput = mxDateFrmt.format(Enddate);
+				// Calendar cal = Calendar.getInstance();
+				// cal.setTime(Enddate);
+				// cal.add(Calendar.DATE, 1); // add 10 days
+				//
+				// Enddate = cal.getTime();
+				// endDateInput = mxDateFrmt.format(Enddate);
+			}
+
+			String strObjectId = (String) programMap.get("objectId");
+			String relId = (String) programMap.get("relId");
+			AuditTrailService auditService = new AuditTrailServiceImpl();
+			MapList mlHistory=new MapList();
+			if(UIUtil.isNotNullAndNotEmpty(relId))
+			{
+				 mlHistory = (MapList) auditService.getRelationshipHistory(context,  relId , strFilterSearch);
+			}
+			else
+			{
+				mlHistory = (MapList) auditService.getHistory(context, new String[] { strObjectId }, startDateInput, endDateInput,
+					isStructuralHistory, strFilterSearch);
+
+			if (isStructuralHistory && UIUtil.isNotNullAndNotEmpty(mode))
+				mlHistory.addAll(auditService.addRelatedItemHistory(context, strObjectId, startDateInput, endDateInput, mode, strFilterSearch));
+			}
+
+			return  mlHistory;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Method to remove parenthesis from Action List values
+	 * 
+	 * Wsd * @param getActionList holds Action
+	 * 
+	 * @return List of Actions after removing parenthesis
+	 * @exclude
+	 */
+	public StringList trimCustomActionInList(StringList getActionList) {
+		StringList trimCustomActionList = new StringList();
+		for (Object action : getActionList) {
+			String getAction = (String) action;
+			if (getAction.indexOf("(") == 0 && getAction.indexOf(")") == getAction.length() - 1) {
+				getAction = getAction.substring(getAction.indexOf("(") + 1, getAction.length() - 1);
+
+			}
+			trimCustomActionList.add(getAction);
+		}
+		return trimCustomActionList;
+	}
+
+
+
+	public StringList getColumnHistoryItem(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, AuditTrailConstants.ITEM);
+	}
+
+	public StringList getColumnHistoryPreviousValue(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, AuditTrailConstants.PREVIOUS_VALUE);
+	}
+
+	public StringList getColumnHistoryNewValue(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, AuditTrailConstants.NEW_VALUE);
+	}
+
+	public StringList getColumnHistoryPeriod(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, "Period");
+	}
+
+	public StringList getColumnHistoryUser(Context context, String args[]) throws Exception {
+		StringList userList = new StringList();
+		try {
+			StringList tempList = getHistoryContents(context, args, AuditTrailConstants.SELECT_USER);
+
+			for (Object user : tempList) {
+				String strName = (String) user;
+				String strFullName = PersonUtil.getFullName(context, strName);
+				userList.add(strFullName);
+			}
+		}
+		catch (FrameworkException e) {
+			throw new Exception(e);
+		}
+		return (StringList) userList;
+	}
+
+	/**
+	 * Method to get Time Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Time
+	 * @throws Exception
+	 *             if operation fails
+	 * @exclude
+	 */
+	public StringList getColumnHistoryTime(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, AuditTrailConstants.SELECT_TIME);
+	}
+
+
+	/**
+	 * Method to get contents of History of particular key given
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of values for key
+	 * @throws Exception
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public StringList getHistoryContents(Context context, String args[], String key) throws Exception {
+		StringList keyList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(AuditTrailConstants.OBJECTLIST);
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strObjectKey = (String) mapObject.get(key);
+				if (UIUtil.isNullOrEmpty(strObjectKey))
+					keyList.add(DomainConstants.EMPTY_STRING);
+				else
+					keyList.add(strObjectKey);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		return keyList;
+	}
+
+	/**
+	 * Method to get Action Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Actions
+	 * @throws Exception
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public StringList getColumnHistoryAction(Context context, String args[]) throws Exception {
+		StringList getActionList = getHistoryContents(context, args, AuditTrailConstants.SELECT_ACTION);
+		StringList actionList = trimCustomActionInList(getActionList);
+
+		return (StringList) actionList;
+	}
+
+	/**
+	 * Method to get State Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of States
+	 * @throws Exception
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public StringList getColumnHistoryState(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, DomainConstants.SELECT_STATES);
+	}
+
+	/**
+	 * Method to get Description Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Descriptions
+	 * @throws Exception
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public StringList getColumnHistoryDescription(Context context, String args[]) throws Exception {
+		return (StringList) getHistoryContents(context, args, DomainConstants.SELECT_DESCRIPTION);
+	}
+
+	/**
+	 * Method to get Name Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Names
+	 * @throws Exception
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryName(Context context, String args[]) throws Exception {
+		List nameList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(AuditTrailConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(AuditTrailConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(AuditTrailConstants.REPORTFORMAT);
+			Iterator objectListIterator = objectList.iterator();
+
+			while (objectListIterator.hasNext()) {
+				Map mapObject = (Map) objectListIterator.next();
+				String strObjectName = (String) mapObject.get(DomainConstants.SELECT_NAME);
+				String strId = (String) mapObject.get(DomainConstants.SELECT_ID);
+				String strName = DomainConstants.EMPTY_STRING;
+				if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strId)) {
+					strName = AuditTrailUtil.getObjectLink(context, strId, strObjectName);
+				}
+				if (UIUtil.isNotNullAndNotEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strId)) {
+					strName = strObjectName;
+				}
+
+				nameList.add(strName);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		return nameList;
+	}
+
+	public boolean checkStructuralMode(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+
+		String structuralHistory = (String) programMap.get(AuditTrailConstants.STRUCTURAL_HISTORY);
+		if (Boolean.valueOf(structuralHistory)) {
+			return true;
+		}
+		return false;
+
+	}
+
+	@com.dassault_systemes.enovia.audittrail.AuditTrailExecuteCallable
+	public String preProcessHistory(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String strObjectId[] = (String[]) programMap.get("objectId");
+		String structuralHistory[] = (String[]) programMap.get("structuralHistory");
+		String mode[] = (String[]) programMap.get(AuditTrailConstants.MODE);
+		String relationship[] = (String[]) programMap.get("relationship");
+		String relId[] = (String[]) programMap.get("relId");
+		String strMode=DomainConstants.EMPTY_STRING;
+		String strRelationship = DomainConstants.EMPTY_STRING;
+		String strStructuralHistory = "false";
+		String strRelId = DomainConstants.EMPTY_STRING;
+		String targetLocation[] = (String[]) programMap.get("targetLocation");
+		
+		String strTargetLocation=DomainConstants.EMPTY_STRING;
+		if(targetLocation!=null)
+		{
+			strTargetLocation=targetLocation[0];
+		}		
+		if(mode!=null)
+		{
+			strMode=mode[0];
+		}
+		if (structuralHistory != null) {
+			strStructuralHistory = structuralHistory[0];
+		}
+		if (relationship != null) {
+			strRelationship = relationship[0];
+			strStructuralHistory= "false";
+			if(relId!=null)
+				strRelId = relId[0];
+		}
+
+		return AuditTrailUtil.encodeFunctionForJavaScript(context, false, "showHistory", strObjectId[0], strStructuralHistory, strMode,
+				 strRelId,strTargetLocation);
+	}
+
+}
+

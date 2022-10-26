@@ -1,0 +1,99 @@
+/*
+ ** ${CLASSNAME}
+ **
+ ** Copyright (c) 1993-2018 Dassault Systemes. All Rights Reserved.
+ ** This program contains proprietary and trade secret information of
+ ** Dassault Systemes.
+ ** Copyright notice is precautionary only and does not evidence any actual
+ ** or intended publication of such program
+ */
+
+import java.io.*;
+import matrix.db.*;
+import matrix.util.*;
+import com.matrixone.apps.domain.util.*;
+
+public class ${CLASSNAME} extends ${CLASS:emxCommonFindObjects}
+{
+    String migrationProgramName = "emxPartMasterMigration";
+
+    /**
+    *
+    * @param context the eMatrix <code>Context</code> object
+    * @param args holds no arguments
+    * @throws Exception if the operation fails
+    * @grade 0
+    */
+    public ${CLASSNAME} (Context context, String[] args)
+            throws Exception
+    {
+     super(context, args);
+    }
+
+    /**
+     * Evalutes a temp query to get all the DOCUEMENTS objects in the system
+     * @param context the eMatrix <code>Context</code> object
+     * @param chunksize has the no. of objects to be stored in file.
+     * @return void
+     * @exception Exception if the operation fails.
+     */
+    public void getIds(Context context, int chunkSize) throws Exception
+    {
+        // Written using temp query to optimize performance in anticipation of
+        // large 1m+ documents in system.
+        // Utilize query limit to use different algorithim in memory allocation
+
+        String vaultList = "*";
+
+        try
+        {
+            FrameworkProperties.getProperty(context, "emxComponents.CommonMigration.VaultList");
+        }
+        catch(Exception e)
+        {
+            //do nothing
+        }
+        String whereClause = "(revision == first) && (policy.property[PolicyClassification] == \"Development\" || policy.property[PolicyClassification] == \"Production\")";
+        String command = "temp query bus '" + type + "' '" + name + "' '" + revision + "'  vault '" + vaultList + "' limit 1 where '" + whereClause + " && program[" + migrationProgramName + " -method writeOID ${OBJECTID} \"${TYPE}\"] == true'";
+        writer.write("command = "+ command + "\n");
+
+        //reset/set static variabless back to original values every time this JPO is run
+        ${CLASS:emxPartMasterMigration}._counter  = 0;
+        ${CLASS:emxPartMasterMigration}._sequence  = 1;
+        ${CLASS:emxPartMasterMigration}._oidsFile = null;
+        ${CLASS:emxPartMasterMigration}._fileWriter = null;
+        ${CLASS:emxPartMasterMigration}._objectidList = null;
+
+        //set statics
+        //create BW and file first time
+        if (${CLASS:emxPartMasterMigration}._fileWriter == null)
+        {
+            try
+            {
+                ${CLASS:emxPartMasterMigration}.documentDirectory = documentDirectory;
+                ${CLASS:emxPartMasterMigration}._oidsFile = new java.io.File(documentDirectory + "objectids_1.txt");
+                ${CLASS:emxPartMasterMigration}._fileWriter = new BufferedWriter(new FileWriter(${CLASS:emxPartMasterMigration}._oidsFile));
+                ${CLASS:emxPartMasterMigration}._chunk = chunkSize;
+                ${CLASS:emxPartMasterMigration}._objectidList = new StringList(chunkSize);
+            }
+            catch(FileNotFoundException eee)
+            {
+                throw eee;
+            }
+        }
+
+        try
+        {
+            MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 vault $4 limit $5 where $6",
+                               type,name,revision,vaultList,"1",whereClause + " && program[" + migrationProgramName + " -method writeOID ${OBJECTID} \"${TYPE}\"] == true");
+        }
+        catch(Exception me)
+        {
+            throw me;
+        }
+
+        // call cleanup to write the left over oids to a file
+        ${CLASS:emxPartMasterMigration}.cleanup();
+    }
+}
+

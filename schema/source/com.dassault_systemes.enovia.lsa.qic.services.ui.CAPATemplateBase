@@ -1,0 +1,357 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPAProjectService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPATemplateService;
+import com.dassault_systemes.enovia.lsa.services.PNOService;
+import com.matrixone.apps.common.ContentReplicateOptions;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets CAPAProjectService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return CAPAProjectService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private static CAPAProjectService getCAPAProjectService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPAProjectService service = (CAPAProjectService) LSAQICCore.getService(CAPAProjectService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets CAPATemplateService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return CAPATemplateService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private static CAPATemplateService getCAPATemplateService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPATemplateService service = (CAPATemplateService) LSAQICCore.getService(CAPATemplateService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the PNOService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return PNOService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static PNOService getPNOService(Context context) throws QICException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			PNOService service = (PNOService) component.getService(PNOService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the list of all CAPA Templates based on the filter value selected.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return MapList containing the ids of CAPA objects
+	 * @throws QICException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createCAPATemplate(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_TITLE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_TITLE);
+		Map<String, String> returnMap = null;
+		try {
+			returnMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strType = (String) programMap.get(QICConstants.FIELD_TYPE_ACTUAL);
+			String strTitle = (String) programMap.get(QICConstants.FIELD_TITLE);
+
+			Map<String, String> attributeMap = new HashMap<String, String>();
+			attributeMap.put(ATTRIBUTE_TITLE, strTitle);
+
+			CAPATemplateService capaTemplateService = getCAPATemplateService(context);
+			DomainObject dmoCAPATempalte = capaTemplateService.createCAPATemplate(context, strType, attributeMap);
+
+			returnMap.put("id", dmoCAPATempalte.getObjectId());
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the list of all CAPA Templates based on the filter value selected.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return MapList containing the ids of CAPA objects
+	 * @throws QICException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getCAPATemplateSummary(Context context, String[] args) throws QICException {
+		final String POLICY_PROJECT_TEMPLATE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_policy_ProjectTemplate);
+		final String STATE_PROJECT_TEMPLATE_ACTIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_TEMPLATE, "state_Active");
+		final String STATE_PROJECT_TEMPLATE_INACTIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_TEMPLATE, "state_Inactive");
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CAPA_TEMPLATE_FILTER);
+			StringBuilder sbBusWhere = new StringBuilder();
+			List<Map<?, ?>> capaTemplateSummary = new ArrayList<Map<?, ?>>();
+
+			if (strFilterValue == null) {
+				// do nothing here
+			}
+			else if ((STATE_PROJECT_TEMPLATE_INACTIVE).equals(strFilterValue)) {
+				sbBusWhere.append("current=='");
+				sbBusWhere.append(STATE_PROJECT_TEMPLATE_INACTIVE);
+				sbBusWhere.append("'");
+			}
+			else if ((STATE_PROJECT_TEMPLATE_ACTIVE).equals(strFilterValue)) {
+
+				sbBusWhere.append("current=='");
+				sbBusWhere.append(STATE_PROJECT_TEMPLATE_ACTIVE);
+				sbBusWhere.append("'");
+			}
+
+			CAPATemplateService capaTemplateService = getCAPATemplateService(context);
+			capaTemplateSummary = capaTemplateService.getCAPATemplate(context, sbBusWhere.toString());
+
+			return new MapList(capaTemplateSummary);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Owner of the Object and opening Owner's properties page on click of
+	 * that Owner Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCAPATemplateSummaryColumnOwner(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> objList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> ownerList = new Vector<String>();
+			if (!Helper.isNullOrEmpty(objList)) {
+				for (Map map : objList) {
+					String strCAPATemplatedId = (String) map.get(DomainConstants.SELECT_ID);
+					String strOwnerHyperLink = QICUtil.getOwnerHyperlink(context, strCAPATemplatedId);
+					if (!Helper.isNullOrEmpty(strOwnerHyperLink)) {
+						ownerList.add(strOwnerHyperLink);
+					}
+					else {
+						ownerList.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return ownerList;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionForCommandQICCAPATemplateClone(Context context, String[] args) throws QICException {
+		try {
+
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			CAPAProjectService capaProjectService = getCAPAProjectService(context);
+			String[] emxTableRowIds = (String[]) inputMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			String sourceCAPATemplateId = EmxTableRowId.getTableRowIds(emxTableRowIds).get(0).getObjectId();
+
+			DomainObject srcCAPATemp = DomainObject.newInstance(context, sourceCAPATemplateId);
+
+			capaProjectService.cloneTemplate(context, srcCAPATemp, ContentReplicateOptions.COPY, ContentReplicateOptions.COPY,
+					ContentReplicateOptions.COPY);
+			String successMsg = Helper.getProperty(context, "QIC.CAPATemplate.TemplateCloneSuccessMessage");
+			return Helper.encodeFunctionForJavaScript(context, false, "alertCAPATemplateClonedSuccessfully", successMsg);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Owner of the Object and opening Owner's properties page on click of
+	 * that Owner Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public String getFormQICCAPATemplatePropertiesFieldOwner(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(QICConstants.PARAM_MAP);
+			String strCAPATemplateId = (String) paramMap.get(QICConstants.OBJECT_ID);
+			String strCAPAOwnerHyperLink = QICUtil.getOwnerHyperlink(context, strCAPATemplateId);
+			return strCAPAOwnerHyperLink;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Updates Owner of the Object. This method can be used in structured
+	 * browser as well form.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public void updateOwnerForObject(Context context, String[] args) throws QICException {
+		final String TYPE_PERSON = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_type_Person);
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> mpParamMap = (HashMap<?, ?>) programMap.get(QICConstants.PARAM_MAP);
+			String strNewVal = (String) mpParamMap.get(QICConstants.NEW_VALUE);
+			String strCAPATemplateId = (String) mpParamMap.get(QICConstants.OBJECT_ID);
+
+			if (!Helper.isNullOrEmpty(strCAPATemplateId) && !Helper.isNullOrEmpty(strNewVal)) {
+				StringBuilder whereExp = new StringBuilder("name == '");
+				whereExp.append(strNewVal);
+				whereExp.append("'");
+
+				List<Map<?, ?>> personList = QueryUtil.findObjects(context, TYPE_PERSON, whereExp.toString(),
+						Helper.stringList(DomainConstants.SELECT_ID));
+				if (!Helper.isNullOrEmpty(personList)) {
+					Map<String, String> attributeMap = new HashMap<String, String>();
+					DomainObject dmoPerson = DomainObject.newInstance(context, (String) personList.get(0).get(DomainObject.SELECT_ID));
+					PNOService pnoService = getPNOService(context);
+					pnoService.changeAssignment(context, dmoPerson, attributeMap, strCAPATemplateId);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Puts Edit Access on form field "Title and Description".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void preProcessEditAccessCheckForCAPATemplatePropertiesForm(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(QICConstants.REQUEST_MAP);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(QICConstants.FORMMAP);
+			MapList formFieldList = (MapList) formMap.get(QICConstants.FIELDS);
+			String strCAPATemplateId = (String) requestMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strCAPATemplateId)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPATemplateId },
+						Helper.stringList(DomainConstants.SELECT_OWNER));
+				Map requestInfoMap = (Map) returnMap.get(0);
+				String strOwner = (String) requestInfoMap.get(DomainConstants.SELECT_OWNER);
+				for (Object object : formFieldList) {
+					Map<?, ?> fieldMap = (Map<?, ?>) object;
+					String fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+					if ((QICConstants.FIELD_TITLE.equalsIgnoreCase(fieldName) || QICConstants.FIELD_DESCRIPTION.equalsIgnoreCase(fieldName))
+							&& (!Helper.isNullOrEmpty(strOwner) && !(context.getUser().equalsIgnoreCase(strOwner)))) {
+						Map<String, String> settingsMap = (Map<String, String>) fieldMap.get(QICConstants.SETTINGS);
+						settingsMap.put(QICConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+}
+

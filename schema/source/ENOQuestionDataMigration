@@ -1,0 +1,573 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectItr;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionUtil;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+/**
+ * This program migrates V6R2014x LRA product data to V6R2015x Dassault
+ * Systemes' MARE product schema. The details of the migration are described in
+ * RFL in PES. This program is to be executed from MQL command line. The program
+ * produces traces under <ENOVIA Server installation dir/logs.
+ * 
+ * @author Dassault Systems
+ * 
+ */
+public class ${CLASSNAME} {
+
+	private static final String	TRACE_QUESTIONNAIRE_MIGRATION		= "QuestionnaireMigration";
+	private static final String	FILE_QUESTIONNAIRE_MIGRATION_LOG	= "QuestionnaireMigration.log";
+
+	private static String		SYM_ATTRIBUTE_TASK_TRANSFER	= "attribute_TaskTransfer";
+	private static String		ATTRIBUTE_TASK_TRANFER;
+	private static String		ATTRIBUTE_QUESTION_RESPONSE;
+	private static String		ATTRIBUTE_SEQUENCE_ORDER;
+	private static String       ATTRIBUTE_RESPONSIBLE_QUESTION_TYPE;
+
+	private void initialize(Context context) throws Exception {
+
+		ATTRIBUTE_TASK_TRANFER = PropertyUtil.getSchemaProperty(context, SYM_ATTRIBUTE_TASK_TRANSFER);
+		ATTRIBUTE_QUESTION_RESPONSE = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RESPONSE);
+		ATTRIBUTE_SEQUENCE_ORDER = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_SEQUENCE_ORDER);
+		ATTRIBUTE_RESPONSIBLE_QUESTION_TYPE = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_RESPONSIBLE_QUESTION_TYPE);
+	}
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		try {
+			traceBeginMethod(context);
+			traceBegin(context, "Initializing");
+			initialize(context);
+			traceEnd(context, "Initializing Ends");
+
+		}
+		catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new Exception(exp);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * Entry point of the migration program.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The command line arguments
+	 * @throws Exception
+	 *             if operation fails
+	 * @throws MatrixException
+	 */
+	public static void mxMain(Context context, String[] args) throws Exception {
+		try {
+			boolean traceON = true;
+			boolean allSession = false; // false for only this session
+
+			context.setTrace(FILE_QUESTIONNAIRE_MIGRATION_LOG, TRACE_QUESTIONNAIRE_MIGRATION, traceON, allSession);
+			traceBeginMethod(context);
+
+			ContextUtil.startTransaction(context, true);
+					try {
+						new ${CLASSNAME}(context, null).run(context);
+					}
+					catch (Exception e) {
+						// TODO Auto-generated catch block
+				ContextUtil.abortTransaction(context);
+						e.printStackTrace();
+					}
+			ContextUtil.commitTransaction(context);
+		}
+		catch (Exception exp) {
+			ContextUtil.abortTransaction(context);
+			traceError(context, exp.getMessage());
+			throw new Exception(exp);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * Starts the data migration.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private void run(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			System.out.println("----Migrating Impact Questionnaire ----");
+			migrateImpactQuestionnaireTemplate(context);
+			System.out.println("----Migrating Change Template----");
+			migrateChangeTemplate(context);
+			System.out.println("----Migrating Change Order----");
+			migrateChangeOrder(context);
+			System.out.println("----Migrating Complaint----");
+			migrateComplaint(context);
+			System.out.println("----Migrating Derived Event----");
+			migrateDerivedEvent(context);
+			System.out.println("----Migrating Change Action----");
+			migrateChangeAction(context);
+			System.out.println("----Migrating Regulatory Request Type----");
+			migrateRegulatoryRequestType(context);
+			System.out.println("----Migrating Regulatory Request----");
+			migrateRegulatoryRequest(context);
+		}
+		finally {
+
+			traceEndMethod(context);
+		}
+	}
+
+	private void migrateImpactQuestionnaireTemplate(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> impactQuestionnaireTemplateListMap = DomainObject.findObjects(context, "Impact Questionnaire",
+			null, "", new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> impactQuestionnaireMap : impactQuestionnaireTemplateListMap) {
+				String impactQuestionnaireTypeId = (String) impactQuestionnaireMap.get(DomainConstants.SELECT_ID);
+				DomainObject rSubTypeObj = DomainObject.newInstance(context, impactQuestionnaireTypeId);
+				//QuestionUtil.mqlCommand(context, "mod bus $1 organization $2", true, impactQuestionnaireTypeId, "Company Name");
+
+				rSubTypeObj.setAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_RESPONSIBLE_ROLE),
+						"Document Center Administrator");
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private void migrateChangeTemplate(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> changeTemplateListMap = DomainObject.findObjects(context, "Change Template",
+			null, "", new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> changeTemplateMap : changeTemplateListMap) {
+				String changeTemplateId = (String) changeTemplateMap.get(DomainConstants.SELECT_ID);
+				migrateParentQuestions(context, changeTemplateId, "Approval");
+				migrateEFormQuestions(context, changeTemplateId, "eForm");
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	private void migrateEFormQuestions(Context context, String changeTemplateId, String strAction) throws Exception {
+		try {
+			QuestionService questionService = new QuestionServiceImpl();
+			List<Map> lRelatedRootQuestionsList = questionService.getQuestion(context, changeTemplateId, strAction, "1", QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+			List<Map> lRelatedApprovalRootQuestionsList = questionService.getQuestion(context, changeTemplateId, "Approval", "1",QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+			int QuestionSize=lRelatedApprovalRootQuestionsList.size();
+			for (Map<?, ?> rootQuestionMap : lRelatedRootQuestionsList) {
+				String rootQuestionId = (String) rootQuestionMap.get(DomainConstants.SELECT_ID);
+				String rootQuestionRelId = (String) rootQuestionMap.get(DomainRelationship.SELECT_ID);
+				DomainRelationship rootQuestionRel = DomainRelationship.newInstance(context, rootQuestionRelId);
+				rootQuestionRel.setAttributeValue(context, ATTRIBUTE_RESPONSIBLE_QUESTION_TYPE, "Approval");
+				rootQuestionRel.setAttributeValue(context, ATTRIBUTE_SEQUENCE_ORDER,String.valueOf(QuestionSize+1));
+				QuestionSize++;
+				setSequenceOrder(context, rootQuestionId, strAction);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+	private void migrateParentQuestions(Context context, String changeTemplateId, String strAction) throws Exception {
+		try {
+			QuestionService questionService = new QuestionServiceImpl();
+			List<Map> lRelatedRootQuestionsList = questionService.getQuestion(context, changeTemplateId, strAction, "1",QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+
+			for (Map<?, ?> rootQuestionMap : lRelatedRootQuestionsList) {
+				String rootQuestionId = (String) rootQuestionMap.get(DomainConstants.SELECT_ID);
+				setSequenceOrder(context, rootQuestionId, strAction);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	private void setSequenceOrder(Context context, String rootQuestionId, String strAction) throws Exception {
+		try {
+			QuestionService questionService = new QuestionServiceImpl();
+			List<Map> lRelatedQuestionsList = questionService.getQuestion(context, rootQuestionId, strAction, "1",QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+			int i = 1;
+			for (Map<?, ?> subQuestionMap : lRelatedQuestionsList) {
+				String subQuestionId = (String) subQuestionMap.get(DomainConstants.SELECT_ID);
+				
+				String subQuestionRelId = (String) subQuestionMap.get(DomainRelationship.SELECT_ID);
+			
+				DomainRelationship subQuesRel = DomainRelationship.newInstance(context, subQuestionRelId);
+				String strTaskTransfer =subQuesRel.getAttributeValue(context,ATTRIBUTE_TASK_TRANFER);
+				String strQuestionResponse =subQuesRel.getAttributeValue(context,ATTRIBUTE_QUESTION_RESPONSE);
+				if(UIUtil.isNullOrEmpty(strQuestionResponse)){
+				if("TRUE".equalsIgnoreCase(strTaskTransfer))
+					strTaskTransfer="Yes";
+				else 
+					strTaskTransfer="No";
+				subQuesRel.setAttributeValue(context, ATTRIBUTE_QUESTION_RESPONSE, strTaskTransfer);
+				}
+				subQuesRel.setAttributeValue(context, ATTRIBUTE_SEQUENCE_ORDER, String.valueOf(i+1));
+				setSequenceOrder(context, subQuestionId, strAction);
+				i++;
+			}
+			return;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	private void migrateChangeOrder(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> changeOrderList = DomainObject.findObjects(context, "Change Order", null, "",
+					new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> changeOrderMap : changeOrderList) {
+				String changeOrderId = (String) changeOrderMap.get(DomainConstants.SELECT_ID);
+				setResponseValue(context, changeOrderId);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	public Map<String, Map<String, String>> setResponseValue(Context context, String strObjectId) throws Exception {
+		try {
+			QuestionUtil.ensureNotEmpty(strObjectId, "Object Id is null");
+			String strRelChangeOrderQuestionnaire = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_RELATED_ITEM_QUESTIONNAIRE);
+			String strAttrCOResposne = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RESPONSE);
+			StringList slSelects = new StringList();
+			Map mQuesIdResponse = new HashMap();
+			slSelects.add("from[" + strRelChangeOrderQuestionnaire + "].torel.to.id");
+			slSelects.add("from[" + strRelChangeOrderQuestionnaire + "].id");
+			slSelects.add(new StringBuilder("from[").append(strRelChangeOrderQuestionnaire).append("].attribute[").append(ATTRIBUTE_TASK_TRANFER)
+					.append("]").toString());
+			slSelects.add(new StringBuilder("from[").append(strRelChangeOrderQuestionnaire).append("].attribute[").append(ATTRIBUTE_QUESTION_RESPONSE)
+					.append("]").toString());
+
+			String strCO[] = new String[] { strObjectId };
+			BusinessObjectWithSelectList bList = BusinessObject.getSelectBusinessObjectData(context, strCO, slSelects);
+			for (BusinessObjectWithSelectItr itr = new BusinessObjectWithSelectItr(bList); itr.next();) {
+				BusinessObjectWithSelect bows = itr.obj();
+				StringList slQuesId = bows.getSelectDataList(new StringBuilder().append("from[").append(strRelChangeOrderQuestionnaire)
+						.append("].torel.to.id").toString());
+				StringList slResponse = bows.getSelectDataList(new StringBuilder().append("from[").append(strRelChangeOrderQuestionnaire)
+						.append("].attribute[").append(ATTRIBUTE_TASK_TRANFER).append("]").toString());
+				StringList slRelIds = bows.getSelectDataList(new StringBuilder().append("from[").append(strRelChangeOrderQuestionnaire)
+						.append("].id").toString());
+				StringList slQuestionResponseValue = bows.getSelectDataList(new StringBuilder().append("from[").append(strRelChangeOrderQuestionnaire)
+						.append("].attribute[").append(ATTRIBUTE_QUESTION_RESPONSE).append("]").toString());
+				if (slQuesId != null) {
+					for (int i = 0; i < slQuesId.size(); i++) {
+						String strTaskTransfer = slResponse.get(i).toString();
+						String strQuestionResponse=slQuestionResponseValue.get(i).toString();
+						DomainRelationship relObj = DomainRelationship.newInstance(context, slRelIds.get(i).toString());
+						if (UIUtil.isNullOrEmpty(strQuestionResponse)) {
+							if ("TRUE".equalsIgnoreCase(strTaskTransfer))
+								strTaskTransfer = "Yes";
+							else
+								strTaskTransfer = "No";
+							relObj.setAttributeValue(context, ATTRIBUTE_QUESTION_RESPONSE, strTaskTransfer);
+						}
+					}
+				}
+			}
+			return mQuesIdResponse;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+	private void migrateComplaint(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> complaintListMap = DomainObject.findObjects(context, "Complaint",
+			null, "", new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> complaintMap : complaintListMap) {
+				String complaintId = (String) complaintMap.get(DomainConstants.SELECT_ID);
+				migrateParentQuestions(context, complaintId, "AERComplaint");
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	private void migrateDerivedEvent(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> derivedEventList = DomainObject.findObjects(context, "Derived Event", null, "",
+					new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> derivedEventMap : derivedEventList) {
+				String derivedEventId = (String) derivedEventMap.get(DomainConstants.SELECT_ID);
+				setResponseValue(context, derivedEventId);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	private void migrateChangeAction(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> changeActionList = DomainObject.findObjects(context, "Change Action", null, "",
+					new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> changeActionMap : changeActionList) {
+				String changeActionId = (String) changeActionMap.get(DomainConstants.SELECT_ID);
+				setResponseValue(context, changeActionId);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	private void migrateRegulatoryRequestType(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> regulatoryRequestTypeList = DomainObject.findObjects(context, "Regulatory Request Type",
+			null, "", new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> regulatoryRequestTypeMap : regulatoryRequestTypeList) {
+				String regulatoryRequestTypeId = (String) regulatoryRequestTypeMap.get(DomainConstants.SELECT_ID);
+				migrateParentQuestions(context,regulatoryRequestTypeId, "RegulatoryRequest");
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	private void migrateRegulatoryRequest(Context context) throws Exception {
+		try {
+			traceBeginMethod(context);
+			List<String> objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_NAME);
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_REVISION);
+
+			List<Map<?, ?>> regulatoryRequestList = DomainObject.findObjects(context, "Regulatory Request",null, "",
+					new StringList(new ArrayList<String>(objSelects)));
+
+			for (Map<?, ?> regulatoryRequestMap : regulatoryRequestList) {
+				String regulatoryRequestId = (String) regulatoryRequestMap.get(DomainConstants.SELECT_ID);
+				setResponseValue(context,regulatoryRequestId);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+	/**
+	 * Prints trace message for trace type LRAMigration
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void trace(Context context, String message) throws Exception {
+		try {
+			context.printTrace(TRACE_QUESTIONNAIRE_MIGRATION, message);
+		}
+		catch (MatrixException exp) {
+			traceError(context, exp.getMessage());
+			throw new Exception(exp);
+		}
+	}
+
+	/**
+	 * Print "Begin: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void traceBegin(Context context, String message) throws Exception {
+		trace(context, "Begin: " + message);
+	}
+
+	/**
+	 * Print "End: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void traceEnd(Context context, String message) throws Exception {
+		trace(context, "End: " + message);
+	}
+
+	/**
+	 * Print "ERROR: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void traceError(Context context, String message) throws Exception {
+		trace(context, "ERROR: " + message);
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void traceEndMethod(Context context) throws Exception {
+		String methodName = getTracedMethodName();
+		traceEnd(context, methodName + "()");
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private static void traceBeginMethod(Context context) throws Exception {
+		String methodName = getTracedMethodName();
+		traceBegin(context, methodName + "()");
+	}
+
+	/**
+	 * Returns the name of the method being traced. This SHOULD NOT be called by
+	 * any client other than traceBeginMethod and traceEndMethod methods.
+	 * 
+	 * @return the method name
+	 */
+	private static String getTracedMethodName() {
+		Exception exp = new Exception();
+		StackTraceElement[] stes = exp.getStackTrace();
+		StackTraceElement ste = stes[2];
+		String methodName = ste.getMethodName();
+		return methodName;
+	}
+
+
+}
+

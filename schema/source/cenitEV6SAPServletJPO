@@ -1,0 +1,303 @@
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.regex.Pattern;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.*;
+import matrix.util.*;
+
+import de.cenit.ev6sap.adaptor.EV6SAPAdaptor;
+import de.cenit.ev6sap.adaptor.EV6SAPAdaptor.*;
+import de.cenit.ev6sap.adaptor.Result;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}() throws Exception {}
+
+
+	public int mxMain(Context Ctx, String[] Args, HttpServletRequest ServletRequest, HttpServletResponse ServletResponse) throws Exception {
+
+	 return mxMainEV6SAP(Ctx, Args, ServletRequest, ServletResponse).Code;
+	}
+
+
+	public Hashtable mxMainServlet(Context Ctx, String[] args) throws Exception {
+	
+		
+	HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		
+//	String BusID=(String) paramMap.get("BusID");
+	String Operation=(String) paramMap.get("Operation");
+	String DialogMode=(String) paramMap.get("DialogMode");
+	String Input=(String) paramMap.get("Input");
+	
+//	putTrace("mxMainServlet: BusID "+BusID);
+	putTrace("mxMainServlet: Operation "+Operation);
+	putTrace("mxMainServlet: DialogMode "+DialogMode);
+	HttpServletRequest ServletRequest=(HttpServletRequest) paramMap.get("ServletRequest");
+	HttpServletResponse ServletResponse=(HttpServletResponse) paramMap.get("ServletResponse");
+	
+	String Output="";
+	 Hashtable result = new Hashtable();
+	                    String[] Args = new String[10];
+        
+                   //String BusID ="0";
+                   //String DialogMode = "0";
+                   String Mode = "Online";
+
+                   Args[0] ="0";
+                   Args[1] = Operation;
+                   Args[2] = DialogMode;
+                   Args[3] = Mode;
+				   Args[4] = Input;
+
+                 Result r_return = mxMainEV6SAP(Ctx, Args, ServletRequest, ServletResponse);
+	
+	result.put("Code", r_return.Code );
+	result.put("Message", r_return.Message );
+	result.put("Output", r_return.Output );
+	result.put("List", r_return.List);
+	return result;
+	}
+
+
+	
+	public de.cenit.ev6sap.adaptor.Result mxMainEV6SAP(Context Ctx, String[] Args, HttpServletRequest ServletRequest, HttpServletResponse ServletResponse) throws Exception {
+
+ try {
+ 
+
+
+{
+
+    		
+			 try {
+            Thread.sleep(2);
+        } catch (NumberFormatException e) {
+        } catch (InterruptedException e) {
+        }
+			}
+
+		
+		
+        String BusID, Operation, DialogMode, Mode, Input = "";
+        BusID = Args[0];
+        Operation = Args[1];
+        DialogMode = Args[2];
+        Mode = Args[3];
+        if (Args.length > 4) Input = Args[4];
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        putTrace("\n\n\n---------- mxMainEV6SAP:Servlet: EV6SAP JPO mxMain " + df.format(new Date()) + "----------");
+        putTrace("mxMainEV6SAP:Servlet: ObjectID = " + BusID);
+        putTrace("mxMainEV6SAP:Servlet:Operation = " + Operation);
+        putTrace("mxMainEV6SAP:Servlet:DialogMode = " + DialogMode);
+        putTrace("mxMainEV6SAP:Servlet:Mode = " + Mode);
+        putTrace("mxMainEV6SAP:Servlet:Input = " + Input);
+        MQLCommand MQL = new MQLCommand();
+        MQL.executeCommand(Ctx, "list env");
+        putTrace("RPE:\n" + MQL.getResult());
+        if (BusID.isEmpty()) {
+            MQL.executeCommand(Ctx, "get env OBJECTID");
+            BusID = MQL.getResult();
+            if (BusID.trim().isEmpty()) {
+                MQL.executeCommand(Ctx, "get env ID");
+                BusID = MQL.getResult();
+            }
+        }
+        BusID = BusID.replace("\n", "");
+        putTrace("mxMainEV6SAP:Servlet:ObjectID = " + BusID);
+        if (Mode.equalsIgnoreCase("Batch")) {
+            try {
+                EV6SAPAdaptor ev6sapAdaptor = new EV6SAPAdaptor();
+                ev6sapAdaptor.createRequestObject(Ctx, BusID, Operation, DialogMode, Input);
+				
+                return new Result (0,"RequestObject crearted ...");
+            } catch (MatrixException e) {
+                MQL.executeCommand(Ctx, "error \"Error creating Request Object: " + e.getLocalizedMessage() + "\"");
+				
+                return new Result (1,"error \"Error creating Request Object: " + e.getLocalizedMessage() + "\"");
+            }
+        }
+        else if (Mode.equalsIgnoreCase("Online")) {
+putTrace("Debug kph06 : mxMainEV6SAP:Servlet:");
+            Result Return = exec(Ctx, BusID, Operation, DialogMode, Input, ServletRequest, ServletResponse);
+System.out.println("1: " + Return.Code);
+putTrace("Debug kph07: mxMainEV6SAP:Servlet:");
+putTrace("Debug kph071: mxMainEV6SAP:Servlet:: " + Return.Code);
+putTrace("Debug kph071: mxMainEV6SAP:Servlet:: " + Return.Message);
+
+            if (Return.Code == 0) {
+                if (! Return.Message.isEmpty()){
+				putTrace("Debug kph072: mxMainEV6SAP:Servlet:");
+                    MQL.executeCommand(Ctx, "notice \"" + Return.Message + "\"");
+					}
+					putTrace("Debug kph073 r_code: mxMainEV6SAP:Servlet:" + Return.Code );
+					
+                return Return;
+            }
+			
+putTrace("Debug kph08: mxMainEV6SAP:Servlet:");
+System.out.println("2: " + Return.Message);
+            if (Return.Message.isEmpty()){
+putTrace("Debug kph09: mxMainEV6SAP:Servlet:");
+
+             throw new Exception("Error in SAP Activity!"); // kph - MQL.executeCommand(Ctx, "error \"Error in SAP activity " + Operation + "\"");
+            }else{
+putTrace("Debug kph10: mxMainEV6SAP:Servlet:");
+           
+			throw new Exception(Return.Message);               // kph- MQL.executeCommand(Ctx, "error \"" + Return.Message + "\"");
+            //kph- return 1;
+        } }else{
+putTrace("Debug kph11: mxMainEV6SAP:Servlet:");
+           
+		   throw new Exception("Unknown mode: " + Mode);
+	}
+	
+	} catch (Exception e1) {
+	
+	throw e1;
+        }
+	}
+	
+
+	
+    private Result exec(Context Ctx, String BusID, String Operation, String DialogMode, String Input, HttpServletRequest ServletRequest, HttpServletResponse ServletResponse) throws Exception {
+
+        Result Return;
+    putTrace("Debug kph01: mxMainEV6SAP:Servlet:");
+		boolean EntireTree = false, ParentsOnly = false, BottomUp = false;
+        /* EntireTree = false: only the current object is processed
+         * EntireTree = true: all objects of the entire tree are considered */
+		EntireTree = matches(Operation, "Tree");
+        /* ParentsOnly = false: all objects of the tree are processed
+         * ParentsOnly = true: objects are only processed if they have children */
+		ParentsOnly = matches(Operation, "BOM") ;
+        /* BottomUp = false: Processing runs top down, parents are processed before children
+         * BottomUp = true: Processing runs bottom up, children are processed before parents */
+		BottomUp = matches(Operation, "Document") || matches(Operation, "BOD");
+                                putTrace("Debug kph02: mxMainEV6SAP:Servlet:");
+		if (! EntireTree) {
+                                               putTrace("Debug kph021: mxMainEV6SAP:Servlet:");
+			putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+putTrace("Debug kph0211: mxMainEV6SAP:Servlet:");
+			Return = execute(Ctx, BusID, Operation, DialogMode, Input, ServletRequest,ServletResponse);
+ putTrace("Debug kph022: mxMainEV6SAP:Servlet:");
+			putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+putTrace("Debug kph0230: mxMainEV6SAP:Servlet:");
+			putTrace("Result = " + String.valueOf(Return.Code) + "---" + Return.Message + "---" + Return.Output);
+putTrace("Debug kph023: mxMainEV6SAP:Servlet:");
+        } else {
+
+			BusinessObject Bus = new BusinessObject(BusID);
+			Vector<String> Tree = new Vector<String>();
+			//getTree(Ctx, Bus, "EBOM", ParentsOnly, Tree);
+                                                getTree(Ctx, Bus, "VPLMrel/PLMProductInstanceDS", ParentsOnly, Tree);
+			if (BottomUp) Collections.reverse(Tree);
+            Enumeration<String> E = Tree.elements();
+            Return = new Result(0, "", "");
+			while(E.hasMoreElements()) {
+                BusID = E.nextElement();
+				putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+				Result R = execute(Ctx, BusID, Operation, DialogMode, Input, ServletRequest, ServletResponse);
+				putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+				putTrace("Result = " + String.valueOf(R.Code) + "---" + R.Message + "---" + R.Output);
+				Return.Code += R.Code;
+				if (! R.Message.isEmpty()) Return.Message += "\n" + getTNR(Ctx, BusID) + ":\n" + R.Message;
+			}
+            if (Return.Message.length() > 0) Return.Message = Return.Message.substring(1);
+		}
+putTrace("Debug kph03: mxMainEV6SAP:Servlet:");
+        return Return;
+    }
+
+	
+		private Result execute(Context Ctx, String BusID, String Operation, String sDialogMode, String Input, HttpServletRequest ServletRequest, HttpServletResponse ServletResponse) {
+	
+
+	putTrace("Debug kph0212: mxMainEV6SAP:Servlet:");
+		try {
+putTrace("Debug kph130: mxMainEV6SAP:Servlet:");		
+
+    		EV6SAPAdaptor ev6sapAdaptor = new EV6SAPAdaptor();
+
+ putTrace("Debug kph12: mxMainEV6SAP:Servlet:");
+			eDialogMode DialogMode = eDialogMode.values()[Integer.parseInt(sDialogMode)];
+putTrace("Debug kph13");
+
+			return ev6sapAdaptor.execute(null, Operation, Ctx, BusID, DialogMode, eProgressInfo.piNone, Input, ServletRequest, ServletResponse);
+			
+		} catch (RuntimeException e) {
+putTrace("Debug kph14: mxMainEV6SAP:Servlet:");
+			return new Result(1, "Runtime Exception: " + e.getMessage(), "");
+		} catch (Exception e) {
+putTrace("Debug kph15: mxMainEV6SAP:Servlet:");
+			return new Result(1, "Exception: " + e.getMessage(), "");
+		}
+	}
+	
+	private void getTree(Context Ctx, BusinessObject Bus, String RelationName, boolean ParentsOnly, Vector<String> V) throws MatrixException {
+	    BusinessObjectWithSelect Child = null;
+	    StringList SL = new StringList();
+        boolean ta = Ctx.isTransactionActive();
+        if (! ta) Ctx.start(false);
+	    Bus.open(Ctx);
+		String BusID = Bus.getObjectId(Ctx);
+                                 putTrace("kph:getTree:head= " +  BusID);
+		ExpansionIterator E = Bus.getExpansionIterator(Ctx, RelationName, "*", SL, SL, false, true, (short) 1, "", "", (short) 0, false, false, (short) 1024);
+		if ((E.hasNext() || ! ParentsOnly) && ! V.contains(BusID)) V.addElement(BusID);
+		while (E.hasNext()) {
+			Child = E.next().getTarget();
+                                                putTrace("kph:getTree:child= " +  Child.getObjectId(Ctx));
+			getTree(Ctx, Child, RelationName, ParentsOnly, V);
+		}
+        E.close();
+		Bus.close(Ctx);
+        if (! ta) Ctx.commit();
+	}
+
+
+
+
+    private String getTNR(Context Ctx, String BusID) throws MatrixException {
+
+String TNR = "0";  //case of ws call without enovia id
+
+putTrace("Debug kph031");
+ if (!BusID.equalsIgnoreCase("0")) {
+        BusinessObject Bus = new BusinessObject(BusID);
+putTrace("Debug kph032");
+        Bus.open(Ctx);
+putTrace("Debug kph033");
+        TNR = Bus.getTypeName() + " " + Bus.getName() + " rev " + Bus.getRevision();
+putTrace("Debug kph034");
+        Bus.close(Ctx);
+}
+
+        return TNR;
+    }
+
+
+
+    private boolean matches(String S, String P) {
+        P = ".*" + P + ".*";
+        Pattern Pat = Pattern.compile(P, Pattern.CASE_INSENSITIVE);
+		return Pat.matcher(S).matches();
+	}
+
+
+    private void putTrace(String S) {
+        String EV6SAPPreTrace = System.getenv("EV6SAP_PRE_TRACE");
+        boolean Trace = EV6SAPPreTrace != null && ! EV6SAPPreTrace.isEmpty();
+        if (Trace) System.out.println("JPO / " + S);
+    }
+
+}

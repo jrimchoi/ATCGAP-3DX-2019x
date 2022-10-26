@@ -1,0 +1,502 @@
+
+/**
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+
+import matrix.db.Context;
+import matrix.util.MatrixException;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+/**
+ * @author v8l
+ * 
+ */
+public class ${CLASSNAME} {
+
+	private static final String	TRACE_PQC_MIGRATION		= "LPQMigration";
+	private static final String	FILE_PQC_MIGRATION_LOG	= "LPQMigration.log";
+
+	protected static int		flagForFirstTime		= 0;
+
+	protected static Logger		logger					= Logger.getLogger(${CLASS:com.dassault_systemes.enovia.lsa.complaint.services.COLSMigrationFromV6R2014FindObjects}.class
+																.getName());
+
+	protected static void findObjects(Context context, String[] args) throws TicketException {
+
+		boolean isValidFilePath = false;
+		String strPath = new String();
+		String firstArg = "";
+
+		if (args.length == 0) {
+			try {
+				help(context, args);
+			}
+			catch (Exception e) {
+				throw new TicketException(e.getLocalizedMessage());
+			}
+		}
+		else {
+			firstArg = args[0];
+			if (firstArg.equals("help")) {
+				try {
+					help(context, args);
+				}
+				catch (Exception e) {
+					throw new TicketException(e.getLocalizedMessage());
+				}
+			}
+			else {
+				if ((args.length == 1)) {
+					strPath = args[0];
+					try {
+						isValidFilePath = validateFilePath(strPath);
+					}
+					catch (TicketException e) {
+						throw new TicketException(e);
+					}
+				}
+				else {
+					throw new TicketException("Arguments passed incorrectly!!! Please see help by passing only one argument: \"help\" to the program");
+				}
+
+			}
+		}
+		if (isValidFilePath) {
+			String strFileNameForExtractedDataObjects = TRACE_PQC_MIGRATION;
+			String strFileNameForLogs = "OidsForMigration";
+			String strFullPath = strPath + File.separator;
+			try {
+				createLogFile(strFileNameForLogs, strFullPath);
+			}
+			catch (Exception e) {
+				throw new TicketException(e);
+			}
+			try {
+				traceBeginMethod(context);
+				File csvFile = createCSVForMigration(context, strFileNameForExtractedDataObjects, strFullPath, 100);
+				convertCSVToHTML(csvFile, new File(new StringBuilder().append(strFullPath).append(strFileNameForExtractedDataObjects).append(".html")
+						.toString()));
+			}
+			catch (Exception exp) {
+				try {
+					traceError(context, exp.getMessage());
+				}
+				catch (Exception e) {
+					throw new TicketException(e);
+				}
+				throw new TicketException(exp);
+			}
+			finally {
+				try {
+					traceEndMethod(context);
+				}
+				catch (Exception e) {
+					throw new TicketException(e);
+				}
+			}
+		}
+
+	}
+
+	private static File createCSVForMigration(Context context, String strFileName, String strFullPath, int strLimitPerFile) throws TicketException {
+		try {
+			int fileNumber = 1;
+			File file = new File(new StringBuilder().append(strFullPath).append(File.separator).append(strFileName).append("_").append(fileNumber)
+					.append(".xls").toString());
+
+			boolean isFileCreated = file.createNewFile();
+
+			if (isFileCreated || file.exists()) {
+				FileWriter writer = new FileWriter(file);
+				PrintWriter pw = new PrintWriter(writer);
+				logger.log(Level.INFO, "*****Writing objects to file*****");
+
+				MapList objectListMap = new MapList(QueryUtil.findObjects(context, "Complaint",
+						"(policy!=\"Complaint Record\" && policy!=\"Complaint Template\" && current!=Closed && current!=Invalid)", Helper.stringList(
+								DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION,
+								DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORIGINATED)));
+				objectListMap.addAll(QueryUtil.findObjects(context, "Equipment Service Request",
+						"(policy!=\"Ticket Record\" && policy!=\"Complaint Template\" && current!=Closed && current!=Invalid)", Helper.stringList(
+								DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION,
+								DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORIGINATED)));
+				objectListMap.addAll(QueryUtil.findObjects(context, "Inquiry",
+						"(policy!=\"Ticket Record\" && policy!=\"Complaint Template\" && current!=Closed && current!=Invalid)", Helper.stringList(
+								DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION,
+								DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORIGINATED)));
+
+				objectListMap.addSortKey(DomainConstants.SELECT_ORIGINATED, "ascending", "date");
+				objectListMap.sort();
+
+				int count = 0;
+				List<Map<?, ?>> objectListMapL = objectListMap;
+				for (Map<?, ?> objectMap : objectListMapL) {
+					Map<?, ?> mapOfAttributes = objectMap;
+					if (count != 0 && Math.IEEEremainder(count, strLimitPerFile) == 0) {
+						pw.close();
+						fileNumber++;
+						file = new File(new StringBuilder().append(strFullPath).append(File.separator).append(strFileName).append("_" + fileNumber)
+								.append(".xls").toString());
+						writer = new FileWriter(file);
+						pw = new PrintWriter(writer);
+						flagForFirstTime = 0;
+					}
+					createCSVFile(context, pw, mapOfAttributes);
+					pw.flush();
+					count++;
+				}
+				pw.close();
+				logger.log(Level.INFO, "*****Objects are written to file*****");
+			}
+			else {
+				throw new TicketException(new StringBuilder().append("Please check if path ").append(strFullPath).append(" is correct").toString());
+			}
+			return file;
+		}
+		catch (Exception e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new TicketException(e);
+		}
+	}
+
+	/**
+	 * Entry point of the migration program.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The command line arguments
+	 * @throws TicketException
+	 *             if operation fails
+	 * @throws MatrixException
+	 */
+	public static void mxMain(Context context, String[] args) throws TicketException {
+		try {
+			boolean traceON = true;
+			boolean allSession = false; // false for only this session
+			context.setTrace(FILE_PQC_MIGRATION_LOG, TRACE_PQC_MIGRATION, traceON, allSession);
+			traceBeginMethod(context);
+
+			findObjects(context, args);
+		}
+		catch (Exception exp) {
+			try {
+				traceError(context, exp.getMessage());
+			}
+			catch (Exception e) {
+				throw new TicketException(e);
+			}
+			throw new TicketException(exp);
+		}
+		finally {
+			try {
+				traceEndMethod(context);
+			}
+			catch (Exception e) {
+				throw new TicketException(e);
+			}
+		}
+	}
+
+	protected static boolean validateFilePath(String strPath) throws TicketException {
+		// Validate path
+		logger.log(Level.INFO, "Validating File Path");
+		boolean isPathNotNullOrNotEmpty = UIUtil.isNotNullAndNotEmpty(strPath);
+		File filePath = new File(strPath);
+		if (isPathNotNullOrNotEmpty && !filePath.isDirectory()) {
+			logger.log(Level.SEVERE, "Invalid file path!!!");
+			throw new TicketException("Invalid file path!!!");
+		}
+		else {
+			logger.log(Level.INFO, "File Path Validated");
+			return true;
+		}
+	}
+
+	protected static void createCSVFile(Context context, PrintWriter pw, Map<?, ?> attributesList) throws IOException, TicketException {
+		Set<?> setOfKeys = attributesList.keySet();
+		Iterator<?> itrKeys = setOfKeys.iterator();
+		if (flagForFirstTime == 0) {
+			while (itrKeys.hasNext()) {
+				String key = (String) itrKeys.next();
+				attributesList.get(key).toString().trim().replace("\n", " ").replace("\t", " ");
+				pw.print(key + "\t");
+				flagForFirstTime = 1;
+			}
+			pw.print("status" + "\t");
+		}
+		if (flagForFirstTime == 1) {
+			pw.println();
+			Iterator<?> itrValues = setOfKeys.iterator();
+			while (itrValues.hasNext()) {
+				String key = (String) itrValues.next();
+				attributesList.get(key).toString().trim().replace("\n", " ").replace("\t", " ");
+				pw.print(attributesList.get(key) + "\t");
+			}
+			try {
+				${CLASS:com.dassault_systemes.enovia.lsa.complaint.services.COLSMigration} migration = new ${CLASS:com.dassault_systemes.enovia.lsa.complaint.services.COLSMigration}();
+				migration.checkIfComplaintTicketIsMigratebale(context,
+						DomainObject.newInstance(context, (String) attributesList.get(DomainConstants.SELECT_ID)));
+				pw.print("Object is Migratable" + "\t");
+			}
+			catch (Exception e) {
+				pw.print(e.getLocalizedMessage() + "\t");
+			}
+		}
+		logger.log(Level.INFO, new StringBuilder().append("Object: ").append(attributesList.get(DomainConstants.SELECT_NAME)).append(" written!!!")
+				.toString());
+	}
+
+	protected static FileHandler createLogFile(String strFileNameForLogs, String strFullPath) throws TicketException {
+		DateFormat dateFormat = new SimpleDateFormat("yyyyddMMHHmmss");
+		java.util.Date date = new java.util.Date();
+
+		FileHandler fh;
+		try {
+			File logFolder = new File(new StringBuilder().append(strFullPath).append(File.separator).append("Logs_FindObjects_")
+					.append(dateFormat.format(date)).toString());
+			logFolder.mkdir();
+			logFolder.setWritable(true);
+			logFolder.setExecutable(true);
+			logger.log(Level.INFO, "Creating log file");
+			File logFile = new File(new StringBuilder().append(logFolder.getAbsolutePath()).append(File.separator)
+					.append(strFileNameForLogs.trim().replace(" ", "_")).append("_FindObjects_log.txt").toString());
+			logFile.setWritable(true);
+			logFile.setExecutable(true);
+			fh = new FileHandler(logFile.getAbsolutePath());
+			fh.setFormatter(new SimpleFormatter());
+			logger.addHandler(fh);
+			fh.setFormatter(new SimpleFormatter());
+			return fh;
+		}
+		catch (SecurityException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new TicketException(e);
+		}
+		catch (IOException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new TicketException(e);
+		}
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	protected static void traceBeginMethod(Context context) throws TicketException {
+		String methodName = getTracedMethodName();
+		traceBegin(context, methodName + "()");
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	protected static void traceEndMethod(Context context) throws TicketException {
+		String methodName = getTracedMethodName();
+		traceEnd(context, methodName + "()");
+	}
+
+	/**
+	 * Prints trace message for trace type LPIMigration
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	private static void trace(Context context, String message) throws TicketException {
+		try {
+			context.printTrace(TRACE_PQC_MIGRATION, message);
+		}
+		catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new TicketException(exp);
+		}
+	}
+
+	/**
+	 * Returns the name of the method being traced. This SHOULD NOT be called by
+	 * any client other than traceBeginMethod and traceEndMethod methods.
+	 * 
+	 * @return the method name
+	 */
+	private static String getTracedMethodName() {
+		Exception exp = new Exception();
+		StackTraceElement[] stes = exp.getStackTrace();
+		StackTraceElement ste = stes[2];
+		String methodName = ste.getMethodName();
+		return methodName;
+	}
+
+	/**
+	 * Print "Begin: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	private static void traceBegin(Context context, String message) throws TicketException {
+		trace(context, "Begin: " + message);
+	}
+
+	/**
+	 * Print "End: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	private static void traceEnd(Context context, String message) throws TicketException {
+		trace(context, "End: " + message);
+	}
+
+	/**
+	 * Print "ERROR: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	protected static void traceError(Context context, String message) throws TicketException {
+		trace(context, "ERROR: " + message);
+	}
+
+	/**
+	 * Converts CSV file to HTML file
+	 * 
+	 * @param csvFile
+	 * @param htmlFileName
+	 * @throws IOException
+	 */
+	protected static void convertCSVToHTML(File csvFile, File htmlFileName) throws IOException {
+		// store each line, Integer is the line number and
+		// String stores each line
+		Map<Integer, String> line = new HashMap<Integer, String>();
+		int lineCounter = 0;
+		String l = new String();// to store current line
+		BufferedReader bufRdr = new BufferedReader(new FileReader(csvFile));
+
+		try {
+			while ((l = bufRdr.readLine()) != null) {
+				// read current line and put it into the map(line)
+				line.put(lineCounter++, l);
+			}
+		}
+		catch (IOException e) {
+			e.printStackTrace();
+		}
+		// write to html file
+		String[] parts = new String[] {};
+		FileWriter fstream = new FileWriter(htmlFileName);
+		BufferedWriter out = new BufferedWriter(fstream);
+
+		int j = 0;
+		out.write("<html>");
+		out.write("<table border=\"1\" >");
+		for (Map.Entry<Integer, String> entry : line.entrySet()) {
+			parts = entry.getValue().split("\t");
+			out.write("<tr>");
+			for (int i = 0; i < parts.length; i++) {
+				if (j != 0 && j == i && !parts[i].equalsIgnoreCase("Object is Migratable"))
+					out.write("<td style=\"color:red\">");
+				else
+					out.write("<td>");
+				out.write(parts[i]);
+				out.write("</td>");
+				if (parts[i].equalsIgnoreCase("status") && j != i)
+					j = i;
+			}
+			out.write("</tr>");
+		}
+		out.write("</table>");
+		out.write("</html>");
+		out.close();
+	}
+
+	public static void help(Context context, String[] args) throws Exception {
+		if (!context.isConnected()) {
+			throw new Exception("not supported on desktop client");
+		}
+		System.out.println("================================================================================================\n");
+		System.out.println(" LPQ Migration is a two step process  \n");
+		System.out.println(" Step1: Find objects for migration and write them into .csv file \n");
+		System.out.println(" Example: \n");
+		System.out.println(" execute com.dassault_systemes.enovia.lsa.lpq.services.LPQMigrationV62014xFindObjects F:\\Migration; \n");
+		System.out.println(" First parameter  = the directory where files should be written \n");
+		System.out
+				.println(" This step creates two files - OidsForMigration.csv & OidsForMigration.txt - having the details about all the objects. \n");
+		System.out.println(" These files are created at the location provided as the first parameter \n");
+		System.out.println(" These files show which of the listed objects are migratable and which are not with appropriate reasons. \n");
+		System.out.println(" NOTE : Please do not edit the \"id\" field of the file. Editing it will cause failure in Step2 of migration. \n");
+		System.out.println(" \n");
+		System.out.println(" Step2: Migrate the UI, schema and objects \n");
+		System.out.println(" UI,schema and objects found in Step1 can be migrated in 2 ways \n");
+		System.out.println(" (i) Migrating all three - UI,schema and objects - at once. \n");
+		System.out.println(" Example: \n");
+		System.out
+				.println(" execute com.dassault_systemes.enovia.lsa.lpq.services.LPQMigrationV62014xObjectAndUIMigration F:\\Migration UIandSchema; \n");
+		System.out.println(" First parameter  = the directory where files should be written \n");
+		System.out.println(" Second Parameter = tells the program that UI and schema are to be migrated along with the objects. \n");
+		System.out.println(" (ii) Migrating the objects only. \n");
+		System.out.println(" Example: \n");
+		System.out.println(" execute com.dassault_systemes.enovia.lsa.lpq.services.LPQMigrationV62014xObjectAndUIMigration F:\\Migration; \n");
+		System.out.println(" First parameter  = the directory where the .csv file is present \n");
+		System.out.println(" \n");
+		System.out.println(" Both of these ways create 2 files in the path provided - SuccessStatus.csv & FailureStatus.csv \n");
+		System.out
+				.println(" SuccessStatus.csv - This file has the details about the objects which were migrated successfuly. It also contains the details about their corresponding newly created object.\n");
+		System.out
+				.println(" FailureStatus.csv - This file has the details about the objects which could not be migrated along with the reason for failure.\n");
+		System.out.println("The objects which could not be migrated, user can rectify the reason and run the command in Step2(ii) again. \n");
+		System.out.println("================================================================================================\n");
+	}
+}
+

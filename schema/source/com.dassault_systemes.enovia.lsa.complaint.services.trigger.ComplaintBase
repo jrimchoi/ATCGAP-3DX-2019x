@@ -1,0 +1,639 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.EventService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+	private static final String SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT = TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT;
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+		super();
+	}
+
+	/**
+	 * Gets ComplaintProductEvaluation implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintProductEvaluation implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 * @throws ComponentException
+	 */
+	private ComplaintProductEvaluationService getComplaintProductEvaluationService(Context context) throws ComponentException {
+		Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+		ComplaintProductEvaluationService complaintProductEvaluationService = (ComplaintProductEvaluationService) component
+				.getService(ComplaintProductEvaluationService.class);
+		return complaintProductEvaluationService;
+
+	}
+
+	/**
+	 * Gets Event implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return Event implementation reference
+	 * @throws ComponentException
+	 *             if operation fails
+	 */
+	private EventService getEventService(Context context) throws ComponentException {
+		Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+		EventService eventService = (EventService) component.getService(EventService.class);
+		return eventService;
+
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ComponentException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws ComponentException {
+
+		Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+		ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+		return complaintTicketService;
+
+	}
+
+	/**
+	 * checks if Complaint have all connected Product evaluations completed.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkForProductEvaluationCompletion(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strCurrentState = args[1];
+			String strNextState = args[2];
+			if (strCurrentState
+					.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+					&& strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+				ComplaintProductEvaluationService complaintProductEvaluation = getComplaintProductEvaluationService(context);
+				List<Map<?, ?>> mpProductEvaluation = complaintProductEvaluation.getComplaintAssociatedProductEvaluations(context,
+						DomainObject.newInstance(context, strComplaintId), DomainConstants.EMPTY_STRING);
+				for (Object object : mpProductEvaluation) {
+					Map<?, ?> prodEvalMap = (Map<?, ?>) object;
+					String strProdEvalState = (String) prodEvalMap.get(DomainConstants.SELECT_CURRENT);
+					if (!strProdEvalState.equalsIgnoreCase(TicketUtil.getStateName(context,
+							TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION, TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE))) {
+						String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.COLS,
+								"LPQ.Complaint.PromoteToClose.ComplaintProductEvaluationNotCompleted.Error");
+						throw new ComplaintException(strErrorMessage);
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * checks if complaint have a all events connected to at least one Patient
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkForPatientAssociatedToEvents(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strNextState = args[1];
+			if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))) {
+				List<Map<?, ?>> mlEvents = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strComplaintId),
+						TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE,
+						(short) 0, null, null);
+				for (Object object : mlEvents) {
+					Map<?, ?> eventMap = (Map<?, ?>) object;
+					String strEventId = (String) eventMap.get(DomainConstants.SELECT_ID);
+					if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strEventId),
+							TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PATIENT, "from") == 0) {
+						String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.COLS,
+								"LPQ.Complaint.PromoteToInProcess.PatientNotassociated.Error");
+						throw new ComplaintException(strErrorMessage);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * checks if Reportable Decision is set on all events associated to the
+	 * Complaint
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkForReportableDecisionIsSetOnAllEvents(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strNextState = args[1];
+			if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+				StringBuilder sbRelPattern = new StringBuilder();
+				sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+				sbRelPattern.append(TicketConstants.COMMA);
+				sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT);
+				StringBuilder sbTypePattern = new StringBuilder();
+				sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT);
+				sbTypePattern.append(TicketConstants.COMMA);
+				sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_DERIVED_EVENT);
+				List<Map<?, ?>> mlDerivedEvents = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strComplaintId),
+						sbRelPattern.toString(), sbTypePattern.toString(),
+						Helper.stringList(DomainConstants.SELECT_ID,
+								DomainObject.getAttributeSelect(
+										PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_REPORTABLE_STATUS))),
+						Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, null, null, Boolean.FALSE, Boolean.FALSE, null,
+						new Pattern(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT)), null);
+
+				for (Object object : mlDerivedEvents) {
+					Map<?, ?> eventMap = (Map<?, ?>) object;
+					String strReportableStatus = (String) eventMap.get(DomainObject
+							.getAttributeSelect(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_REPORTABLE_STATUS)));
+					if (Helper.isNullOrEmpty(strReportableStatus)) {
+						Helper.mqlError(context, Helper.StringResource.COLS, "LPQ.Complaint.PromoteToClose.ReportableDecisionNotSet.Error");
+						String errorMessage = Helper.getI18NString(context, Helper.StringResource.COLS,
+								"LPQ.Complaint.PromoteToClose.ReportableDecisionNotSet.Error");
+						throw new ComplaintException(errorMessage);
+					}
+				}
+
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * demotes all Complaint Product Evaluations associated with the Complaint
+	 * to "In Process" state
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int demoteComplaintProductEvaluationsToInProcess(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strCurrentState = args[1];
+			String strSourceState = args[2];
+			if (strSourceState.equalsIgnoreCase(
+					TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))
+					&& strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_CREATE))) {
+				ComplaintProductEvaluationService complaintProductEvaluation = getComplaintProductEvaluationService(context);
+				List<Map<?, ?>> mpProductEvaluation = complaintProductEvaluation.getComplaintAssociatedProductEvaluations(context,
+						DomainObject.newInstance(context, strComplaintId), DomainConstants.EMPTY_STRING);
+				if (!Helper.isNullOrEmpty(mpProductEvaluation)) {
+					String[] arrProdEvalIds = new String[mpProductEvaluation.size()];
+					int i = 0;
+					for (Object object : mpProductEvaluation) {
+						Map<?, ?> prodEvalMap = (Map<?, ?>) object;
+						arrProdEvalIds[i] = (String) prodEvalMap.get(DomainConstants.SELECT_ID);
+						i++;
+					}
+					TicketUtil.promote(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS, arrProdEvalIds);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * checks if complaint's Reportable status is "Reportable"
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkComplaintsReportableStatus(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strCurrentState = args[1];
+			String strNextState = args[2];
+			if ((strCurrentState
+					.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+					|| strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_CREATE)))
+					&& strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))) {
+				String[] strArrayComplaintId = { strComplaintId };
+				List<Map<?, ?>> mlComplaints = QueryUtil.getInfo(context, strArrayComplaintId,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainObject.getAttributeSelect(
+								PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_REPORTABLE_STATUS))));
+				for (Object object : mlComplaints) {
+					Map<?, ?> mpComplaint = (Map<?, ?>) object;
+					String strComplaintReportableStatus = (String) mpComplaint.get(DomainObject.getAttributeSelect(
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_REPORTABLE_STATUS)));
+					if (strComplaintReportableStatus.equalsIgnoreCase(TicketConstants.RANGE_REPORTABLE)) {
+						Helper.mqlError(context, Helper.StringResource.COLS, "LPQ.Complaint.PromoteToInvalid.ComplaintIsReportable.Error");
+						return 1;
+					}
+				}
+			}
+			else if (strCurrentState
+					.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+					&& strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+				String[] strArrayComplaintId = { strComplaintId };
+				List<Map<?, ?>> mlComplaints = QueryUtil.getInfo(context, strArrayComplaintId,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainObject.getAttributeSelect(
+								PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_REPORTABLE_STATUS))));
+				for (Object object : mlComplaints) {
+					Map<?, ?> mpComplaint = (Map<?, ?>) object;
+					String strComplaintReportableStatus = (String) mpComplaint.get(DomainObject.getAttributeSelect(
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_REPORTABLE_STATUS)));
+					if (strComplaintReportableStatus.equalsIgnoreCase(TicketConstants.RANGE_PENDING)) {
+						Helper.mqlError(context, Helper.StringResource.COLS, "LPQ.Complaint.PromoteToClosed.ComplaintIsPending.Error");
+						return 1;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * checks if Complaint is associated with any Adverse Event Report
+	 * Submissions
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkComplaintsAdverseEventReportSubmissions(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			String strCurrentState = args[1];
+			String strNextState = args[2];
+			if ((strCurrentState
+					.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+					|| strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_CREATE)))
+					&& strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+							TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))) {
+				DomainObject dmoComplaint = DomainObject.newInstance(context, strComplaintId);
+				if (Helper.getTypeKindOf(context, dmoComplaint, TicketConstants.SYMBOLIC_TYPE_COMPLAINT).containsValue(Boolean.TRUE)) {
+					StringBuilder sbRelPattern = new StringBuilder();
+					sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+					sbRelPattern.append(TicketConstants.COMMA);
+					sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT);
+					sbRelPattern.append(TicketConstants.COMMA);
+					sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_EVENT_REPORT);
+					StringBuilder sbTypePattern = new StringBuilder();
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT);
+					sbTypePattern.append(TicketConstants.COMMA);
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_DERIVED_EVENT);
+					sbTypePattern.append(TicketConstants.COMMA);
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_ADVERSE_EVENT_REPORT);
+					List<Map<?, ?>> mlAERSubmissions = QueryUtil.getRelatedObjects(context, dmoComplaint, sbRelPattern.toString(),
+							sbTypePattern.toString(), Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+							Boolean.FALSE, Boolean.TRUE, null, null, Boolean.FALSE, Boolean.FALSE, null,
+							new Pattern(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_ADVERSE_EVENT_REPORT)), null);
+					if (mlAERSubmissions.size() > 0) {
+						Helper.mqlError(context, Helper.StringResource.COLS,
+								"LPQ.Complaint.PromoteToInvalid.AdverseEventReportSubmissionExists.Error");
+						return 1;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * sets the Complaint Reportable status whenever there is change in value
+	 * for attribute "Reportable Status" on any associated derived event.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void setComplaintsReportableStatus(Context context, String[] args) throws ComplaintException {
+		try {
+			String strDerivedEventId = args[0];
+			String strAttrCurrentValue = args[1];
+			String strAttrNewValue = args[2];
+			DomainObject doObjComplaint = DomainObject.newInstance(context, strDerivedEventId);
+
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	public void createAndConnectDerivedEventAndProductEvaluation(Context context, String[] args) throws ComplaintException {
+		final String RELATIONSHIP_COMPLAINT_EVENT_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT);
+		Helper.ensureNotNull(args, "args");
+		String strEventId = new String();
+		DomainObject dmoEvent = null;
+		String strDerivedEventId = new String();
+		DomainObject dmoDerivedEvent = null;
+		List<Map<?, ?>> mlConnectedDerivedEvent = null;
+		DomainObject dmoProductEvaluation = null;
+
+		try {
+			String strComplaintId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			Helper.ensureNotNull(strComplaintId, "strComplaintId");
+			Helper.ensureNotNull(strPolicy, "strPolicy");
+			Helper.ensureNotNull(strCurrentState, "strCurrentState");
+
+			String strTargetState = PropertyUtil.getSchemaProperty(context, "policy",
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD), TicketConstants.STATE_IN_PROCESS);
+			StringList slObjSelects = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME);
+			StringList slRelSelects = Helper.stringList(DomainRelationship.SELECT_ID);
+
+			// if complaint promoted to InProcess
+			if (strTargetState.equals(strCurrentState)) {
+				ContextUtil.startTransaction(context, true);
+				DomainObject dmoComplaint = DomainObject.newInstance(context, strComplaintId);
+
+				// get all connected events
+				List<Map<?, ?>> mlConnectedEvent = QueryUtil.getRelatedObjects(context, dmoComplaint,
+						TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT, slObjSelects,
+						slRelSelects, false, true, new String(), new String(), false, true, null,
+						new Pattern(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)), null);
+				Helper.ensureNotNull(mlConnectedEvent, "map list of connected Events");
+				StringList slDerivedEvent = Helper.stringList();
+				StringList slProductEvaluation = Helper.stringList();
+
+				// for every event, perform following steps
+				for (Object obj1 : mlConnectedEvent) {
+					Map mapEvent = (Map) obj1;
+					strEventId = (String) mapEvent.get(DomainConstants.SELECT_ID);
+					dmoEvent = DomainObject.newInstance(context, strEventId);
+
+					// get all connected Derived Events
+					mlConnectedDerivedEvent = QueryUtil.getRelatedObjects(context, dmoEvent, TicketConstants.SYMBOLIC_RELATIONSHIP_DERIVED_EVENT,
+							TicketConstants.SYMBOLIC_TYPE_DERIVED_EVENT, slObjSelects, slRelSelects, false, true, new String(), new String(), false,
+							true, null, new Pattern(RELATIONSHIP_COMPLAINT_EVENT_PRODUCT), null);
+					Helper.ensureNotNull(mlConnectedDerivedEvent, "map list of connected Derived Events");
+					// if Derived event found, add it to list, else create new
+					if (mlConnectedDerivedEvent.size() > 0) {
+						for (Object obj : mlConnectedDerivedEvent) {
+							Map mapDerivedEvent = (Map) obj;
+							strDerivedEventId = (String) mapDerivedEvent.get(DomainConstants.SELECT_ID);
+							slDerivedEvent.add(strDerivedEventId);
+						}
+					}
+					else {
+						List<Map<?, ?>> mlConnectProductModel = QueryUtil.getRelatedObjects(context, dmoEvent,
+								SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT, new StringBuilder().append(TicketConstants.SYMBOLIC_TYPE_MODEL)
+										.toString(), Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+								false, true, new String(), new String(), false, true, null,
+								new Pattern(PropertyUtil.getSchemaProperty(context, SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)), null);
+						for (Object obj : mlConnectProductModel) {
+							Map mapModel = (Map) obj;
+							String strModel = (String) mapModel.get(DomainConstants.SELECT_ID);
+							DomainObject dmoModel = DomainObject.newInstance(context, strModel);
+							// create DE, connect to Event
+							DomainObject dmoDerivedEventTemp = createDerivedEvent(context, dmoEvent, dmoModel);
+							DomainRelationship.connect(context, dmoEvent, RELATIONSHIP_COMPLAINT_EVENT_PRODUCT, dmoDerivedEventTemp);
+							// add DE to list
+							slDerivedEvent.add(dmoDerivedEventTemp.getId(context).toString());
+						}
+					}
+				}
+
+				if(dmoComplaint.checkAccess(context, (short)AccessConstants.cModify))
+				{
+					// for every Derived Event, create Product Evaluation
+					DomainObject doObjDerivedEvent = null;
+					String[] arrDeriveEventIds = (String[]) slDerivedEvent.toArray(new String[slDerivedEvent.size()]);
+					StringBuilder sbSelect = new StringBuilder("to[").append(
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_EVALUATION)).append("].from.id");
+					// create Product evaluation and connect Derived Event to it
+					List<Map<?, ?>> mlDerivedEventsDetail = QueryUtil.getInfo(context, arrDeriveEventIds,
+							Helper.stringList(DomainConstants.SELECT_ID, sbSelect.toString()));
+					String strProductEvaluationId = DomainConstants.EMPTY_STRING;
+					for (Map<?, ?> mapDerivedEventsDetail : mlDerivedEventsDetail) {
+						strProductEvaluationId = (String) mapDerivedEventsDetail.get(sbSelect.toString());
+						if (Helper.isNullOrEmpty(strProductEvaluationId)) {
+							doObjDerivedEvent = DomainObject.newInstance(context, (String) mapDerivedEventsDetail.get(DomainConstants.SELECT_ID));
+							dmoProductEvaluation = createComplaintProductEvaluation(context, doObjDerivedEvent);
+							// add it's ID to list
+							slProductEvaluation.add(dmoProductEvaluation.getId(context).toString());
+						}
+					}
+					
+					// connect all product evaluation to complaint
+					DomainRelationship.connect(context, dmoComplaint,
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION), true,
+							(String[]) slProductEvaluation.toArray(new String[slProductEvaluation.size()]));
+				}
+				ContextUtil.commitTransaction(context);
+			}
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new ComplaintException(e);
+		}
+	}
+
+	private DomainObject createDerivedEvent(Context context, DomainObject dmoEvent, DomainObject dmoModel) throws ComplaintException {
+
+		try {
+			EventService eventService = getEventService(context);
+			DomainObject dmoDerivedEvent = null;
+			Map eventAttributeMap = dmoEvent.getAttributeMap(context);
+			Map<String, String> derivedEventattributeMap = new HashMap<String, String>();
+			derivedEventattributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL),
+					eventAttributeMap.get(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL))
+							.toString());
+			derivedEventattributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EVENT_TIMING),
+					eventAttributeMap.get(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EVENT_TIMING)).toString());
+			derivedEventattributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ISSUE_CODE),
+					eventAttributeMap.get(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_ISSUE_CODE)).toString());
+			derivedEventattributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EXPERIENCE_CODE),
+					eventAttributeMap.get(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EXPERIENCE_CODE)).toString());
+			derivedEventattributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_REPORTABLE_STATUS),
+					TicketConstants.RANGE_NOT_APPLICABLE);
+
+			StringBuilder strWhereStringBuilder = new StringBuilder();
+			strWhereStringBuilder.append("to[");
+			strWhereStringBuilder.append(PropertyUtil.getSchemaProperty(context, SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT));
+			strWhereStringBuilder.append("].from.id==");
+			strWhereStringBuilder.append(dmoEvent.getObjectId(context));
+			String strhwere = strWhereStringBuilder.toString();
+			List<Map<?, ?>> mlProductsofModel = QueryUtil.getRelatedObjects(context, dmoModel, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCTS,
+					TicketConstants.SYMBOLIC_type_Products, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), Boolean.TRUE, Boolean.TRUE, (short) 0, strhwere, null);
+
+			
+			derivedEventattributeMap.put(DomainConstants.SELECT_ORGANIZATION, dmoModel.getInfo(context, DomainConstants.SELECT_ORGANIZATION));
+			dmoDerivedEvent = eventService.createDerivedEventWithAttributes(context, derivedEventattributeMap);
+			DomainRelationship.connect(context, dmoDerivedEvent,
+					PropertyUtil.getSchemaProperty(context, SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT), dmoModel);
+			if (mlProductsofModel.size() < 1) {
+				throw new ComplaintException(
+						Helper.getI18NString(context, Helper.StringResource.COLS, "Complaints.Product.NoProductConnectedToEvent"));
+			}
+			for (Object obj : mlProductsofModel) {
+				Map mapProductofModel = (Map) obj;
+				String strProduct = (String) mapProductofModel.get(DomainConstants.SELECT_ID);
+				DomainObject dmoProduct = DomainObject.newInstance(context, strProduct);
+				DomainRelationship.connect(context, dmoDerivedEvent,
+						PropertyUtil.getSchemaProperty(context, SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT), dmoProduct);
+			}
+			return dmoDerivedEvent;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	private DomainObject createComplaintProductEvaluation(Context context, DomainObject dmoDerivedEvent) throws ComplaintException {
+
+		DomainObject dmoProductEvaluation = null;
+		try {
+			ComplaintProductEvaluationService complaintProductEvaluationService = getComplaintProductEvaluationService(context);
+			String strProductEvaluationId = Helper.autoName(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION,
+					TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION);
+			dmoProductEvaluation = DomainObject.newInstance(context, strProductEvaluationId);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.setOrganizationOwnership(context, dmoProductEvaluation, "");
+			complaintProductEvaluationService.addDerivedEventsToProductEvaluation(context, dmoProductEvaluation, dmoDerivedEvent.getId(context));
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return dmoProductEvaluation;
+	}
+
+	/**
+	 * Checks CAPA Request OR CAPA connected should be inComplaete State else
+	 * promotion fails.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkIfRelatedCAPACompleted(Context context, String args[]) throws ComplaintException {
+		try {
+			String strNCRId = args[0];
+			String strPolicy = args[1];
+			String strNextState = args[2];
+
+			final DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+
+			StringBuilder busWhere = new StringBuilder();
+			busWhere.append(
+					"(((type==CAPA) && (current!= Complete)) || ((type==CAPA) && (current != Archive)) || ((type==\"CAPA Request\") && (current != Fulfilled)))");
+			List<Map<?, ?>> relatedCAPA = QueryUtil.getRelatedObjects(context, dmoNCR, TicketConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					new StringBuilder().append(TicketConstants.SYMBOLIC_TYPE_CAPA).append(",").append(TicketConstants.SYMBOLIC_TYPE_CAPA_REQUEST)
+							.toString(),
+					Helper.stringList(DomainObject.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), Boolean.TRUE, Boolean.FALSE,
+					(short) 0, busWhere.toString(), new String());
+			if (relatedCAPA.size() > 0) {
+				throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.NCR, "Related CAPA are not completed"));
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+}
+

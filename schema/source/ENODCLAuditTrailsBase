@@ -1,0 +1,296 @@
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.service.HistoryAuditTrailService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	
+	public ${CLASSNAME}(Context context, String[] args)
+	throws Exception {
+	}
+
+	/**
+	 * Method to get contents of History of particular key given
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of values for key
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getHistoryContents(Context context,String args[],String key) throws DCLException
+	{
+		List keyList = new StringList();
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strObjectKey =(String) mapObject.get(key);
+				keyList.add(strObjectKey);
+			}
+		}catch(Exception e){
+			throw new DCLException(e);
+		}
+		return keyList ;
+	}
+	
+	/**
+	 * Method to get Name Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of Names
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getColumnName(Context context,String args[]) throws DCLException
+	{
+		List nameList = new StringList();
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+			Iterator objectListIterator = objectList.iterator();
+			
+			while (objectListIterator.hasNext())
+			{
+				Map mapObject = (Map) objectListIterator.next();
+				String strObjectName =(String) mapObject.get(DomainConstants.SELECT_NAME);
+				String strId =(String) mapObject.get(DomainConstants.SELECT_ID);
+				String strName=DomainConstants.EMPTY_STRING;
+				if(UIUtil.isNullOrEmpty(strReportFormat)&&UIUtil.isNotNullAndNotEmpty(strId))
+				{
+					strName = DCUtil.getObjectLink(context, strId, strObjectName);
+				}
+				if(UIUtil.isNotNullAndNotEmpty(strReportFormat)&&UIUtil.isNotNullAndNotEmpty(strId))
+				{
+					strName=strObjectName;
+				}
+					
+				nameList.add(strName);
+			}
+		}catch(Exception e){
+			throw new DCLException(e);
+		}
+		return nameList;
+	}
+	
+	/**
+	 * Method to get Time Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of Time
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryTime(Context context,String args[]) throws DCLException
+	{		
+		return getHistoryContents(context, args,DCLConstants.SELECT_TIME);
+	}
+
+	/**
+	 * Method to get User Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of Users
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryUser(Context context,String args[]) throws DCLException
+	{
+		List userList=new StringList();
+		try {
+		List tempList=getHistoryContents(context, args,DCLConstants.SELECT_USER);
+		
+		for(Object user:tempList)
+		{
+			String strName=(String)user;
+			String strFullName = PersonUtil.getFullName(context,strName);
+			userList.add(strFullName);
+		}
+		} catch (FrameworkException e) {
+			throw new DCLException(e);
+		}
+		return userList ;
+	}
+	
+	/**
+	 * Method to get Action Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of Actions
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryAction(Context context,String args[]) throws DCLException
+	{		
+		List getActionList=getHistoryContents(context, args,DCLConstants.SELECT_ACTION);
+		HistoryAuditTrailService auditTrails = DCLServiceUtil.getHistoryAuditTrailService(context);
+		List<String> actionList=auditTrails.trimCustomActionInList(getActionList);
+
+		return actionList;
+	}
+	
+	/**
+	 * Method to get State Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of States
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryState(Context context,String args[]) throws DCLException
+	{		
+		return getHistoryContents(context, args,DomainConstants.SELECT_STATES);
+	}
+
+	/**
+	 * Method to get Description Column Data of History Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds objectList
+	 * @return List of Descriptions
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryDescription(Context context,String args[]) throws DCLException
+	{		
+		return getHistoryContents(context, args,DomainConstants.SELECT_DESCRIPTION);
+	}
+	
+	/**
+	 * Method to get History of all the Parent Objects and their Related Objects
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds selected Filter Action and Search Filter Text in program map
+	 * @return MapList of Objects along containing History information 
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDCLAuditTrailsHistoryTable(Context context,String args[]) throws DCLException
+	{
+		try{
+			MapList mlist=new MapList();
+			Map programMap =  (Map)JPO.unpackArgs(args);
+			String strObjectID =(String)programMap.get(DCConstants.PARENT_OID); 
+
+			String strActionSelected=(String) programMap.get(DCLConstants.SELECT_FILTERACTION);
+			String strFilterSearch=(String) programMap.get(DCLConstants.SELECT_SEARCHFILTER);
+			
+			HistoryAuditTrailService auditTrails = DCLServiceUtil.getHistoryAuditTrailService(context);
+			MapList tempList= auditTrails.getHistory(context,strObjectID,strActionSelected,strFilterSearch);
+			mlist.addAll(tempList);
+
+			MapList relObj = auditTrails.getAllChangeAffectedItems(context, strObjectID);
+			if(relObj.size()>0)
+			{
+				String strAffectedItems = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Header.AffectedItems");
+				Map history = auditTrails.populateHistoryData("",strAffectedItems,"","","","","");
+				mlist.add(history);
+			}
+			for(Object relObjects:relObj)
+			{
+				Map mapRelObjects=(Map)relObjects;
+				String id=((List)mapRelObjects.get(DomainConstants.SELECT_ID)).get(0).toString();
+				
+				tempList=auditTrails.getHistory(context, id,strActionSelected,strFilterSearch);
+				mlist.addAll(tempList);
+			}
+			return mlist;
+		}catch(Exception e){
+			throw new DCLException(e);
+		}
+		
+	}
+
+	/**
+	 * This method displays the possible values of Action to be selected by user to filter the History.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args hold program map
+	 * @return Map of Actions
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+
+	public Map getFilterRanges(Context context,String args[]) throws Exception
+	{
+		Map programMap =  (Map)JPO.unpackArgs(args);
+		Map requestMap = (Map)programMap.get(DCLConstants.REQUESTMAP);
+		String strObjectID = (String)requestMap.get(DCConstants.PARENT_OID);
+		MapList relObj=new MapList();
+		Map hmaplist = new HashMap();
+		
+		hmaplist=UINavigatorUtil.getHistoryData(context,strObjectID);
+	
+		List<String>actionArray=(List) hmaplist.get(DCLConstants.SELECT_ACTION);
+		List<String>uniqueValueArray=new StringList();
+
+		for(String action :actionArray)
+		{
+			if(!uniqueValueArray.contains(action))
+			{
+				uniqueValueArray.add(action); 
+			}
+		}
+
+		StringList actionList=new StringList();
+		actionList.add(DCLConstants.SELECT_ALL);
+		HistoryAuditTrailService auditTrails = DCLServiceUtil.getHistoryAuditTrailService(context);
+
+		relObj=auditTrails.getAllChangeAffectedItems(context,strObjectID);
+		for(Object relObjects:relObj)
+		{
+			Map hmRel=(Map) relObjects;
+			String id=((List)hmRel.get(DomainConstants.SELECT_ID)).get(0).toString();
+			Map hmaplistRel = new HashMap();
+			hmaplistRel=UINavigatorUtil.getHistoryData(context,id);
+			List <String>actionArrayRel=(List) hmaplistRel.get(DCLConstants.SELECT_ACTION);
+			List<String> getTrimList=auditTrails.trimCustomActionInList(actionArrayRel);
+			for(String action :getTrimList)
+			{
+				if(!uniqueValueArray.contains(action))
+				{
+					uniqueValueArray.add(action); 
+				}
+			}
+		}
+		for(Object action:uniqueValueArray)
+		{
+			String getActionRel=(String)action;
+			actionList.add(getActionRel);
+		}
+		Map rangeMap=new HashMap();
+		rangeMap.put(DCLConstants.FIELD_CHOICES, actionList);
+
+		return rangeMap;
+	}
+}
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,589 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ReviewRoute.RouteCompletionAction;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPAProjectService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService.CAPARequestPolicyState;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.util.Pattern;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets CAPAProjectService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return CAPAProjectService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private static CAPAProjectService getCAPAProjectService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPAProjectService service = (CAPAProjectService) LSAQICCore.getService(CAPAProjectService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the CAPARequestService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARequestService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARequestService getCAPARequestService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARequestService service = (CAPARequestService) LSAQICCore.getService(CAPARequestService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets ReviewRouteService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ReviewRouteService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private ReviewRouteService getReviewRouteService(Context context) throws QICException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			ReviewRouteService reviewRouteService = (ReviewRouteService) component.getService(ReviewRouteService.class);
+			return reviewRouteService;
+		}
+		catch (ComponentException exception) {
+			throw new QICException(exception);
+		}
+	}
+
+	/**
+	 * Grants the Read and Show access on Duplicate CAPA Request to all the Team
+	 * Members of the CAPA which is associated to the Master CAPA Request.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void grantAccessToCAPAMembersOnDuplicateRequests(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		try {
+			String strMasterCAPARequestId = args[0];
+			String strDuplicateCAPARequestId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strMasterCAPARequestId) && !Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+				List<Map<?, ?>> lmAssociatedCAPA = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strMasterCAPARequestId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, QICConstants.SYMBOLIC_TYPE_CAPA,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null,
+						null);
+				if (lmAssociatedCAPA.size() > 0) {
+					Map mpAssociatedCAPA = (Map) lmAssociatedCAPA.get(0);
+					String strCAPAId = (String) mpAssociatedCAPA.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPAId)) {
+						MapList mlCAPAMembers = CAPA_PROJECT_SERVICE.getMembers(context, strCAPAId);
+						Iterator capaMembersIterator = mlCAPAMembers.iterator();
+						while (capaMembersIterator.hasNext()) {
+							Map mpCAPAMembers = (Map) capaMembersIterator.next();
+							String strCAPAMemberId = (String) mpCAPAMembers.get(DomainConstants.SELECT_ID);
+							QICUtil.grantAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Revokes the Read and Show access on Duplicate CAPA Request from all the
+	 * Team Members of the CAPA which is associated to the Master CAPA Request.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void revokeAccessFromCAPAMembersOnDuplicateRequests(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		try {
+			String strMasterCAPARequestId = args[0];
+			String strDuplicateCAPARequestId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strMasterCAPARequestId) && !Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+				List<Map<?, ?>> lmAssociatedCAPA = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strMasterCAPARequestId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, QICConstants.SYMBOLIC_TYPE_CAPA,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null,
+						null);
+				if (lmAssociatedCAPA.size() > 0) {
+					Map mpAssociatedCAPA = (Map) lmAssociatedCAPA.get(0);
+					String strCAPAId = (String) mpAssociatedCAPA.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPAId)) {
+						MapList mlCAPAMembers = CAPA_PROJECT_SERVICE.getMembers(context, strCAPAId);
+						Iterator capaMembersIterator = mlCAPAMembers.iterator();
+						while (capaMembersIterator.hasNext()) {
+							Map mpCAPAMembers = (Map) capaMembersIterator.next();
+							String strCAPAMemberId = (String) mpCAPAMembers.get(DomainConstants.SELECT_ID);
+							QICUtil.revokeAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void grantAccessToTeamMembers(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAReqId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPAReqId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				MapList capaMemberList = CAPA_PROJECT_SERVICE.getMembers(context, strCAPAId);
+				Iterator capaMemberListItr = capaMemberList.iterator();
+				while (capaMemberListItr.hasNext()) {
+					Map memberMap = (Map) capaMemberListItr.next();
+					String strCAPAMemberId = (String) memberMap.get(Person.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPAMemberId)) {
+						QICUtil.grantAccess(context, strCAPAReqId, strCAPAMemberId, sbAccesses.toString());
+						// Code to grant Access on Duplicate CAPA Requests
+						List<Map<?, ?>> lmDuplicateRequestsInfo = CAPA_REQUEST_SERVICE.getDuplicateCAPARequests(context,
+								DomainObject.newInstance(context, strCAPAReqId));
+						for (Map mpDuplicateRequests : lmDuplicateRequestsInfo) {
+							String strDuplicateCAPARequestId = (String) mpDuplicateRequests.get(DomainConstants.SELECT_ID);
+							if (!Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+								QICUtil.grantAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+							}
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void promoteCAPARequestsonAssociationWithCAPA(Context context, String[] args) throws QICException {
+		final CAPARequestService capaRequestService = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAReqId = args[1];
+			if (!Helper.isNullOrEmpty(strCAPAReqId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				ContextUtil.startTransaction(context, Boolean.TRUE);
+				try {
+
+					capaRequestService.promoteCAPARequest(context, CAPARequestPolicyState.COMMITTED, new HashMap<String, String>(), strCAPAReqId);
+					ContextUtil.commitTransaction(context);
+				}
+				catch (Exception e) {
+					ContextUtil.abortTransaction(context);
+					throw new QICException(e);
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void demoteCAPARequestsonDissociationWithCAPA(Context context, String[] args) throws QICException {
+		final CAPARequestService capaRequestService = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAReqId = args[1];
+			if (!Helper.isNullOrEmpty(strCAPAReqId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				ContextUtil.startTransaction(context, Boolean.TRUE);
+				try {
+
+					QICUtil.demoteCAPARequests(context, strCAPAReqId);
+					ContextUtil.commitTransaction(context);
+				}
+				catch (Exception e) {
+					ContextUtil.abortTransaction(context);
+					throw new QICException(e);
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void revokeAccessFromTeamMembers(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAReqId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPAReqId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				MapList capaMemberList = CAPA_PROJECT_SERVICE.getMembers(context, strCAPAId);
+				Iterator capaMemberListItr = capaMemberList.iterator();
+				while (capaMemberListItr.hasNext()) {
+					Map memberMap = (Map) capaMemberListItr.next();
+					String strCAPAMemberId = (String) memberMap.get(Person.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPAMemberId)) {
+						QICUtil.revokeAccess(context, strCAPAReqId, strCAPAMemberId, sbAccesses.toString());
+						// Code to revoke Access on Duplicate CAPA Requests
+						List<Map<?, ?>> lmDuplicateRequestsInfo = CAPA_REQUEST_SERVICE.getDuplicateCAPARequests(context,
+								DomainObject.newInstance(context, strCAPAReqId));
+						for (Map mpDuplicateRequests : lmDuplicateRequestsInfo) {
+							String strDuplicateCAPARequestId = (String) mpDuplicateRequests.get(DomainConstants.SELECT_ID);
+							if (!Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+								QICUtil.revokeAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+							}
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void grantAccessForAssociatedCAPARequests(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAMemberId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPAMemberId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				List<Map<?, ?>> relCAPAReqList = CAPA_PROJECT_SERVICE.getAssociatedCAPARequest(context, DomainObject.newInstance(context, strCAPAId));
+				if (!Helper.isNullOrEmpty(relCAPAReqList)) {
+					for (Map<?, ?> map : relCAPAReqList) {
+						String strCAPAReqId = (String) map.get(DomainObject.SELECT_ID);
+						if (!Helper.isNullOrEmpty(strCAPAReqId)) {
+							QICUtil.grantAccess(context, strCAPAReqId, strCAPAMemberId, sbAccesses.toString());
+							// Code to grant Access on Duplicate CAPA Requests
+							List<Map<?, ?>> lmDuplicateRequestsInfo = CAPA_REQUEST_SERVICE.getDuplicateCAPARequests(context,
+									DomainObject.newInstance(context, strCAPAReqId));
+							for (Map mpDuplicateRequests : lmDuplicateRequestsInfo) {
+								String strDuplicateCAPARequestId = (String) mpDuplicateRequests.get(DomainConstants.SELECT_ID);
+								if (!Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+									QICUtil.grantAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+								}
+							}
+						}
+
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void revokeAccessForAssociatedCAPARequests(Context context, String[] args) throws QICException {
+		final CAPAProjectService CAPA_PROJECT_SERVICE = getCAPAProjectService(context);
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			String strCAPAId = args[0];
+			String strCAPAMemberId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPAMemberId) && !Helper.isNullOrEmpty(strCAPAId)
+					&& Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPAId), QICConstants.SYMBOLIC_TYPE_CAPA)
+							.containsValue(Boolean.TRUE)) {
+				List<Map<?, ?>> relCAPAReqList = CAPA_PROJECT_SERVICE.getAssociatedCAPARequest(context, DomainObject.newInstance(context, strCAPAId));
+				if (!Helper.isNullOrEmpty(relCAPAReqList)) {
+					for (Map<?, ?> map : relCAPAReqList) {
+						String strCAPAReqId = (String) map.get(DomainObject.SELECT_ID);
+						if (!Helper.isNullOrEmpty(strCAPAReqId)) {
+							QICUtil.revokeAccess(context, strCAPAReqId, strCAPAMemberId, sbAccesses.toString());
+							// Code to revoke Access on Duplicate CAPA Requests
+							List<Map<?, ?>> lmDuplicateRequestsInfo = CAPA_REQUEST_SERVICE.getDuplicateCAPARequests(context,
+									DomainObject.newInstance(context, strCAPAReqId));
+							for (Map mpDuplicateRequests : lmDuplicateRequestsInfo) {
+								String strDuplicateCAPARequestId = (String) mpDuplicateRequests.get(DomainConstants.SELECT_ID);
+								if (!Helper.isNullOrEmpty(strDuplicateCAPARequestId)) {
+									QICUtil.revokeAccess(context, strDuplicateCAPARequestId, strCAPAMemberId, sbAccesses.toString());
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public int promoteAssociatedCAPARequests(Context context, String[] args) throws QICException {
+		try {
+			String capaId = args[0];
+
+			if (!Helper.isNullOrEmpty(capaId) && Helper
+					.getTypeKindOf(context, DomainObject.newInstance(context, capaId), QICConstants.SYMBOLIC_TYPE_CAPA).containsValue(Boolean.TRUE)) {
+				ArrayList<String> alCAPARequestIds = new ArrayList<String>();
+				CAPAProjectService capaProjectService = getCAPAProjectService(context);
+				List<Map<?, ?>> relCAPAReqList = capaProjectService.getAssociatedCAPARequest(context, DomainObject.newInstance(context, capaId));
+				for (Map capaRequestMap : relCAPAReqList) {
+					String strCAPARequestId = (String) capaRequestMap.get(DomainObject.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						alCAPARequestIds.add(strCAPARequestId);
+					}
+				}
+
+				if (!Helper.isNullOrEmpty(alCAPARequestIds)) {
+					String[] strCAPARequestIds = alCAPARequestIds.toArray(new String[alCAPARequestIds.size()]);
+					CAPARequestService capaRequestService = getCAPARequestService(context);
+					capaRequestService.promoteCAPARequest(context, CAPARequestPolicyState.FULFILLED, new HashMap<String, String>(),
+							strCAPARequestIds);
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int demoteAssociatedCAPARequests(Context context, String[] args) throws QICException {
+		try {
+			String capaId = args[0];
+
+			if (!Helper.isNullOrEmpty(capaId) && Helper
+					.getTypeKindOf(context, DomainObject.newInstance(context, capaId), QICConstants.SYMBOLIC_TYPE_CAPA).containsValue(Boolean.TRUE)) {
+				ArrayList<String> alCAPARequestIds = new ArrayList<String>();
+
+				CAPAProjectService capaProjectService = getCAPAProjectService(context);
+				List<Map<?, ?>> relCAPAReqList = capaProjectService.getAssociatedCAPARequest(context, DomainObject.newInstance(context, capaId));
+				for (Map capaRequestMap : relCAPAReqList) {
+					String strCAPARequestId = (String) capaRequestMap.get(DomainObject.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						alCAPARequestIds.add(strCAPARequestId);
+					}
+				}
+
+				if (!Helper.isNullOrEmpty(alCAPARequestIds)) {
+					String[] strCAPARequestIds = alCAPARequestIds.toArray(new String[alCAPARequestIds.size()]);
+					QICUtil.demoteCAPARequests(context, strCAPARequestIds);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int checkCAPAConnectedObjects(Context context, String[] args) throws QICException {
+		final String TYPE_MOE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_MOE);
+		try {
+			String capaId = args[0];
+			if (!Helper.isNullOrEmpty(capaId) && Helper
+					.getTypeKindOf(context, DomainObject.newInstance(context, capaId), QICConstants.SYMBOLIC_TYPE_CAPA).containsValue(Boolean.TRUE)) {
+				StringBuilder sbRelPattern = new StringBuilder();
+				sbRelPattern.append(QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE);
+				sbRelPattern.append(QICConstants.COMMA);
+				sbRelPattern.append(QICConstants.SYMBOLIC_relationship_Risk);
+				int noOfConnections = Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, capaId), sbRelPattern.toString(),
+						"from");
+				if (noOfConnections > 0) {
+					Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPA.RootCauseOrRiskAssociatedError");
+					return 1;
+				}
+				StringBuilder sbTypePattern = new StringBuilder();
+				sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_MOE_PHASE);
+				sbTypePattern.append(QICConstants.COMMA);
+				sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_MOE);
+				List<Map<?, ?>> lmMOE = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, capaId),
+						QICConstants.SYMBOLIC_relationship_Subtask, sbTypePattern.toString(),
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE), Helper.stringList(DomainRelationship.SELECT_ID),
+						false, true, null, null, false, true, new Pattern(TYPE_MOE), null, null);
+				if (lmMOE.size() > 0) {
+					Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPA.MOEAssociatedError");
+					return 1;
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public int disconnectAndDemoteAssociatedCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			String capaId = args[0];
+
+			if (!Helper.isNullOrEmpty(capaId) && Helper
+					.getTypeKindOf(context, DomainObject.newInstance(context, capaId), QICConstants.SYMBOLIC_TYPE_CAPA).containsValue(Boolean.TRUE)) {
+				CAPAProjectService capaProjectService = getCAPAProjectService(context);
+				String[] capaReqIds = null;
+				String[] inputReqRelIds = null;
+				List<Map<?, ?>> relCAPAReqList = capaProjectService.getAssociatedCAPARequest(context, DomainObject.newInstance(context, capaId));
+				if (!Helper.isNullOrEmpty(relCAPAReqList)) {
+					capaReqIds = new String[relCAPAReqList.size()];
+					inputReqRelIds = new String[relCAPAReqList.size()];
+					for (int index = 0; index < relCAPAReqList.size(); index++) {
+						capaReqIds[index] = (String) relCAPAReqList.get(index).get(DomainObject.SELECT_ID);
+						inputReqRelIds[index] = (String) relCAPAReqList.get(index).get(DomainRelationship.SELECT_ID);
+					}
+
+					DomainRelationship.disconnect(context, inputReqRelIds);
+					QICUtil.demoteCAPARequests(context, capaReqIds);
+
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int createReviewRouteOnProjectSpaceForCAPAProject(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_ROUTE_STATUS = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_attribute_RouteStatus);
+
+		try {
+			String capaId = args[0];
+
+			if (!Helper.isNullOrEmpty(capaId) && Helper
+					.getTypeKindOf(context, DomainObject.newInstance(context, capaId), QICConstants.SYMBOLIC_TYPE_CAPA).containsValue(Boolean.TRUE)) {
+
+				DomainObject capa = DomainObject.newInstance(context, args[0]);
+
+				ReviewRouteService reviewRouteService = getReviewRouteService(context);
+
+				Map<?, ?> mapRoute = reviewRouteService.getCurrentReviewRoute(context, capa, null, null);
+
+				if (Helper.isNullOrEmpty(mapRoute)) {
+					reviewRouteService.createReviewRoute(context, capa, QICConstants.EMPTY_STRING, QICConstants.EMPTY_STRING, null,
+							QICConstants.SYMBOLIC_STATE_REVIEW, RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+				}
+				else {
+					String strRouteId = (String) mapRoute.get(DomainObject.SELECT_ID);
+					List<Map<?, ?>> routeInfoList = QueryUtil.getInfo(context, new String[] { strRouteId },
+							Helper.stringList(DomainRelationship.getAttributeSelect(ATTRIBUTE_ROUTE_STATUS)));
+
+					if (!Helper.isNullOrEmpty(routeInfoList)) {
+						String status = (String) routeInfoList.get(0).get(DomainRelationship.getAttributeSelect(ATTRIBUTE_ROUTE_STATUS));
+						if (!Helper.isNullOrEmpty(status)) {
+							if ("Stopped".equalsIgnoreCase(status) || "Not Started".equalsIgnoreCase(status)) {
+								reviewRouteService.resumeRestartReviewRoute(context, (Route) DomainObject.newInstance(context, strRouteId));
+							}
+							else if ("Finished".equalsIgnoreCase(status)) {
+
+								reviewRouteService.createReviewRoute(context, capa, QICConstants.EMPTY_STRING, QICConstants.EMPTY_STRING, null,
+										QICConstants.SYMBOLIC_STATE_REVIEW, RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+							}
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+}
+

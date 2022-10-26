@@ -1,0 +1,337 @@
+
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ListIterator;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.Context;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+/**
+ * The <code>iwPartTriggerBase</code> JPO contains Part Trigger Methods.
+ */
+@Deprecated
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructor.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+
+	}
+
+	/**
+	 * This method is executed if a specific method is not specified.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return an integer: 0 for success and non-zero for failure
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public int mxMain(Context context, String[] args) throws Exception {
+		if (true)
+			// throw new
+			// Exception("must specify method on iwActionItemTrigger
+			// invocation");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.ErrorMsg.NoMethodTrigger"));
+		return 0;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	static public int checkActionItemComplete(Context context, String[] args) throws Exception {
+		int result = 0;
+		String objectId = args[0];
+		try {
+			MapList actionItemList = getIncompleteActionItems(context, objectId);
+
+			/*
+			 * If the expand returns 1 or more objects, we need to capture the
+			 * template name of the objects and then generate an error message.
+			 */
+			if (actionItemList.size() > 0) {
+				ListIterator lstItr = actionItemList.listIterator();
+				Map<?, ?> map = null;
+				String objectType = null;
+				String actionItemName = null;
+				String templateName = null;
+
+				// String msg = "The following tasks must be completed: \n";
+				String msg = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.TasksMustBeCompleted") + "\n";
+
+				while (lstItr.hasNext()) {
+					// Get the check error message from the templates
+					map = (Map<?, ?>) lstItr.next();
+					objectType = (String) map.get("type");
+					actionItemName = (String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_NAME);
+					templateName = (String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_TEMPLATE_NAME);
+					msg += " > " + getTemplateCheckTriggerMessage(context, objectType, actionItemName, templateName) + "\n";
+				}
+
+				// Optional Info message to be displayed on the JSP
+
+				// command.executeCommand(context, "error '" + msg + "'");
+				${CLASS:emxContextUtil}.mqlNotice(context, msg);
+				// command.executeCommand(context, errorMsg);
+				result = 1;
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			// String msg = "checkActionItemComplete: Error: " + e;
+			// command.executeCommand(context, "error '" + msg + "'");
+			String msg = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.ErrorLowerCase") + " '"
+					+ "checkActionItemComplete: " + Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.ErrorMsg.Error")
+					+ " " + e + "'";
+			${CLASS:emxContextUtil}.mqlError(context, msg);
+		}
+
+		return result;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	private static MapList getIncompleteActionItems(Context context, String objectId) throws Exception, MatrixException, FrameworkException {
+
+		String state_Complete = FrameworkUtil.lookupStateName(context, ${CLASS:iwActionItemStaticVariables}.POLICY_ACTION_ITEM, "state_Complete");
+
+		/*
+		 * Get the 'current' state of the object.
+		 */
+		DomainObject dob = new DomainObject(objectId);
+		StringList busSelects = new StringList();
+		busSelects.add("current");
+		String current = dob.select(context, busSelects).getSelectData("current");
+
+		/*
+		 * Expand one level to find all ACTION ITEM objects that match the
+		 * current state of the 'root' object, and are NOT in the 'Complete'
+		 * state.
+		 */
+		// getRelatedObjects - Start
+		String relPattern = ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM;
+		String typePattern = ${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_ITEM;
+		busSelects = new StringList();
+		busSelects.add("type");
+		busSelects.add("name");
+		busSelects.add("description");
+		busSelects.add(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_TEMPLATE_NAME);
+		busSelects.add(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_NAME);
+		busSelects.add(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_COMPLETION_STATE);
+
+		StringList relSelects = new StringList();
+		boolean to = false;
+		boolean from = true;
+		short recurseToLevel = 1;
+		String busWhere = " current != \"" + state_Complete + "\" && attribute[" + ${CLASS:iwActionItemStaticVariables}.ATTR_ACTION_ITEM_COMPLETION_STATE
+				+ "] == \"" + current + "\" ";
+		String relWhere = "";
+
+		MapList actionItemList = dob.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, to, from, recurseToLevel, busWhere,
+				relWhere, 0, null, null, null);
+
+		return actionItemList;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	static public int promoteActionItemSendNotification(Context context, String[] args) throws Exception {
+
+		int result = 0;
+		String objectId = args[0];
+		try {
+			/*
+			 * Get related 'root' object id
+			 */
+			DomainObject dob = new DomainObject(objectId);
+
+			SelectList selectLst = new SelectList();
+			String selectRootId = "to[" + ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM + "].from.id";
+			selectLst.add(selectRootId);
+
+			BusinessObjectWithSelect bows = dob.select(context, selectLst);
+			String rootId = bows.getSelectData(selectRootId);
+
+			/*
+			 * See if all Action Items are complete. If so, send a notification
+			 * to the owner of the root object.
+			 */
+			MapList actionItemList = getIncompleteActionItems(context, rootId);
+
+			if (actionItemList.size() == 0)
+				result = ${CLASS:iwActionItem}.sendActionItemCompleted(context, objectId);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			String msg = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.ErrorLowerCase") + " '"
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.ErrorMsg.Error") + " " + e + "'";
+			${CLASS:emxContextUtil}.mqlError(context, msg);
+			throw e;
+		}
+
+		return result;
+	}
+
+	/**
+	 * Removes Routes from an object
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws Throwable
+	 */
+	public static void deleteRoutes(Context context, String[] args) throws Exception {
+		String strObjectId = args[0];
+
+		try {
+			ContextUtil.pushContext(context);
+			DomainObject doObject = new DomainObject(strObjectId);
+
+			SelectList objSelects = new SelectList(1);
+			objSelects.add(doObject.SELECT_ID);
+
+			MapList routeList = doObject.getRelatedObjects(context, ${CLASS:iwActionItemStaticVariables}.REL_OBJECT_ROUTE, // relationship
+																														// pattern
+					${CLASS:iwActionItemStaticVariables}.TYPE_ROUTE, // object
+																	// pattern
+					objSelects, // object selects
+					null, // relationship selects
+					false, // to direction
+					true, // from direction
+					(short) 1, // recursion level
+					"", // object where clause
+					null, 0, null, null, null); // relationship where clause
+
+			for (int i = 0; i < routeList.size(); i++) {
+				String strRouteId = (String) (((Map<?, ?>) routeList.get(i)).get(doObject.SELECT_ID));
+				DomainObject doRoute = new DomainObject(strRouteId);
+				MapList taskList = doRoute.getRelatedObjects(context, ${CLASS:iwActionItemStaticVariables}.REL_ROUTE_TASK, // relationship
+																														// pattern
+						${CLASS:iwActionItemStaticVariables}.TYPE_INBOX_TASK, // object
+																			// pattern
+						objSelects, // object selects
+						null, // relationship selects
+						true, // to direction
+						false, // from direction
+						(short) 1, // recursion level
+						"", // object where clause
+						null, 0, null, null, null); // relationship where clause
+
+				for (int j = 0; j < taskList.size(); j++) {
+					String strTaskId = (String) (((Map<?, ?>) taskList.get(j)).get(doObject.SELECT_ID));
+					DomainObject doTask = new DomainObject(strTaskId);
+					doTask.deleteObject(context);
+				}
+				doRoute.deleteObject(context);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+		finally {
+			ContextUtil.popContext(context);
+		}
+	}
+
+	/**
+	 * Finds the right message for the type.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return an integer: 0 for success and non-zero for failure
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static String getTemplateCheckTriggerMessage(Context context, String type, String name, String templateName) throws MatrixException {
+		String s = null;
+
+		if (templateName != null && templateName.length() != 0) {
+			s = getCheckTriggerMessage(context, templateName);
+		}
+
+		if (s == null || s.trim().length() == 0)
+			// s = "Action Item, " + name + ", has not been completed.";
+			try {
+				s = name + ": " + Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.NotBeenCompleted");
+			}
+			catch (Exception e) {
+				s = "Action Item, " + name + ", has not been completed.";
+			}
+		return s;
+	}
+
+	/**
+	 * Finds the right message for the templateName.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param templateName
+	 *            holds templateName
+	 * @return String: message
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static String getCheckTriggerMessage(Context context, String templateName) throws MatrixException {
+		String sMessage = null;
+
+		MapList objectList = DomainObject.findObjects(context, ${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_ITEM_TEMPLATE, // type
+																															// pattern
+				templateName, // name pattern
+				"*", // rev pattern
+				"*", // owner pattern
+				"*", // vault pattern
+				"revision==last", // where expression
+				true, // expand type
+				new StringList("attribute[Check Trigger Message]")); // object
+																		// selects
+
+		if (objectList.size() > 0) {
+			Map<?, ?> test = (Map<?, ?>) objectList.get(0);
+			sMessage = (String) test.get("attribute[Check Trigger Message]");
+		}
+
+		return sMessage;
+	}
+}
+

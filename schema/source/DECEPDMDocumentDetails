@@ -1,0 +1,536 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.matrixone.MCADIntegration.server.beans.MCADMxUtil;
+import com.matrixone.MCADIntegration.utils.MCADAppletServletProtocol;
+import com.matrixone.MCADIntegration.utils.MCADGlobalConfigObject;
+import com.matrixone.apps.domain.DomainConstants;
+
+public class ${CLASSNAME}
+{
+	public Object getFileName(Context context, String args[])
+	{
+		return getParameterVectorFromIdMap(context,"fileName", args);
+	}
+
+	public Object getFileSize(Context context, String args[]) 
+	{
+		return	getParameterVectorFromIdMap(context,"fileSize", args);
+	}
+
+	public Object getFileModifiedDate(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"modifiedDate", args);
+	}
+
+	public Object getComputerName(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"computerName", args);
+	}
+
+	public Object getLockedPath(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"lockedpath", args);
+	}	
+
+	public Object getLockerName(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"locker", args);
+	}	
+
+	public Object getObjectCreated(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"objectcreated", args);
+	}	
+
+	public Object getObjectModified(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"objectmodified", args);
+	}
+
+	public Object getObjectUpdateStamp(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"updatestamp", args);
+	}
+
+	public Object getMinorObjectModified(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"minorobjectmodified", args);
+	}
+
+	public Object getInstanceObjectModified(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"instanceobjectmodified", args);
+	}	
+
+	public Object getInstanceUpdateStamp(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"instanceupdatestamp", args);
+	}
+
+	public Object getInstanceObjectCreated(Context context, String args[]) 
+	{
+		return getParameterVectorFromIdMap(context,"instanceobjectcreated", args);
+	}	
+
+	private  Vector   getParameterVectorFromIdMap(Context context, String paramKey, String args[])
+	{
+
+		Vector retunValues = new Vector();
+		try
+		{	
+			Map dataMap             = (Map) JPO.unpackArgs(args);
+			if(isValidForEvaluation(dataMap))
+			{
+				List objectList   	    = (List) dataMap.get("objectList");
+				if(!checkForDataExistense(paramKey,objectList))
+				{
+					initialize(context,dataMap);
+				}
+				for ( int i = 0; i < objectList.size(); i++ )
+				{
+					Map idsMap   	= (Map) objectList.get(i);
+					retunValues.add(idsMap.get(paramKey).toString());
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		return retunValues;
+	}
+
+	private String  getNativeFormat(String mxType, String cadType, String source, Map globalConfigObjectsMap)
+	{
+		String nativeFormat    = null;
+		String integrationName = "";
+		StringTokenizer integrationSourceTokens = new StringTokenizer(source, "|");
+
+		if(integrationSourceTokens.hasMoreTokens())
+			integrationName = integrationSourceTokens.nextToken();
+
+		MCADGlobalConfigObject  gco = (MCADGlobalConfigObject)globalConfigObjectsMap.get(integrationName);
+		if(gco != null)
+		{
+			nativeFormat = gco.getFormatsForType(mxType, cadType);
+		}
+		return nativeFormat;
+	}
+
+	private String[] getObjectsId(Map dataMap)
+	{
+		List objectList    = (List) dataMap.get("objectList");
+		String[] objIds    = new String[objectList.size()];
+		for ( int i = 0; i < objectList.size(); i++ )
+		{
+			Map idsMap   = (Map) objectList.get(i);
+			objIds[i] = idsMap.get("id").toString();
+		}
+		return objIds;
+	}
+
+
+	private boolean isValidForEvaluation(Map dataMap)
+	{
+		boolean isValid          = true;
+		Map paramList    = (Map)dataMap.get("paramList");				
+		String evaluatesColumns  = paramList != null ?(String)paramList.get("evaluatecolumns"):null; 
+		if(evaluatesColumns != null && evaluatesColumns.trim().equalsIgnoreCase("false"))
+		{
+			isValid = false;
+		}
+		return isValid;
+	}
+
+	//Assumption : Input is major 
+	private void initialize(Context context, Map dataMap)
+	{
+		ArrayList familyids = new ArrayList();
+
+		try
+		{
+			Map paramList               = (Map)dataMap.get("paramList");
+			Map globalConfigObjectsMap  = (Map)paramList.get("GCOTable");
+
+			List filterList             = (List) paramList.get("filters");
+			List objectList   			= (List) dataMap.get("objectList");
+
+			String[] objsId 		    =  getObjectsId(dataMap);
+
+			String localeLanguage	     = (String)dataMap.get("LocaleLanguage");
+
+			String activeVersion 	   = MCADMxUtil.getActualNameForAEFData(context, "relationship_ActiveVersion");
+			String versionOfRelActualName	= MCADMxUtil.getActualNameForAEFData(context, "relationship_VersionOf");
+
+			String SELECT_ON_MINOR	   = new StringBuffer("from[").append(activeVersion).append("].to.").toString();
+			String SELECT_HAS_FILE     = "format.hasfile";
+
+			String ALL_FORMAT_SELECT   			= "format.file.format";
+			String ALL_FORMAT_SELECT_ON_MINOR   = new StringBuffer(SELECT_ON_MINOR).append(ALL_FORMAT_SELECT).toString();
+
+			String ALL_FILE_NAME_SELECT           = "format.file.name";
+			String ALL_FILE_SIZE_SELECT  		  = "format.file.size";
+			String ALL_FILE_MODIFIED_DATE_SELECT  = "format.file.modified.generic";
+			String SELECT_OBJECT_MODIFIED		= "modified.generic";
+			String SELECT_OBJECT_CREATED		= "originated.generic";
+			String SELECT_UPDATE_STAMP			= "updatestamp";
+
+			String ALL_FILE_NAME_SELECT_ON_MINOR  	= new StringBuffer(SELECT_ON_MINOR).append(ALL_FILE_NAME_SELECT).toString();
+			String ALL_FILE_SIZE_SELECT_ON_MINOR  	= new StringBuffer(SELECT_ON_MINOR).append(ALL_FILE_SIZE_SELECT).toString();
+			String ALL_FILE_MODIFIED_DATE_SELECT_ON_MINOR = new StringBuffer(SELECT_ON_MINOR).append(ALL_FILE_MODIFIED_DATE_SELECT).toString();
+			String SELECT_OBJECT_MODIFIED_ON_MINOR			= new StringBuffer(SELECT_ON_MINOR).append(SELECT_OBJECT_MODIFIED).toString();
+
+			String SELECT_SOURCE_ATT    = new StringBuffer("attribute[").append(MCADMxUtil.getActualNameForAEFData(context, "attribute_Source")).append("]").toString();
+			String SELECT_CAD_TYPE_ATT  = new StringBuffer("attribute[").append(MCADMxUtil.getActualNameForAEFData(context, "attribute_CADType")).append("]").toString();
+			String SELECT_LOCK_INFO_ATT = new StringBuffer("attribute[").append(MCADMxUtil.getActualNameForAEFData(context, "attribute_IEF-LockInformation")).append("]").toString();  
+			String SELECT_TITLE_ATTR    = new StringBuffer("attribute[").append(MCADMxUtil.getActualNameForAEFData(context, "attribute_Title")).append("]").toString();
+
+
+			String SELECT_ON_MAJOR          		  = new StringBuffer("from[").append(versionOfRelActualName).append("].to.").toString();
+			String SELECT_ON_MAJOR_ID          		  = new StringBuffer(SELECT_ON_MAJOR).append("id").toString();
+			String SELECT_ON_MAJOR_LOCK_INFORMATION   = new StringBuffer(SELECT_ON_MAJOR).append(SELECT_LOCK_INFO_ATT).toString();
+			String SELECT_ON_MAJOR_MX_TYPE            = new StringBuffer(SELECT_ON_MAJOR).append(DomainConstants.SELECT_TYPE).toString();
+			String SELECT_ON_MAJOR_LOCKER             = new StringBuffer(SELECT_ON_MAJOR).append(DomainConstants.SELECT_LOCKER).toString();
+
+
+			StringList  busSelectList   = new StringList();
+
+			busSelectList.add(SELECT_HAS_FILE);
+			busSelectList.add(SELECT_TITLE_ATTR);
+			busSelectList.add(ALL_FORMAT_SELECT);
+			busSelectList.add(ALL_FORMAT_SELECT_ON_MINOR);
+			busSelectList.add(ALL_FILE_NAME_SELECT);
+			busSelectList.add(ALL_FILE_SIZE_SELECT);
+			busSelectList.add(ALL_FILE_MODIFIED_DATE_SELECT);
+			busSelectList.add(ALL_FILE_NAME_SELECT_ON_MINOR);
+			busSelectList.add(ALL_FILE_SIZE_SELECT_ON_MINOR);
+			busSelectList.add(ALL_FILE_MODIFIED_DATE_SELECT_ON_MINOR);
+
+			busSelectList.add(SELECT_SOURCE_ATT);
+			busSelectList.add(SELECT_CAD_TYPE_ATT);
+			busSelectList.add(SELECT_LOCK_INFO_ATT);
+			busSelectList.add(DomainConstants.SELECT_TYPE);
+			busSelectList.add(DomainConstants.SELECT_LOCKER);
+			busSelectList.add(SELECT_OBJECT_MODIFIED);
+			busSelectList.add(SELECT_OBJECT_CREATED);
+			busSelectList.add(SELECT_OBJECT_MODIFIED_ON_MINOR);
+			busSelectList.add(DomainConstants.SELECT_ID);
+			busSelectList.add(SELECT_UPDATE_STAMP);
+
+			busSelectList.add(SELECT_ON_MAJOR_ID);
+			busSelectList.add(SELECT_ON_MAJOR_LOCK_INFORMATION);
+			busSelectList.add(SELECT_ON_MAJOR_MX_TYPE);
+			busSelectList.add(SELECT_ON_MAJOR_LOCKER);
+
+			BusinessObjectWithSelectList busSelectDataList = BusinessObject.getSelectBusinessObjectData(context,objsId,busSelectList);
+
+			for(int i =0 ; i < busSelectDataList.size(); i++)
+			{
+				BusinessObjectWithSelect busSelectData = busSelectDataList.getElement(i);
+
+				String busid   = busSelectData.getSelectData(DomainConstants.SELECT_ID);
+				String cadType        = busSelectData.getSelectData(SELECT_CAD_TYPE_ATT);
+				String mxType         = busSelectData.getSelectData(DomainConstants.SELECT_TYPE);
+				String source         = busSelectData.getSelectData(SELECT_SOURCE_ATT);
+				String title          = busSelectData.getSelectData(SELECT_TITLE_ATTR);
+				String majorId         = busSelectData.getSelectData(SELECT_ON_MAJOR_ID);
+				String lockInformation = busSelectData.getSelectData(SELECT_LOCK_INFO_ATT);
+				String locker          =  busSelectData.getSelectData(DomainConstants.SELECT_LOCKER);
+
+				String minorObjectModified	= busSelectData.getSelectData(SELECT_OBJECT_MODIFIED_ON_MINOR);
+
+				Map idsMap  		  = (Map) objectList.get(i);
+
+				boolean isInputMinor    = majorId != null && !majorId.equals("");
+				if(isInputMinor)
+				{
+					lockInformation     = busSelectData.getSelectData(SELECT_ON_MAJOR_LOCK_INFORMATION);
+					mxType              = busSelectData.getSelectData(SELECT_ON_MAJOR_MX_TYPE);
+					locker              = busSelectData.getSelectData(SELECT_ON_MAJOR_LOCKER);
+					minorObjectModified	= "";
+				}
+
+				StringTokenizer integrationSourceTokens = new StringTokenizer(source, "|");
+				String integrationName 		= "";
+				if(integrationSourceTokens.hasMoreTokens())
+					integrationName = integrationSourceTokens.nextToken();
+
+				MCADGlobalConfigObject  gco = (MCADGlobalConfigObject)globalConfigObjectsMap.get(integrationName);
+
+				if(null != gco && gco.isTypeOfClass(cadType, MCADAppletServletProtocol.TYPE_FAMILY_LIKE))
+				{
+					familyids.add(busid);
+				}
+				else
+				{
+					idsMap.put("instanceobjectcreated",  "");
+					idsMap.put("instanceobjectmodified",  "");
+					idsMap.put("instanceupdatestamp",  "");
+				}
+
+				String computerName     = "";
+				String lockPath         = "";
+				List   fileNameList     = null;
+				List   formatList       = null;
+				List   modifiedDateList = null;
+				List   sizeList			= null;
+
+				String isMajorHasFile = (String) busSelectData.getSelectDataList(SELECT_HAS_FILE).elementAt(0);
+
+				if(isMajorHasFile.equalsIgnoreCase(MCADAppletServletProtocol.TRUE))
+				{
+					fileNameList      =  busSelectData.getSelectDataList(ALL_FILE_NAME_SELECT);
+					formatList        =  busSelectData.getSelectDataList(ALL_FORMAT_SELECT);
+					sizeList      	  =  busSelectData.getSelectDataList(ALL_FILE_SIZE_SELECT);					
+					modifiedDateList  =  busSelectData.getSelectDataList(ALL_FILE_MODIFIED_DATE_SELECT);
+				}
+				else
+				{
+					fileNameList      =  busSelectData.getSelectDataList(ALL_FILE_NAME_SELECT_ON_MINOR);
+					formatList        =  busSelectData.getSelectDataList(ALL_FORMAT_SELECT_ON_MINOR);
+					sizeList      	  =  busSelectData.getSelectDataList(ALL_FILE_SIZE_SELECT_ON_MINOR);					
+					modifiedDateList  =  busSelectData.getSelectDataList(ALL_FILE_MODIFIED_DATE_SELECT_ON_MINOR);
+				}
+
+
+				if(lockInformation != null && !"".equals(lockInformation))
+				{
+					StringTokenizer token = new StringTokenizer(lockInformation,"|");
+					computerName          = token.hasMoreTokens() ? token.nextToken() : "";
+					lockPath 			   = token.hasMoreTokens() ? token.nextToken() : "";	
+				}
+
+				//adding lock related info
+				idsMap.put("computerName", computerName);
+				idsMap.put("lockedpath", lockPath);
+				idsMap.put("locker",locker);
+				idsMap.put("fileName", "");
+				idsMap.put("fileSize", "");
+				idsMap.put("modifiedDate", "");
+				idsMap.put("objectcreated", busSelectData.getSelectData(SELECT_OBJECT_CREATED));
+				idsMap.put("objectmodified",  busSelectData.getSelectData(SELECT_OBJECT_MODIFIED));
+				idsMap.put("minorobjectmodified", minorObjectModified);
+				idsMap.put("updatestamp",  busSelectData.getSelectData(SELECT_UPDATE_STAMP));
+
+				String nativeFormat   =   getNativeFormat(mxType, cadType, source, globalConfigObjectsMap);
+
+				//adding file related info
+				Map fileData = getFileData(formatList,fileNameList,sizeList,modifiedDateList,nativeFormat,filterList,title);
+				if(fileData != null)
+					idsMap.putAll(fileData);
+			}
+
+			if(!familyids.isEmpty())
+				getInstanceObjectDateAttributes(context, familyids, objectList);
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+	}
+
+	private void getInstanceObjectDateAttributes(Context context, ArrayList familyids, List objectList) throws Exception 
+	{
+		HashMap familyidsActiveMinorIdsMap = new HashMap();
+		HashMap incomingIdActiveMinorIdsMap = new HashMap();
+
+		String OBJECT_CREATED		= "originated.generic";
+		String OBJECT_MODIFIED		= "modified.generic";
+		String OBJECT_NAME			= "name";
+		String SELECT_UPDATE_STAMP	= "updatestamp";
+
+		String REL_INSTANCE_OF      = MCADMxUtil.getActualNameForAEFData(context, "relationship_InstanceOf");
+
+		String REL_ACTIVE_VERSION   = MCADMxUtil.getActualNameForAEFData(context, "relationship_ActiveVersion");
+
+		String SELECT_ON_INSTANCE 	= "from["+ REL_INSTANCE_OF + "].to.";
+
+		String SELECT_ACTIVE_MINOR_ID = "from["+ REL_ACTIVE_VERSION + "].to.id";
+
+		String[] familyidArray 		    = new String[familyids.size()];
+
+		familyids.toArray(familyidArray);
+
+		StringList  familyBusSelectList   = new StringList();
+		familyBusSelectList.add(DomainConstants.SELECT_ID);
+		familyBusSelectList.add(SELECT_ACTIVE_MINOR_ID);
+
+		BusinessObjectWithSelectList familyBusSelectDataList = BusinessObject.getSelectBusinessObjectData(context, familyidArray, familyBusSelectList);
+
+		for(int i =0 ; i < familyBusSelectDataList.size(); i++)
+		{
+			BusinessObjectWithSelect familyBusSelectData = familyBusSelectDataList.getElement(i);
+
+			String familyid 	 = familyBusSelectData.getSelectData(DomainConstants.SELECT_ID);
+			String activeMinorId = familyBusSelectData.getSelectData(SELECT_ACTIVE_MINOR_ID);
+
+			//incase of input is minor
+			if(activeMinorId == null || activeMinorId.equals(""))
+				activeMinorId = familyid;
+
+			familyidsActiveMinorIdsMap.put(activeMinorId, familyid);
+			incomingIdActiveMinorIdsMap.put(familyid, activeMinorId);
+		}
+
+		HashMap familydIdInstanceInfoMap = new HashMap();
+
+		String[] familyActiveMinorids 	 = new String[familyidsActiveMinorIdsMap.size()];
+
+		familyidsActiveMinorIdsMap.keySet().toArray(familyActiveMinorids);
+
+		StringList  busSelectList   = new StringList();
+		busSelectList.add(DomainConstants.SELECT_ID);
+		busSelectList.add(SELECT_ON_INSTANCE + OBJECT_NAME);
+		busSelectList.add(SELECT_ON_INSTANCE + OBJECT_CREATED);
+		busSelectList.add(SELECT_ON_INSTANCE + OBJECT_MODIFIED);
+		busSelectList.add(SELECT_ON_INSTANCE + SELECT_UPDATE_STAMP);
+
+		BusinessObjectWithSelectList familyActiveMinorBusSelectDataList = BusinessObject.getSelectBusinessObjectData(context, familyActiveMinorids, busSelectList);
+
+		for(int i =0 ; i < familyActiveMinorBusSelectDataList.size(); i++)
+		{
+			BusinessObjectWithSelect familyActiveMinorBusSelectData = familyActiveMinorBusSelectDataList.getElement(i);
+
+			String familyActiveMinorid 	 	 = familyActiveMinorBusSelectData.getSelectData(DomainConstants.SELECT_ID);
+
+			String familyid = (String) familyidsActiveMinorIdsMap.get(familyActiveMinorid);
+
+			StringList instanceNames 		 = familyActiveMinorBusSelectData.getSelectDataList(SELECT_ON_INSTANCE + OBJECT_NAME);
+			StringList instanceCreatedTimes  = familyActiveMinorBusSelectData.getSelectDataList(SELECT_ON_INSTANCE + OBJECT_CREATED);
+			StringList instanceModifiedTimes = familyActiveMinorBusSelectData.getSelectDataList(SELECT_ON_INSTANCE + OBJECT_MODIFIED);
+
+			StringList instanceUpdatestampTimes =  familyActiveMinorBusSelectData.getSelectDataList(SELECT_ON_INSTANCE + SELECT_UPDATE_STAMP);
+
+			StringBuffer instanceObjectCreated	= new StringBuffer(45*instanceNames.size());
+			StringBuffer instanceObjectModified	= new StringBuffer(45*instanceNames.size());
+			StringBuffer instanceupdatestamp	= new StringBuffer(45*instanceNames.size());
+
+			for(int k =0 ; k < instanceNames.size(); k++)
+			{
+				if(k > 0)
+				{
+					instanceObjectCreated.append("|");
+					instanceObjectModified.append("|");
+					instanceupdatestamp.append("|");
+				}
+
+				String instanceName 	= (String) instanceNames.elementAt(k);
+				String instanceCreated  = (String) instanceCreatedTimes.elementAt(k);
+				String instanceModified = (String) instanceModifiedTimes.elementAt(k);
+				String updateStamp 		= (String) instanceUpdatestampTimes.elementAt(k);
+
+				instanceObjectCreated.append(instanceName).append("##").append(instanceCreated);
+				instanceObjectModified.append(instanceName).append("##").append(instanceModified);
+				instanceupdatestamp.append(instanceName).append("##").append(updateStamp);
+
+			}
+
+			HashMap instanceInfoMap = new HashMap();
+
+			instanceInfoMap.put("instanceobjectcreated",  instanceObjectCreated.toString());
+			instanceInfoMap.put("instanceobjectmodified",  instanceObjectModified.toString());
+			instanceInfoMap.put("instanceupdatestamp",  instanceupdatestamp.toString());
+
+			familydIdInstanceInfoMap.put(familyid, instanceInfoMap);
+		}
+
+		for (Iterator iterator = objectList.iterator(); iterator.hasNext();)
+		{
+			Map idsMap = (Map) iterator.next();
+
+			String id  = (String) idsMap.get("id");
+
+			if(familydIdInstanceInfoMap.containsKey(id))
+			{
+				Map instanceInfoMap = (Map) familydIdInstanceInfoMap.get(id);
+
+				idsMap.putAll(instanceInfoMap);
+			}
+			else if (incomingIdActiveMinorIdsMap.containsKey(id))//added if incoming object is minor
+			{
+				String activeminorId = (String)incomingIdActiveMinorIdsMap.get(id);
+				if(activeminorId != null && !activeminorId.equals("") && familyidsActiveMinorIdsMap.containsKey(id))
+					activeminorId = (String)familyidsActiveMinorIdsMap.get(id);
+				
+				Map instanceInfoMap = (Map) familydIdInstanceInfoMap.get(activeminorId);
+
+				idsMap.putAll(instanceInfoMap);
+			}
+		}
+	}
+
+	private Map getFileData(List formatList, List fileNameList, List sizeList, List modifiedDateList, String nativeFormat, List filterList, String title)
+	{
+		Map fileData         = null;
+
+		List allNativeFileDataList       = new ArrayList(); 
+		if(null != formatList)
+		{
+			Iterator   formatItr  =  formatList.iterator();
+			int formatIndex 	  = 0;
+
+			while(formatItr.hasNext())
+			{
+				String format = (String)formatItr.next();
+
+				String fileName     = (String)fileNameList.get(formatIndex);
+				String fileSize     = (String)sizeList.get(formatIndex);
+				String modifiedDate = (String)modifiedDateList.get(formatIndex);
+				if((format.equals(nativeFormat) || nativeFormat == null) && fileName.equalsIgnoreCase(title))
+				{
+					Map fileInfoMap = new Hashtable();
+
+					fileInfoMap.put("fileName", fileName);
+					fileInfoMap.put("fileSize", fileSize);
+					fileInfoMap.put("modifiedDate", modifiedDate);
+
+					allNativeFileDataList.add(fileInfoMap);
+				}
+
+				formatIndex++;
+			}
+
+			if(!allNativeFileDataList.isEmpty())
+				fileData = (Map)allNativeFileDataList.get(0);
+		}
+		return fileData;
+	}
+
+
+	private boolean checkForDataExistense(String key, List objectList)
+	{
+		boolean hasDataForKey = false;
+		try
+		{
+			for ( int i = 0; i < objectList.size(); i++ )
+			{
+				Map idsMap   	= (Map) objectList.get(i);
+				if(idsMap.containsKey(key))
+				{
+					hasDataForKey = true;
+					break;
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+		}
+		return hasDataForKey;
+	}
+}
+

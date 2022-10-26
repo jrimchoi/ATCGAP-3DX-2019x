@@ -1,0 +1,168 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.StringResource;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants;
+import com.dassault_systemes.enovia.lsa.ncr.NCRException;
+import com.dassault_systemes.enovia.lsa.ncr.NCRUtil;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIMenu;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws NCRException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDynamicCommandRelatedCAPA(Context context, String[] args) throws NCRException {
+		MapList commandMapList = new MapList();
+		try {
+			HashMap inputMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) inputMap.get("requestMap");
+			boolean isCAPAInstalled = Helper.isProductInstalled(context, "appVersionCAPABase");
+			// To test
+			if (isCAPAInstalled) {
+				Map mapCAPACommand = UIMenu.getCommand(context, "QICRelatedCAPATreeCategory");
+				String strNewLabel = Helper.getI18NString(context, StringResource.NCR, "Related CAPA");
+				mapCAPACommand.put("label", strNewLabel);
+				commandMapList.add(mapCAPACommand);
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return commandMapList;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws NCRException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDynamicCommandForCollaboration(Context context, String[] args) throws NCRException {
+		MapList commandMapList = new MapList();
+		try {
+			HashMap inputMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) inputMap.get("requestMap");
+			String objectID = (String) requestMap.get(NCRConstants.OBJECTID);
+			DomainObject doNCR = DomainObject.newInstance(context,objectID);
+			final String NC_CLOSURE_TYPE=DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_NCClosureType"));
+			List <Map<?,?>> closureMapList=DomainObject.getInfo(context, new String[]{objectID}, Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER,
+					DomainConstants.SELECT_CURRENT, NC_CLOSURE_TYPE,"to[Data Source].from.type"));
+			String strClosure = (String)closureMapList.get(0).get(NC_CLOSURE_TYPE);
+			String dataSource=(String)closureMapList.get(0).get("to[Data Source].from.type");
+			Map mapCommand = UIMenu.getCommand(context, "ACTSummary");
+			String strHref = "../common/emxIndentedTable.jsp?HelpMarker=emxhelptasks&table=ACTSummary&header=ActionTasks.Command.ACTSummary.Label&selection=multiple&toolbar=ACTActionsToolbar&program=com.dassault_systemes.enovia.actiontasks.ui.ActionTasks:getTableACTSummary";
+			String strNewLabel = Helper.getI18NString(context, StringResource.ACT, "ActionTasks.Command.ACTSummary.Label");
+			String strALTLabel = Helper.getI18NString(context, StringResource.ACT, "ActionTasks.Command.ACTSummary.Label");
+			mapCommand.put("alt", strALTLabel);
+			mapCommand.put("label", strNewLabel);
+			mapCommand.put("href", strHref);
+			commandMapList.add(mapCommand);
+			
+			
+			mapCommand = UIMenu.getCommand(context, "APPDiscussionCommand");
+			strHref = "../common/emxIndentedTable.jsp?table=APPDiscussionsList&program=emxDiscussion:getDiscussionList&header=emxComponents.DiscussionSummary.Heading&toolbar=APPDiscussionToolBar&selection=multiple&sortColumnName=Name&sortDirection=ascending&HelpMarker=emxhelpdiscussions&PrinterFriendly=true&TransactionType=update";
+			strNewLabel = Helper.getI18NString(context, StringResource.CBS, "emxComponents.Common.Discussion");
+			strALTLabel = Helper.getI18NString(context, StringResource.CBS, "emxComponents.Common.Discussion");
+			mapCommand.put("alt", strALTLabel);
+			mapCommand.put("label", strNewLabel);
+			mapCommand.put("href", strHref);
+			commandMapList.add(mapCommand);
+			
+			mapCommand = UIMenu.getCommand(context, "TicketMgmtAssignees");
+			strHref = "../common/emxIndentedTable.jsp?program=com.dassault_systemes.enovia.lsa.ticket.services.ui.ComplaintTicket:getComplaintTicketAssignees&table=TicketMgmtAssignees&toolbar=TicketMgmtAssigneesActionToolBar&header=TicketMgmt.Command.TicketMgmtAssignees.Header&rowGroupingColumnNames=Role&suiteKey=TicketManagement&selection=multiple&HelpMarker=emxhelpassignee";
+			strNewLabel = Helper.getI18NString(context, StringResource.TicketMgmt, "TicketMgmt.Command.TicketMgmtAssignees.Label");
+			strALTLabel = Helper.getI18NString(context, StringResource.TicketMgmt, "TicketMgmt.Command.TicketMgmtAssignees.Label");
+			mapCommand.put("alt", strALTLabel);
+			mapCommand.put("label", strNewLabel);
+			mapCommand.put("href", strHref);
+			commandMapList.add(mapCommand);
+
+			if (NCRUtil.isQICInstalled(context) && ((!Helper.isNullOrEmpty(strClosure) && strClosure.equalsIgnoreCase(NCRConstants.ClosureType.CAPA.toString()))||(!Helper.isNullOrEmpty(dataSource)&&dataSource.contains("CAPA")))) {
+				mapCommand = UIMenu.getCommand(context, "QICRelatedCAPATreeCategory");
+				strHref = (String) mapCommand.get("href");
+				strNewLabel = Helper.getI18NString(context, StringResource.NCR, "NCR.ProcessSteps.Related_CAPA");
+				mapCommand.put("label", strNewLabel);
+				strHref = strHref.replace("${COMMON_DIR}", "../common");
+				mapCommand.put("href", strHref);
+				commandMapList.add(mapCommand);
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return commandMapList;
+	}
+
+	public Boolean showAssignedFilter(Context context, String[] args) throws ComplaintException {
+		Boolean showFilter = new Boolean(false);
+
+		try {
+
+			if ((Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+					&& Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR))
+					|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_REGULATORY_USER)) {
+				showFilter = false;
+			}
+			else if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR,NCRConstants.SYMBOLIC_ROLE_VPLMProjLeader)) {
+				showFilter = true;
+			}
+			return showFilter;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on Table Create Filter Method to display the Create
+	 * Filter in My Complaints table depending upon user's role
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	public Boolean showCreateFilter(Context context, String[] args) throws ComplaintException {
+		Boolean showFilter = new Boolean(false);
+
+		try {
+			if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER,NCRConstants.SYMBOLIC_ROLE_VPLMProjLeader)) {
+				showFilter = true;
+			}
+			else if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_REGULATORY_USER)) {
+				showFilter = false;
+			}
+			return showFilter;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e.getLocalizedMessage());
+		}
+	}
+}
+

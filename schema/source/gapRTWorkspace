@@ -1,0 +1,1835 @@
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Vector;
+
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.common.RouteTemplate;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.Group;
+import matrix.db.GroupList;
+import matrix.db.JPO;
+import matrix.db.Policy;
+import matrix.db.RelationshipType;
+import matrix.db.Role;
+import matrix.db.User;
+import matrix.db.UserList;
+import matrix.util.MatrixException;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	private final static String  USER_AGENT = "User Agent";
+	public final static String CONST_TASK_KEY_PREFIX = "emxTeamCentral";
+	public final static String CONST_SIGNING_POLICY_PREFIX = "_GAP_DOC_";
+	public final static String CONST_DEFAULT_USER_LOCATION = "ENS";
+	public final static String CONST_SYM_DOT = ".";
+	public final static String CONST_SYM_SEQ_SPE = "~";
+	public final static String CONST_SYM_ASSIGNEE_SPE = "^";
+	public final static String CONST_SYM_COMMA = ",";
+	public final static String CONST_SYM_PIPE = "|";
+	public final static String CONST_SYM_HYPEN = "-";
+	public final static String CONST_SYM_SPACE = " ";
+	public final static String CONST_USR_DISP_PART1 = " (";
+	public final static String CONST_USR_DISP_PART2 = ")";
+	public final static String CONST_MAP_TASK_LABEL = "TASK_LABEL";
+	public final static String CONST_MAP_TASK_DATA = "TASK_DATA";
+	public final static String CONST_MAP_CURRET_SELECTION = "TASK_CURRET_SELECTION";
+	public final static String CONST_MAP_TASK_SELECTED_MEMBER = "SELECTED_MEMBER";
+	public final static String CONST_MAP_TASK_MEMBERS_LIST = "MEMBERS_LIST";
+	public final static String CONST_TASK_USERS = "TASK_USERS";
+	public final static String CONST_TASK_NAME = "TASK_NAME";
+	
+	public final static String CONST_TASK_ASSIGNEE = "TASK_ASSIGNEE";
+	public final static String CONST_DOCUMNET_CODE = "gapDocCode";
+	public final static String CONST_DOCUMNET_REV = "gapDocRev";
+	public final static String CONST_RT_DESCRIPTION = "System generated signers route";
+	public final static String PROMOTE_CONNECTED_OBJECT= "Promote Connected Object";
+	public final static String ATTRIBUTE_GAP_SIGNERS = PropertyUtil.getSchemaProperty("attribute_gapSigners");
+	public final static String REQUESTED_CHANGE = "Requested Change";
+	public final static String REQUESTED_CHANGE_FOR_RELEASE = "For Release";
+	public final static String CONST_ERROR_MSG = "ERROR_MSG";
+	public final static String CONST_DOC_CODE_MATCH = "DOC_CODE_MATCH";
+	public final static String CONST_ERROR_MSG_NOT_SAMEDOC_CODE = "Please select Documents with same document code!";
+	public final static String CONST_ERROR_MSG_NOT_DOC = "Signers selection is only available for Documents!";
+    protected static final String sbRouteStatus = "attribute["+DomainObject.ATTRIBUTE_ROUTE_STATUS+          "]";
+    protected static final String selParentRouteOwner = "to["+DomainConstants.RELATIONSHIP_TASK_SUBROUTE+"].from.from["+DomainConstants.RELATIONSHIP_ROUTE_TASK+"].to.owner";
+    protected static final String attRouteVisibility = "attribute["+DomainObject.ATTRIBUTE_SUBROUTE_VISIBILITY+          "]";
+    protected static final String attRestrictMembers = "attribute["+DomainObject.ATTRIBUTE_RESTRICT_MEMBERS+          "]";
+
+    protected static String activeFilter = "";
+    protected static String inActiveFilter = "";
+    protected static final String strMatchList = " matchlist ";
+    static final String AEF_WORKSPACE_ACCESS_GRANTOR_USERNAME = "Workspace Access Grantor";
+    static final String AEF_WORKSPACE_LEAD_GRANTOR_USERNAME = "Workspace Lead Grantor";
+    static final String AEF_WORKSPACE_MEMBER_GRANTOR_USERNAME = "Workspace Member Grantor";
+    static final String AEF_ROUTE_DELEGATION_GRANTOR_USERNAME = "Route Delegation Grantor";
+    static final String AEF_ROUTE_ACCESS_GRANTOR_USERNAME = "Route Access Grantor";
+    static final String AEF_COMMON_ACCESS_GRANTOR_USERNAME = "Common Access Grantor";
+    static final String RED="Red";
+    static final String YELLOW="Yellow";
+    static final String GREEN="Green";
+    static final String DEFAULT_PART_DOC_CODE     ="PART_ETO";
+    static final String DEFAULT_PART_DOC_CODE_REV ="0";
+
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+    }
+    public String getProjectTeams(Context context, String[] args) throws Exception {
+    	return "sSs";
+    }
+	/**
+    * getProjectTeamsList - method to return range values for Project teams
+    * @author ENGMASA
+    * @param context the eMatrix <code>Context</code> object
+    * @return Map
+    * @throws Exception if the operation fails
+    * @since R212
+    * @grade 0
+    */   
+   public static Object getProjectTeamsList(Context context, String[] args) throws Exception {
+
+       try {
+           StringList values = new StringList();
+           StringList displayValues = new StringList();
+           
+           Group grpPT = new Group("PT");
+           GroupList gpList =  grpPT.getChildren(context, false);
+           Group grpTemp = null;
+           String strGrpName = null;
+           for (int y=0;y<gpList.size(); y++)
+           {
+        	   grpTemp = (Group) gpList.get(y);
+        	   strGrpName = grpTemp.getName();
+        	   values.add(strGrpName);
+        	   displayValues.add(strGrpName);
+           }
+           HashMap resultMap = new HashMap();
+           resultMap.put("field_choices", values);
+           resultMap.put("field_display_choices", displayValues);
+          
+           return resultMap;
+           
+       } catch (Exception e) {
+           throw new Exception(e);
+       }
+   }
+   /**
+    * this method reads Route Template and return task map for display
+    * @author ENGMASA
+    * @param context
+    * @param args
+    * @return
+    * @throws Exception
+    */
+   public static Map getTaskListForDisplay(Context context, String args[]) throws Exception
+   {
+	   Map mpTaskDisplay = new HashMap();
+	   Map programMap = (HashMap)JPO.unpackArgs(args);
+	   String strRTId = (String)programMap.get("routeTemplateId");
+	   String strRTName = (String)programMap.get("routeTemplateName");
+	   
+	   RouteTemplate rt = (RouteTemplate) RouteTemplate.newInstance(context, strRTId);
+		StringList rtObjectSelects = new StringList();
+       rtObjectSelects.add(DomainObject.SELECT_NAME);
+       
+       StringList rtRelSelects = new StringList();
+       rtRelSelects.add(RouteTemplate.SELECT_TITLE);
+       rtRelSelects.add(RouteTemplate.SELECT_ROUTE_SEQUENCE);
+       
+	   MapList mlTaskList = getRouteTemplateTasksList(context, rt, rtObjectSelects, rtRelSelects);
+	   // wrong call
+	   // rt.getRouteTemplateMembers(context, rtObjectSelects, rtRelSelects, false);
+		// iterate task list and prepare map with groups
+		Iterator itrTaskList = mlTaskList.iterator();
+		Map mp = null;
+		
+		while (itrTaskList.hasNext())
+		{
+			mp = (Map) itrTaskList.next();
+			mpTaskDisplay = addDetailsToTaskDisplayMap(context, mp, mpTaskDisplay, strRTName);			
+		}
+		
+	   return mpTaskDisplay;
+   }
+   /**
+    * this method returns Rote Template task list
+    * @author ENGMASA
+    * @param context
+    * @param rt
+    * @param rtObjectSelects
+    * @param rtRelSelects
+    * @return
+    * @throws Exception
+    */
+   public static MapList getRouteTemplateTasksList(Context context, RouteTemplate rt, StringList rtObjectSelects, StringList rtRelSelects) throws Exception
+   {
+	   MapList mlTaskList =  new MapList();
+	   mlTaskList = rt.getRelatedObjects(context, 
+			   									  DomainConstants.RELATIONSHIP_ROUTE_NODE, 
+			   									  "Group", 
+			   									  rtObjectSelects, 
+			   									  rtRelSelects, 
+			   									  false, 
+			   									  true,  
+			   									  (short)1, 
+			   									  DomainConstants.EMPTY_STRING, 
+			   									  DomainConstants.EMPTY_STRING);     
+	  
+	   return mlTaskList;
+   }
+   /**
+    * this method reads task map and prepares key and returns task user list
+    * @author ENGMASA
+    * @param mp
+    * @return
+    * @throws Exception
+    */
+   public static Map addDetailsToTaskDisplayMap(Context context, Map mp, Map mpTaskDisplay, String strRTName) throws Exception
+   {
+	   StringBuffer sbKeyPart1 = new StringBuffer();
+	   sbKeyPart1.append(CONST_TASK_KEY_PREFIX)
+	   			 .append(CONST_SYM_DOT)
+	   			 .append(strRTName);
+	   StringBuffer sbKeyPart2 = new StringBuffer();
+	   StringBuffer sbKey = new StringBuffer();
+	   StringBuffer sbTaskUsers = new StringBuffer();
+	   
+	   String strKey = null;
+	   String strTaskTitle = null;
+	   String strTaskUser = null;
+	   String strTaskSequence = null;
+	   strTaskTitle = (String) mp.get(RouteTemplate.SELECT_TITLE);
+	   strTaskSequence = (String) mp.get(RouteTemplate.SELECT_ROUTE_SEQUENCE);
+	   strTaskUser = (String) mp.get(RouteTemplate.SELECT_NAME);
+	   sbTaskUsers.append(strTaskUser);
+	   String strTempTitle = strTaskTitle.replaceAll(CONST_SYM_SPACE, DomainObject.EMPTY_STRING);
+	   sbKeyPart2.append(strTaskSequence)
+	   			.append(CONST_SYM_DOT)
+	   			.append(strTempTitle);
+	   sbKey.append(sbKeyPart1.toString())
+	   		.append(CONST_SYM_DOT)
+	   		.append(sbKeyPart2.toString());
+
+	   Map mpInfo = new HashMap();
+	   mpInfo.put(CONST_TASK_ASSIGNEE, DomainObject.EMPTY_STRING);
+	   mpInfo.put(CONST_TASK_NAME, sbTaskUsers.toString());
+	   
+	   mpInfo.put(CONST_TASK_USERS, strTaskTitle);
+	   mpTaskDisplay.put(strTaskSequence+CONST_SYM_SEQ_SPE+strTaskTitle, mpInfo);
+	   Map mpTaskDisplaySorted = new TreeMap(mpTaskDisplay);
+	   return mpTaskDisplaySorted;
+   }
+   /**
+    * getWorkspaceId - this Method will be called Internally by Other methods to get the Workspace Id by passing the document Id.
+    * @param context the eMatrix <code>Context</code> object
+    * @param folderId  The Object id of the Document
+    * @return String type
+    * @throws Exception detailed in the log file if the operation fails
+    * @since Team 10-0-1-0
+    */
+
+ public static String getWorkspaceId(Context context, String  folderId)
+ {
+       String workspaceId= DomainObject.EMPTY_STRING;
+       try{
+         String strProjectVault = "Data Vaults";
+         String strSubVaultsRel = "Sub Vaults";
+         String strValuedObjectsRel = "Vaulted Objects";
+         String strProjectType  = DomainConstants.TYPE_WORKSPACE;
+         String strProjectVaultType  = DomainConstants.TYPE_WORKSPACE_VAULT;
+         DomainObject domainObject = DomainObject.newInstance(context);
+         domainObject.setId(folderId);
+         Pattern relPattern  = new Pattern(strProjectVault);
+         relPattern.addPattern(strSubVaultsRel);
+         relPattern.addPattern(strValuedObjectsRel);
+         Pattern typePattern = new Pattern(strProjectType);
+         typePattern.addPattern(strProjectVaultType);
+
+         Pattern includeTypePattern = new Pattern(strProjectType);
+
+         StringList objSelects = new StringList();
+         objSelects.addElement(domainObject.SELECT_ID);
+         //need to include Type as a selectable if we need to filter by Type
+         objSelects.addElement(domainObject.SELECT_TYPE);
+         MapList mapList = domainObject.getRelatedObjects(context,
+                                                relPattern.getPattern(),
+                                                typePattern.getPattern(),
+                                                objSelects,
+                                                null,
+                                                true,
+                                                false,
+                                                (short)0,
+                                                DomainObject.EMPTY_STRING,
+                                                DomainObject.EMPTY_STRING,
+                                                0,
+                                                includeTypePattern,
+                                                null,
+                                                null);
+
+         Iterator mapItr = mapList.iterator();
+         while(mapItr.hasNext())
+         {
+             Map map = (Map)mapItr.next();
+             workspaceId = (String) map.get(domainObject.SELECT_ID);
+         }
+       }catch(Exception e) {
+     	  e.printStackTrace();
+       }
+
+       return workspaceId;
+    }
+ /**
+  * this method updates selected assignees
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+  public static Map updateSelectedAssignees(Context context, String[] args) throws Exception
+  {
+	  //Map mpUpdatedMap = new HashMap();
+	  Map mpCurrentRTMap = new HashMap();
+	  Map programMap = (HashMap)JPO.unpackArgs(args);
+	 
+	  try
+	  {
+	 
+	  String strCurrentSelection = (String) programMap.get("currentSelection");
+	  mpCurrentRTMap = (Map) programMap.get("mpCurrentRTMap");
+	 
+	 // Iterator itr = mpCurrentRTMap.entrySet().iterator(); 
+	  String strKey = null;
+	  String strAssignee = null;
+	  Map mpTaskMap = null;
+	  // split current selection and update into RT map
+	  StringList slList = FrameworkUtil.split(strCurrentSelection, CONST_SYM_COMMA);
+	  StringList slTempList = null;
+	  String strTemp = null;
+	  for (int i=0; i<slList.size(); i++)
+	  {
+		  strTemp = (String) slList.get(i);
+		  slTempList = FrameworkUtil.split(strTemp, CONST_SYM_ASSIGNEE_SPE);
+		  //System.out.println("slTempList : "+slTempList.size());
+		  if (slTempList.size()==2)
+		  {
+			  strKey = (String) slTempList.get(0);
+			  strAssignee = (String) slTempList.get(1);			  
+			  // update into map
+			  mpCurrentRTMap = updateCurrentRTMap(context, mpCurrentRTMap, strKey, strAssignee);
+		  }
+	  }
+	 
+	  }
+	  catch (Exception e) {
+		// TODO: handle exception
+		  String strChangeId = (String) programMap.get("objectId");
+		  ${CLASS:emxContextUtil}.mqlNotice(context, "Document Code of contents have been modified. System is now been clearing previous selection. Please re-open the page!"+strChangeId);
+		  
+		  clearSignersOnCA(context, strChangeId);
+		  mpCurrentRTMap = new HashMap();
+	}
+	  return mpCurrentRTMap;
+  }
+  /**
+   * this method updates selection map for reference
+   * @author ENGMASA
+   * @param context
+   * @param args
+   * @return
+   * @throws Exception
+   */
+  public static Map getSelectionMap(Context context, String[] args) throws Exception
+  {
+	  Map mpUpdatedMap = new HashMap();
+	  Map programMap = (HashMap)JPO.unpackArgs(args);
+	  String strCurrentSelection = (String) programMap.get("currentSelection");
+	  String strClearSelection = (String) programMap.get("clearSelection");
+	  if (UIUtil.isNullOrEmpty(strClearSelection))
+		  strClearSelection = DomainObject.EMPTY_STRING;
+	  boolean bClearSelection = false;
+	  if ("true".equals(strClearSelection))
+		  bClearSelection = true; 
+	  String strKey = null;
+	  String strAssignee = null;
+	  Map mpTaskMap = null;
+	  // split current selection and update into RT map
+	  StringList slList = FrameworkUtil.split(strCurrentSelection, CONST_SYM_COMMA);
+	  StringList slTempList = null;
+	  String strTemp = null;
+	  for (int i=0; i<slList.size(); i++)
+	  {
+		  strTemp = (String) slList.get(i);
+		  slTempList = FrameworkUtil.split(strTemp, CONST_SYM_ASSIGNEE_SPE);
+		 // System.out.println("slTempList : "+slTempList);
+		  if (slTempList.size()==2)
+		  {
+			  strKey = (String) slTempList.get(0);
+			  if (!bClearSelection)
+			  strAssignee = (String) slTempList.get(1);
+			  else 
+				  strAssignee = DomainObject.EMPTY_STRING;
+			  mpUpdatedMap.put(strKey, strAssignee);
+		  }
+	  }
+	  return mpUpdatedMap;
+  }
+  /**
+   * this method returns updated task assignee map
+   * @author ENGMASA
+   * @param context
+   * @param mpCurrentRTMap
+   * @param strTaskTitle
+   * @param strAssignee
+   * @return
+   * @throws Exception
+   */
+  public static Map updateCurrentRTMap(Context context, Map mpCurrentRTMap, String strTaskTitle, String strAssignee) throws Exception
+  {
+	  Map mpTaskInfoMap = (Map) mpCurrentRTMap.get(strTaskTitle);
+	  mpTaskInfoMap.put(CONST_TASK_ASSIGNEE, strAssignee);
+	  mpTaskInfoMap.put(strTaskTitle, mpTaskInfoMap);
+	  mpCurrentRTMap.put(strTaskTitle, mpTaskInfoMap);
+	  return  mpCurrentRTMap;
+  }
+ /**
+  * this method formats map to display person details om signers page
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public static Map formatDisplayMap(Context context, String[] args) throws Exception
+ {
+	 Map mpFormattedMap = new HashMap(0);
+	 Map programMap = (HashMap)JPO.unpackArgs(args);
+	 String strSelecteGroup = (String) programMap.get("UserGrp");
+	 if (UIUtil.isNullOrEmpty(strSelecteGroup))
+		 strSelecteGroup = CONST_DEFAULT_USER_LOCATION;
+	 Map mpCurrentDispMap = (Map) programMap.get("currentDispMap");
+	 Map mpLabelMap = new HashMap();
+	 Map mpValues = new HashMap();
+	 Iterator itr = mpCurrentDispMap.entrySet().iterator(); 
+	 mpFormattedMap.put(CONST_MAP_TASK_LABEL, new StringList());
+	 mpFormattedMap.put(CONST_MAP_TASK_DATA, new HashMap());
+	 mpFormattedMap.put(CONST_MAP_CURRET_SELECTION, new HashMap());
+     while(itr.hasNext()) 
+     { 
+          Map.Entry entry = (Map.Entry)itr.next(); 
+          // update label and values
+          formatDisplayMap(context, mpFormattedMap, entry, strSelecteGroup);
+     }
+
+     // sort tasks by sequences
+     Map mpTaskData = (Map) mpFormattedMap.get(CONST_MAP_TASK_DATA);
+     mpTaskData = new TreeMap(mpTaskData);
+     mpFormattedMap.put(CONST_MAP_TASK_DATA, mpTaskData);
+     
+	 // iterate map 
+	 return mpFormattedMap;
+ }
+ /**
+  * this method formats map
+  * @author ENGMASA
+  * @param context
+  * @param mp
+  * @param entry
+  * @param strSelecteGroup
+  * @throws Exception
+  */
+ public static void formatDisplayMap(Context context, Map mp, Map.Entry entry, String strSelecteGroup) throws Exception
+ {
+	 String strKey = (String) entry.getKey();
+	 Map mpInfo = (Map) entry.getValue();
+	 
+	 String strUser = (String) mpInfo.get(CONST_TASK_NAME);
+	 String strTaskAssignee = (String) mpInfo.get(CONST_TASK_ASSIGNEE);
+	 StringList slList = FrameworkUtil.split(strUser, CONST_SYM_PIPE);
+	 StringBuffer sbNewAssignee = new StringBuffer();
+	/* for (int y=0; y<slList.size(); y++)
+	 {
+		 String strTaskGrp1 = (String) slList.get(y);
+		 if (!strTaskGrp1.startsWith("group_"+strSelecteGroup))
+		 {
+			 String strTempGrp = strTaskGrp1.substring(0, 9);
+			 strTaskGrp1 = strTaskGrp1.replaceAll(strTempGrp, "group_"+strSelecteGroup);
+			 if (y>0)
+				 sbNewAssignee.append(CONST_SYM_PIPE);
+			 sbNewAssignee.append(strTaskGrp1);
+		 }
+	 }
+	 // update assignee list 
+	 if (sbNewAssignee.toString().length()>0)
+	 {
+		 mpInfo.put(CONST_TASK_USERS, sbNewAssignee.toString());
+		 strUser = sbNewAssignee.toString();
+	 }*/
+	 // update current selection map
+	 Map mpCurrentSelection = (Map) mp.get(CONST_MAP_CURRET_SELECTION);
+	 mpCurrentSelection.put(strKey, strTaskAssignee);
+	 mp.put(CONST_MAP_CURRET_SELECTION, mpCurrentSelection);
+	 // populate assignee with new group
+	 MapList mlMemberList = getMemberListForDisplay(context, strUser, strSelecteGroup, strTaskAssignee);
+	 
+	 StringList slLabel = (StringList) mp.get(CONST_MAP_TASK_LABEL);
+	
+	 slLabel.add(strKey);
+	 // update into map
+	 mp.put(CONST_MAP_TASK_LABEL, slLabel);
+	 Map mpUserTaskMap  = new HashMap(); 
+	 mpUserTaskMap.put(CONST_MAP_TASK_MEMBERS_LIST, mlMemberList);
+	 Map mpTaskData = (Map) mp.get(CONST_MAP_TASK_DATA);
+	 mpTaskData.put(strKey,mpUserTaskMap);
+	 
+	 mp.put(CONST_MAP_TASK_DATA, mpTaskData);
+	 
+ }
+ protected StringList getProjectAndOrganizationClassificationRoles(Context context) throws Exception
+ {
+     String strMQL = "list role * where 'isaproject || isanorg'";
+     String strResult = MqlUtil.mqlCommand(context, strMQL, true);
+     return FrameworkUtil.split(strResult, System.getProperty("line.separator"));
+ }
+ /**
+  * this method returns members list for display
+  * @author ENGMASA
+  * @param context
+  * @param strTaskGrp
+  * @return
+  * @throws Exception
+  */
+ public static MapList getMemberListForDisplay(Context context, String strTaskGrp, String strSelecteGroup, String strCurrentAssignee) throws Exception
+ {
+	 MapList mlMemberList = new MapList();
+	 //System.out.println("strTaskGrp >>>>>>>>>>>>>>>> "+strTaskGrp);
+	 // push context
+	 boolean bIsContextPushed = false;
+	 try
+	 {
+		 ContextUtil.pushContext(context, USER_AGENT, null, null);
+		 bIsContextPushed = true;
+		 Map mp = null;
+		 Map mpMember = new HashMap();
+		 StringList slList = FrameworkUtil.split(strTaskGrp, CONST_SYM_PIPE);
+		 String strSelected = "false";
+		 for (int y=0; y<slList.size(); y++)
+		 {
+			 String strTaskGrp1 = (String) slList.get(y);
+			 // replaces selected location
+			String strCurrentUserGrp =  strTaskGrp1.substring(0, strTaskGrp1.indexOf("_"));
+			strTaskGrp1 = strTaskGrp1.replaceFirst(strCurrentUserGrp, strSelecteGroup);
+			// strTaskGrp1 = PropertyUtil.getSchemaProperty(context, strTaskGrp1);
+			// System.out.println("strTaskGrp111 >>>>>>>>>>>>>>>> "+strTaskGrp);
+			 
+			 // print group
+			 Role gp = new Role(strTaskGrp1);
+			 
+			 //Group gp = new Group(strTaskGrp1);
+			 UserList userList =  gp.getAssignments(context);
+			 
+			 Iterator itrUserList = userList.iterator();
+			 StringBuffer sbDisp = new StringBuffer();
+			 String strUserName = null;
+			 
+			// add current user as well
+				/*
+				 * if (UIUtil.isNotNullAndNotEmpty(strCurrentAssignee)) { strUserName =
+				 * strCurrentAssignee; sbDisp.setLength(0);
+				 * sbDisp.append(PersonUtil.getFullName(context,
+				 * strUserName)).append(CONST_USR_DISP_PART1).append(strUserName).append(
+				 * CONST_USR_DISP_PART2); // if current user is selected user then mark as
+				 * selected if (strCurrentAssignee.equals(strUserName)) { strSelected = "true";
+				 * } mpMember.put(CONST_MAP_TASK_SELECTED_MEMBER, strSelected);
+				 * mpMember.put(DomainObject.SELECT_NAME, sbDisp.toString());
+				 * mpMember.put(DomainObject.SELECT_ID, strUserName); // if list does not
+				 * contains if (!mlMemberList.contains(mpMember)) { mlMemberList.add(mpMember);
+				 * } }
+				 */
+			 while (itrUserList.hasNext())
+			 {
+				 strSelected = "false";
+				 mpMember = new HashMap();
+				 User user = (User) itrUserList.next();
+				 strUserName = user.getName();
+				 sbDisp.setLength(0);
+				 sbDisp.append(PersonUtil.getFullName(context, strUserName)).append(CONST_USR_DISP_PART1).append(strUserName).append(CONST_USR_DISP_PART2);
+				 // if current user is selected user then mark as selected
+				 if (strCurrentAssignee.equals(strUserName))
+				 {
+					 strSelected = "true";
+				 }
+				 mpMember.put(CONST_MAP_TASK_SELECTED_MEMBER, strSelected);
+				 mpMember.put(DomainObject.SELECT_NAME, sbDisp.toString());
+				 mpMember.put(DomainObject.SELECT_ID, strUserName);
+				 // if list does not contains
+				 if (!mlMemberList.contains(mpMember))
+				 {
+					 mlMemberList.add(mpMember);
+				 }
+			 }
+		 }
+	 }
+	 catch (Exception exp)
+	 {
+		// exp.printStackTrace();
+	 }
+	 finally {
+		if (bIsContextPushed)
+			ContextUtil.popContext(context);
+	}
+	 return mlMemberList;
+ }
+ /**
+  * this method updates assignee map for CA signer selection
+  * @param context
+  * @param strChangeId
+  * @return
+  * @throws Exception
+  */
+ public static Map getAsigneeMapForCA(Context context, String strChangeId) throws Exception
+ {
+	 Map mpSelectionMap = new HashMap();
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 Map programMap = new HashMap();
+	programMap.put("currentSelection", strSigners);
+	    String[] strArgs1  = JPO.packArgs(programMap);
+	    mpSelectionMap = getSelectionMap(context, strArgs1);
+	 return mpSelectionMap;
+ }
+ /**
+  * this trigger checks if signers selected for CA if not then checks for reviewers selection
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public int checkRouteTemplatesOrReviewerOrSignerRoute(Context context, String[] args)
+		    throws Exception
+ {
+	 String strChangeId = args[0];
+	 int i = 0;
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 System.out.println("~~~~~~~~~~~~~~~~~~from triggggg L:::: "+strSigners);
+	 if (UIUtil.isNullOrEmpty(strSigners)) {	
+		 // check for reviewers if no signers selected
+		 ${CLASS:UnifiedChangeActionECMTriggers} UnifiedChangeActionECMTriggers = new ${CLASS:UnifiedChangeActionECMTriggers}();
+		 i = UnifiedChangeActionECMTriggers.checkForReviewersOrRouteTemplate(context, args);
+	 }
+	 return i;
+ }
+ /**
+  * this trigger checks if signers selected for CA if not then checks for reviewers selection
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public int checkReviewersAndBaseline(Context context, String[] args)
+		    throws Exception
+ {
+	 String strChangeId = args[0];
+	 int i = 0;
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 System.out.println("~~~~~~~~~~~~~~~~~~from triggggg L:::: "+strSigners);
+	 if (UIUtil.isNullOrEmpty(strSigners)) {	
+		 // check for reviewers if no signers selected
+		 ${CLASS:UnifiedChangeActionECMTriggers} UnifiedChangeActionECMTriggers = new ${CLASS:UnifiedChangeActionECMTriggers}();
+		 i = UnifiedChangeActionECMTriggers.checkReviewersAndBaseline(context, args);
+	 }
+	 return i;
+ }
+ /**
+  * this trigger checks if signers selected for CA if not then checks for reviewers selection
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public int checkForReviewersOrSignerRoute(Context context, String[] args)
+		    throws Exception
+ {
+	 String strChangeId = args[0];
+	 int i = 0;
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 if (UIUtil.isNullOrEmpty(strSigners)) {	
+		 // check for reviewers if no signers selected
+		 ${CLASS:UnifiedChangeActionECMTriggers} UnifiedChangeActionECMTriggers = new ${CLASS:UnifiedChangeActionECMTriggers}();
+		 i = UnifiedChangeActionECMTriggers.checkReviewersAndBaseline(context, args);
+	 }
+	 return i;
+ }
+ /**
+  * this method checks if any previous signers route was rejected
+  * @author ENGMASA
+  * @param context
+  * @param strChangeId
+  * @return
+  * @throws Exception
+  */
+ public static boolean checkIfPreviousSignersRouteWasRejected(Context context, String strChangeId) throws Exception
+ {
+	 boolean bRes = false;
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+     StringList busSelects = new StringList();
+     busSelects.add(DomainObject.SELECT_CURRENT);
+     busSelects.add(DomainObject.SELECT_POLICY);
+     
+
+     //Finding the current state and policy of the object
+     Map mapInfo = doCA.getInfo(context, busSelects);
+     String strStateName = (String)mapInfo.get(DomainObject.SELECT_CURRENT);
+     String strPolicyName = (String)mapInfo.get(DomainObject.SELECT_POLICY);
+
+     //Getting the symbolic names of the object
+     String strSymbolicState = FrameworkUtil.reverseLookupStateName(context, strPolicyName, strStateName);
+     String strSymbolicPolicy = FrameworkUtil.getAliasForAdmin(context, "Policy", strPolicyName, false);
+
+     //Obtaining the state based routes of the current state
+     String strTypePattern = DomainObject.TYPE_ROUTE;
+     String strRelPattern = DomainObject.RELATIONSHIP_OBJECT_ROUTE;
+     StringList slBusSelect = new StringList();
+     slBusSelect.add(DomainObject.SELECT_ID);
+     slBusSelect.add("from[Initiating Route Template].to.id");
+     StringList slRelSelect = new StringList();
+     short nRecurseLevel = (short)1;
+     String strBusWhere = "attribute[Route Status] == Stopped";
+     String strRelWhere = DomainObject.EMPTY_STRING;//"attribute[" + DomainObject.ATTRIBUTE_ROUTE_BASE_STATE + "]==\"" + strSymbolicState + "\" && attribute[" + DomainObject.ATTRIBUTE_ROUTE_BASE_POLICY + "]==\"" +strSymbolicPolicy+ "\"";
+     final boolean GET_TO = true;
+     final boolean GET_FROM = true;
+
+     MapList mlRoutes = doCA.getRelatedObjects(context, strRelPattern, strTypePattern, slBusSelect, slRelSelect, !GET_TO, GET_FROM, nRecurseLevel, strBusWhere, strRelWhere);
+     
+     if (mlRoutes!=null && mlRoutes.size()>0)
+     {
+    	 /*String args[] = new String[] {strChangeId};
+    	 ${CLASS:emxRoute} emxRoute = new ${CLASS:emxRoute}(context, null);
+		 int iRes = emxRoute.triggerAutoResumeRoute(context, args);*/
+    	Map mpDocCode = getDocumentCodeAndRevision(context, strChangeId);
+    	 String strDocCode = (String) mpDocCode.get(CONST_DOCUMNET_CODE);
+    	 String strDocRev = (String) mpDocCode.get(CONST_DOCUMNET_REV);
+    	 // get matching route Template id
+    	 Map mpRT = getMatchingRouteTemplate(context, strChangeId, strDocCode, strDocRev);
+		 //System.out.println("1..."+mpRT);
+		  if (mpRT==null || mpRT.isEmpty())
+			 {
+				 // if for PNF then show default else ignore
+				 String strUserGrp = getCAUserLocation(context, strChangeId);
+				 if (strUserGrp.equals("PNF")) 
+				 {			 
+					 // show Part template as default
+					 mpRT = getMatchingRouteTemplate(context, strChangeId, DEFAULT_PART_DOC_CODE, DEFAULT_PART_DOC_CODE_REV);
+				 }
+			 }
+			 // System.out.println("2..."+mpRT);
+    	 String strRTId = (String) mpRT.get(DomainObject.SELECT_ID);
+    	 Map mapRoute = null;
+    	 String strRouteId = null;
+    	 String strInitiatingTemplate = null;
+    	 Route rt = (Route) Route.newInstance(context, DomainObject.TYPE_ROUTE);
+    	 boolean bIsContextPushed = false;
+			try {
+			// push context to restart route
+			ContextUtil.pushContext(context, USER_AGENT, null, null);
+			bIsContextPushed = true;
+	    	 for (Iterator itrRoutes = mlRoutes.iterator(); itrRoutes.hasNext();) {
+	             mapRoute = (Map)itrRoutes.next();
+	             strRouteId = (String)mapRoute.get(DomainObject.SELECT_ID);
+	             strInitiatingTemplate  = (String)mapRoute.get("from[Initiating Route Template].to.id");
+	             // start only signers route
+	             if (UIUtil.isNotNullAndNotEmpty(strInitiatingTemplate) && strInitiatingTemplate.equals(strRTId))
+	             {
+		             rt.setId(strRouteId);
+		            // rt.resume(context);
+		             // restart previous route
+		           //  rt.reStart(context);
+		             // set status as Finished and promote to Complete
+		             rt.setAttributeValue(context, DomainObject.ATTRIBUTE_ROUTE_STATUS, "Finished");
+		             rt.promote(context);
+	             }
+	         }
+			}
+			finally
+			{
+				if (bIsContextPushed)
+					ContextUtil.popContext(context);
+			}
+    	 return true;
+     }
+	 return bRes;
+ }
+ 
+ /**
+  * this trigger method instantiates Route for Signing document
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public static int instantiateSignerRoute(Context context, String args[]) throws Exception
+ {
+	 String strChangeId = args[0];
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 //String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 // check if signers selected
+	 if (checkIfSignersSelected(context, strChangeId)) {
+		 // ENGMASA : Added below code to fix task rejection : START
+		 // check if previous signers route was rejected then Complete previous route
+		 boolean bAnySignersRouteRejected = cleanupOrRestartExistingRoute(context, doCA, strChangeId, strChangeId);//checkIfPreviousSignersRouteWasRejected(context, strChangeId);
+		 if (bAnySignersRouteRejected)
+			 return 1;
+		// ENGMASA : Added below code to fix task rejection : END
+	 Map mpDocMap = getDocumentCodeAndRevision(context, strChangeId);
+	 boolean bSameDocuments = (boolean) mpDocMap.get("DOC_CODE_MATCH");
+		String strAttributeRouteCompletionAction = PropertyUtil.getSchemaProperty(context, "attribute_RouteCompletionAction");
+
+		String strAttributeRouteBasePurpose = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+		String SELECT_ATTR_ROUTE_BASE_PURPOSE = "attribute[" +  PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose")  + "]";
+		String SELECT_ATTR_AUTO_STOP_REJECTION = "attribute[" + PropertyUtil.getSchemaProperty(context, "attribute_AutoStopOnRejection" ) + "]";
+
+		String strAttributeRouteBasePolicy = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePolicy");
+		String strAttributeRouteBaseState = PropertyUtil.getSchemaProperty(context, "attribute_RouteBaseState");
+		String strAttributeAutoStopRejection = PropertyUtil.getSchemaProperty(context, "attribute_AutoStopOnRejection" );
+	    if (bSameDocuments){
+			String strDocumentCode = (String) mpDocMap.get(CONST_DOCUMNET_CODE);
+			String strDocRev = (String) mpDocMap.get(CONST_DOCUMNET_REV);
+			Map mpRTMap = getMatchingRouteTemplate(context, strChangeId, strDocumentCode, strDocRev);
+		// System.out.println("1..."+mpRTMap);
+		  if (mpRTMap==null || mpRTMap.isEmpty())
+			 {
+				 // if for PNF then show default else ignore
+				 String strUserGrp = getCAUserLocation(context, strChangeId);
+				 if (strUserGrp.equals("PNF")) 
+				 {			 
+					 // show Part template as default
+					 mpRTMap = getMatchingRouteTemplate(context, strChangeId, DEFAULT_PART_DOC_CODE, DEFAULT_PART_DOC_CODE_REV);
+				 }
+			 }
+			//  System.out.println("2..."+mpRTMap);
+			String contextObjectPolicyName  = args[2];
+			String contextObjectStateName  = args[1];
+			//System.out.println("contextObjectPolicyName: "+contextObjectPolicyName);
+			//System.out.println("contextObjectStateName : "+contextObjectStateName);
+			if (mpRTMap!=null || !mpRTMap.isEmpty())
+			{
+				String routeTemplateID = (String) mpRTMap.get(DomainObject.SELECT_ID);
+				Map routeAttributeMap = new HashMap();
+				Map objectRouteAttributeMap = new HashMap();
+				
+				ContextUtil.startTransaction(context, true);
+				String strCAOwner = doCA.getInfo(context, DomainObject.SELECT_OWNER);
+				DomainObject doRT = DomainObject.newInstance(context, routeTemplateID);
+				// update assignee map
+				Map mpAssigneeMap = getAsigneeMapForCA(context, strChangeId);
+				final String ROUTE_FINISHED                      = "Finished";
+	            final String SELECT_ROUTE_TASK_ASSIGNEE_TYPE     = "from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.type";
+	            final String SELECT_ATTRIBUTE_ROUTE_STATUS       = "attribute[" + DomainObject.ATTRIBUTE_ROUTE_STATUS + "]";
+	            final String ATTRIBUTE_CURRENT_ROUTE_NODE        = PropertyUtil.getSchemaProperty(context, "attribute_CurrentRouteNode");
+	            final String SELECT_ATTRIBUTE_CURRENT_ROUTE_NODE = "attribute[" + ATTRIBUTE_CURRENT_ROUTE_NODE + "]";
+	            final String SELECT_REL_ATTRIBUTE_ROUTE_SEQUENCE = DomainRelationship.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_SEQUENCE);
+	            final String ATTRIBUTE_AUTO_STOP_ON_REJECTION    = PropertyUtil.getSchemaProperty(context, "attribute_AutoStopOnRejection");
+	            final String ATTRIBUTE_ROUTE_BASE_PURPOSE    = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+	            final String SELECT_ATTRIBUTE_AUTO_STOP_REJECTION  = "attribute[" + ATTRIBUTE_AUTO_STOP_ON_REJECTION + "]";
+	            final String SELECT_ATTRIBUTE_ROUTE_BASE_PURPOSE  = "attribute[" + ATTRIBUTE_ROUTE_BASE_PURPOSE + "]";
+	            //final String COMPLETED_ROUTE = (String)loc.GetString(RESOURCE_BUNDLE, strLanguage, "emxFramework.Alert.CannotAddTaskToCompletedRoute");
+	            String sAttrRestrictMembers = PropertyUtil.getSchemaProperty(context, "attribute_RestrictMembers" );
+	            final String SELECT_ATTRIBUTE_ROUTE_SCOPE = "attribute[" + sAttrRestrictMembers + "]";
+				//strRouteTemplateDescription = (String)mapRouteTemplate.get(RouteTemplate.SELECT_DESCRIPTION);
+				
+				//attributes to be set on type Route
+				routeAttributeMap.put(strAttributeRouteCompletionAction, "Notify Route Owner");
+				routeAttributeMap.put(strAttributeAutoStopRejection, doRT.getInfo(context, SELECT_ATTR_AUTO_STOP_REJECTION));
+				routeAttributeMap.put(strAttributeRouteBasePurpose, doRT.getInfo(context, SELECT_ATTR_ROUTE_BASE_PURPOSE));
+				
+				// attributes to be set on relationship Object Route
+				objectRouteAttributeMap.put(strAttributeRouteBasePolicy,FrameworkUtil.getAliasForAdmin(context, "Policy", args[2], false));
+				objectRouteAttributeMap.put(strAttributeRouteBaseState, FrameworkUtil.reverseLookupStateName(context, args[2], args[1]));
+				objectRouteAttributeMap.put(strAttributeRouteBasePurpose, "Standard");
+				boolean bIsContextPushed = false;
+				try {
+				//added temporary to check with user other than User Agent
+			    // ENGMASA : Added below code to fix task rejection : START
+				ContextUtil.pushContext(context, strCAOwner, null, null);
+				// ENGMASA : Added below code to fix task rejection : END
+				bIsContextPushed = true;
+				 DomainObject domRouteTemplateObject = DomainObject.newInstance(context, routeTemplateID);
+				
+				com.matrixone.apps.common.Route route = (com.matrixone.apps.common.Route)DomainObject.newInstance(context, DomainConstants.TYPE_ROUTE);
+                String strRouteName = null;
+
+                // Create route object
+                strRouteName = FrameworkUtil.autoName(context,
+                                                      "type_Route",
+                                                      new Policy(DomainObject.POLICY_ROUTE).getFirstInSequence(context),
+                                                      "policy_Route",
+                                                      null,
+                                                      null,
+                                                      true,
+                                                      true);
+                //System.out.println("context RT : "+context.getUser());
+                route.createObject(context, DomainConstants.TYPE_ROUTE, strRouteName, new Policy(DomainConstants.POLICY_ROUTE).getSequence(context), DomainObject.POLICY_ROUTE, "eService Production");
+               // get Alias Names
+                String RoutePolicyAdminAlias = FrameworkUtil.getAliasForAdmin(context,
+                        DomainObject.SELECT_POLICY, DomainObject.POLICY_ROUTE, true);
+                String RouteTypeAdminAlias = FrameworkUtil.getAliasForAdmin(context,
+                        DomainObject.SELECT_TYPE, DomainObject.TYPE_ROUTE, true);
+                String sProductionVault = PropertyUtil
+                        .getSchemaProperty(context,"vault_eServiceProduction");
+                // get Route Object id
+                String sRouteId = FrameworkUtil.autoName(context,
+                        RouteTypeAdminAlias, "", RoutePolicyAdminAlias,
+                        sProductionVault);
+              //  route = (Route) DomainObject.newInstance(context,
+                	//	DomainConstants.TYPE_ROUTE);
+                // create ROute object
+               // route.setId(sRouteId);
+                // set Route owner to CA Owner
+                route.setOwner(context, strCAOwner);
+                route.setDescription(context, CONST_RT_DESCRIPTION);
+                String strRouteId = route.getInfo(context, DomainObject.SELECT_ID);
+                com.matrixone.apps.common.Person objPerson = com.matrixone.apps.common.Person.getPerson(context, strCAOwner);
+                // Connect route to the owner
+                route.connect(context, new RelationshipType(DomainObject.RELATIONSHIP_PROJECT_ROUTE), true, objPerson);
+
+                // Connect route to the route template
+                route.connectTemplate(context, routeTemplateID);
+				//System.out.println("ooo :::::::::::::::: "+route.getInfo(context, "current"));
+              //Getting the current auto stop on rejection attribute for the ROUTE
+                String sAutoStopOnRejection = (String)domRouteTemplateObject.getInfo(context, SELECT_ATTRIBUTE_AUTO_STOP_REJECTION);
+                String sRouteBasePurpose = (String)domRouteTemplateObject.getInfo(context, SELECT_ATTRIBUTE_ROUTE_BASE_PURPOSE);
+                String sRouteScope = (String)domRouteTemplateObject.getInfo(context, SELECT_ATTRIBUTE_ROUTE_SCOPE);
+                Map mapRelAttributes = DomainRelationship.getTypeAttributes(context, DomainObject.RELATIONSHIP_ROUTE_NODE);
+                StringList slRelSelects = new StringList();
+                for (Iterator itrAttributes = mapRelAttributes.keySet().iterator(); itrAttributes.hasNext();) {
+                    slRelSelects.add(DomainRelationship.getAttributeSelect((String)itrAttributes.next()));
+                }
+                String strTypePattern = DomainObject.TYPE_PERSON + "," + DomainObject.TYPE_ROUTE_TASK_USER;
+                String strRelPattern = DomainObject.RELATIONSHIP_ROUTE_NODE;
+                boolean getTo = false;
+                boolean getFrom = true;
+                String strRelWhere = null;short nRecurseToLevel = (short)1;
+             // Form the bus select
+                StringList slBusSelects = new StringList(DomainObject.SELECT_ID);
+                slBusSelects.add(DomainObject.SELECT_TYPE);
+                MapList mlTasks = doRT.getRelatedObjects(context,
+                                                                     strRelPattern,
+                                                                     strTypePattern,
+                                                                     slBusSelects,
+                                                                     slRelSelects,
+                                                                     getTo,
+                                                                     getFrom,
+                                                                     nRecurseToLevel,
+                                                                     DomainObject.EMPTY_STRING,
+                                                                     strRelWhere);
+                RouteTemplate rt = (RouteTemplate) RouteTemplate.newInstance(context, routeTemplateID);
+                mlTasks = getRouteTemplateTasksList(context, rt, slBusSelects, slRelSelects);
+                		//rt.getRouteTemplateMembers(context, slBusSelects, slRelSelects, false);
+              //  System.out.println("mlTasks : "+mlTasks);
+                Map mapTask = null;
+                DomainRelationship dmoRelationship             = null;
+                DomainObject toObject       = null;
+                String strUserId            = null;
+                String strUserType          = null;
+                String strAttributeName     = null;
+                String strAttributeValue    = null;
+                String strRouteTaskUser     = null;
+                String strTitle             = null;           
+                String strSeq            = null;   
+                StringBuffer sbTaskKey = new StringBuffer();
+                
+                Map mapRelAttributesToSet   = null;
+             // We could have found all the user objects and connect them simultaneously. 
+                // But there might be multiple tasks to a same user. In this scenario, when all the users are connected,
+                // we will not know for which relationship attributes are to be updated. 
+                // So find one user (i.e. task) and complete it, then go for next user (i.e. task).
+                for (Iterator itrTasks = mlTasks.iterator(); itrTasks.hasNext();) {
+                	sbTaskKey.setLength(0);
+                    // Get each task in route template
+                    mapTask = (Map)itrTasks.next();
+                   // System.out.println("mapTask : "+mapTask);
+                 // Create the same tasks for route object
+                    strUserId = (String)mapTask.get(DomainObject.SELECT_ID);
+                    strUserType = (String)mapTask.get(DomainObject.SELECT_TYPE);
+                    strSeq = (String)mapTask.get(DomainRelationship.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_SEQUENCE));
+                    strTitle = (String)mapTask.get(DomainRelationship.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE));
+                    
+                    sbTaskKey.append(strSeq.trim())
+                    		 .append(CONST_SYM_SEQ_SPE)
+                    		 .append(strTitle.trim());
+                    strUserId = (String) mpAssigneeMap.get(sbTaskKey.toString());
+                    // get person id
+                    strUserId = PersonUtil.getPersonObjectID(context, strUserId);
+              //     System.out.println(sbTaskKey.toString() + " >>>> "+strUserId);
+                  //If the task is of RTU type then create new RTU
+                   
+                        //Normal task
+                        toObject = DomainObject.newInstance(context, strUserId);
+                        
+                    dmoRelationship = DomainRelationship.connect(context, route, DomainObject.RELATIONSHIP_ROUTE_NODE, toObject);
+
+                    // Copy all the attributes from route template Route Node relationship to Route
+                    mapRelAttributesToSet = new HashMap();
+                    for (Iterator itrAttributes = mapRelAttributes.keySet().iterator(); itrAttributes.hasNext();) {
+                        strAttributeName = (String)itrAttributes.next();
+                        strAttributeValue = (String)mapTask.get(DomainRelationship.getAttributeSelect(strAttributeName));
+                        mapRelAttributesToSet.put(strAttributeName, strAttributeValue);
+                    }
+                    // set route task user to person object
+                    mapRelAttributesToSet.put(DomainObject.ATTRIBUTE_ROUTE_TASK_USER, "");
+                    // set task as Template Task
+                 // ENGMASA : Added below code to fix task rejection : START
+                    mapRelAttributesToSet.put(DomainObject.ATTRIBUTE_TEMPLATE_TASK, "Yes");
+                 // ENGMASA : Added below code to fix task rejection : END
+                  //  System.out.println("mapRelAttributesToSet : "+mapRelAttributesToSet);
+                    dmoRelationship.setAttributeValues(context, mapRelAttributesToSet);
+                }
+             // Add this object as content to this route
+                Map mapObjectToState = new HashMap();
+                mapObjectToState.put(strChangeId, args[1]);
+                DomainObject domainObject = new DomainObject(strChangeId);
+                String strCurrentStateOfObject = domainObject.getInfo(context, DomainObject.SELECT_CURRENT);
+
+                dmoRelationship = DomainRelationship.connect(context, domainObject, DomainObject.RELATIONSHIP_OBJECT_ROUTE, route);
+
+                String strPolicyName = domainObject.getInfo(context, DomainObject.SELECT_POLICY);
+                String strStateNameSymbolic = FrameworkUtil.reverseLookupStateName(context, strPolicyName, args[1]);
+                String strPolicyNameSymbolic = FrameworkUtil.getAliasForAdmin(context,"Policy", strPolicyName, true);
+                
+                Map mapRelAttributesNew = new HashMap();
+                mapRelAttributesNew.put(DomainObject.ATTRIBUTE_ROUTE_BASE_POLICY, strPolicyNameSymbolic);
+                mapRelAttributesNew.put(DomainObject.ATTRIBUTE_ROUTE_BASE_STATE, strStateNameSymbolic);
+                dmoRelationship.setAttributeValues(context, mapRelAttributesNew);
+
+                //Setting attribute Auto stop on rejection
+                route.setAttributeValue(context, ATTRIBUTE_AUTO_STOP_ON_REJECTION, sAutoStopOnRejection);
+                route.setAttributeValue(context, ATTRIBUTE_ROUTE_BASE_PURPOSE, sRouteBasePurpose);
+                route.setAttributeValue(context, sAttrRestrictMembers, sRouteScope);
+                // set route completion action as Promote
+                route.setAttributeValue(context, strAttributeRouteCompletionAction, PROMOTE_CONNECTED_OBJECT);
+                
+                String attrDueDateOffset      = PropertyUtil.getSchemaProperty( context,"attribute_DueDateOffset");
+                String attrDueDateOffsetFrom  = PropertyUtil.getSchemaProperty( context,"attribute_DateOffsetFrom");
+                String selDueDateOffset       = "attribute["+attrDueDateOffset+"]";
+                String selDueDateOffsetFrom   = "attribute["+attrDueDateOffsetFrom+"]";
+                String selRouteNodeRelId      = DomainObject.SELECT_RELATIONSHIP_ID;
+                String selSequence            = "attribute["+DomainObject.ATTRIBUTE_ROUTE_SEQUENCE+"]";
+                String sWhereExp              = "";
+                String OFFSET_FROM_ROUTE_START_DATE  = "Route Start Date";
+                sWhereExp += "("+selDueDateOffset+ " !~~ \"\")";
+                sWhereExp += " && (" +selDueDateOffsetFrom + " ~~ \""+OFFSET_FROM_ROUTE_START_DATE+"\")";
+                sWhereExp += " || (" +selSequence + " == \"1\")";
+                StringList relSelects             = new StringList();
+                relSelects.addElement(selDueDateOffset);
+                relSelects.addElement(selDueDateOffsetFrom);
+                relSelects.addElement(selRouteNodeRelId);
+                relSelects.addElement(selSequence);
+                MapList routeFirstOrderOffsetList = Route.getFirstOrderOffsetTasks(context, route, relSelects, sWhereExp);
+                // set Scheduled Due Date attribute for all delta offset ORDER 1 Route Nodes offset From Task create which is same as Route start
+                Route.setDueDatesFromOffset(context, routeFirstOrderOffsetList);   
+                // automatically start the route
+                route.promote(context);
+                route.setDueDateFromOffsetForGivenLevelTasks(context, 1);
+                // automatically start the route
+             /*   route.promote(context);
+                route.setDueDateFromOffsetForGivenLevelTasks(context, 1);
+                ContextUtil.commitTransaction(context);*/
+				}
+				catch (Exception e) {
+					ContextUtil.abortTransaction(context);
+					//System.out.println("eoorrr ?????? ");
+					e.printStackTrace();
+					${CLASS:emxContextUtil}.mqlError(context, e.getMessage());
+					throw e;
+				}
+				finally {
+					if (bIsContextPushed)
+						ContextUtil.popContext(context);
+				}
+			}
+	    }
+	 }// create reviewers route
+	 else {
+		 ${CLASS:UnifiedChangeActionECMTriggers} UnifiedChangeActionECMTriggers = new ${CLASS:UnifiedChangeActionECMTriggers}();
+		 int iRes = UnifiedChangeActionECMTriggers.createAndStartRouteFromTemplateOrReviewers(context, args);
+		 return iRes;
+	 }
+	 return 0;
+ }
+ /**
+  * Implements promote trigger process for the object. Following things will happen on broad level
+  * For the object for which the routes are attached to when promoted to next state the Routes
+  * attached to the state is resumed.
+  * @author ENGMASA
+  * @param context The Matrix Context object
+  * @param args The arguments array.
+  *  args[0] : The object id
+  * @return 0 indicating successful operation or 1 indicating unsuccessful operation
+  * @throws Exception of operation fails
+  * @since Common V6R2009-1
+  * @grade 0
+  */
+ public int triggerAutoResumeRoute(Context context, String[] args) throws Exception
+ {
+	 int iRes = 0;
+	 // auto trigger routes only incase signers not selected
+	 if (!checkIfSignersSelected(context, args[0]))
+	 {
+		 ${CLASS:emxRoute} emxRoute = new ${CLASS:emxRoute}(context, null);
+		 iRes = emxRoute.triggerAutoResumeRoute(context, args);
+	 }
+	 return iRes;
+ }
+ /**
+  * this method checks if signers are selected for change
+  * @author ENGMASA
+  * @param context
+  * @param strChangeId
+  * @return
+  * @throws Exception
+  */
+ public static boolean checkIfSignersSelected(Context context, String strChangeId) throws Exception
+ {
+	 boolean bResult = false;
+	 DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+	 String strSigners = doCA.getAttributeValue(context, ATTRIBUTE_GAP_SIGNERS);
+	 if (UIUtil.isNotNullAndNotEmpty(strSigners))
+		 return true;
+	 return bResult;
+ }
+ /**
+  * this method returns matching route templates ID
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public static Map getDocumentCodeAndRevision(Context context, String args[]) throws Exception
+ {
+	 Map programMap = (HashMap)JPO.unpackArgs(args);
+	 String strChangeId = (String)programMap.get("objectId");
+	 Map mpDocMap = getDocumentCodeAndRevision(context, strChangeId);
+	 return mpDocMap;
+ }
+ /**
+  * this method returns matching route templates ID
+  * @param context
+  * @param strObjectId
+  * @param strDocCode
+  * @param strDocRev
+  * @return
+  * @throws Exception
+  */
+ public static Map getDocumentCodeAndRevision(Context context, String strChangeId) throws Exception
+ {	
+	 Map mpDocRes = new HashMap();
+	// get affected Items connected to CA
+			HashMap programMap = new HashMap();		
+			programMap.put("objectId", strChangeId);
+		    boolean bSameDocuments =true;
+		    boolean bIsDoc = true;
+		    String[] strArgs  = JPO.packArgs(programMap);
+		    ${CLASS:enoECMChangeAction} enoECMChangeAction = new ${CLASS:enoECMChangeAction}(context, null);
+		    MapList mlResultList = enoECMChangeAction.getAffectedItems(context, strArgs);
+		   // System.out.println("mlResultList : "+mlResultList);
+		 // format map and check if all documents are of same type
+		 			Map mp = null;
+		 			String strId = null;
+		 			DomainObject doDoc = DomainObject.newInstance(context);
+		 			String strAttrDocCode = PropertyUtil.getSchemaProperty(context, "attribute_gapDocumentCode");
+		 			Iterator itrResList = mlResultList.iterator();
+		 			String strDocCode = null;
+		 			String strDocRev = null;
+		 			String strRev = null;
+		 			String strTempDocCode = null;
+		 			String strRequeChange = null;
+		 			// ENGMASA : Added below code to enable signers selection for Parts : START
+		 			int iTotalAffectedItems = mlResultList.size();
+		 			int iNumberOfParts = 0;
+		 			int iNumberOfDocuments = 0;
+		 		    // ENGMASA : Added below code to enable signers selection for Parts : END
+		 			while (itrResList.hasNext())
+		 			{
+		 				mp = (Map) itrResList.next();
+		 				strId= (String) mp.get(DomainObject.SELECT_ID);
+		 				strRequeChange = (String) mp.get(REQUESTED_CHANGE);
+		 				if (strRequeChange.equals(REQUESTED_CHANGE_FOR_RELEASE))
+		 					strDocRev = "0";
+		 				else
+		 					strDocRev = "1";
+		 				doDoc.setId(strId);
+		 			// ENGMASA : Added below code to enable signers selection for Parts : START
+		 			// ignore type Part if any Document is attached
+		 				if (!doDoc.isKindOf(context, DomainObject.TYPE_PART)) {
+		 			// ENGMASA : Added below code to enable signers selection for Parts : END
+		 				if (doDoc.isKindOf(context, CommonDocument.TYPE_DOCUMENTS)) {
+		 				// read latest rev id		 				
+			 			String strLatestId = doDoc.getInfo(context, DomainObject.SELECT_LAST_ID);
+			 			doDoc.setId(strLatestId);
+		 				strTempDocCode = doDoc.getAttributeValue(context, strAttrDocCode);
+		 				
+		 			//	strRev = doDoc.getInfo(context, DomainObject.SELECT_REVISION);
+		 				
+		 				// set for the first time
+		 				if (UIUtil.isNullOrEmpty(strDocCode))
+		 					strDocCode = strTempDocCode;
+		 				// set for the first time
+//		 				if (UIUtil.isNullOrEmpty(strDocRev))
+//		 					strDocRev = strRev;
+		 				
+		 				if (!strTempDocCode.equals(strDocCode))
+		 				{
+		 					bSameDocuments = false;
+		 					break;
+		 				}
+		 				}
+		 				else {
+		 					bIsDoc = false;
+		 					break;
+		 				}
+		 			}
+		 				// ENGMASA : Added below code to enable signers selection for Parts : START
+		 				else
+		 				{
+		 					// count number of Parts
+		 					iNumberOfParts++;
+		 				}
+		 				// ENGMASA : Added below code to enable signers selection for Parts : END
+		 			}//System.out.println("bSameDocuments :: "+bSameDocuments+" >>> bIsDoc : "+bIsDoc);
+		 			if (bSameDocuments && bIsDoc)
+		 			{
+		 				// ENGMASA : Added below code to enable signers selection for Parts : START
+		 				String strDocumentCode = null;
+		 				// if all Parts then select doc code for Part
+		 				if (iNumberOfParts==iTotalAffectedItems) 
+		 				{
+		 					strDocumentCode = DEFAULT_PART_DOC_CODE;
+		 					strDocRev = DEFAULT_PART_DOC_CODE_REV;
+		 					mpDocRes.put(CONST_DOCUMNET_CODE, strDocumentCode);
+			 				mpDocRes.put(CONST_DOCUMNET_REV, strDocRev);
+		 				}
+		 				else {
+		 				// ENGMASA : Added below code to enable signers selection for Parts : END
+		 				int iRev = Integer.parseInt(strDocRev);
+		 				if (iRev>0)
+		 					strDocRev = "1";
+		 				//System.out.println("strDocRev:  "+strDocRev);
+		 				StringList slList = FrameworkUtil.split(strDocCode, CONST_SYM_HYPEN);
+		 				strDocumentCode = (String) slList.get(0);
+		 				strDocumentCode = strDocumentCode.trim();
+		 				mpDocRes.put(CONST_DOCUMNET_CODE, strDocumentCode);
+		 				mpDocRes.put(CONST_DOCUMNET_REV, strDocRev);
+		 				// ENGMASA : Added below code to enable signers selection for Parts : START
+		 				}
+		 				// ENGMASA : Added below code to enable signers selection for Parts : END
+		 			}
+		 			if (!bSameDocuments)
+		 			{
+		 				bSameDocuments = false;
+		 				mpDocRes.put(CONST_ERROR_MSG, CONST_ERROR_MSG_NOT_SAMEDOC_CODE);
+		 			}
+		 			if (!bIsDoc)
+		 			{
+		 				bSameDocuments = false;
+		 				mpDocRes.put(CONST_ERROR_MSG, CONST_ERROR_MSG_NOT_DOC);
+		 			}
+		 			
+		 	mpDocRes.put(CONST_DOC_CODE_MATCH, bSameDocuments);
+		return mpDocRes;
+ }
+ /**
+  * this method returns matching route templates ID
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public static Map getMatchingRouteTemplate(Context context, String args[]) throws Exception
+ {
+	 Map programMap = (HashMap)JPO.unpackArgs(args);
+	 String strChangeId = (String)programMap.get("objectId");
+	 String strDocCode  = (String)programMap.get(CONST_DOCUMNET_CODE);
+	 String strDocRev = (String)programMap.get(CONST_DOCUMNET_REV);
+	 Map mpRTMap = getMatchingRouteTemplate(context, strChangeId, strDocCode, strDocRev);
+	 if (mpRTMap==null || mpRTMap.isEmpty())
+	 {
+		 // if for PNF then show default else ignore
+		 String strUserGrp = getCAUserLocation(context, strChangeId);
+		 if (strUserGrp.equals("PNF")) 
+		 {			 
+			 // show Part template as default
+			 mpRTMap = getMatchingRouteTemplate(context, strChangeId, DEFAULT_PART_DOC_CODE, DEFAULT_PART_DOC_CODE_REV);
+		 }
+	 }
+	 return mpRTMap;
+ }
+ /**
+  * this method returns location for CA owner
+  * @author ENGMASA
+  * @param context
+  * @param args
+  * @return
+  * @throws Exception
+  */
+ public static String getCAUserLocation(Context context, String [] args) throws Exception
+ {
+	 Map programMap = (HashMap)JPO.unpackArgs(args);
+	 String strChangeId = (String)programMap.get("objectId");
+	 String strLocation =  getCAUserLocation(context, strChangeId);
+	
+	 return strLocation;
+ }
+ /**
+  * this method returns location for CA owner
+  * @author ENGMASA
+  * @param context
+  * @param strChangeId
+  * @return
+  * @throws Exception
+  */
+ public static String getCAUserLocation(Context context, String strChangeId) throws Exception
+ {
+	 String strLocation = null;
+	 DomainObject doObj = DomainObject.newInstance(context,strChangeId);
+	 String strCAOwner = doObj.getInfo(context, DomainObject.SELECT_OWNER);
+	 DomainObject personCA = PersonUtil.getPersonObject(context, strCAOwner);
+	 String Args[] = new String[1];
+		Args[0] = strCAOwner;
+		strLocation	= MqlUtil.mqlCommand(context ,"print person $1 select site dump", strCAOwner);
+	 if (UIUtil.isNullOrEmpty(strLocation))
+		 strLocation = CONST_DEFAULT_USER_LOCATION;
+	 // for ENG please consider ENS
+	 if (strLocation.equals("ENG"))
+		 strLocation = CONST_DEFAULT_USER_LOCATION;
+	 // in QAT for ENS site is TBI
+//	 if (strLocation.equals("TBI"))
+//		 strLocation = CONST_DEFAULT_USER_LOCATION;
+	 return strLocation;
+ }
+ /**
+  * this method returns matching route templates ID
+  * @param context
+  * @param strObjectId
+  * @param strDocCode
+  * @param strDocRev
+  * @return
+  * @throws Exception
+  */
+ public static Map getMatchingRouteTemplate(Context context, String strObjectId, String strDocCode, String strDocRev) throws Exception
+ {	 
+	 Map mpRTMap = null;
+	 String strRTId = DomainObject.EMPTY_STRING;
+		String strUserGrp = getCAUserLocation(context, strObjectId);
+		
+		StringBuffer sbRTName = new StringBuffer();
+		sbRTName.append(strUserGrp)
+				.append(CONST_SIGNING_POLICY_PREFIX)
+				.append(strDocCode)
+				.append("_")
+				.append(strDocRev);
+		// ENGMASA : added below change to Map COF to default Template : START
+		/*if ("COF".equals(strUserGrp))
+		{
+			sbRTName.setLength(0);
+			sbRTName.append("RT_COF_DefaultSigners");
+		}*/
+		// ENGMASA : added below change to Map COF to default Template : END
+		StringBuffer sbWhere = new StringBuffer();
+		sbWhere.append("(name==\"")
+			   .append(sbRTName.toString())
+			   .append("\") && revision ~~ last");
+		//System.out.println("sbWhere : "+sbWhere.toString());
+		StringList objectSelect = new StringList();
+	      objectSelect.add(DomainObject.SELECT_ID);
+	      objectSelect.add(DomainObject.SELECT_NAME);
+	      
+		 MapList mapList = DomainObject.findObjects(context, DomainObject.TYPE_ROUTE_TEMPLATE, DomainObject.QUERY_WILDCARD, sbWhere.toString(), objectSelect);
+		 //System.out.println("mapList: "+mapList);
+		 if (mapList!=null && mapList.size()>0)
+		 {
+			 mpRTMap = (Map) mapList.get(0);	
+		 }
+		 // if looking for route template greater than 0 revision, if not found the redirect to rev 0 template
+		 if (mpRTMap==null && Integer.valueOf(strDocRev)>0)
+		 {
+			 sbRTName = new StringBuffer();
+				sbRTName.append(strUserGrp)
+						.append(CONST_SIGNING_POLICY_PREFIX)
+						.append(strDocCode)
+						.append("_0");
+				 sbWhere = new StringBuffer();
+				sbWhere.append("(name==\"")
+					   .append(sbRTName.toString())
+					   .append("\") && revision ~~ last");
+			      mapList = new MapList();
+				  mapList = DomainObject.findObjects(context, DomainObject.TYPE_ROUTE_TEMPLATE, DomainObject.QUERY_WILDCARD, sbWhere.toString(), objectSelect);
+				 //System.out.println("mapList: "+mapList);
+				 if (mapList!=null && mapList.size()>0)
+				 {
+					 mpRTMap = (Map) mapList.get(0);	
+				 } 
+		 }
+	 return mpRTMap;
+ }
+   public static void main(String[] args) {
+	try
+	{
+		Context ctx = new Context("http://tbisusen131:8070/internal/") ;
+		ctx.setUser("");		
+		ctx.setPassword("");
+		ctx.connect();System.out.println("connn");
+//		String strWrkId = getWorkspaceId(ctx, "11584.8298.6232.45736");
+//		System.out.println("strWrkId : "+strWrkId);
+		DomainObject doObj = DomainObject.newInstance(ctx, "11584.8298.6232.45736");
+		System.out.println("latest ?? :"+doObj.getInfo(ctx, DomainObject.SELECT_LATEST_REVISION));
+	}
+	catch (Exception e) {
+		// TODO: handle exception
+		e.printStackTrace();
+	}
+	
+}
+   public static void mxMain(Context context, String[] args) {
+		try
+		{
+			 String oidsArray[] = new String[] {"65080.62902.32391.47731"};
+	           Vector vTemp = new Vector();
+	           StringList selects = new StringList(1);
+	           selects.add(CommonDocument.SELECT_HAS_ROUTE);
+	           ContextUtil.pushContext(context); //Addded for IR-054419V6R2011x
+	           MapList mlist = DomainObject.getInfo(context, oidsArray, selects);
+	           System.out.println(mlist);
+		}
+		catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		
+	}
+   
+   /**
+    * getRouteStatus- This method is used to show the Lock image.
+    *                This method is called from the Column Lock Image.
+    * @author ENGMASA
+    * @param context the eMatrix <code>Context</code> object
+    * @param args holds the following input arguments:
+    *        0 - objectList MapList
+    * @returns Object of type Vector
+    * @throws Exception if the operation fails
+    * @since V10 Patch1
+    */
+   public Vector getRouteStatus(Context context, String[] args)
+                                 throws Exception
+   {
+       Vector showRoute = new Vector();
+      // showRoute.add("");       showRoute.add("");       showRoute.add("");       showRoute.add("");
+      // return  showRoute;
+       try
+       {
+           HashMap programMap = (HashMap) JPO.unpackArgs(args);
+           MapList objectList = (MapList)programMap.get("objectList");
+           DomainObject doObj = DomainObject.newInstance(context);
+           
+           Map objectMap = null;
+           String routeId = "";
+           StringList routeIds = new StringList();
+ 			if(objectList != null && objectList.size() > 0)
+           {
+				objectMap = (Map)objectList.get(0);
+           }
+		    Iterator itr = null;
+		    if ( objectMap != null && objectMap.containsKey(CommonDocument.SELECT_HAS_ROUTE)) {
+				itr = objectList.iterator();
+			} else {
+           String oidsArray[] = new String[objectList.size()];
+           Vector vTemp = new Vector();
+           for (int i = 0; i < objectList.size(); i++)
+           {
+        	   oidsArray[i] = (String)((Map)objectList.get(i)).get("id");
+           }
+           StringList selects = new StringList(1);
+           selects.add(CommonDocument.SELECT_HAS_ROUTE);
+           ContextUtil.pushContext(context); //Addded for IR-054419V6R2011x
+           MapList mlist = DomainObject.getInfo(context, oidsArray, selects);
+          
+           ContextUtil.popContext(context); //Addded for IR-054419V6R2011x
+				itr = mlist.iterator();
+			}
+           while( itr.hasNext() )
+           {
+               objectMap = (Map)itr.next();
+               try
+               {
+                   routeId = (String) objectMap.get(CommonDocument.SELECT_HAS_ROUTE);
+                   if (UIUtil.isNullOrEmpty(routeId))
+                   {
+                	   showRoute.add("&#160;");
+                   }
+                   else 
+                   {
+                	  String strRTStatus=getRouteStatus(context, routeId);
+                      showRoute.add(strRTStatus);                      
+	       		   }                   
+               } 
+               catch (Exception cex)
+               {
+            	   showRoute.add("<img border='0' src='../common/images/iconSmallRoute.gif'/>");
+               }             
+           }
+           return  showRoute;
+       }
+       catch (Exception ex)
+       {
+           ex.printStackTrace();
+           throw ex;
+       }
+   }	  
+   /**
+    * Gets the list of Routes in HTML table format.
+    * @author ENGMASA
+    * @param context the eMatrix <code>Context</code> object.
+    * @param args holds the following input arguments:
+    * 0 - String containing object id.
+    * @return String Html table format representation of Routes info.
+    * @throws Exception if the operation fails.
+    * @since 10.5.
+    */
+   public String getRouteStatus(Context context, String strRouteId)
+       throws Exception, MatrixException
+   {
+       try
+       {
+    	   String sStatus = DomainObject.EMPTY_STRING;
+           String statusColor = DomainObject.EMPTY_STRING;
+           Vector vecResult = new Vector();
+    	   final String SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE = "attribute[" + DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]";
+           final String SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE = "attribute[" + DomainObject.ATTRIBUTE_SCHEDULED_COMPLETION_DATE + "]";
+           Map mapObjectInfo = null;
+           DomainObject dmoRoute = null;
+           StringList slBusSelect = new StringList();
+           StringList slRelSelect = new StringList();
+           slRelSelect.add(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+           slRelSelect.add(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+           String strObjWhr = null;
+           String strRelWhr = null;
+           short nRecurseLevel = (short)1;
+           MapList mlRouteNodes = null;
+           MapList mlTemp = null;
+           Map mapRouteNodeInfo = null;
+           String strTaskDueDate = null;
+           String strTaskCompletionDate = null;
+           String strRotueDueDate = null;
+           Date dtDueDate = null;
+           Date dtCompletionDate = null;
+           Date dtCurrentDate = new Date();
+           MapList mlLastTasks = null;
+           MapList mlNonLastTasks = null;
+           statusColor = null;
+
+           dmoRoute = DomainObject.newInstance(context, strRouteId);
+           sStatus =  dmoRoute.getInfo(context,Route.SELECT_ROUTE_STATUS);
+
+           if (sStatus != null &&  !DomainObject.EMPTY_STRING.equals(sStatus)) {
+               sStatus= i18nNow.getRangeI18NString(Route.ATTRIBUTE_ROUTE_STATUS, sStatus, context.getSession().getLanguage());
+           }
+           else {
+               sStatus= DomainObject.QUERY_WILDCARD;
+           }
+           mlRouteNodes = dmoRoute.getRelatedObjects(context,
+                   DomainObject.RELATIONSHIP_ROUTE_NODE,
+                   DomainObject.TYPE_PERSON + CONST_SYM_COMMA + DomainObject.TYPE_ROUTE_TASK_USER,
+                   slBusSelect,
+                   slRelSelect,
+                   false,
+                   true,
+                   nRecurseLevel,
+                   strObjWhr,
+                   strRelWhr);
+
+           if (mlRouteNodes == null || mlRouteNodes.size() == 0) {
+               statusColor = DomainObject.EMPTY_STRING;
+           }
+           else {
+               // Remove the entries with empty due dates
+               mlTemp = new MapList();
+               for (Iterator itrRouteNodes = mlRouteNodes.iterator(); itrRouteNodes.hasNext();) {
+                   mapRouteNodeInfo = (Map) itrRouteNodes.next();
+                   strTaskDueDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+                   if (strTaskDueDate != null && !DomainObject.EMPTY_STRING.equals(strTaskDueDate)) {
+                       mlTemp.add(mapRouteNodeInfo);
+                   }
+               }
+               mlRouteNodes = mlTemp;
+               mlTemp = null;
+
+               if (mlRouteNodes.size() == 0) {
+                   statusColor = GREEN;
+               }
+               else {
+                   // Sort maplist descending w.r.t. due dates
+                   mlRouteNodes.sort(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE, "descending", "date");
+
+                   // Get route's due date, first due date in sorted list
+                   mapRouteNodeInfo = (Map)mlRouteNodes.get(0);
+                   strRotueDueDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+
+                   // Separate the last tasks of the route from othe tasks
+                   mlLastTasks = new MapList();
+                   mlNonLastTasks = new MapList();
+                   for (Iterator itrRouteNodes = mlRouteNodes.iterator(); itrRouteNodes.hasNext();) {
+                       mapRouteNodeInfo = (Map) itrRouteNodes.next();
+                       strTaskDueDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+                       if (strRotueDueDate != null && strRotueDueDate.equals(strTaskDueDate)) {
+                           mlLastTasks.add(mapRouteNodeInfo);
+                       }
+                       else {
+                           mlNonLastTasks.add(mapRouteNodeInfo);
+                       }
+                   }
+
+                   // Process last tasks to decide if RED status is to be shown
+                   dtDueDate = eMatrixDateFormat.getJavaDate(strRotueDueDate);
+                   for (Iterator itrLastTasks = mlLastTasks.iterator(); itrLastTasks.hasNext();) {
+                       mapRouteNodeInfo = (Map)itrLastTasks.next();
+                       strTaskCompletionDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+                       // If this task is not completed
+                       if (strTaskCompletionDate == null || DomainObject.EMPTY_STRING.equals(strTaskCompletionDate)) {
+                           dtCompletionDate = dtCurrentDate;
+                       }
+                       else {
+                           dtCompletionDate = eMatrixDateFormat.getJavaDate(strTaskCompletionDate);
+                       }
+
+
+                       if (dtCompletionDate != null && dtCompletionDate.after(dtDueDate)) {
+                           statusColor = RED;
+                           break;
+                       }
+                   }
+
+                   // Process non-last tasks to decide if YELLOW status is to be shown
+                   if (statusColor == null) {
+                       for (Iterator itrNonLastTasks = mlNonLastTasks.iterator(); itrNonLastTasks.hasNext();) {
+                           mapRouteNodeInfo = (Map)itrNonLastTasks.next();
+                           strTaskDueDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+                           strTaskCompletionDate = (String)mapRouteNodeInfo.get(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+
+                           dtDueDate = eMatrixDateFormat.getJavaDate(strTaskDueDate);
+                           // If this task is not completed
+                           if (strTaskCompletionDate == null || DomainObject.EMPTY_STRING.equals(strTaskCompletionDate)) {
+                               dtCompletionDate = dtCurrentDate;
+                           }
+                           else {
+                               dtCompletionDate = eMatrixDateFormat.getJavaDate(strTaskCompletionDate);
+                           }
+
+                           if (dtCompletionDate != null && dtCompletionDate.after(dtDueDate)) {
+                               statusColor = YELLOW;
+                               break;
+                           }
+                       }
+                   }
+                   // If no yellow and red then it is green
+                   if (statusColor == null) {
+                       statusColor = GREEN;
+                   }
+               }
+           }
+
+           String statusImageString = DomainObject.EMPTY_STRING;
+           if(RED.equals(statusColor)) {
+			sStatus = "Due";
+               statusImageString = "<img border=\"0\" src=\"../common/images/iconStatusRed.gif\" name=\"red\" id=\"red\" alt=\""+sStatus+"\" title=\""+sStatus+"\"></img>";
+           }
+           else if(YELLOW.equals(statusColor)) {
+               statusImageString = "<img border=\"0\" src=\"../common/images/iconStatusYellow.gif\" name=\"yellow\" id=\"yellow\" alt=\""+sStatus+"\" title=\""+sStatus+"\"></img>";
+           }
+           else if(GREEN.equals(statusColor)) {
+			   sStatus = "Started";
+               statusImageString = "<img border=\"0\" src=\"../common/images/iconStatusGreen.gif\" name=\"green\" id=\"green\" alt=\""+sStatus+"\" title=\""+sStatus+"\"></img>";
+           }
+           return statusImageString;
+       }
+       catch (Exception ex)
+       {
+         throw ex;
+       }
+   }
+   /**
+    * this method updates selected assignees
+    * @author ENGMASA
+    * @param context
+    * @param strChangeId
+    * @return
+    * @throws Exception
+    */
+    public static void clearSignersOnCA(Context context, String strChangeId) throws Exception
+    {
+      boolean bRes = true;  	 
+  	  try
+  	  {
+  		DomainObject doCA = DomainObject.newInstance(context, strChangeId);
+  		doCA.setAttributeValue(context, ATTRIBUTE_GAP_SIGNERS, DomainObject.EMPTY_STRING);
+  	  }
+  	  catch (Exception exp)
+  	  {
+  		  throw exp;
+  	  }
+    }
+ // ENGMASA : Added below code to fix task rejection : START
+    /**
+     * @author ENGMASA
+     * @param context
+     * @param doCA
+     * @param strRTId
+     * @param strChangeId
+     * @return
+     * @throws Exception
+     */
+    public static boolean cleanupOrRestartExistingRoute(Context context, DomainObject doCA, String strRTId, String strChangeId) throws Exception
+	{
+		    // if rejected set as finished and promote
+    	    // if demoted and no change in RT or selection then just restart again
+    		// if demoted and change in RT or selection then finish and autoComplete prev
+    	Object localObject1 = "";
+	    String ROUTE_NODE_ID = "relationship[" + Route.RELATIONSHIP_ROUTE_NODE + "].attribute[" + Route.ATTRIBUTE_ROUTE_NODE_ID + "]";
+	    String ROUTE_NODE_SEQ = "from[Route Node].attribute[" + Route.ATTRIBUTE_ROUTE_SEQUENCE + "]";
+	    String IT_ROUTE_NODE_ID ="from[Route Node].id";//"relationship[" + Route.RELATIONSHIP_ROUTE_TASK + "].from.attribute[" + Route.ATTRIBUTE_ROUTE_NODE_ID + "]";
+	    String INBOX_TASK_NODE_ID = "to[Route Task].from.attribute[Route Node ID]";
+	    StringList slSelectBust = new StringList(2);
+	    slSelectBust.add("id");
+	    slSelectBust.add("from[" + Route.RELATIONSHIP_INITIATING_ROUTE_TEMPLATE + "].to.id");
+	    
+	    String strWhere = "current != Complete && current != Archive";
+	    
+	    MapList mlRouteList = doCA.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE, slSelectBust, null, false, true, (short)1, strWhere, "");
+	   
+	    Map mpRouteMap = null;
+	    Iterator itrRTList = mlRouteList.iterator();
+	    while (itrRTList.hasNext()) 
+	    {
+	    	mpRouteMap = (Map) itrRTList.next();
+	    	 
+	    	String strRTID = (String)mpRouteMap.get("id");
+	        Route localRoute = new Route(strRTID);
+	    	StringList slRTSelList = new StringList();
+	          slRTSelList.add(ROUTE_NODE_ID);
+	          slRTSelList.add(IT_ROUTE_NODE_ID);
+	          slRTSelList.add(ROUTE_NODE_SEQ);
+	          slRTSelList.add(ROUTE_NODE_SEQ);
+	          slRTSelList.add(INBOX_TASK_NODE_ID);
+	          
+	          DomainObject.MULTI_VALUE_LIST.add(ROUTE_NODE_ID);
+	          DomainObject.MULTI_VALUE_LIST.add(IT_ROUTE_NODE_ID);
+	          DomainObject.MULTI_VALUE_LIST.add(ROUTE_NODE_SEQ);
+	          DomainObject.MULTI_VALUE_LIST.add(INBOX_TASK_NODE_ID);
+	          Map localMap2 = localRoute.getInfo(context, slRTSelList);
+	          
+	          StringList slNodelist = (StringList)localMap2.get(ROUTE_NODE_ID);
+	          StringList slITNodeList = (StringList)localMap2.get(IT_ROUTE_NODE_ID);
+	          StringList slTaskNodeSeqList = (StringList)localMap2.get(ROUTE_NODE_SEQ);
+	          StringList slTaskNodeIDList = (StringList)localMap2.get(INBOX_TASK_NODE_ID);
+
+	          for (int u=0;u<slITNodeList.size();u++) {
+            	  String strITNodeIds = (String) slITNodeList.get(u);
+            	  
+            	  String strSeq = (String) slTaskNodeSeqList.get(u);
+            	  
+            	  String strRTNodeId = (String) slNodelist.get(u);
+            	  
+        	      // if task already created then only disconnect Route Node
+        	      if (!slTaskNodeIDList.contains(strRTNodeId))
+        	      {
+        	    	  HashMap mpPutMap = new HashMap();
+            	      mpPutMap.put(PropertyUtil.getSchemaProperty(context, "attribute_ApprovalStatus"), "None");
+            	      mpPutMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Comments"), "Completed to create a superseeded Route");
+            	      DomainRelationship doRTNode = DomainRelationship.newInstance(context, strITNodeIds);
+            	      doRTNode.setAttributeValues(context, mpPutMap);
+        	    	  DomainRelationship.disconnect(context, strITNodeIds);
+        	      }
+	          }
+	          completeRoute(context, localRoute);
+	    }
+    	return false;
+	}
+    /**
+     * @author ENGMASA
+     * @param paramContext
+     * @param localRoute
+     * @throws Exception
+     */
+    public static void completeRoute(Context paramContext, Route localRoute)
+    	    throws Exception
+    	  {
+    	    try
+    	    {
+    	      ContextUtil.pushContext(paramContext);
+    	      HashMap localHashMap1 = new HashMap();
+    	      localHashMap1.put(PropertyUtil.getSchemaProperty(paramContext, "attribute_RouteCompletionAction"), "Notify Route Owner");
+    	      localHashMap1.put(PropertyUtil.getSchemaProperty(paramContext, "attribute_RouteStatus"), "Finished");
+    	      localRoute.setAttributeValues(paramContext, localHashMap1);
+    	      HashMap mpPutMap = new HashMap();
+    	      mpPutMap.put(PropertyUtil.getSchemaProperty(paramContext, "attribute_ApprovalStatus"), "None");
+    	      mpPutMap.put(PropertyUtil.getSchemaProperty(paramContext, "attribute_Comments"), "Completed to create a superseeded Route");
+    	      StringList localStringList = new StringList(2);
+    	      localStringList.add("id");
+    	      String str1 = "current!=Complete";
+    	      MapList localMapList = localRoute.getRelatedObjects(paramContext, DomainConstants.RELATIONSHIP_ROUTE_TASK, DomainConstants.TYPE_INBOX_TASK, localStringList, null, true, false, (short)1, str1, null, 0);
+    	      while (localMapList.size() > 0)
+    	      {
+    	        Iterator localIterator = localMapList.iterator();
+    	        while (localIterator.hasNext())
+    	        {
+    	          Map localMap = (Map)localIterator.next();
+    	          String str2 = (String)localMap.get("id");
+    	          DomainObject localDomainObject = new DomainObject(str2);
+    	          if (localDomainObject.exists(paramContext))
+    	          {
+    	            localDomainObject.setAttributeValues(paramContext, mpPutMap);
+    	            localDomainObject.setState(paramContext, "Complete");
+    	            localRoute.setAttributeValues(paramContext, localHashMap1);
+    	          }
+    	        }
+    	        localMapList = localRoute.getRelatedObjects(paramContext, DomainConstants.RELATIONSHIP_ROUTE_TASK, DomainConstants.TYPE_INBOX_TASK, localStringList, null, true, false, (short)1, str1, null, 0);
+    	      }
+    	      localRoute.setState(paramContext, "Complete");
+    	    }
+    	    catch (Exception localException)
+    	    {
+    	      localException.printStackTrace();
+    	    }
+    	    finally
+    	    {
+    	      ContextUtil.popContext(paramContext);
+    	    }
+    	  }
+ // ENGMASA : Added below code to fix task rejection : END
+}

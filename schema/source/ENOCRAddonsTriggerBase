@@ -1,0 +1,222 @@
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.ChangeRequestAddons.ChangeRequestAddonsException;
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.ChangeRequestAddonsConstants;
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.ChangeServiceAddons;
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.impl.ChangeServiceImplAddons;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+
+	public void checkIfConnectedToCO(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+
+			MapList sObjectList = dObj.getRelatedObjects(context, // matrix
+																	// context
+					PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE) + ","
+							+ PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE), // relationship
+					// pattern
+					"*", // object
+							// pattern
+					new StringList(DomainConstants.SELECT_ID), // object selects
+					DomainConstants.EMPTY_STRINGLIST, // relationship selects
+					true, // to direction
+					true, // from direction
+					(short) 1, // recursion level
+					DomainConstants.EMPTY_STRING, // object where clause
+					DomainConstants.EMPTY_STRING, // relationship where clause
+					0);
+			if (!sObjectList.isEmpty()) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, ChangeRequestAddonsConstants.CHANGEREQUESTADDONS_STRING_RESOURCE,
+						context.getLocale(), "enoCRAddons.Label.ChangeTemplateDemoteError ");
+				throw new Exception(strMsg);
+
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+	public int checkRelatedApprovalRoute(Context context,String args[]) throws Exception{
+		
+		if (args == null || args.length < 1) {
+			throw (new IllegalArgumentException());
+		}
+		String objectId = args[0];
+		String strPolicy=PropertyUtil.getSchemaProperty(context,DomainConstants.POLICY_ROUTE);
+		String strArchiveState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicy, "state_Archive");
+		
+		DomainObject dom = DomainObject.newInstance(context,objectId);
+		MapList mapRelatedObject = new MapList();
+		StringList busSelects = new StringList(2);
+		busSelects.add(DomainConstants.SELECT_ID);
+		busSelects.add(DomainConstants.SELECT_CURRENT);
+		
+		
+		mapRelatedObject = dom.getRelatedObjects(context,
+				DomainConstants.RELATIONSHIP_OBJECT_ROUTE,
+				DomainObject.TYPE_ROUTE,
+				busSelects,
+				null,
+				false,
+				true,
+				(short) 1,
+				DomainConstants.EMPTY_STRING, // object where clause
+				DomainConstants.EMPTY_STRING, // relationship where clause
+				0);
+		
+		if(mapRelatedObject == null || mapRelatedObject.size()==0){
+			String strMsg = EnoviaResourceBundle.getProperty(context, ChangeRequestAddonsConstants.CHANGEREQUESTADDONS_STRING_RESOURCE,
+					context.getLocale(), "enoCRAddons.NoApprovalRouteError");
+			throw new Exception(strMsg);
+		}else{
+			for(int i=0; i<mapRelatedObject.size();i++){
+				Map map1 = (Map) mapRelatedObject.get(i);
+				String routeState = (String) map1.get(DomainConstants.SELECT_CURRENT);
+				if(routeState.equalsIgnoreCase(DomainConstants.STATE_ROUTE_COMPLETE)||routeState.equalsIgnoreCase(strArchiveState)){
+			return 0;
+				}
+		}
+		
+	}
+		return 1;
+	}
+
+	public void checkIfChangeTemplateisInactive(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strCurrent = dObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (!strCurrent.equals("Inactive")) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, ChangeRequestAddonsConstants.CHANGEREQUESTADDONS_STRING_RESOURCE,
+						context.getLocale(), "enoCRAddons.Label.ChangeTemplateDeleteError");
+				throw new Exception(strMsg);
+
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void connectChangeTemplateToChangeRequest(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strRel = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			String strTypeChangeTemplate = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_TYPE_CHANGE_TEMPLATE);
+			String strPolicyChangeTemplate = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_POLICY_CHANGE_TEMPLATE);
+			String strPolciyFasttrack = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_POLICY_FAST_TRACK_CHNAGE);
+			String strState = PropertyUtil.getSchemaProperty(context, "policy", strPolicyChangeTemplate,
+					ChangeRequestAddonsConstants.SYMBOLIC_STATE_ACTIVE);
+			String strOrg = dObj.getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+			StringList slBusSelects = new StringList(DomainObject.SELECT_ID);
+			slBusSelects.add(DomainObject.SELECT_NAME);
+			slBusSelects.add(DomainObject.SELECT_ORGANIZATION);
+
+			StringBuilder sbWhere = new StringBuilder(); // "organization==const'Responsible Org'";
+			sbWhere.append("attribute[Default Policy]==");
+			sbWhere.append("\'").append(strPolciyFasttrack).append("\'&&");
+			sbWhere.append(DomainObject.SELECT_ORGANIZATION);
+			sbWhere.append("==");
+			sbWhere.append("\'");
+			sbWhere.append(strOrg).append("\'&&");
+			sbWhere.append(DomainObject.SELECT_CURRENT);
+			sbWhere.append("==");
+			sbWhere.append(strState);
+
+			MapList ml = DomainObject.findObjects(context, strTypeChangeTemplate, null, sbWhere.toString(), slBusSelects);
+			if (ml.size() == 1) {
+				Map map = (Map) ml.get(0);
+				String strChangeTempId = (String) map.get(DomainObject.SELECT_ID);
+				DomainObject dobjChangeTemplate = DomainObject.newInstance(context, strChangeTempId);
+				DomainRelationship dr = DomainRelationship.connect(context, dObj, new RelationshipType(strRel), dobjChangeTemplate);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void checkIfChangeTemplateIsConnected(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strRel = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			boolean hasRelatedObject = dObj.hasRelatedObjects(context, strRel, true);
+			if (!hasRelatedObject) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, ChangeRequestAddonsConstants.CHANGEREQUESTADDONS_STRING_RESOURCE,
+						context.getLocale(), "enoCRAddons.Label.ChangeTemplateNotConnected");
+				throw new Exception(strMsg);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void checkIfQuestionsAreConfigured(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			QuestionService questionServie = new QuestionServiceImpl();
+			Map mpConfiguredQues = questionServie.getConfigureConnectedQuestions(context, strObjectId);
+
+			if (!(mpConfiguredQues == null || mpConfiguredQues.isEmpty())) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, ChangeRequestAddonsConstants.CHANGEREQUESTADDONS_STRING_RESOURCE,
+						context.getLocale(), "enoCRAddons.Label.cannotDemoteCR");
+				throw new Exception(strMsg);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Action trigger to Promote all the Implemented/Affected Items connected to
+	 * the Change Action as per Target state passed.
+	 * 
+	 * @param context
+	 * @param args
+	 *            (Change Action Id)
+	 * @throws ChangeRequestAddonsException
+	 *             if operation fails
+	 */
+	public void autoPromoteAffectedItems(Context context, String[] args) throws ChangeRequestAddonsException {
+		try {
+			String strChangeActionId = args[0];
+			String strTargetState = args[2];
+
+			ChangeServiceAddons changeServiceAddons = new ChangeServiceImplAddons();
+			DomainObject changeObj = DomainObject.newInstance(context, strChangeActionId);
+			//changeServiceAddons.autoPromoteAffectedItems(context, changeObj, strTargetState);
+		}
+		catch (Exception Ex) {
+			throw new ChangeRequestAddonsException(Ex.getMessage());
+		}
+	}
+
+}
+

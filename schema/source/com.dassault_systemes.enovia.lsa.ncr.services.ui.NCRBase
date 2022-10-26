@@ -1,0 +1,2692 @@
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.dassault_systemes.enovia.actiontasks.ActionTasks;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.LSALicense;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants.Action;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants.NCRRecordPolicyState;
+import com.dassault_systemes.enovia.lsa.ncr.NCRException;
+import com.dassault_systemes.enovia.lsa.ncr.NCRUtil;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCAllowedItems;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCRService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.services.HistoryService;
+import com.matrixone.apps.common.Company;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.Plant;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.matrixone.apps.productline.DerivationUtil;
+import com.matrixone.apps.productline.ProductLineConstants;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	${CLASS:com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRUtil} ncrUtil = null;
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		ncrUtil = new ${CLASS:com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRUtil}(context, args);
+	}
+
+	/**
+	 * Gets NCRService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return NCRService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private NCRService getNCRService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSANCRCoreComponent");
+			NCRService ncrService = (NCRService) component.getService(NCRService.class);
+			return ncrService;
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets HistoryService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return HistorService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private HistoryService getHistoryService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			HistoryService historyService = (HistoryService) component.getService(HistoryService.class);
+			return historyService;
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Category' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Category' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnCategory(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_CATEGORY);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+
+	}
+
+	/**
+	 * Method to get the range for 'NCType' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'NC Type' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnNCType(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_NC_TYPE);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Severity' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Severity' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnSeverity(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Defect Type' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Defect Type' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnDefectType(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Functional Area' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Functional Area' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnFunctionalArea(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_FUNCTIONAL_AREA);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Process' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Process' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnProcess(Context context, String args[]) throws NCRException {
+		try {
+			return Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PROCESS);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get Ids of Plant Objects related to the Context user's company
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return List of Plant IDs to be listed in the search page
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getIncludedPlantOIDFormPQCNCRCreateColumnSiteFound(Context context, String args[]) throws NCRException {
+		StringList plantOID = Helper.stringList();
+
+		StringList objSelects = Helper.stringList();
+		objSelects.add(DomainConstants.SELECT_ID);
+		objSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList relSelects = Helper.stringList();
+		relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		StringBuilder sbObjectWhere = new StringBuilder();
+		sbObjectWhere.append(DomainConstants.SELECT_CURRENT);
+		sbObjectWhere.append("==");
+		sbObjectWhere.append(NCRConstants.STATE_ACTIVE);
+
+		try {
+
+			String strPersonId = PersonUtil.getPersonObjectID(context, context.getUser());
+			Helper.ensureNotEmpty(strPersonId, "Person id cannot be empty or null");
+
+			DomainObject person = DomainObject.newInstance(context, strPersonId);
+			List<Map<?, ?>> companyMapList = QueryUtil.getRelatedObjects(context, person, DomainConstants.RELATIONSHIP_EMPLOYEE,
+					DomainConstants.TYPE_COMPANY, objSelects, relSelects, true, false, (short) 0, sbObjectWhere.toString(), null);
+
+			for (Object obj : companyMapList) {
+				Map companyMap = (Map) obj;
+				String strCompanyId = (String) companyMap.get(DomainConstants.SELECT_ID);
+
+				Helper.ensureNotNull(strCompanyId, "Company id cannot be null");
+				Helper.ensureNotEmpty(strCompanyId, "Company id cannot be empty");
+
+				DomainObject company = DomainObject.newInstance(context, strCompanyId);
+				List<Map<?, ?>> plantMapList = QueryUtil.getRelatedObjects(context, company, DomainConstants.RELATIONSHIP_ORGANIZATION_PLANT,
+						PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_PLANT), objSelects, relSelects, false, true, (short) 0,
+						sbObjectWhere.toString(), null);
+
+				for (Object obj1 : plantMapList) {
+					Map plantMap = (Map) obj1;
+					plantOID.add((String) plantMap.get(DomainConstants.SELECT_ID));
+				}
+			}
+
+			return plantOID;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Suppliers' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Suppliers' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getIncludedSupplierOIDFormPQCNCRCreateColumnSupplierName(Context context, String args[]) throws NCRException {
+		StringList suppliersOID = new StringList();
+
+		StringList objSelects = new StringList(2);
+		objSelects.add(DomainConstants.SELECT_ID);
+		objSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList relSelects = new StringList(1);
+		relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		StringBuilder sbObjectWhere = new StringBuilder();
+		sbObjectWhere.append(DomainConstants.SELECT_CURRENT);
+		sbObjectWhere.append("==");
+		sbObjectWhere.append(NCRConstants.STATE_ACTIVE);
+
+		try {
+			String strPersonId = PersonUtil.getPersonObjectID(context, context.getUser());
+			Helper.ensureNotEmpty(strPersonId, "Person id cannot be empty or null");
+
+			DomainObject person = DomainObject.newInstance(context, strPersonId);
+			List<Map<?, ?>> companyMapList = QueryUtil.getRelatedObjects(context, person, DomainConstants.RELATIONSHIP_EMPLOYEE,
+					DomainConstants.TYPE_COMPANY, objSelects, relSelects, true, false, (short) 0, sbObjectWhere.toString(), null);
+
+			for (Object obj : companyMapList) {
+				Map companyMap = (Map) obj;
+				String strCompanyId = (String) companyMap.get(DomainConstants.SELECT_ID);
+
+				Helper.ensureNotNull(strCompanyId, "Company id cannot be null");
+				Helper.ensureNotEmpty(strCompanyId, "Company id cannot be empty");
+
+				DomainObject company = DomainObject.newInstance(context, strCompanyId);
+				List<Map<?, ?>> suppliersMapList = QueryUtil.getRelatedObjects(context, company, DomainConstants.RELATIONSHIP_SUPPLIER,
+						DomainConstants.TYPE_COMPANY, objSelects, relSelects, false, true, (short) 1, sbObjectWhere.toString(), null);
+				suppliersMapList.parallelStream().forEach(obj1->{
+					suppliersOID.add((String) obj1.get(DomainConstants.SELECT_ID));
+				});
+			}
+			return suppliersOID;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+
+	}
+
+	/**
+	 * Connects the NCR Object to selected Supplier with 'NCR Supplier'
+	 * relationship on edit
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void updateFormPQCNCRBasicInfoColumnSuppliers(Context context, String[] args) throws NCRException {
+		DomainObject dmoNCR = null;
+		DomainObject dmoSupplier = null;
+		final String STR_ATTRIBUTE_NCR_SUPPLIER_LOT = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_SUPPLIER_LOT);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			String objectId = (String) paramMap.get(NCRConstants.OBJECTID);
+			String strSupplierId = (String) paramMap.get(NCRConstants.NEW_OID);
+			String[] arrLotNo = (String[]) requestMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_SUPPLIER_LOT);
+			String strLotNo = arrLotNo[0];
+			String[] arrDefectType = (String[]) requestMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			String strDefectType = arrDefectType[0];
+			Map<String, String> mapRelAttributes = new HashMap<String, String>();
+			mapRelAttributes.put(STR_ATTRIBUTE_NCR_SUPPLIER_LOT, strLotNo);
+
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(strDefectType) && Helper.isNullOrEmpty(strSupplierId))
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierNameMandatoryForDefectTypeExternal"));
+			else {
+				dmoNCR = DomainObject.newInstance(context, objectId);
+				List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER,
+						DomainConstants.TYPE_COMPANY, Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+						false, true, (short) 0, null, null);
+				StringList slRelIds = Helper.stringList();
+				returnMap.parallelStream().forEach(supplierMap->{
+					String strRelId = (String) supplierMap.get(DomainRelationship.SELECT_ID);
+					slRelIds.add(strRelId);
+				});
+				if (!Helper.isNullOrEmpty(strSupplierId)) {
+					dmoSupplier = DomainObject.newInstance(context, strSupplierId);
+					NCRUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER, dmoSupplier, mapRelAttributes);
+				}
+
+				QueryUtil.disconnectObjects(context, slRelIds);
+			}
+
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Supplier Locations' field in PQCNCRCreate
+	 * form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Supplier Locations' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	@ProgramCallable
+	public Map<?, ?> FormPQCNCRCreateColumnSupplierLocationReload(Context context, String args[]) throws NCRException {
+
+		HashMap locations = new HashMap();
+		StringList locationsOID = new StringList();
+		StringList locationsName = new StringList();
+
+		StringList objSelects = new StringList(2);
+		objSelects.add(DomainConstants.SELECT_ID);
+		objSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList relSelects = new StringList(1);
+		relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		StringBuilder sbObjectWhere = new StringBuilder();
+		sbObjectWhere.append(DomainConstants.SELECT_CURRENT);
+		sbObjectWhere.append("==");
+		sbObjectWhere.append(NCRConstants.STATE_ACTIVE);
+
+		try {
+
+			HashMap programMap = JPO.unpackArgs(args);
+			Map<?, ?> fieldValues = (Map<?, ?>) programMap.get(NCRConstants.FIELDVALUES);
+
+			Helper.ensureNotNull(fieldValues, "fieldValues");
+
+			String strNCRSupplierOID = (String) fieldValues.get(NCRConstants.NCR_SUPPLIER_OID);
+
+			if (!Helper.isNullOrEmpty(strNCRSupplierOID)) {
+				DomainObject supplier = DomainObject.newInstance(context, strNCRSupplierOID);
+				List<Map<?, ?>> lmLocations = QueryUtil.getRelatedObjects(context, supplier, DomainConstants.RELATIONSHIP_ORGANIZATION_PLANT,
+						PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_PLANT), objSelects, relSelects, Boolean.FALSE,
+						Boolean.TRUE, (short) 0, sbObjectWhere.toString(), null);
+				if (Helper.isNullOrEmpty(lmLocations)) {
+					locationsOID.add(DomainConstants.EMPTY_STRING);
+					locationsName.add(DomainConstants.EMPTY_STRING);
+				}
+				else {
+					
+					lmLocations.parallelStream().forEach(locationsMap->{
+						locationsOID.add((String) locationsMap.get(DomainConstants.SELECT_ID));
+						locationsName.add((String) locationsMap.get(DomainConstants.SELECT_NAME));
+					});
+				}
+			}
+			else {
+				locationsOID.add(DomainConstants.EMPTY_STRING);
+				locationsName.add(DomainConstants.EMPTY_STRING);
+			}
+			locations.put("RangeValues", locationsOID);
+			locations.put("RangeDisplayValues", locationsName);
+			return locations;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Supplier Locations' field in PQCNCRBasicInfo
+	 * form on edit for already selected Supplier
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Supplier Locations' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public Map<?, ?> getRangeFormPQCNCRCreateColumnSupplierSite(Context context, String args[]) throws NCRException {
+
+		HashMap locations = new HashMap();
+		StringList locationsOID = new StringList();
+		StringList locationsName = new StringList();
+
+		StringList objSelects = new StringList(2);
+		objSelects.add(DomainConstants.SELECT_ID);
+		objSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList relSelects = new StringList(1);
+		relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		StringBuilder sbObjectWhere = new StringBuilder();
+		sbObjectWhere.append(DomainConstants.SELECT_CURRENT);
+		sbObjectWhere.append("==");
+		sbObjectWhere.append(NCRConstants.STATE_ACTIVE);
+
+		try {
+
+			HashMap programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+
+			String strNCRId = (String) paramMap.get(NCRConstants.OBJECTID);
+			List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strNCRId),
+					NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER, DomainConstants.TYPE_COMPANY, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, null, null);
+
+			if (!Helper.isNullOrEmpty(returnMap)) {
+				String strNCRSupplierOID = (String) ((Map<?, ?>) returnMap.get(0)).get(DomainConstants.SELECT_ID);
+
+				if (!Helper.isNullOrEmpty(strNCRSupplierOID)) {
+					DomainObject supplier = DomainObject.newInstance(context, strNCRSupplierOID);
+					List<Map<?, ?>> lmLocations = QueryUtil.getRelatedObjects(context, supplier, DomainConstants.RELATIONSHIP_ORGANIZATION_PLANT,
+							PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_PLANT), objSelects, relSelects, Boolean.FALSE,
+							Boolean.TRUE, (short) 0, sbObjectWhere.toString(), null);
+					
+					lmLocations.parallelStream().forEach(obj1->{
+						Map locationsMap = (Map) obj1;
+						locationsOID.add((String) locationsMap.get(DomainConstants.SELECT_ID));
+						locationsName.add((String) locationsMap.get(DomainConstants.SELECT_NAME));
+					});
+				}
+				else {
+					locationsOID.add(DomainConstants.EMPTY_STRING);
+					locationsName.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			else {
+				locationsOID.add(DomainConstants.EMPTY_STRING);
+				locationsName.add(DomainConstants.EMPTY_STRING);
+			}
+			locations.put("field_choices", locationsOID);
+			locations.put("field_display_choices", locationsName);
+			return locations;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Connects the NCR Object to selected Supplier Site with 'NCR Supplier
+	 * Location' relationship on edit
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void updateFormPQCNCRBasicInfoColumnSupplierSite(Context context, String[] args) throws NCRException {
+		DomainObject dmoNCR = null;
+		DomainObject dmoSupplierPlant = null;
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			String objectId = (String) paramMap.get(NCRConstants.OBJECTID);
+			String strSupplierPlantId = (String) paramMap.get(NCRConstants.NEW_VALUE);
+			String[] arrDefectType = (String[]) requestMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			String strDefectType = arrDefectType[0];
+
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(strDefectType) && Helper.isNullOrEmpty(strSupplierPlantId))
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierSiteMandatoryForDefectTypeExternal"));
+			else {
+				dmoNCR = DomainObject.newInstance(context, objectId);
+				List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER_LOCATION,
+						PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_PLANT), Helper.stringList(DomainConstants.SELECT_ID),
+						Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, null, null);
+				StringList slRelIds = Helper.stringList();
+				for (Object obj : returnMap) {
+					Map supplierLocMap = (Map) obj;
+					String strRelId = (String) supplierLocMap.get(DomainRelationship.SELECT_ID);
+					slRelIds.add(strRelId);
+				}
+				if (!Helper.isNullOrEmpty(strSupplierPlantId)) {
+					dmoSupplierPlant = DomainObject.newInstance(context, strSupplierPlantId);
+					QueryUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER_LOCATION, dmoSupplierPlant, slRelIds);
+				}
+				else {
+					QueryUtil.disconnectObjects(context, slRelIds);
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Connects the NCR Object to selected Supplier with 'NCR Supplier'
+	 * relationship
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void updateFormPQCNCRCreateColumnSupplierLotNumber(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+			String objectId = (String) paramMap.get(NCRConstants.OBJECTID);
+			String strSupplierLotNumber = (String) paramMap.get(NCRConstants.NEW_VALUE);
+			if (!Helper.isNullOrEmpty(objectId) && !Helper.isNullOrEmpty(strSupplierLotNumber)) {
+				DomainObject dmoNCR = DomainObject.newInstance(context, objectId);
+				List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER,
+						DomainConstants.TYPE_COMPANY, Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+						false, true, (short) 0, null, null);
+				StringList slRelIds = Helper.stringList();
+				returnMap.parallelStream().forEach(supplierMap->{
+					String strRelId = (String) supplierMap.get(DomainRelationship.SELECT_ID);
+					slRelIds.add(strRelId);
+				});
+				if (!Helper.isNullOrEmpty(slRelIds)) {
+					DomainRelationship.setAttributeValue(context, slRelIds.get(0).toString(),
+							PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_SUPPLIER_LOT), strSupplierLotNumber);
+				}
+				else
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.UpdateSupplierLot.NoSupplierAttached"));
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Supplier Locations' field in PQCNCRCreate
+	 * form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Supplier Locations' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createNCR(Context context, String args[]) throws NCRException {
+		NCRService NCRService = getNCRService(context);
+		Map<String, String> ncrAttributeMap = new HashMap<String, String>();
+		Map<String, String> ncrSupplierRelAttributeMap = new HashMap<String, String>();
+		Map<String, String> returnMap = new HashMap<String, String>();
+		ArrayList<DomainObject> dmoProductList = new ArrayList<DomainObject>();
+		boolean isIssue = false;
+		try {
+			final String STR_ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_COMMENTS);
+			final String STR_ATTRIBUTE_NCR_CATEGORY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_CATEGORY);
+			final String STR_ATTRIBUTE_NCR_NC_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_NC_TYPE);
+			final String STR_ATTRIBUTE_SEVERITY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+			final String STR_ATTRIBUTE_NCR_DEFECT_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			final String STR_ATTRIBUTE_NCR_FUNCTIONAL_AREA = PropertyUtil.getSchemaProperty(context,
+					NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_FUNCTIONAL_AREA);
+			final String STR_ATTRIBUTE_NCR_PROCESS = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PROCESS);
+			final String STR_ATTRIBUTE_NCR_SUPPLIER_LOT = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_SUPPLIER_LOT);
+			final String STR_ATTRIBUTE_ORIGINATOR = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_attribute_Originator);
+
+			HashMap programMap = JPO.unpackArgs(args);
+
+			String strDescription = (String) programMap.get(NCRConstants.DESCRIPTION);
+			String strCategory = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_CATEGORY);
+			String strNCType = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_NC_TYPE);
+			String strSeverity = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+			String strDefectType = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			String strPlantOID = (String) programMap.get(NCRConstants.NCR_SITE_FOUND_OID);
+			String strFunctionalArea = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_FUNCTIONAL_AREA);
+			String strProcess = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PROCESS);
+			String strProductOID = (String) programMap.get(NCRConstants.PRODUCT_OID);
+			String strSupplierOID = (String) programMap.get(NCRConstants.NCR_SUPPLIER_OID);
+			String strSupplierLocation = (String) programMap.get(NCRConstants.NCR_SUPPLIER_LOCATION);
+			String strSupplierLot = (String) programMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_SUPPLIER_LOT);
+
+			if (Helper.isNullOrEmpty(strProductOID)) {
+				strProductOID = (String) programMap.get("objectId");// NCR
+																	// creation
+																	// in case
+																	// of
+																	// product
+																	// context
+			}
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(strDefectType)
+					&& (Helper.isNullOrEmpty(strSupplierOID) || Helper.isNullOrEmpty(strSupplierLocation) || Helper.isNullOrEmpty(strPlantOID))) {
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierInfoMandatoryForDefectTypeExternal"));
+			}
+				ncrAttributeMap.put(STR_ATTRIBUTE_COMMENTS, strDescription);
+			ncrAttributeMap.put(STR_ATTRIBUTE_NCR_CATEGORY, strCategory);
+			ncrAttributeMap.put(STR_ATTRIBUTE_NCR_NC_TYPE, strNCType);
+			ncrAttributeMap.put(STR_ATTRIBUTE_SEVERITY, strSeverity);
+			ncrAttributeMap.put(STR_ATTRIBUTE_NCR_DEFECT_TYPE, strDefectType);
+			ncrAttributeMap.put(STR_ATTRIBUTE_NCR_FUNCTIONAL_AREA, strFunctionalArea);
+			ncrAttributeMap.put(STR_ATTRIBUTE_NCR_PROCESS, strProcess);
+			ncrAttributeMap.put(STR_ATTRIBUTE_ORIGINATOR, context.getUser());
+
+			ncrSupplierRelAttributeMap.put(STR_ATTRIBUTE_NCR_SUPPLIER_LOT, strSupplierLot);
+			DomainObject newInstance = null;
+			if (!Helper.isNullOrEmpty(strProductOID)) {
+				String[] strProductIDArr = strProductOID.split("\\|");
+				for (String strProductId : strProductIDArr) {
+					newInstance = DomainObject.newInstance(context, strProductId);
+
+					if (Helper.getTypeKindOf(context, newInstance, DomainSymbolicConstants.SYMBOLIC_type_Issue).containsValue(Boolean.TRUE)) {
+						isIssue = true;
+						List<Map<?, ?>> impactedItems = QueryUtil.getRelatedObjects(context, newInstance,
+								DomainSymbolicConstants.SYMBOLIC_relationship_Issue, DomainConstants.QUERY_WILDCARD,
+								Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_ID),
+								Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 1, null, null);
+						// TODO Throw Exception if impactedItems is empty
+						for (Map<?, ?> impactedItem : impactedItems) {
+							dmoProductList.add(DomainObject.newInstance(context, (String) impactedItem.get(DomainConstants.SELECT_ID)));
+						}
+					}
+					else {
+						dmoProductList.add(newInstance);
+					}
+
+				}
+
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(strDefectType)
+					&& (Helper.isNullOrEmpty(strSupplierOID) || Helper.isNullOrEmpty(strSupplierLocation) || Helper.isNullOrEmpty(strPlantOID)))
+				throw new NCRException(Helper.getI18NString(context, Helper.StringResource.NCR,
+						"LQINCR.NCR.SupplierInfoMandatoryForDefectTypeExternal"));
+			else {
+				DomainObject dmoNCR = NCRService.createNCR(context, ncrAttributeMap, dmoProductList);
+
+				if (!Helper.isNullOrEmpty(strPlantOID)) {
+					DomainObject dmoPlant = DomainObject.newInstance(context, strPlantOID);
+					NCRUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE, dmoPlant, null);
+				}
+
+				if (!Helper.isNullOrEmpty(strSupplierOID)) {
+					DomainObject dmoSupplier = DomainObject.newInstance(context, strSupplierOID);
+					DomainObject dmoSupplierLoc = DomainObject.newInstance(context, strSupplierLocation);
+					NCRUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER, dmoSupplier, ncrSupplierRelAttributeMap);
+					NCRUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER_LOCATION, dmoSupplierLoc, null);
+				}
+				if (isIssue) {
+					NCRUtil.connectObjects(context, newInstance, DomainSymbolicConstants.SYMBOLIC_relationship_ResolvedTo, dmoNCR, null);
+				}
+				returnMap.put(DomainConstants.SELECT_ID, dmoNCR.getObjectId());
+				
+			}
+			}
+			else {
+
+				throw new NCRException(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.CreateNCR.InvalidImpactedItem"));
+			}
+
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Process' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Process' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSubmitToReviewNCR(Context context, String args[]) throws NCRException {
+		final ArrayList<DomainObject> DMO_NCR_LIST = new ArrayList<DomainObject>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strNCRId = ((String[]) programMap.get(NCRConstants.PARENT_OID))[0];
+			DMO_NCR_LIST.add(DomainObject.newInstance(context, strNCRId));
+			NCRService NCRService = getNCRService(context);
+			NCRService.promoteNCR(context, NCRConstants.NCRRecordPolicyState.REVIEW, "", DMO_NCR_LIST);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshNCR");
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * promotes the NCR from Create/Review to Invalid state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionInvalidNCR(Context context, String args[]) throws NCRException {
+		final ArrayList<DomainObject> DMO_NCR_LIST = new ArrayList<DomainObject>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strNCRId = ((String[]) programMap.get(TicketConstants.OBJECTID))[0];
+			DMO_NCR_LIST.add(DomainObject.newInstance(context, strNCRId));
+			String strInvalidateRationale = ((String[]) programMap.get(NCRConstants.COMMENTS))[0];
+			NCRService NCRService = getNCRService(context);
+			NCRService.promoteNCR(context, NCRConstants.NCRRecordPolicyState.INVALID, strInvalidateRationale, DMO_NCR_LIST);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshNCRProperties");
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean checkAccessOnPasswordField(Context context, String args[]) throws NCRException {
+
+		try {
+			boolean bResult = false;
+			String strPasswordSetting = Helper.getProperty(context, "emxFramework.Routes.EnableFDA");
+			if (!Helper.isNullOrEmpty(strPasswordSetting)) {
+				bResult = Boolean.parseBoolean(strPasswordSetting);
+			}
+			return bResult;
+		}
+		catch (Exception exception) {
+			throw new NCRException(exception);
+		}
+
+	}
+
+	/**
+	 * promotes NCR from Review to Closed state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionCloseNCR(Context context, String args[]) throws NCRException {
+		final ArrayList<DomainObject> DMO_NCR_LIST = new ArrayList<DomainObject>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strNCRId = ((String[]) programMap.get(NCRConstants.PARENT_OID))[0];
+			DMO_NCR_LIST.add(DomainObject.newInstance(context, strNCRId));
+			String strReasonForClosure = ((String[]) programMap.get(NCRConstants.COMMENTS))[0];
+			NCRService NCRService = getNCRService(context);
+			NCRService.promoteNCR(context, NCRRecordPolicyState.CLOSED, strReasonForClosure, DMO_NCR_LIST);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshNCRProperties");
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * transfers ownership of NCR and related objects from existing user to
+	 * selected user.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public void transferNCROwnership(Context context, String args[]) throws NCRException {
+		ArrayList<DomainObject> DMO_NCR_LIST = new ArrayList<DomainObject>();
+		DomainObject dmoNCR = null;
+		DomainObject dmoNewOwner = null;
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrParentOID = null;
+			String[] strNCRRowIds = (String[]) programMap.get(NCRConstants.EMX_TABLE_ROW_ID);
+			String[] arrNewOwnerOID = (String[]) programMap.get(NCRConstants.FIELD_NEW_OWNER_OID);
+			String[] arrTransferReason = (String[]) programMap.get(NCRConstants.FIELD_TRANSFER_REASON);
+
+			if (!Helper.isNullOrEmpty(strNCRRowIds)) { // from workqueue
+				String[] strNCRIds = strNCRRowIds;
+				List<EmxTableRowId> rowIds = EmxTableRowId.getTableRowIds(strNCRRowIds);
+				arrParentOID = new String[rowIds.size()];
+				for (int i = 0; i < rowIds.size(); i++) {
+					EmxTableRowId emxTableRowId = rowIds.get(i);
+					arrParentOID[i] = emxTableRowId.getObjectId();
+				}
+
+				for (String strNCRId : arrParentOID) {
+					dmoNCR = DomainObject.newInstance(context, strNCRId);
+					DMO_NCR_LIST.add(dmoNCR);
+				}
+			}
+			else { // from propertypage
+				String[] strNCRObjectIds = (String[]) programMap.get("objectId");
+				if (!Helper.isNullOrEmpty(strNCRObjectIds)) {
+					String strNCRId = strNCRObjectIds[0];
+					dmoNCR = DomainObject.newInstance(context, strNCRId);
+					DMO_NCR_LIST.add(dmoNCR);
+				}
+			}
+			if (!Helper.isNullOrEmpty(arrNewOwnerOID)) {
+				dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+			}
+
+			final List<String> SYM_REL_LIST = Helper.stringList(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_relationship_ObjectRoute);
+
+			final List<String> SYM_TYPE_LIST = Helper.stringList(NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_type_Route);
+
+			NCRService NCRService = getNCRService(context);
+			context.setCustomData("transferReason", arrTransferReason[0]);
+			NCRService.transferOwnership(context, DMO_NCR_LIST, dmoNewOwner, arrTransferReason[0], SYM_REL_LIST, SYM_TYPE_LIST, Action.TRANSFER);
+
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get the range for 'Process' field in PQCNCRCreate form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * 
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return range for 'Process' field in the object type Map<?, ?>
+	 * 
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+	public String getFieldInvestigationRequiredFormPQCNCRBasicInfo(Context context, String[] args) throws NCRException {
+		Helper.ensureNotNull(args, "args");
+		String strReturn = "No";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map) programMap.get(NCRConstants.PARAMMAP);
+			String strNCRId = paramMap.get(NCRConstants.OBJECTID).toString();
+			Helper.ensureNotNull(strNCRId, "strNCRId");
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			StringBuilder sbtypePattern = new StringBuilder();
+			sbtypePattern.append(NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION);
+			List<Map<?, ?>> listComplaintInvestigation = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strNCRId),
+					sbRelPattern.toString(), sbtypePattern.toString(), Helper.stringList(DomainObject.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 0, null, null);
+
+			DomainObject dmoComplaintInvestigation = null;
+			for (Object obj : listComplaintInvestigation) {
+				Map map = (Map) obj;
+				dmoComplaintInvestigation = DomainObject.newInstance(context, map.get(DomainConstants.SELECT_ID).toString());
+				Helper.ensureNotNull(dmoComplaintInvestigation, "dmoComplaintInvestigation");
+				String strInvestigationRequired = dmoComplaintInvestigation.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_INVESTIGATION_REQUIRED));
+				if ("yes".equalsIgnoreCase(strInvestigationRequired)) {
+					strReturn = "Yes";
+					break;
+				}
+			}
+			return strReturn;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	// =====================================================WV5=======================================================================
+	/**
+	 * This block contains methods used for NCR WorkQueue table/commands.
+	 */
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMyNCRs(Context context, String[] args) throws Exception {
+		MapList mlNCRsList = new MapList();
+		try {
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strNCRActiveFilter = (String) paramMap.get("PQCNCRActiveFilter");
+			String sObjectId = (String) paramMap.get("objectId");
+
+			StringList busSelects = new StringList();
+			busSelects.add(DomainConstants.SELECT_POLICY);
+
+			busSelects.add("state[" + NCRUtil.getActualStateName(context, NCRRecordPolicyState.CREATE) + "].actual");
+			busSelects.add("state[" + NCRUtil.getActualStateName(context, NCRRecordPolicyState.REVIEW) + "].actual");
+
+			busSelects.add("from[" + PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL) + "].to.id");
+			busSelects.add("from[" + PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL) + "].to.type");
+			busSelects.add(
+					"from[" + PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION) + "].to.current");
+			busSelects.add("from[" + PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+					+ "].to.attribute[" + PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_SEVERITY) + "]");
+			NCRService ncrService = getNCRService(context);
+			StringBuilder strWhereSB = new StringBuilder();
+			if (!Helper.isNullOrEmpty(sObjectId)
+					&& (Helper.getTypeKindOf(context, DomainObject.newInstance(context, sObjectId), NCRConstants.SYMBOLIC_TYPE_PRODUCTS)
+							.containsValue(Boolean.TRUE))) {
+				strWhereSB.append("(from[");
+				strWhereSB.append(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL));
+				strWhereSB.append("].to.from[");
+				strWhereSB.append(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT));
+				strWhereSB.append("].to.id == ");
+				strWhereSB.append("\"" + sObjectId + "\")");
+				strWhereSB.append(" && ");
+			}
+
+			if (!Helper.isNullOrEmpty(strNCRActiveFilter)) {
+				// Filter for NCR User and Active is default
+
+				switch (strNCRActiveFilter) {
+				case NCRConstants.FILTER_ACTIVE:
+
+					StringBuilder busWhereBuilder = new StringBuilder(200);
+					busWhereBuilder.append(NCRUtil.getContextOwnerOriginatorExpression(context));
+					busWhereBuilder.append(" && (");
+					busWhereBuilder.append(NCRUtil.getStateWhereExpression(context, NCRRecordPolicyState.CREATE));
+					busWhereBuilder.append(" || ");
+					busWhereBuilder.append(NCRUtil.getStateWhereExpression(context, NCRRecordPolicyState.REVIEW));
+					busWhereBuilder.append(")");
+					busWhereBuilder.append(NCRUtil.getAndOrganizationWhereExpression(context));
+					if (!Helper.isNullOrEmpty(sObjectId)) {
+						strWhereSB.append(busWhereBuilder);
+						mlNCRsList = ncrService.getNCRs(context, busSelects, strWhereSB.toString());
+					}
+					else {
+						mlNCRsList = ncrService.getNCRs(context, busSelects, busWhereBuilder.toString());
+					}
+
+					break;
+
+				case NCRConstants.FILTER_CLOSED:
+
+					mlNCRsList = ncrService.getNCRs(context, busSelects, strWhereSB.append(NCRUtil.getContextOwnerOriginatorExpression(context)
+							+ " && " + NCRUtil.getBusWhereExpression(context, NCRRecordPolicyState.CLOSED)).toString());
+
+					break;
+
+				case NCRConstants.FILTER_ASSIGNED:
+
+					mlNCRsList = ncrService.getNCRs(context, busSelects, strWhereSB.append(
+							NCRUtil.getContextOwnerExpression(context) + " && " + NCRUtil.getBusWhereExpression(context, NCRRecordPolicyState.REVIEW))
+							.toString());
+
+					break;
+
+				case NCRConstants.FILTER_UNASSIGNED:
+
+					strWhereSB.append(NCRUtil.getBusWhereExpression(context, NCRRecordPolicyState.REVIEW));
+					strWhereSB.append(" &&(from[Complaint Investigation]==\"false\"||");
+					strWhereSB.append(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_REASSIGN_RATIONALE)));
+					strWhereSB.append("~~'')");
+					mlNCRsList = ncrService.getNCRs(context, busSelects, strWhereSB.toString());
+
+					break;
+
+				case NCRConstants.FILTER_CREATE:
+
+					mlNCRsList = ncrService.getNCRs(context, busSelects,
+							strWhereSB.append(NCRUtil.getBusWhereExpression(context, NCRRecordPolicyState.CREATE)).toString());
+
+					break;
+
+				case NCRConstants.FILTER_REVIEW:
+
+					mlNCRsList = ncrService.getNCRs(context, busSelects,
+							strWhereSB.append(NCRUtil.getBusWhereExpression(context, NCRRecordPolicyState.REVIEW)).toString());
+
+					break;
+
+				default:
+					mlNCRsList = ncrService.getNCRs(context, busSelects, strWhereSB.append(NCRUtil.getContextOwnerExpression(context)).toString());
+					break;
+				}
+
+			}
+			return mlNCRsList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTablePQCNCRMyNCRExpansion(Context context, String[] args) throws NCRException {
+		MapList mlNCRExpands = new MapList();
+		try {
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			return mlNCRExpands;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Boolean isAssignedFilterAccessible(Context context, String[] args) throws NCRException {
+		try {
+			return ncrUtil.showAssignedFilter(context, args);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Boolean isActiveFilterAccessible(Context context, String[] args) throws NCRException {
+		try {
+			return ncrUtil.showCreateFilter(context, args);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map getRangeFilterPQCNCRRoleSpecific(Context context, String[] args) throws NCRException {
+		try {
+			Map rangeMap = new HashMap();
+
+			String ACTIVE_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Active");
+			String ASSIGNED_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Assigned");
+			String UNASSIGNED_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Unassigned");
+			String CREATE_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Create");
+			String REVIEW_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Review");
+			String CLOSED_FILTER = Helper.getI18NString(context, Helper.StringResource.NCR, "PQCNCR.NCR.Filter.Label.Closed");
+
+			StringList filed_choices = new StringList();
+			StringList display_choices = new StringList();
+
+			if (Helper.isLoggedInWithRole(context, NCRConstants.SYMBOLIC_ROLE_VPLMProjLeader)) {
+
+				display_choices.add(ASSIGNED_FILTER);
+				filed_choices.add("Assigned");
+				display_choices.add(UNASSIGNED_FILTER);
+				filed_choices.add("Unassigned");
+				display_choices.add(CREATE_FILTER);
+				filed_choices.add("Create");
+				display_choices.add(REVIEW_FILTER);
+				filed_choices.add("Review");
+			}
+			else if (Helper.isLoggedInWithRole(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+
+				display_choices.add(UNASSIGNED_FILTER);
+				filed_choices.add("Unassigned");
+				display_choices.add(CREATE_FILTER);
+				filed_choices.add("Create");
+				display_choices.add(REVIEW_FILTER);
+				filed_choices.add("Review");
+
+			}
+
+			else if (Helper.isLoggedInWithRole(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+
+				display_choices.add(UNASSIGNED_FILTER);
+				filed_choices.add("Unassigned");
+				display_choices.add(ASSIGNED_FILTER);
+				filed_choices.add("Assigned");
+
+			}
+			else if (Helper.hasRoles(context, NCRConstants.SYMBOLIC_ROLE_NCR_USER)
+					|| Helper.hasRoles(context, NCRConstants.SYMBOLIC_ROLE_VPLMExperimenter))
+
+			{
+
+				display_choices.add(ACTIVE_FILTER);
+				filed_choices.add("Active");
+				display_choices.add(CLOSED_FILTER);
+				filed_choices.add("Closed");
+
+			}
+
+			rangeMap.put("field_choices", filed_choices);
+			rangeMap.put("field_display_choices", display_choices);
+
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Submit To Review for selected NCRs.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueSubmitToReview(Context context, String[] args) throws NCRException {
+
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<DomainObject> arrSuccessNCRIds = new ArrayList<DomainObject>();
+		ArrayList<Object> arrFailedNCRs = new ArrayList<Object>();
+		DomainObject doNCR = null;
+		String strNCRName = new String();
+		String strNCRId = new String();
+
+		try {
+
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String[] strNCRIds = (String[]) mapProgram.get(NCRConstants.EMX_TABLE_ROW_ID);
+			NCRService NCRService = getNCRService(context);
+
+			for (String strRowId : strNCRIds) {
+				EmxTableRowId tr = new EmxTableRowId(strRowId);
+				strNCRId = tr.getObjectId();
+				doNCR = DomainObject.newInstance(context, strNCRId);
+				strNCRName = doNCR.getInfo(context, DomainConstants.SELECT_NAME);
+				boolean hasPromoteAccess = doNCR.checkAccess(context, (short) AccessConstants.cPromote);
+				if (hasPromoteAccess) {
+					arrSuccessNCRIds.add(DomainObject.newInstance(context, strNCRId));
+				}
+				else
+					arrFailedNCRs.add(strNCRName);
+			}
+			if (arrFailedNCRs.size() > 0) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.CanNotSubmitToReview"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedNCRs.toString());
+
+				MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+			}
+			else if (arrSuccessNCRIds.size() > 0)
+				NCRService.promoteNCR(context, NCRRecordPolicyState.REVIEW,
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.TransferReason.Review"), arrSuccessNCRIds);
+			sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyNCRWorkQueue"));
+
+			return sbReturn.toString();
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Action for Closing selected NCR(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueClose(Context context, String[] args) throws NCRException {
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<DomainObject> arrSuccessNCRs = new ArrayList<DomainObject>();
+		ArrayList<Object> arrFailedNCRs = new ArrayList<Object>();
+		DomainObject doNCR = null;
+		String strNCRName = new String();
+
+		try {
+			NCRService NCRService = getNCRService(context);
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String strReasonForClosure = ((String[]) mapProgram.get(NCRConstants.COMMENTS))[0];
+			String strNCRIds = ((String[]) mapProgram.get(NCRConstants.ROWIDS))[0];
+
+			if (!Helper.isNullOrEmpty(strNCRIds)) {
+				StringList slNCRIds = FrameworkUtil.split(strNCRIds, NCRConstants.COMMA);
+				for (Object obj : slNCRIds) {
+					String strNCRId = (String) obj;
+					doNCR = DomainObject.newInstance(context, strNCRId);
+					strNCRName = doNCR.getInfo(context, DomainConstants.SELECT_NAME);
+					boolean hasPromoteAccess = doNCR.checkAccess(context, (short) AccessConstants.cPromote);
+					if (hasPromoteAccess) {
+						arrSuccessNCRs.add(DomainObject.newInstance(context, strNCRId));
+					}
+					else
+						arrFailedNCRs.add(strNCRName);
+				}
+			}
+			if (!arrFailedNCRs.isEmpty()) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.CanNotClosed"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedNCRs.toString());
+
+				MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+			}
+			else if (!arrSuccessNCRs.isEmpty())
+				NCRService.promoteNCR(context, NCRRecordPolicyState.CLOSED, strReasonForClosure, arrSuccessNCRs);
+			sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyNCRWorkQueue"));
+
+			return sbReturn.toString();
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Action for Invalidating selected NCR(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueInvalidate(Context context, String[] args) throws NCRException {
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<DomainObject> arrSuccessNCRs = new ArrayList<DomainObject>();
+		try {
+			NCRService NCRService = getNCRService(context);
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String strNCRIds = ((String[]) mapProgram.get(NCRConstants.ROWIDS))[0];
+			String[] strInvalidateRationale = ((String[]) mapProgram.get(NCRConstants.COMMENTS));
+			StringList slNCRIds = FrameworkUtil.split(strNCRIds, ",");
+			boolean hasPromoteAccess = true;
+			for (String ncrid : slNCRIds) {
+				DomainObject domOBJNC = DomainObject.newInstance(context, ncrid);
+				if (!domOBJNC.checkAccess(context, (short) AccessConstants.cPromote)) {
+					hasPromoteAccess = false;
+					break;
+				}
+			}
+
+			if (!hasPromoteAccess) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.NCR,
+						"LQINCR.NCR.Invalidiate.SelectedUnassignedComplaint");
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionShowAlertMessage", strErrorMessage);
+			}
+
+			if (!Helper.isNullOrEmpty(strNCRIds)) {
+				StringList slNCRIds1 = FrameworkUtil.split(strNCRIds, NCRConstants.COMMA);
+				for (Object obj : slNCRIds1) {
+					String strNCRId = (String) obj;
+					arrSuccessNCRs.add(DomainObject.newInstance(context, strNCRId));
+				}
+			}
+			NCRService.promoteNCR(context, NCRRecordPolicyState.INVALID, strInvalidateRationale[0], arrSuccessNCRs);
+			sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyNCRWorkQueue"));
+			return sbReturn.toString();
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Sets the new owner for the NCR and for all its associated objects.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueTransferOwnership(Context context, String[] args) throws NCRException {
+
+		String strNCRIds = new String();
+		DomainObject dmoNewOwner = null;
+		DomainObject doNCR = null;
+		String strReturn = new String();
+		String strNCRName = new String();
+		ArrayList<DomainObject> arrSuccessNCRs = new ArrayList<DomainObject>();
+		ArrayList<Object> arrFailedNCRs = new ArrayList<Object>();
+		try {
+			final List<String> SYM_REL_LIST = Helper.stringList(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_relationship_ObjectRoute);
+
+			final List<String> SYM_TYPE_LIST = Helper.stringList(NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_type_Route);
+
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			
+			String[] strAssignedFilterValue = (String[]) programMap.get(NCRConstants.NCR_ASSIGNED_FILTER_COMMAND);
+
+			if (!Helper.isNullOrEmpty(strAssignedFilterValue) && strAssignedFilterValue[0].equalsIgnoreCase(NCRConstants.FILTER_UNASSIGNED)) {
+
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferComplaintOwnership");
+			}
+
+			else {
+				String[] arrNCRIds = (String[]) programMap.get(NCRConstants.ROWIDS);
+				strNCRIds = arrNCRIds[0];
+
+				String[] arrNewOwnerOID = (String[]) programMap.get(NCRConstants.FIELD_NEW_OWNER_OID);
+				String[] arrTransferReason = (String[]) programMap.get(NCRConstants.FIELD_TRANSFER_REASON);
+				String strTransferReason = arrTransferReason[0];
+
+				NCRService NCRService = getNCRService(context);
+
+				if (!Helper.isNullOrEmpty(strNCRIds)) {
+					StringList slNCRIds1 = FrameworkUtil.split(strNCRIds, NCRConstants.COMMA);
+					for (Object obj : slNCRIds1) {
+						String strNCRId = (String) obj;
+						doNCR = DomainObject.newInstance(context, strNCRId);
+						strNCRName = doNCR.getInfo(context, DomainConstants.SELECT_NAME);
+						boolean hasChangeOwnerAccess = doNCR.checkAccess(context, (short) AccessConstants.cChangeOwner);
+						if (hasChangeOwnerAccess) {
+							arrSuccessNCRs.add(DomainObject.newInstance(context, strNCRId));
+						}
+						else
+							arrFailedNCRs.add(strNCRName);
+					}
+				}
+				if (arrFailedNCRs.size() > 0) {
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferOwnershipNotOwner");
+				}
+				else if (arrSuccessNCRs.size() > 0) {
+					dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+					context.setCustomData("transferReason", strTransferReason);
+					NCRService.transferOwnership(context, arrSuccessNCRs, dmoNewOwner, strTransferReason, SYM_REL_LIST, SYM_TYPE_LIST,
+							Action.TRANSFER);
+					strReturn = Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyNCRWorkQueue");
+				}
+			}
+			return strReturn;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Accept NCRs
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws NCRException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueAccept(Context context, String[] args) throws NCRException {
+		DomainObject dmoNewOwner = null;
+		StringBuffer sbTransferReason = new StringBuffer();
+		ArrayList<DomainObject> arrNCRs = new ArrayList<DomainObject>();
+		try {
+
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(NCRConstants.EMX_TABLE_ROW_ID);
+			if (null == strOrgTableRowIds || strOrgTableRowIds.length == 0) {
+				String[] objectIds = (String[]) mapProgram.get(NCRConstants.OBJECTID);
+				for (String objectId : objectIds) {
+					arrNCRs.add(DomainObject.newInstance(context, objectId));
+				}
+			}
+			else {
+				for (String strRowId : strOrgTableRowIds) {
+					EmxTableRowId tr = new EmxTableRowId(strRowId);
+					arrNCRs.add(DomainObject.newInstance(context, tr.getObjectId()));
+				}
+			}
+			dmoNewOwner = PersonUtil.getPersonObject(context);
+
+			sbTransferReason.append(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.Message.AcceptNCR1"));
+			sbTransferReason.append(" ");
+			sbTransferReason.append(dmoNewOwner.getName());
+			sbTransferReason.append(" ");
+			sbTransferReason.append(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.Message.AcceptNCR2"));
+
+			final List<String> SYM_REL_LIST = Helper.stringList(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_relationship_ObjectRoute);
+
+			final List<String> SYM_TYPE_LIST = Helper.stringList(NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION, NCRConstants.SYMBOLIC_type_Route);
+
+			NCRService NCRService = getNCRService(context);
+			NCRService.transferOwnership(context, arrNCRs, dmoNewOwner, sbTransferReason.toString(), SYM_REL_LIST, SYM_TYPE_LIST, Action.ACCEPT);
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshNCR");
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Delete NCRs
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws NCRException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionMyWorkQueueDelete(Context context, String[] args) throws NCRException {
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<Object> arrSuccessNCRIds = new ArrayList<Object>();
+		ArrayList<Object> arrFailedNCR = new ArrayList<Object>();
+
+		DomainObject doNCR = null;
+		String strNCRName = new String();
+
+		try {
+			Helper.isLicenseAssigned(context, LSALicense.COLS);
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(NCRConstants.EMX_TABLE_ROW_ID);
+			String strNCRId = new String();
+			for (String strRowId : strOrgTableRowIds) {
+				EmxTableRowId tr = new EmxTableRowId(strRowId);
+				strNCRId = tr.getObjectId();
+				List<Map<?, ?>> mlNCR = QueryUtil.getInfo(context, new String[] { strNCRId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_NAME));
+				for (Object oNCR : mlNCR) {
+					Map mNCR = (Map) oNCR;
+					strNCRName = (String) mNCR.get(DomainConstants.SELECT_NAME);
+					doNCR = DomainObject.newInstance(context, strNCRId);
+
+					if (!Helper.getTypeKindOf(context, doNCR, NCRConstants.SYMBOLIC_TYPE_NCR).containsValue(Boolean.TRUE)) {
+						return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForWrongTypeSelection");
+					}
+					boolean hasDeleteAccess = doNCR.checkAccess(context, (short) AccessConstants.cDelete);
+					if (hasDeleteAccess)
+						arrSuccessNCRIds.add(strNCRId);
+					else
+						arrFailedNCR.add(strNCRName);
+				}
+			}
+			if (!arrFailedNCR.isEmpty()) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.CanNotBeDeleted"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedNCR.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionShowAlertMessage", sbReturn.toString());
+			}
+			else if (!arrSuccessNCRIds.isEmpty())
+				NCRUtil.deleteObjects(context, arrSuccessNCRIds.toArray(new String[arrSuccessNCRIds.size()]));
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshNCR");
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+	}
+
+	// =============================================================================================================================
+
+	/**
+	 * This method gives stringList of person objectIds which are to be excluded
+	 * in Full search List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of ObjectIDs to exclude
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedOwnerOIDNCR(Context context, String[] args) throws NCRException {
+		try {
+			StringList slOwnerExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(NCRConstants.OBJECTID);
+			String[] arrDmoNCR = { strObjectId };
+
+			List<Map<?, ?>> resultMap = QueryUtil.getInfo(context, arrDmoNCR, Helper.stringList(DomainConstants.SELECT_OWNER));
+			for (Object objMap : resultMap) {
+				Map<?, ?> mapOwner = (Map) objMap;
+				String strOwnerName = (String) mapOwner.get(DomainConstants.SELECT_OWNER);
+				slOwnerExclusion.add(PersonUtil.getPersonObjectID(context, strOwnerName));
+			}
+			return slOwnerExclusion;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Connects the NCR Object to selected Location with 'NCR Site' relationship
+	 * and disconnects the existing Location.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void updateFormPQCNCRCreateColumnPlant(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			String objectId = (String) paramMap.get(NCRConstants.OBJECTID);
+			String strPlantId = (String) paramMap.get(NCRConstants.NEW_OID);
+			String[] arrDefectType = (String[]) requestMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			String strDefectType = arrDefectType[0];
+
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(strDefectType) && !Helper.isNullOrEmpty(objectId)
+					&& Helper.isNullOrEmpty(strPlantId))
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SiteFoundMandatoryForDefectTypeExternal"));
+			else {
+				DomainObject dmoNCR = DomainObject.newInstance(context, objectId);
+				List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE,
+						NCRConstants.SYMBOLIC_TYPE_PLANT, Helper.stringList(DomainConstants.SELECT_ID),
+						Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, null, null);
+				StringList slRelIds = Helper.stringList();
+				for (Object obj : returnMap) {
+					Map supplierMap = (Map) obj;
+					String strRelId = (String) supplierMap.get(DomainRelationship.SELECT_ID);
+					slRelIds.add(strRelId);
+				}
+
+				if (!Helper.isNullOrEmpty(strPlantId)) {
+					DomainObject dmoPlant = DomainObject.newInstance(context, strPlantId);
+					QueryUtil.connectObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE, dmoPlant, slRelIds);
+				}
+				else {
+					QueryUtil.disconnectObjects(context, slRelIds);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	// start code for History
+
+	/**
+	 * Method to get contents of History of particular key given
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of values for key
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getHistoryContents(Context context, String args[], String key) throws NCRException {
+		List keyList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(NCRConstants.OBJECTLIST);
+			objectList.parallelStream().forEach(object ->{
+				Map mapObject = (Map) object;
+				String strObjectKey = (String) mapObject.get(key);
+				keyList.add(strObjectKey);
+			});
+			return keyList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get Name Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Names
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnName(Context context, String args[]) throws NCRException {
+		List nameList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(NCRConstants.OBJECTLIST);
+			Iterator objectListIterator = objectList.iterator();
+
+			while (objectListIterator.hasNext()) {
+				Map mapObject = (Map) objectListIterator.next();
+				String strObjectName = (String) mapObject.get(DomainConstants.SELECT_NAME);
+				String strId = (String) mapObject.get(DomainConstants.SELECT_ID);
+				String strName = new String();
+				if (UIUtil.isNullOrEmpty(strId)) {
+					strName = new StringBuilder().append("<b>").append(XSSUtil.encodeForHTML(context, strObjectName)).append("</b>").toString();
+				}
+				else {
+					strName = NCRUtil.getObjectLink(context, strId, strObjectName);
+				}
+				nameList.add(strName);
+			}
+			return nameList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get Time Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Time
+	 * @throws NCRException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryTime(Context context, String args[]) throws NCRException {
+		return getHistoryContents(context, args, NCRConstants.SELECT_TIME);
+	}
+
+	/**
+	 * Method to get User Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Users
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryUser(Context context, String args[]) throws NCRException {
+		List userList = new StringList();
+		try {
+			List tempList = getHistoryContents(context, args, NCRConstants.SELECT_USER);
+
+			for (Object user : tempList) {
+				String strName = (String) user;
+				String strFullName = PersonUtil.getFullName(context, strName);
+				userList.add(strFullName);
+			}
+			return userList;
+		}
+		catch (FrameworkException e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Method to get Action Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Actions
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryAction(Context context, String args[]) throws NCRException {
+		List getActionList = getHistoryContents(context, args, NCRConstants.SELECT_ACTION);
+		HistoryService historyService = getHistoryService(context);
+		List<String> actionList = historyService.trimCustomActionInList(getActionList);
+
+		return actionList;
+	}
+
+	/**
+	 * Method to get State Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of States
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryState(Context context, String args[]) throws NCRException {
+		return getHistoryContents(context, args, DomainConstants.SELECT_STATES);
+	}
+
+	/**
+	 * Method to get Description Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Descriptions
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryDescription(Context context, String args[]) throws NCRException {
+		return getHistoryContents(context, args, DomainConstants.SELECT_DESCRIPTION);
+	}
+
+	/**
+	 * Method to get History of all the Parent Objects and their Related Objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds selected Filter Action and Search Filter Text in program
+	 *            map
+	 * @return MapList of Objects along containing History information
+	 * @throws NCRException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getNCRHistory(Context context, String args[]) throws NCRException {
+		try {
+			MapList mlist = new MapList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectID = (String) programMap.get(NCRConstants.OBJECTID);
+			DomainObject dmoNCR = DomainObject.newInstance(context, strObjectID);
+
+			String strActionSelected = (String) programMap.get(NCRConstants.SELECT_NCR_FILTERACTION);
+			String strFilterSearch = (String) programMap.get(NCRConstants.SELECT_NCR_SEARCHFILTER);
+
+			HistoryService historyService = getHistoryService(context);
+			MapList tempList = historyService.getHistory(context, strObjectID, strActionSelected, strFilterSearch);
+			mlist.addAll(tempList);
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER);
+
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_type_Location);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_type_Company);
+
+			List<Map<?, ?>> relObj = historyService.getAllComplaintRelatedItems(context, dmoNCR, sbRelPattern.toString(), sbTypePattern.toString());
+			if (relObj.size() > 0) {
+				String strRelatedItems = Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.Common.AssociatedItemsHistory");
+				Map history = historyService.populateHistoryData("", strRelatedItems, "", "", "", "", "");
+				mlist.add(history);
+			}
+			for (Object relObjects : relObj) {
+				Map mapRelObjects = (Map) relObjects;
+				String id = (String) mapRelObjects.get(DomainConstants.SELECT_ID);
+				tempList = historyService.getHistory(context, id, strActionSelected, strFilterSearch);
+				mlist.addAll(tempList);
+			}
+			return mlist;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+
+	}
+
+	/**
+	 * This method displays the possible values of Action to be selected by user
+	 * to filter the History.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            hold program map
+	 * @return Map of Actions
+	 * @throws NCRException
+	 *             if the operation fails
+	 */
+
+	public Map getHistoryFilterRanges(Context context, String args[]) throws NCRException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(NCRConstants.REQUESTMAP);
+			String strObjectID = (String) requestMap.get(NCRConstants.PARENT_OID);
+			DomainObject dmoNCR = DomainObject.newInstance(context, strObjectID);
+			Map hmaplist = new HashMap();
+			hmaplist = UINavigatorUtil.getHistoryData(context, strObjectID);
+			List<String> actionArray = (List) hmaplist.get(NCRConstants.SELECT_ACTION);
+			List<String> uniqueValueArray = new StringList();
+
+			for (String action : actionArray) {
+				if (!uniqueValueArray.contains(action)) {
+					uniqueValueArray.add(action);
+				}
+			}
+			StringList actionList = new StringList();
+			actionList.add(NCRConstants.SELECT_ALL);
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE);
+			sbRelPattern.append(NCRConstants.COMMA);
+			sbRelPattern.append(NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER);
+
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_type_Location);
+			sbTypePattern.append(NCRConstants.COMMA);
+			sbTypePattern.append(NCRConstants.SYMBOLIC_type_Company);
+
+			HistoryService historyService = getHistoryService(context);
+			List<Map<?, ?>> relObj = historyService.getAllComplaintRelatedItems(context, dmoNCR, sbRelPattern.toString(), sbTypePattern.toString());
+			for (Object relObjects : relObj) {
+				Map hmRel = (Map) relObjects;
+				String id = (String) hmRel.get(DomainConstants.SELECT_ID);
+				Map hmaplistRel = new HashMap();
+				hmaplistRel = UINavigatorUtil.getHistoryData(context, id);
+				List<String> actionArrayRel = (List) hmaplistRel.get(NCRConstants.SELECT_ACTION);
+				List<String> getTrimList = historyService.trimCustomActionInList(actionArrayRel);
+				for (String action : getTrimList) {
+					if (!uniqueValueArray.contains(action)) {
+						uniqueValueArray.add(action);
+					}
+				}
+			}
+			for (Object action : uniqueValueArray) {
+				String getActionRel = (String) action;
+				actionList.add(getActionRel);
+			}
+			Map rangeMap = new HashMap();
+			rangeMap.put(NCRConstants.FIELD_CHOICES, actionList);
+
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<?, ?> getTablePQCNCRMyNCRColumnNCRTypeRange(Context context, String[] args) throws NCRException {
+		try {
+			Map mapNCRTypeRange = Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_NC_TYPE);
+			StringList slNCRTypeRange = (StringList) mapNCRTypeRange.get(NCRConstants.FIELD_DISPLAY_CHOICES);
+			mapNCRTypeRange.put(NCRConstants.FIELD_CHOICES, slNCRTypeRange);
+			mapNCRTypeRange.put(NCRConstants.FIELD_DISPLAY_CHOICES, slNCRTypeRange);
+			return mapNCRTypeRange;
+		}
+		catch (LSAException e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<?, ?> getRangeTablePQCNCRMyNCRColumnFunctionalArea(Context context, String[] args) throws NCRException {
+		try {
+			Map mapFunctionalArea = Helper.getAttributeRanges(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_FUNCTIONAL_AREA);
+			StringList slFunctionalAreaChoices = (StringList) mapFunctionalArea.get(NCRConstants.FIELD_DISPLAY_CHOICES);
+			mapFunctionalArea.put(NCRConstants.FIELD_CHOICES, slFunctionalAreaChoices);
+			mapFunctionalArea.put(NCRConstants.FIELD_DISPLAY_CHOICES, slFunctionalAreaChoices);
+			return mapFunctionalArea;
+		}
+		catch (LSAException e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getRangeTablePQCNCRMyNCRColumnNCRProductLine(Context context, String[] args) throws NCRException {
+		StringList slProductLineList = new StringList();
+		final String RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT);
+		final String RELATIONSHIP_MAIN_PRODUCT = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT);
+		final String RELATIONSHIP_PRODUCT_LINE_MODELS = PropertyUtil.getSchemaProperty(context,
+				NCRConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS);
+		final String strProductLineRelatinship = "from[" + RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT + "].to.to[" + RELATIONSHIP_MAIN_PRODUCT
+				+ "].from.to[" + RELATIONSHIP_PRODUCT_LINE_MODELS + "].from.name";
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strObjectId = (String) map.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(strType) && strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR))) {
+					slProductLineList.add(DomainConstants.EMPTY_STRING);
+				}
+				else if (!Helper.isNullOrEmpty(strType)
+						&& strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL))) {
+					DomainObject dmoPCR = DomainObject.newInstance(context, strObjectId);
+					String strProductLine = dmoPCR.getInfo(context, strProductLineRelatinship);
+					slProductLineList.add(strProductLine);
+				}
+				else {
+					slProductLineList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return slProductLineList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getRangeTablePQCNCRMyNCRColumnNCRProductModel(Context context, String[] args) throws NCRException {
+		StringList slProductModelList = new StringList();
+		final String strProductModelRelatinship = "from["
+				+ PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT) + "].to.id";
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strObjectId = (String) map.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(strType) && strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR))) {
+					slProductModelList.add(DomainConstants.EMPTY_STRING);
+				}
+				else if (!Helper.isNullOrEmpty(strType)
+						&& strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL))) {
+					DomainObject dmoPCR = DomainObject.newInstance(context, strObjectId);
+					String strProductId = dmoPCR.getInfo(context, strProductModelRelatinship);
+
+					String strLookupRel = null;
+					if (DerivationUtil.isRootNode(context, strProductId)) {
+						strLookupRel = ProductLineConstants.RELATIONSHIP_MAIN_PRODUCT;
+					}
+					else {
+						strLookupRel = ProductLineConstants.RELATIONSHIP_PRODUCTS;
+					}
+
+					String strRootSelectable = "to[" + strLookupRel + "].from.";
+					String strNameSelectable = strRootSelectable + "name";
+
+					DomainObject doProductObject = DomainObject.newInstance(context, strProductId);
+					String modelName = doProductObject.getInfo(context, strNameSelectable);
+
+					slProductModelList.add(modelName);
+				}
+				else {
+					slProductModelList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return slProductModelList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getRangeTablePQCNCRMyNCRColumnNCRProduct(Context context, String[] args) throws NCRException {
+		StringList slProducts = new StringList();
+		final String strProductRelatinship = "from["
+				+ PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT) + "].to.name";
+		final String strProductRelatinshipRev = "from["
+				+ PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT) + "].to.revision";
+
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strObjectId = (String) map.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(strType) && strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR))) {
+					slProducts.add(DomainConstants.EMPTY_STRING);
+				}
+				else if (!Helper.isNullOrEmpty(strType)
+						&& strType.equals(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL))) {
+
+					DomainObject dmoPCR = DomainObject.newInstance(context, strObjectId);
+					String strProductLine = dmoPCR.getInfo(context, strProductRelatinship);
+					String strProductLineRev = dmoPCR.getInfo(context, strProductRelatinshipRev);
+					slProducts.add(strProductLine + " " + strProductLineRev);
+				}
+				else {
+					slProducts.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return slProducts;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getNCRAgeCreateState(Context context, String[] args) throws NCRException {
+		StringList slCreateStateAge = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strActual = (String) map.get("state[" + NCRUtil.getActualStateName(context, NCRRecordPolicyState.CREATE) + "].actual");
+				String strDays = NCRUtil.getDurationFromNowInDays(context, strActual);
+				slCreateStateAge.add(strDays);
+			}
+			return slCreateStateAge;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getNCRAgeReviewState(Context context, String[] args) throws NCRException {
+		StringList slActiveAge = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strActual = (String) map.get("state[" + NCRUtil.getActualStateName(context, NCRRecordPolicyState.REVIEW) + "].actual");
+				String strDays = NCRUtil.getDurationFromNowInDays(context, strActual);
+				slActiveAge.add(strDays);
+			}
+			return slActiveAge;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getTotalNCRAge(Context context, String[] args) throws NCRException {
+		StringList slTotalAge = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List objectList = (List) programMap.get(NCRConstants.OBJECTLIST);
+			for (Iterator iterator = objectList.iterator(); iterator.hasNext();) {
+				Map map = (Map) iterator.next();
+				String strType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strOriginated = (String) map.get(DomainConstants.SELECT_ORIGINATED);
+				String strDays = NCRUtil.getDurationFromNowInDays(context, strOriginated);
+				slTotalAge.add(strDays);
+			}
+			return slTotalAge;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public HashMap getSuppliersForSearch(Context context, String[] args) throws NCRException {
+		HashMap<String, String> returnL = new HashMap<>();
+		try {
+			Person person = Person.getPerson(context);
+			Company company = person.getCompany(context);
+			List<Map<?, ?>> suppliersM = company.getSuppliers(context, Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME));
+			suppliersM.parallelStream().forEach(suppliers ->{
+				returnL.put((String) suppliers.get(DomainConstants.SELECT_NAME), (String) suppliers.get(DomainConstants.SELECT_NAME));
+			});
+			return returnL;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public HashMap getSitesForSearch(Context context, String[] args) throws NCRException {
+		HashMap<String, String> returnL = new HashMap<>();
+		try {
+			Person person = Person.getPerson(context);
+			Plant plant = new Plant();
+			Company company = person.getCompany(context);
+			List<Map<?, ?>> plantM = plant.getPlants(context, "emxPlant", "getPlants", person.getCompany(context).getObjectId(),
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME), "on");
+			plantM.parallelStream().forEach(plants ->{
+				returnL.put((String) plants.get(DomainConstants.SELECT_NAME), (String) plants.get(DomainConstants.SELECT_NAME));
+			});
+			return returnL;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getPCForSummaryReport(Context context, String[] args) throws NCRException {
+		try {
+			List<Map<?, ?>> productControlMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String ncrObjectId = (String) programMap.get("objectId");
+			DomainObject ncrObj = DomainObject.newInstance(context, ncrObjectId);
+			productControlMap = QueryUtil.getRelatedObjects(context, ncrObj, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL,
+					NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 1, new String(), new String());
+			return new MapList(productControlMap);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getATForSummaryReport(Context context, String[] args) throws NCRException {
+		try {
+			List<Map<?, ?>> actionTaskMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String ncrObjectId = (String) programMap.get("objectId");
+			DomainObject ncrObj = DomainObject.newInstance(context, ncrObjectId);
+			final ActionTasks ACTIONTASKS = ActionTasks.getInstance();
+			actionTaskMap = ACTIONTASKS.getAllActionTask(context, ncrObj,
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT, DomainObject.SELECT_TYPE,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_SCHEDULED_COMPLETION_DATE), DomainObject.SELECT_OWNER,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_INSTRUCTIONS),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_DUEDATE_OFFSET),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ALLOW_DELEGATION)),
+					Helper.stringList(DomainRelationship.SELECT_NAME, DomainRelationship.SELECT_ID), null);
+
+			return new MapList(actionTaskMap);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getColumnStatusTablePQCNCRSummaryReportAT(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("currentObjectId");
+			final ActionTasks ACTIONTASKS = ActionTasks.getInstance();
+			int status = ACTIONTASKS.getActionTaskDueDateStatus(context, DomainObject.newInstance(context, objectId));
+			switch (status) {
+			case 0:
+				return Helper.getI18NString(context, Helper.StringResource.ACT, "ActionTasks.Table.ACTSummary.Column.Status.Complete1");
+			case 1:
+				return Helper.getI18NString(context, Helper.StringResource.ACT, "ActionTasks.Table.ACTSummary.Column.Status.NotComplete");
+			case 2:
+				return Helper.getI18NString(context, Helper.StringResource.ACT, "ActionTasks.Table.ACTSummary.Column.Status.Overdue");
+			case 3:
+				return Helper.getI18NString(context, Helper.StringResource.ACT, "ActionTasks.Table.ACTSummary.Column.Status.NotComplete");
+			}
+			return DomainConstants.EMPTY_STRING;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getCAPAForSummaryReport(Context context, String[] args) throws NCRException {
+		try {
+			List<Map<?, ?>> capaMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String ncrObjectId = (String) programMap.get("objectId");
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CAPA);
+			sbTypePattern.append(",");
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+			DomainObject ncrObj = DomainObject.newInstance(context, ncrObjectId);
+			capaMap = QueryUtil.getRelatedObjects(context, ncrObj, "relationship_DataSource", sbTypePattern.toString(),
+					Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 1, null,
+					null);
+			return new MapList(capaMap);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getWhereUsedForSummaryReport(Context context, String[] args) throws NCRException {
+		try {
+			List<Map<?, ?>> productControlMap = null;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String ncrObjectId = (String) programMap.get("objectId");
+			DomainObject ncrObj = DomainObject.newInstance(context, ncrObjectId);
+			productControlMap = ncrObj.getRelatedObjects(context, DomainConstants.QUERY_WILDCARD, DomainConstants.QUERY_WILDCARD,
+					Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0,
+					new String(), new String(), (short) 0, DomainObject.CHECK_HIDDEN, DomainObject.PREVENT_DUPLICATES, DomainObject.PAGE_SIZE, null,
+					null, null, DomainObject.EMPTY_STRING, "", DomainObject.FILTER_STR_AND_ITEM);
+			return new MapList(productControlMap);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public void checkMandatoryFieldsFormPQCNCRBasicInfo(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			final String STR_NCR_DEFECT_TYPE = (String) requestMap.get(NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE);
+			final String STR_NCR_SITE_FOUND_OID = (String) requestMap.get(NCRConstants.NCR_SITE_FOUND_OID);
+			final String STR_NCR_SUPPLIER_OID = (String) requestMap.get(NCRConstants.NCR_SUPPLIER_OID);
+			final String STR_NCR_SUPPLIER_LOCATION_OID = (String) requestMap.get(NCRConstants.NCR_SUPPLIER_LOCATION);
+			if (NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL.equalsIgnoreCase(STR_NCR_DEFECT_TYPE)) {
+				if ((Helper.isNullOrEmpty(STR_NCR_SUPPLIER_OID) && Helper.isNullOrEmpty(STR_NCR_SUPPLIER_LOCATION_OID)
+						&& Helper.isNullOrEmpty(STR_NCR_SITE_FOUND_OID)))
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierInfoMandatoryForDefectTypeExternal"));
+				else if (Helper.isNullOrEmpty(STR_NCR_SITE_FOUND_OID))
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SiteFoundMandatoryForDefectTypeExternal"));
+				else if (Helper.isNullOrEmpty(STR_NCR_SUPPLIER_OID))
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierNameMandatoryForDefectTypeExternal"));
+				else if (Helper.isNullOrEmpty(STR_NCR_SUPPLIER_LOCATION_OID))
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.SupplierSiteMandatoryForDefectTypeExternal"));
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Object getContextObjAsProduct(Context context, String[] args) throws NCRException {
+		try {
+			StringBuilder strReturnContextObj = new StringBuilder();
+			StringBuffer sbReturnString = new StringBuffer();
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+			String strContextObjectId = (String) requestMap.get("objectId");
+			String strResolvedTo = (String) requestMap.get("resolvedTo");
+			if (UIUtil.isNotNullAndNotEmpty(strContextObjectId) && UIUtil.isNullOrEmpty(strResolvedTo)) {
+				DomainObject impactedItemDo = DomainObject.newInstance(context, strContextObjectId);
+				if (Helper.getTypeKindOf(context, impactedItemDo, DomainSymbolicConstants.SYMBOLIC_type_Issue).containsValue(Boolean.TRUE)) {
+					List<Map<?, ?>> impactedItems = QueryUtil.getRelatedObjects(context, impactedItemDo,
+							DomainSymbolicConstants.SYMBOLIC_relationship_Issue, DomainConstants.QUERY_WILDCARD,
+							Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_ID),
+							Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 1, null, null);
+					for (Map<?, ?> impactedItem : impactedItems) {
+						if (!Helper.isNullOrEmpty(strReturnContextObj.toString())) {
+							strReturnContextObj = strReturnContextObj.append(" | ");
+					}
+						strReturnContextObj = strReturnContextObj.append((String) impactedItem.get(DomainConstants.SELECT_NAME));
+					}
+					}
+				else {
+					strReturnContextObj = strReturnContextObj.append(impactedItemDo.getInfo(context, DomainConstants.SELECT_NAME));
+				}
+
+				}
+			sbReturnString.append("<input type=\"text\" name=\"Product1Display\" id=\"\" readonly=\"true\" value=\"" + strReturnContextObj.toString()
+					+ "\" maxlength=\"\" size=\"\"></input>");
+			return sbReturnString.toString();
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static boolean checkProductCreateContext(Context context, String args[]) throws NCRException {
+		boolean bFlag = false;
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+			String strContextObjectId = (String) requestMap.get("parentOID");
+			String strResolvedTo = (String) programMap.get("resolvedTo");
+			if (UIUtil.isNotNullAndNotEmpty(strContextObjectId) && UIUtil.isNullOrEmpty(strResolvedTo)) {
+				bFlag = true;
+			}
+			return bFlag;
+		}
+		catch (Exception e) {
+			return bFlag;
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static boolean checkContextForCreateProduct(Context context, String args[]) throws NCRException {
+		return !checkProductCreateContext(context, args);
+	}
+
+	public String getFormPQCNCRCreateFeildDescription(Context context, String[] args) throws NCRException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+			String strProductOID = (String) requestMap.get(NCRConstants.OBJECTID);
+			SimpleDateFormat dateFormat = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(), context.getLocale());
+			if (!Helper.isNullOrEmpty(strProductOID)) {
+				DomainObject impactedItem = DomainObject.newInstance(context, strProductOID);
+				if (Helper.getTypeKindOf(context, impactedItem, DomainSymbolicConstants.SYMBOLIC_type_Issue).containsValue(Boolean.TRUE)) {
+					return impactedItem.getDescription(context);
+				}
+			}
+			return DomainConstants.EMPTY_STRING;
+		}
+
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public void setFormPQCNCRCreateFeildDescription(Context context, String[] args) throws NCRException {
+		try {
+			// Not required as description as update happens via create JPO and
+			// update program is mandatory for field type program
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean accessCommandPQCNCRCreateSlidein(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> progMap = JPO.unpackArgs(args);
+			String objectId = (String) progMap.get("objectId");
+			if (Helper.isNullOrEmpty(objectId)) {
+				return true;
+			}
+			DomainObject obj = DomainObject.newInstance(context, objectId);
+			if (((Helper.getTypeKindOf(context, obj, DomainSymbolicConstants.SYMBOLIC_type_Issue)).containsValue(Boolean.TRUE))) {
+				String currentState = obj.getInfo(context, DomainConstants.SELECT_CURRENT);
+				StringBuilder busWhere = new StringBuilder();
+				busWhere.append("type==NCR");
+				if ((currentState.equals("Assign") || currentState.equals("Active") || currentState.equals("Review"))
+						&& Helper.countConnectionsOnObject(context, obj, DomainSymbolicConstants.SYMBOLIC_relationship_ResolvedTo,
+								NCRConstants.RELATIONSHIP_DIRECTION_FROM, busWhere.toString()) == 0)
+					return true;
+			}
+			else if (((Helper.getTypeKindOf(context, obj, DomainSymbolicConstants.SYMBOLIC_type_Issue)).containsValue(Boolean.FALSE))) {
+				return true;
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getConnectedChanges(Context context, String[] args) throws Exception {
+		MapList totalRelatedListCAs = new MapList();
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		String strObjectId = (String) paramMap.get(ChangeConstants.OBJECT_ID);
+		NCRService NCRService = getNCRService(context);
+		totalRelatedListCAs.addAll(NCRService.getChanges(context, DomainObject.newInstance(context, strObjectId)));
+		return totalRelatedListCAs;
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeConnectedDataSource(Context context, String[] args) throws NCRException {
+		try {
+			final StringList slExcludeContacts = Helper.stringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String strParentOID = (String) programMap.get(NCRConstants.PARENT_OID);
+			DomainObject dmoNCR = DomainObject.newInstance(context, strParentOID);
+			List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					DomainConstants.QUERY_WILDCARD, Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+					true, false, (short) 1, null, null);
+			returnMap.forEach(item -> {
+				slExcludeContacts.add((String)item.get(DomainConstants.SELECT_ID));
+			});
+			return slExcludeContacts;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public void connectNewDataSource(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(NCRConstants.PARAMMAP);
+			String newObjectId = (String) paramMap.get("newObjectId");
+			String objectId = (String) requestMap.get(NCRConstants.OBJECTID);
+			NCRUtil.connectObjects(context, DomainObject.newInstance(context, newObjectId), NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					DomainObject.newInstance(context, objectId), null);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String connectAddExistingDataSource(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String[] emxTableRowId = (String[]) programMap.get(NCRConstants.EMX_TABLE_ROW_ID);
+			final String[] objectId = (String[]) programMap.get(NCRConstants.OBJECTID);
+			if (!Helper.isNullOrEmpty(emxTableRowId)) {
+				List<String> listRelationshipIds = new ArrayList<>();
+				listRelationshipIds = EmxTableRowId.getTableRowIds(emxTableRowId).stream().map(EmxTableRowId::getObjectId)
+						.collect(Collectors.toList());
+				Helper.runWithSuperUser(context, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws LSAException {
+						String objID = (String) args[0];
+						List<String> listRelIds = (List<String>) args[1];
+						final String relationship_data_source = PropertyUtil.getSchemaProperty(context,
+								NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE);
+						try {
+							DomainRelationship.connect(context, DomainObject.newInstance(context, objID), relationship_data_source, false,
+									listRelIds.toArray(new String[listRelIds.size()]));
+						}
+						catch (Exception e) {
+							throw new NCRException(e);
+						}
+						return null;
+					}
+				}, objectId[0], listRelationshipIds);
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshParentOpenerWindow");
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String removeDataSource(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String[] emxTableRowId = (String[]) programMap.get(NCRConstants.EMX_TABLE_ROW_ID);
+			List<String> listRelationshipIds = new ArrayList<>();
+			if (!Helper.isNullOrEmpty(emxTableRowId)) {
+				listRelationshipIds = EmxTableRowId.getTableRowIds(emxTableRowId).stream().map(EmxTableRowId::getRelationshipId)
+						.collect(Collectors.toList());
+				Helper.runWithSuperUser(context, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws LSAException {
+						List<String> listRelIds = (List<String>) args[0];
+						try {
+							DomainRelationship.disconnect(context, listRelIds.toArray(new String[listRelIds.size()]));
+						}
+						catch (Exception e) {
+							throw new NCRException(e);
+						}
+						return null;
+					}
+				}, listRelationshipIds);
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpenerWindow");
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<?, ?> getRangeFormPQCNCRBasicInfoFieldClosureType(Context context, String args[]) throws NCRException {
+		try {
+			HashMap closureType = new HashMap();
+			StringList closureTypeRange = new StringList(3);
+			StringList closureTypeRangeI18n = new StringList(3);
+			closureTypeRange.add(DomainConstants.EMPTY_STRING);
+			closureTypeRangeI18n.add(DomainConstants.EMPTY_STRING);
+			if (NCRUtil.isQICInstalled(context)) {
+				closureTypeRange.add(NCRConstants.ClosureType.CAPA.toString());
+				closureTypeRangeI18n.add(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.Common.CAPA"));
+			}
+			closureTypeRange.add(NCRConstants.ClosureType.CHANGE.toString());
+			closureTypeRangeI18n.add(Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.Common.Change"));
+			closureType.put("field_choices", closureTypeRange);
+			closureType.put("field_display_choices", closureTypeRangeI18n);
+			return closureType;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+
+	}
+
+	public MapList getDynamicFieldsForFormPQCNCRCreate(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			MapList returnColumnList = new MapList();
+			StringBuilder sbType = new StringBuilder();
+			StringBuilder sbState = new StringBuilder();
+			Map<String, Map<String, Object>> allowedItems = NCAllowedItems.getInstance(context).getAllowedItems();
+			allowedItems.forEach((k, v) -> {
+				if (!sbType.toString().isEmpty()) {
+					sbType.append(',');
+					sbState.append(',');
+				}
+				sbType.append(v.get(NCAllowedItems.ORIGINAL_TYPE));
+				sbState.append(v.get(NCAllowedItems.ORIGINAL_POLICY)).append('.').append(v.get(NCAllowedItems.ORIGINAL_RELEASE_STATE));
+			});
+			if (!sbType.toString().isEmpty()) {
+				sbType.append(":CURRENT=").append(sbState.toString());
+			}
+			Map<String, Object> field = new HashMap<>();
+			Map<String, String> settings = new HashMap<String, String>();
+			field.put("name", "Product");
+			field.put("label", Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.Command.PQCNCRImpactedItems"));
+			settings.put("Required", "true");
+			settings.put("Registered Suite", "LQINCR");
+			// For Create NCR context
+			if (!checkProductCreateContext(context, args)) {
+				field.put("range", "../common/emxFullSearch.jsp?field=TYPES=" + sbType.toString()
+						+ "&table=AEFGeneralSearchResults&targetLocation=windowshade&submitAction=refreshCaller&selection=multiple&showInitialResults=true&submitURL=../common/AEFSearchUtil.jsp");
+				settings.put("Show Clear Button", "true");
+			}
+			else {
+				// for Product and Issue Context
+				settings.put("Editable", "false");
+				settings.put("Field Type", "programHTMLOutput");
+				settings.put("function", "getContextObjAsProduct");
+				settings.put("program", "com.dassault_systemes.enovia.lsa.ncr.services.ui.NCR");
+			}
+			field.put("settings", settings);
+			returnColumnList.add(field);
+			return returnColumnList;
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public HashMap<?, ?> preProcessCheckForEdit(Context context, String[] args) throws NCRException {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(NCRConstants.REQUESTMAP);
+			final String STR_PRODUCT_CONTROL_ID = (String) requestMap.get(NCRConstants.OBJECTID);
+			DomainObject dmoProductControl = DomainObject.newInstance(context, STR_PRODUCT_CONTROL_ID);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(NCRConstants.FORMMAP);
+			MapList formFieldList = (MapList) formMap.get(NCRConstants.FIELDS);
+			final String STR_STATE = dmoProductControl.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+			formFieldList.parallelStream().forEach(object ->{
+				Map<?, ?> fieldMap = (Map<?, ?>) object;
+				String  fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+				Map<String, String>  settingsMap = (Map<String, String>) fieldMap.get(NCRConstants.SETTINGS);
+				if (fieldName.equalsIgnoreCase("ClosureType")) {
+					if (STR_STATE.equalsIgnoreCase("Review")) {
+						settingsMap.put("Editable", "true");
+					}
+					else {
+						settingsMap.put("Editable", "false");
+					}
+				}
+				
+				
+			});
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return returnMap;
+	}
+}
+

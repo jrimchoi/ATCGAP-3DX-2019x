@@ -1,0 +1,156 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtRiskAssessmentSummaryBase} {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRiskMgmtHazardResidualRiskReportData(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String ATTRIBUTE_DISCLOSE_RESIDUAL_RISK = RiskMgmtSymNames.SYM_ATTR_DISCLOSE_RESIDUAL_RISK.get(context);
+			List<Map<?, ?>> hazardMapList = new ArrayList<>();
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String productId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(productId)) {
+				HazardContext hazardContext = new HazardContext(productId);
+				StringBuilder objectWhere = new StringBuilder(DomainObject.getAttributeSelect(ATTRIBUTE_DISCLOSE_RESIDUAL_RISK)).append(" == '")
+						.append("Yes").append("'");
+				hazardMapList = hazardContext.getHazards(context,
+						RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainObject.getAttributeSelect(ATTRIBUTE_DISCLOSE_RESIDUAL_RISK)), null,
+						objectWhere.toString());
+			}
+			MapList mapList = new MapList(hazardMapList);
+			if (!RiskMgmtUtil.isNullOrEmpty(mapList)) {
+				for (Object object : mapList) {
+					Map map = (Map) object;
+					String level = (String) map.get(DomainConstants.SELECT_LEVEL);
+					if (!"1".equals(level)) {
+						map.put(DomainConstants.SELECT_LEVEL, "1");
+					}
+				}
+			}
+			return mapList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardResidualRiskReportColumnResidualRisk(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String ATTRIBUTE_RESIDUAL_RISK = RiskMgmtSymNames.SYM_ATTR_RESIDUAL_RISK.get(context);
+			return retrieveColumnValues(context, args, DomainRelationship.getAttributeSelect(ATTRIBUTE_RESIDUAL_RISK));
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardResidualRiskReportColumnDisclosureInformation(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String ATTRIBUTE_RESIDUAL_RISK_DISCLOSURE_INFORMATION = RiskMgmtSymNames.SYM_ATTR_RESIDUAL_RISK_DISCLOSURE_INFORMATION.get(context);
+			return retrieveColumnValues(context, args, DomainRelationship.getAttributeSelect(ATTRIBUTE_RESIDUAL_RISK_DISCLOSURE_INFORMATION));
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRiskMgmtHazardResidualRiskReportReductionOptionsData(Context context, String[] args) throws RiskMgmtException {
+		List<Map<?, ?>> mlResult = new ArrayList<>();
+		final String ATTRIBUTE_RESIDUAL_RISK = RiskMgmtSymNames.SYM_ATTR_RESIDUAL_RISK.get(context);
+		final String ATTRIBUTE_RESIDUAL_RISK_DISCLOSURE_INFORMATION = RiskMgmtSymNames.SYM_ATTR_RESIDUAL_RISK_DISCLOSURE_INFORMATION.get(context);
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				mlResult = hazard.getRiskReductionOptions(context, RiskMgmtUtil.stringList(DomainConstants.SELECT_ID), RiskMgmtUtil.stringList(
+						DomainRelationship.SELECT_ID, DomainRelationship.getAttributeSelect(ATTRIBUTE_RESIDUAL_RISK),
+						DomainRelationship.getAttributeSelect(ATTRIBUTE_RESIDUAL_RISK_DISCLOSURE_INFORMATION)));
+			}
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+		return new MapList(mlResult);
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForHazardResidualRiskReport(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<String> arrProductIds = new ArrayList<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strProductId = DomainConstants.EMPTY_STRING;
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			StringBuilder productIds = new StringBuilder();
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrProductIds.add(rowId.getObjectId());
+					productIds.append(rowId.getObjectId());
+					productIds.append(RiskMgmtConstants.COMMA);
+				}
+				if (!RiskMgmtUtil.isNullOrEmpty(arrProductIds)) {
+					String[] strArrayParoductIds = arrProductIds.toArray(new String[arrProductIds.size()]);
+					strProductId = strArrayParoductIds[0];
+					Map<String, Map<String, Boolean>> infoMap = RiskMgmtUtil.getTypeKindOf(context, new String[] { strProductId },
+							SYM_TYPE_PRODUCTS.toString());
+					for (Map<String, Boolean> valueMap : infoMap.values()) {
+						if (!(valueMap.containsValue(Boolean.TRUE)))
+							return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG,
+									RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.SelectOnlyProductError"));
+					}
+
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_SHOW_RESIDUAL_RISK_REPORT, strProductId);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForProductHazardResidualRiskReport(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strParentId = (String[]) programMap.get(RiskMgmtConstants.PARENT_OID);
+			String strProductId = !RiskMgmtUtil.isAnyNullOrEmpty(strParentId) ? strParentId[0] : DomainConstants.EMPTY_STRING;
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				String hazardSelectionError = RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE,
+						"RiskMgmt.Hazard.Message.DoNotSelectHazardError");
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_SHOW_RESIDUAL_RISK_REPORT, strProductId,
+						hazardSelectionError);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_SHOW_RESIDUAL_RISK_REPORT, strProductId);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

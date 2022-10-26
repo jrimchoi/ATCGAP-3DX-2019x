@@ -1,0 +1,1265 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Vector;
+
+import javax.json.Json;
+import javax.json.JsonArrayBuilder;
+import javax.json.JsonObjectBuilder;
+
+import com.dassault_systemes.enovia.snapshot.services.Helper;
+import com.dassault_systemes.enovia.snapshot.services.QueryUtil;
+import com.dassault_systemes.enovia.snapshot.services.SnapshotConstants;
+import com.dassault_systemes.enovia.snapshot.services.SnapshotException;
+import com.dassault_systemes.enovia.snapshot.services.SnapshotService;
+import com.dassault_systemes.enovia.snapshot.services.admin.RootAdmin;
+import com.dassault_systemes.enovia.snapshot.services.admin.SnapshotAdmin;
+import com.dassault_systemes.enovia.snapshot.services.data.SnapshotInfo;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UIMenu;
+import com.matrixone.apps.framework.ui.UITableCommon;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	private static final String	LEVEL				= "level";
+	private static final String	SELECT_EXPRESSION	= "selectExpression";
+	private static final String	OBJECT_ID			= "objectId";
+	private static final String	REGISTERED_SUITE	= "Registered Suite";
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets SnapshotService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return SnapshotService implementation reference
+	 * @throws SnapshotException
+	 *             if operation fails
+	 */
+	private SnapshotService getSnapshotService(Context context) throws SnapshotException {
+		try {
+			Class<?> implClass = Class.forName("com.dassault_systemes.enovia.snapshot.services.impl.SnapshotServiceImpl", false,
+					this.getClass().getClassLoader());
+			SnapshotService SnapshotService = (SnapshotService) implClass.newInstance();
+			return SnapshotService;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * get Action column for Snapshot List table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return Vector<String>
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ColJPOCallable
+	public Vector<String> getTableSnapshotColumnActions(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramList");
+			String objectId = (String) paramMap.get(OBJECT_ID);
+			String encodedObjectId = XSSUtil.encodeForJavaScript(context, objectId);
+
+			MapList objectList = (MapList) programMap.get("objectList");
+			String snapshot = (String) paramMap.get("snapshot");
+			String encodedSnapshot = XSSUtil.encodeForJavaScript(context, snapshot);
+
+			String strViewAlt = Helper.getI18NString(context, "Snapshot.Table.SnapshotList.Action.View");
+			String strViewJS = XSSUtil.encodeForJavaScript(context, strViewAlt);
+
+			String strCompareAlt = Helper.getI18NString(context, "Snapshot.Table.SnapshotList.Action.Compare");
+			String strCompareJS = XSSUtil.encodeForJavaScript(context, strCompareAlt);
+
+			SnapshotService service = getSnapshotService(context);
+			String tableName = service.getViewTableName(context, snapshot);
+			String strEncodedTableName = XSSUtil.encodeForJavaScript(context, tableName);
+
+			Vector<String> actionColumnHTML = new Vector<String>();
+
+			for (Object object : objectList) {
+				Map<String, String> mapObj = (Map<String, String>) object;
+				String fileName = mapObj.get("format.file.name");
+				String objId = mapObj.get(DomainConstants.SELECT_ID);
+				String encodedObjId = XSSUtil.encodeForJavaScript(context, objId);
+				String objName = mapObj.get(DomainConstants.SELECT_NAME);
+				if (Helper.isNullOrEmpty(objName) && !Helper.isNullOrEmpty(objId)) {
+					objName = (String) QueryUtil.getInfo(context, new String[] { objId }, Helper.stringList(DomainConstants.SELECT_NAME)).get(0)
+							.get(DomainConstants.SELECT_NAME);
+				}
+				String tableHeader = MessageUtil.getMessage(context, null, "Snapshot.Structure.Header", new String[] { objName }, null,
+						context.getLocale(), SnapshotConstants.PROPERTY);
+				StringBuilder strViewURL = new StringBuilder();
+				String encodedFilename = XSSUtil.encodeForJavaScript(context, fileName);
+
+				strViewURL.append(
+						"../common/emxIndentedTable.jsp?expandProgram=com.dassault_systemes.enovia.snapshot.services.ui.Snapshot:actionPerformView&SuiteKey=Snapshot&table=")
+						.append(strEncodedTableName)
+						.append("&snapshotView=true&mode=view&displayView=details&expandLevelFilter=false&emxExpandFilter=All&objId=")
+						.append(encodedObjId).append("&filename=").append(encodedFilename).append("&snapshot=").append(encodedSnapshot)
+						.append("&header=").append(XSSUtil.encodeForJavaScript(context, tableHeader));
+
+				StringBuilder compareURL = new StringBuilder();
+				compareURL.append(
+						"../Snapshot/emxAdvancedStructureCompare.jsp?form=SnapshotCompareForm&suiteKey=Snapshot&header=Snapshot.Compare.Header&displayView=details&expandLevelFilter=false&AppSuiteKey=Snapshot&objectId=")
+						.append(encodedObjId)
+						.append("&submitURL=..%252FSnapshot%252FExecute.jsp%253FexecuteAction%253Dcom.dassault_systemes.enovia.snapshot.services.ui.Snapshot%253AactionCompareSnapshots%2526suiteKey%253DSnapshot%2526snapshot%253D")
+						.append(encodedSnapshot).append("%2526snapshotName%253D").append(objName).append("%2526snapshotPRT%253D")
+						.append(encodedObjectId);
+
+				StringBuilder strHTML = new StringBuilder();
+				String submitViewWithCSRF = "javascript:showWizard(\"" + strViewURL + "\");";
+				String submitCompareWithCSRF = "javascript:submitWithCSRF(\"" + compareURL
+						+ "\", emxUICore.findFrame(getTopWindow(), 'listHidden'));";
+				strHTML.append("<a href=\"").append(XSSUtil.encodeForXML(context, submitViewWithCSRF)).append(" \">");
+				strHTML.append("<img border=\"0\" src=\"../common/images/iconActionViewDetails.png\" title=\"").append(strViewJS).append("\" alt=\"")
+						.append(strViewJS).append("\"></img>");
+				strHTML.append("</a>");
+				strHTML.append("<a href=\"").append(XSSUtil.encodeForXML(context, submitCompareWithCSRF)).append(" \">");
+				strHTML.append("<img border=\"0\" src=\"../common/images/iconActionCompare.png\" title=\"").append(strCompareJS).append("\" alt=\"")
+						.append(strCompareJS).append("\"></img>");
+				strHTML.append("</a>");
+				actionColumnHTML.add(strHTML.toString());
+			}
+			return actionColumnHTML;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * get Name column for Snapshot List table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return Vector<String>
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ColJPOCallable
+	public Vector<String> getTableSnapshotColumnName(Context context, String[] args) throws SnapshotException {
+		final String POLICY_MANUFACTURER_EQUIVALENT = PropertyUtil.getSchemaProperty(context, "relationship_ManufacturerEquivalent");
+		Vector<String> basicList = new Vector<String>();
+		try {
+			Map<?, ?> hmProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlObjects = (MapList) hmProgram.get("objectList");
+			Map<?, ?> paramListMap = (Map<?, ?>) hmProgram.get("paramList");
+			String isStructureCompare = (String) paramListMap.get("IsStructureCompare");
+			String reportFormat = (String) paramListMap.get("reportFormat");
+			String exportFormat = (String) paramListMap.get("exportFormat");
+
+			if ("true".equalsIgnoreCase(isStructureCompare) || (!Helper.isNullOrEmpty(reportFormat) && !Helper.isNullOrEmpty(exportFormat))) {
+				for (Object object : mlObjects) {
+					Map<String, String> mapObj = (Map<String, String>) object;
+					String name = (String) mapObj.get(DomainConstants.SELECT_NAME);
+					String id = (String) mapObj.get(DomainConstants.SELECT_ID);
+					if (Helper.isNullOrEmpty(name)) {
+						DomainObject snapshotDom = DomainObject.newInstance(context, id);
+						name = snapshotDom.getInfo(context, DomainObject.SELECT_NAME);
+					}
+					basicList.add(name);
+				}
+			}
+			else {
+				List<Map<?, ?>> objInfo = new ArrayList<>();
+				String[] objIdArr = new String[mlObjects.size()];
+				for (int i = 0; i <= mlObjects.size() - 1; i++) {
+					Map<String, String> mapObj = (Map<String, String>) mlObjects.get(i);
+					String objectId = mapObj.get("objectId");
+					if (Helper.isNullOrEmpty(objectId)) {
+						objectId = mapObj.get("oid");
+					}
+					objIdArr[i] = objectId;
+				}
+
+				if (!Helper.isNullOrEmpty(objIdArr)) {
+					objInfo = QueryUtil.getInfo(context, objIdArr, Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_ID,
+							DomainConstants.SELECT_MODIFIED, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_POLICY));
+				}
+
+				Map<String, Map<?, ?>> idMapOfDB = new HashMap<String, Map<?, ?>>();
+				objInfo.forEach(objDBMap -> idMapOfDB.put((String) objDBMap.get(DomainConstants.SELECT_ID), objDBMap));
+
+				for (Object object : mlObjects) {
+					Map<String, String> mapObj = (Map<String, String>) object;
+					Map objMap = new HashMap();
+					String format = mapObj.get("format.file.format");
+					String isRootNode = mapObj.get("Root Node");
+					String objectId = mapObj.get("objectId");
+					if (Helper.isNullOrEmpty(objectId)) {
+						objectId = mapObj.get("oid");
+					}
+
+					String strName = (String) mapObj.get(DomainConstants.SELECT_NAME);
+					objMap = idMapOfDB.get(objectId);
+					if (!Helper.isNullOrEmpty(objMap)) {
+						if ("true".equalsIgnoreCase(isRootNode)) {
+							basicList.add(strName);
+						}
+						else {
+							if (!Helper.isNullOrEmpty(format)) {
+								basicList.add(XSSUtil.encodeForHTMLAttribute(context, strName));
+							}
+							else {
+								String strType = (String) objMap.get(DomainConstants.SELECT_TYPE);
+								String strPolicy = (String) objMap.get(DomainConstants.SELECT_POLICY);
+								String strTypeAlias = FrameworkUtil.getAliasForAdmin(context, "type", strType, true);
+								String typeIcon = DomainConstants.EMPTY_STRING;
+								try {
+									if (POLICY_MANUFACTURER_EQUIVALENT.equalsIgnoreCase(strPolicy)) {
+										typeIcon = "iconSmallMEP.gif";
+									}
+									else {
+										typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon." + strTypeAlias);
+									}
+								}
+								catch (Exception e) {
+									typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon.defaultType");
+								}
+								StringBuilder strNameBuffer = new StringBuilder();
+								boolean isModifiedDateEqual = false;
+								boolean flagIsValidObjectDate = true;
+								try {
+									String strxmlModifiedDate = mapObj.get(DomainConstants.SELECT_MODIFIED);
+									String strActualModifiedDate = (String) objMap.get(DomainConstants.SELECT_MODIFIED);
+									Date xmlModifiedDate = eMatrixDateFormat.getJavaDate(strxmlModifiedDate);
+									Date actualModifiedDate = eMatrixDateFormat.getJavaDate(strActualModifiedDate);
+									isModifiedDateEqual = xmlModifiedDate.equals(actualModifiedDate);
+								}
+								catch (Exception e) {
+									flagIsValidObjectDate = false;
+								}
+								if (isModifiedDateEqual && flagIsValidObjectDate) {
+									strNameBuffer.append("<img border=\"0\" src=\"images/");
+									strNameBuffer.append(XSSUtil.encodeForHTMLAttribute(context, typeIcon));
+									strNameBuffer.append("\"></img>");
+									strNameBuffer.append("<a href=\"JavaScript:showModalDialog('../common/emxTree.jsp?objectId=");
+									strNameBuffer.append(XSSUtil.encodeForJavaScript(context, objectId));
+									strNameBuffer.append("','700','600','false','popup')\">");
+									strNameBuffer.append(XSSUtil.encodeForHTML(context, strName));
+									strNameBuffer.append("</a>");
+								}
+								else {
+									strNameBuffer.append(strName);
+								}
+								basicList.add(strNameBuffer.toString());
+							}
+						}
+					}
+					else {
+						basicList.add(strName);
+					}
+				}
+			}
+			return basicList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * get Basic column info for Snapshot List table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return Vector<String>
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ColJPOCallable
+	public Vector<String> getTableSnapshotColumnBasics(Context context, String[] args) throws SnapshotException {
+		Vector<String> basicList = new Vector<String>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			Map<?, ?> columnMap = (Map<?, ?>) programMap.get("columnMap");
+			Map<?, ?> settings = (Map<?, ?>) columnMap.get("settings");
+
+			String select = (String) settings.get("selectExpression");
+			String propertyFileName = Helper.getProperty(context, "eServiceSuiteFramework.StringResourceFileId");
+
+			for (Object object : objectList) {
+				Map<String, String> mapObj = (Map<String, String>) object;
+				String strValue = mapObj.get(select);
+				if (!Helper.isNullOrEmpty(strValue)) {
+					StringBuilder strProperty = new StringBuilder(50);
+					if (!strValue.toString().contains("Access Denied")) {
+						switch (select.toLowerCase()) {
+						case "policy":
+							strProperty.append("emxFramework.Policy.");
+							break;
+						case "state":
+						case "current":
+							strProperty.append("emxFramework.State.");
+							String policy = mapObj.get("policy");
+							if (!Helper.isNullOrEmpty(policy)) {
+								strProperty.append(policy.replace(' ', '_')).append('.');
+							}
+							break;
+						case "type":
+							strProperty.append("emxFramework.Type.");
+							break;
+						case "revision":
+						case "owner":
+						case "name":
+						case "originated":
+						case "modified":
+							break;
+						default:
+							System.out.println("unsupported admin type : " + select);
+							break;
+						}
+						strProperty.append(strValue.replace(' ', '_'));
+					}
+					else {
+						strProperty = new StringBuilder("emxFramework.Access.Denied");
+					}
+					if (!Helper.isNullOrEmpty(strProperty.toString()) && !strProperty.toString().endsWith(".")) {
+						strValue = EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), strProperty.toString());
+					}
+					basicList.add(strValue);
+				}
+				else {
+					basicList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return basicList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * get Originated column for Snapshot List table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return Vector<String>
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ColJPOCallable
+	public Vector<String> getTableSnapshotColumnOriginated(Context context, String[] args) throws SnapshotException {
+		Vector<String> originatedList = new Vector<String>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			for (Object object : objectList) {
+				Map<String, String> mapObj = (Map<String, String>) object;
+				String originated = mapObj.get("originated");
+				if (!Helper.isNullOrEmpty(originated)) {
+					originatedList.add(originated);
+				}
+				else {
+					originatedList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return originatedList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public String actionGetSnapshotStructureInfo(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objId = (String[]) programMap.get(OBJECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, objId[0]);
+			String appName = domObj.getAttributeValue(context,
+					PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE));
+			SnapshotService service = getSnapshotService(context);
+			String tableName = service.getViewTableName(context, appName);
+			String suiteKey = Helper.getSuiteKeyFromappName(context, appName);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "openURLToViewSnapshotStructure", appName, objId[0], tableName,
+					suiteKey);
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * return Snapshot structure for given object
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return MapList
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList actionPerformView(Context context, String[] args) throws SnapshotException {
+		try {
+			final String LESDMR_BASELINE_PLANT_CUSTOM_FILTER = "LESDMRBaselinePlantCustomFilter";
+			final String LESDMR_BASELINE_VIEW_FILTER = "LESDMRBaselineViewFilter";
+			Map<String, String> programMap = JPO.unpackArgs(args);
+			String objectId = programMap.get("objectId");
+			String level = programMap.get(LEVEL);
+			List<Map<?, ?>> listMapSnapshotStructure = new ArrayList<>();
+			SnapshotService SnapshotService = getSnapshotService(context);
+			String appName = DomainObject.EMPTY_STRING;
+			String viewFilter = (String) programMap.get(LESDMR_BASELINE_VIEW_FILTER);
+			String plantFilter = (String) programMap.get(LESDMR_BASELINE_PLANT_CUSTOM_FILTER);
+			if (Helper.isNullOrEmpty(level)) {
+
+				String wsdirectory = context.createWorkspace();
+				java.io.File snapshotFile = new java.io.File(wsdirectory);
+
+				// Check if file already checked out then there is no need of
+				// checkout again
+				DomainObject domObj = DomainObject.newInstance(context, objectId);
+				snapshotFile = SnapshotService.checkOutFile(context, domObj);
+
+				SnapshotInfo snapshotInfo = SnapshotService.readDataXML(context, snapshotFile);
+				listMapSnapshotStructure = SnapshotService.convertToListMap(context, snapshotInfo, Boolean.TRUE);
+
+				if (programMap.containsKey("snapshot")) {
+					appName = programMap.get("snapshot");
+					if (Helper.isNullOrEmpty(appName)) {
+						appName = domObj.getAttributeValue(context,
+								PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE));
+					}
+				}
+				else {
+					appName = domObj.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE));
+				}
+
+				List<Map<?, ?>> mlViewAdmindata = SnapshotService.callViewProgram(context, listMapSnapshotStructure, appName);
+				if (!Helper.isNullOrEmpty(mlViewAdmindata)) {
+					listMapSnapshotStructure = mlViewAdmindata;
+				}
+			}
+			int listSize = listMapSnapshotStructure.size() - 1;
+			for (int i = 0; i <= listSize; i++) {
+				Map<Object, Object> mapSnapshotStructure = (Map<Object, Object>) listMapSnapshotStructure.get(i);
+				int currentObjLevel = Integer.parseInt((String) mapSnapshotStructure.get(LEVEL));
+				if (i == listSize) {
+					mapSnapshotStructure.put("hasChildren", "false");
+					continue;
+				}
+				Map<Object, Object> nextSnapshotObject = (Map<Object, Object>) listMapSnapshotStructure.get(i + 1);
+				int nextObjectLevel = Integer.parseInt((String) nextSnapshotObject.get(LEVEL));
+				if (nextObjectLevel <= currentObjLevel) {
+					mapSnapshotStructure.put("hasChildren", "false");
+				}
+				else {
+					mapSnapshotStructure.put("hasChildren", "true");
+				}
+			}
+			MapList mListSnapshotStructure = new MapList(listMapSnapshotStructure);
+			SnapshotAdmin admin = SnapshotService.readAdminXML(context);
+			RootAdmin mainRoot = SnapshotService.getAdminNode(context, admin, appName);
+			String filterProgram = mainRoot.getFilterProgram();
+			if (!Helper.isNullOrEmpty(filterProgram)) {
+				StringList filterProgramMethod = FrameworkUtil.split(filterProgram, ":");
+				Map paramMap = new HashMap();
+				paramMap.put("Maplist", mListSnapshotStructure);
+				paramMap.put("plantFilter", plantFilter);
+				paramMap.put("viewFilter", viewFilter);
+				paramMap.put("strObjID", objectId);
+				String[] packArgs = JPO.packArgs(paramMap);
+				MapList filteredList = JPO.invoke(context, (String) filterProgramMethod.get(0), null, (String) filterProgramMethod.get(1), packArgs,
+						MapList.class);
+				return filteredList;
+			}
+			else {
+				String viewProgram = mainRoot.getProgram();
+				if (!Helper.isNullOrEmpty(viewProgram)) {
+					StringList viewProgramMethod = FrameworkUtil.split(viewProgram, ":");
+					Map<String, List<Map<?, ?>>> parameterMap = new HashMap<String, List<Map<?, ?>>>();
+					parameterMap.put("Maplist", mListSnapshotStructure);
+					String[] computedArgs = JPO.packArgs(parameterMap);
+					MapList orderedSnapshotStructure = JPO.invoke(context, (String) viewProgramMethod.get(0), null, (String) viewProgramMethod.get(1),
+							computedArgs, MapList.class);
+					return orderedSnapshotStructure;
+				}
+			}
+			return mListSnapshotStructure;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns Vector of values for column owner in snapshot List page
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	public Vector<String> getSnapshotStructureColumnOwner(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			Vector<String> nameList = new Vector<String>();
+			for (Object object : objectList) {
+				Map<String, String> mapObj = (Map<String, String>) object;
+				nameList.add(mapObj.get(DomainConstants.SELECT_NAME));
+			}
+			return nameList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns values for dynamic columns in Snapshot structure table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	public Vector<String> getSnapshotStructureTableColumn(Context context, String[] args) throws SnapshotException {
+		Vector<String> returnvector = new Vector<String>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> columnMap = (Map<?, ?>) programMap.get("columnMap");
+			Map<?, ?> settingsMap = (Map<?, ?>) columnMap.get("settings");
+			MapList objectList = (MapList) programMap.get("objectList");
+			SnapshotService service = getSnapshotService(context);
+
+			String strSelectExpr = (String) settingsMap.get(SELECT_EXPRESSION);
+			String strRegSuite = DomainConstants.EMPTY_STRING;
+			List<Map<?, ?>> listMaps = new MapList();
+
+			Map<String, Object> map = new HashMap<>();
+			map.put(SELECT_EXPRESSION, strSelectExpr);
+			map.put(REGISTERED_SUITE, strRegSuite);
+			map.put("objectList", objectList);
+
+			listMaps.add(map);
+
+			returnvector = service.getSnapshotStructureTableColumn(context, map);
+			return returnvector;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns value for field Snapshot1 which is present on
+	 * SansphotStructureCompare form
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	public String getFormSnapshotCompareFieldSnapshot1(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			String strSnapshotName = (String) requestMap.get("snapshotName");
+			return strSnapshotName;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Reloads Snapshot Rev2 field on change of Snapshot2 field value
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@ProgramCallable
+	public Map<String, Object> reloadFormCompareFieldSnapshotRevision2(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<String, Object> returnMap = new HashMap<String, Object>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> fieldValues = (Map<?, ?>) programMap.get("fieldValues");
+			if (!Helper.isNullOrEmpty(fieldValues)) {
+				String snapshot2Id = (String) fieldValues.get("Snapshot2");
+				if (!Helper.isNullOrEmpty(snapshot2Id)) {
+					Map<?, ?> objectInfo = QueryUtil
+							.getInfo(context, new String[] { snapshot2Id }, Helper.stringList(DomainConstants.SELECT_REVISION)).get(0);
+					String revision = (String) objectInfo.get(DomainConstants.SELECT_REVISION);
+					StringList rangeValues = Helper.stringList(revision);
+					returnMap.put("RangeValues", rangeValues);
+					returnMap.put("RangeDisplayValues", rangeValues);
+					returnMap.put("SelectedValues", revision);
+					returnMap.put("SelectedDisplayValue", revision);
+				}
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Function to get Snapshot2 Revision field value
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public Map<?, ?> getFormSnapshotCompareFieldSnapshotRev2(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] snapshot2Id = (String[]) programMap.get("objectId2");
+			Map<?, ?> objectInfo = QueryUtil.getInfo(context, new String[] { snapshot2Id[0] }, Helper.stringList(DomainConstants.SELECT_REVISION))
+					.get(0);
+			String objectRev = (String) objectInfo.get(DomainConstants.SELECT_REVISION);
+			Map<String, String> returnMap = new TreeMap<String, String>();
+			returnMap.put("Snapshot2Rev", objectRev);
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	public Map<String, Object> getRangeFormSnapshotCompareFieldSnapshot2(Context context, String[] args) throws SnapshotException {
+		try {
+			final String ATTRIBUTE_SNAPSHOT_TYPE = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE);
+			Map<String, Object> rangeMap = new HashMap<String, Object>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+
+			String objectId = (String) requestMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+					DomainConstants.SELECT_REVISION);
+
+			StringBuilder sbSnapshotTypeSelectable = new StringBuilder();
+			sbSnapshotTypeSelectable.append("from.").append(DomainObject.getAttributeSelect(ATTRIBUTE_SNAPSHOT_TYPE));
+
+			List<Map<?, ?>> parentInfo = QueryUtil.getRelatedObjects(context, domObj, "relationship_Snapshot", DomainConstants.QUERY_WILDCARD,
+					selectables,
+					Helper.stringList(DomainRelationship.SELECT_ID, "from.name", "from.revision", "from.id", sbSnapshotTypeSelectable.toString()),
+					Boolean.FALSE, Boolean.TRUE, (short) 1, null, DomainConstants.EMPTY_STRING);
+			String strObjectId = (String) parentInfo.get(0).get(DomainConstants.SELECT_ID);
+			String lhssnapshotId = (String) parentInfo.get(0).get("from.id");
+			String appName = (String) parentInfo.get(0).get(sbSnapshotTypeSelectable.toString());
+			SnapshotService service = getSnapshotService(context);
+			DomainObject domObjPart = DomainObject.newInstance(context, strObjectId);
+			List<Map<?, ?>> snapshotList = service.getSnapshots(context, domObjPart, appName, null, "");
+			StringList snapshotNameList = Helper.stringList();
+			StringList snapshotIdList = Helper.stringList();
+			for (Map<?, ?> mapSnapshot : snapshotList) {
+				String snapshotFileName = (String) mapSnapshot.get(DomainConstants.SELECT_NAME);
+				String snapshotId = (String) mapSnapshot.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(snapshotFileName) && !lhssnapshotId.equals(snapshotId)) {
+					snapshotNameList.add(snapshotFileName);
+					snapshotIdList.add(snapshotId);
+				}
+			}
+			if (Helper.isNullOrEmpty(snapshotIdList)) {
+				snapshotIdList.add("-");
+				snapshotNameList.add("-");
+			}
+			rangeMap.put("field_choices", snapshotIdList);
+			rangeMap.put("field_display_choices", snapshotNameList);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Submits indented Table URL on compare report frame
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public String actionCompareSnapshots(Context context, String[] args) throws SnapshotException {
+		try {
+			final String ATTRIBUTE_SNAPSHOT_TYPE = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE);
+
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectId1 = (String[]) programMap.get("objectId1");
+			String[] snapshot1 = (String[]) programMap.get("objectId1");
+			String[] objectId2 = (String[]) programMap.get("Name2fieldValue");
+			String[] snapshot2 = (String[]) programMap.get("Snapshot2");
+
+			final String SELECT_ID = "from[" + PropertyUtil.getSchemaProperty(context, "relationship_Snapshot") + "].to.id";
+
+			String strSnapshot = DomainConstants.EMPTY_STRING;
+			String snapshotParent = DomainConstants.EMPTY_STRING;
+			List<Map<?, ?>> lmInfo = QueryUtil.getInfo(context, objectId1,
+					Helper.stringList(SELECT_ID, DomainObject.getAttributeSelect(ATTRIBUTE_SNAPSHOT_TYPE)));
+			if (!Helper.isNullOrEmpty(lmInfo)) {
+				snapshotParent = (String) lmInfo.get(0).get(SELECT_ID);
+				strSnapshot = (String) lmInfo.get(0).get(DomainObject.getAttributeSelect(ATTRIBUTE_SNAPSHOT_TYPE));
+			}
+
+			if (snapshot2[0].equals("-")) {
+				String errormsg = Helper.getI18NString(context, "Snapshot.Compare.CompareErrorMessage");
+				throw new SnapshotException(errormsg);
+			}
+			if (objectId2 == null) {
+				objectId2 = objectId1;
+			}
+
+			StringBuilder strBuildURL = new StringBuilder();
+
+			SnapshotService service = getSnapshotService(context);
+			String compareTableName = service.getCompareTableName(context, strSnapshot);
+			compareTableName = (compareTableName != null) ? compareTableName : service.getViewTableName(context, strSnapshot);
+			String strEncodedTableName = XSSUtil.encodeForJavaScript(context, compareTableName);
+
+			Map<?, ?> mapTable = UITableCommon.getTable(context, strEncodedTableName);
+			List<Map<?, ?>> mListcolumns = (List<Map<?, ?>>) mapTable.get("columns");
+			StringBuilder strBuildMatchBasedOn = new StringBuilder();
+			for (Map<?, ?> mapcolumn : mListcolumns) {
+				String strName = (String) mapcolumn.get("name");
+				if (strBuildMatchBasedOn == null || strBuildMatchBasedOn.length() == 0) {
+					strBuildMatchBasedOn.append(strName);
+				}
+				else {
+					strBuildMatchBasedOn.append(',').append(strName);
+				}
+			}
+			String sObjectId = objectId1[0] + "," + snapshot2[0];
+			strBuildURL.append("../common/emxIndentedTable.jsp?table=").append(strEncodedTableName).append("&diffCodeIcons=true")
+					.append("&viewMode=true").append("&displayView=details")
+					.append("&IsStructureCompare=TRUE&expandProgram=com.dassault_systemes.enovia.snapshot.services.ui.Snapshot:getSnapshotStructureForCompare&objId1=")
+					.append(objectId1[0]).append("&objId2=").append(objectId2[0]).append("&Snapshot1=").append(snapshot1[0]).append("&Snapshot2=")
+					.append(snapshot2[0]).append("&strObjectId1=").append(objectId1[0]).append("&strObjectId2=").append(snapshot2[0])
+					.append("&matchBasedOn=").append("RID").append("&compareBy=").append(strBuildMatchBasedOn.toString()).append("&snapshot=")
+					.append(strSnapshot).append("&snapshotPRT=").append(snapshotParent).append("&objectId=").append(sObjectId);
+			String[] sReportType = (String[]) programMap.get("reportType");
+			String reportFrame = ("Difference_Only_Report".equals(sReportType[0])) ? "AEFSCDifferenceOnlyReport"
+					: ("Common_Report".equals(sReportType[0])) ? "AEFSCCompareCommonComponents"
+							: ("Unique_toLeft_Report".equals(sReportType[0])) ? "AEFSCBOM1UniqueComponentsReport"
+									: ("Unique_toRight_Report".equals(sReportType[0])) ? "AEFSCBOM2UniqueComponentsReport"
+											: "AEFSCCompleteSummaryResults";
+			strBuildURL.append("&reportType=").append(sReportType[0]);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "submitCompareURLOnFrame", strBuildURL.toString(), reportFrame);
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns Snapshot structure in case of comparision
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getSnapshotStructureForCompare(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			SnapshotService SnapshotService = getSnapshotService(context);
+			java.io.File snapshotFile = SnapshotService.checkOutFile(context, domObj);
+			SnapshotInfo snapshotInfo = SnapshotService.readDataXML(context, snapshotFile);
+			List<Map<?, ?>> listMapSnapshotStructure = SnapshotService.convertToListMap(context, snapshotInfo, Boolean.TRUE);
+			listMapSnapshotStructure.forEach(m -> m.keySet().remove("uuid"));
+			String appName = DomainObject.EMPTY_STRING;
+			if (programMap.containsKey("snapshot")) {
+				appName = (String) programMap.get("snapshot");
+				if (Helper.isNullOrEmpty(appName)) {
+					appName = domObj.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE));
+				}
+			}
+			else {
+				appName = domObj.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE));
+			}
+			List<Map<?, ?>> mlViewAdmindata = SnapshotService.callViewProgram(context, listMapSnapshotStructure, appName);
+			if (!Helper.isNullOrEmpty(mlViewAdmindata)) {
+				listMapSnapshotStructure = mlViewAdmindata;
+			}
+
+			MapList mListStrcuture = new MapList(listMapSnapshotStructure);
+
+			SnapshotAdmin admin = SnapshotService.readAdminXML(context);
+			RootAdmin mainRoot = SnapshotService.getAdminNode(context, admin, appName);
+			String viewProgram = mainRoot.getProgram();
+			if (!Helper.isNullOrEmpty(viewProgram)) {
+				StringList viewProgramMethod = FrameworkUtil.split(viewProgram, ":");
+				Map<String, List<Map<?, ?>>> parameterMap = new HashMap<String, List<Map<?, ?>>>();
+				parameterMap.put("Maplist", mListStrcuture);
+				String[] computedArgs = JPO.packArgs(parameterMap);
+				MapList orderedSnapshotStructure = JPO.invoke(context, (String) viewProgramMethod.get(0), null, (String) viewProgramMethod.get(1),
+						computedArgs, MapList.class);
+				return orderedSnapshotStructure;
+			}
+			return mListStrcuture;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * get OID column for Snapshot Structure display table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return Vector<String>
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ColJPOCallable
+	public Vector<String> getTableSnapshotStructureColumnRID(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Vector<String> listOIDs = new Vector<String>();
+			MapList objectList = (MapList) programMap.get("objectList");
+			for (Object object : objectList) {
+				Map<String, String> mapObj = (Map<String, String>) object;
+				String rid = mapObj.get("rid");
+				listOIDs.add(rid);
+			}
+			return listOIDs;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * OID and RID columns are added in table of view and compare but it is not
+	 * required in case of View so these columns are being hidden via Access
+	 * Program
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return true - if Compare else False
+	 * @throws SnapshotException
+	 */
+	public boolean canViewTableSnapshotStructureColumnIds(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String snapshotView = (String) programMap.get("snapshotView");
+			if (!Helper.isNullOrEmpty(snapshotView) && "true".equalsIgnoreCase(snapshotView)) {
+				return Boolean.FALSE;
+			}
+			return Boolean.TRUE;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	public String getFormSnapshotCompareFieldName(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			String objectId = (String) requestMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+					DomainConstants.SELECT_REVISION);
+			List<Map<?, ?>> parentInfo = QueryUtil.getRelatedObjects(context, domObj, "relationship_Snapshot", DomainConstants.QUERY_WILDCARD,
+					selectables, Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 1, null,
+					DomainConstants.EMPTY_STRING);
+			String objectName = (String) parentInfo.get(0).get(DomainConstants.SELECT_NAME);
+			return objectName;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	public String getFormSnapshotCompareFieldRev(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			String objectId = (String) requestMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+					DomainConstants.SELECT_REVISION);
+			List<Map<?, ?>> parentInfo = QueryUtil.getRelatedObjects(context, domObj, "relationship_Snapshot", DomainConstants.QUERY_WILDCARD,
+					selectables, Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 1, null,
+					DomainConstants.EMPTY_STRING);
+			String objectRev = (String) parentInfo.get(0).get(DomainConstants.SELECT_REVISION);
+			return objectRev;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	public String getFormSnapshotCompareFieldType(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			String objectId = (String) requestMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+					DomainConstants.SELECT_REVISION);
+			List<Map<?, ?>> parentInfo = QueryUtil.getRelatedObjects(context, domObj, "relationship_Snapshot", DomainConstants.QUERY_WILDCARD,
+					selectables, Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 1, null,
+					DomainConstants.EMPTY_STRING);
+			String objectType = (String) parentInfo.get(0).get(DomainConstants.SELECT_TYPE);
+			if (objectType.contains(" ")) {
+				objectType = objectType.replaceAll(" ", "_");
+			}
+			String strType = Helper.getI18NString(context, "Framework", "emxFramework.Type." + objectType);
+			return strType;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns a javascript function name to get rangeHref for
+	 * SnapshotCompareFrom field Name. Range will be dynamic based on the
+	 * context object and snapshot parameter
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public String getSnapshotCompareFormFieldName2RangeIntermediate(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			final String ATTRIBUTE_SNAPSHOT_TYPE = PropertyUtil.getSchemaProperty(context, "attribute_SnapshotType");
+			final String SELECT_SNAPSHOT_TYPE = DomainObject.getAttributeSelect(ATTRIBUTE_SNAPSHOT_TYPE);
+
+			String[] objectId = (String[]) programMap.get("objectId");
+			DomainObject domObj = DomainObject.newInstance(context, objectId[0]);
+			String strSnapshotType = domObj.getInfo(context, SELECT_SNAPSHOT_TYPE);
+
+			StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME,
+					DomainConstants.SELECT_REVISION);
+			List<Map<?, ?>> parentInfo = QueryUtil.getRelatedObjects(context, domObj, "relationship_Snapshot", DomainConstants.QUERY_WILDCARD,
+					selectables, Helper.stringList(DomainRelationship.SELECT_ID), Boolean.FALSE, Boolean.TRUE, (short) 1, null,
+					DomainConstants.EMPTY_STRING);
+			String parentObjId = (String) parentInfo.get(0).get(DomainConstants.SELECT_ID);
+			String parentObjType = (String) parentInfo.get(0).get(DomainConstants.SELECT_TYPE);
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "getObjectAliasTypeToOpenSearch", parentObjId, strSnapshotType,
+					parentObjType, objectId[0]);
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public String setFormSnapshotcompareFieldName2(Context context, String[] args) throws SnapshotException {
+		try {
+			final String RELATIONSHIP_SNAPSHOT = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_REL_SNAPSHOT);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+
+			String rowId = emxTableRowId[0];
+			String nameActualValue = (String) FrameworkUtil.split(rowId, "|").get(0);
+			String[] lhsSnapshotId = (String[]) programMap.get("snapshotId");
+			StringList nameDisplayValue = new StringList();
+			StringList revValue = new StringList();
+			StringList snapshotNames = new StringList();
+			StringList snapshotIds = new StringList();
+			StringList snapshotRevs = new StringList();
+			final String SELECT__SNAPSHOT_ID = "to[" + RELATIONSHIP_SNAPSHOT + "].from.id";
+			final String SELECT__SNAPSHOT_NAME = "to[" + RELATIONSHIP_SNAPSHOT + "].from.name";
+			final String SELECT__SNAPSHOT_REV = "to[" + RELATIONSHIP_SNAPSHOT + "].from.revision";
+			JsonArrayBuilder snapshotsArray = Json.createArrayBuilder();
+
+			if (!Helper.isNullOrEmpty(nameActualValue)) {
+				DomainObject domObj = DomainObject.newInstance(context, nameActualValue);
+				Hashtable objInfo = domObj.getBusinessObjectData(context, Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE,
+						DomainConstants.SELECT_REVISION, SELECT__SNAPSHOT_ID, SELECT__SNAPSHOT_NAME, SELECT__SNAPSHOT_REV));
+
+				nameDisplayValue = (StringList) objInfo.get(DomainConstants.SELECT_NAME);
+				revValue = (StringList) objInfo.get(DomainConstants.SELECT_REVISION);
+				snapshotNames = (StringList) objInfo.get(SELECT__SNAPSHOT_NAME);
+				snapshotIds = (StringList) objInfo.get(SELECT__SNAPSHOT_ID);
+				snapshotRevs = (StringList) objInfo.get(SELECT__SNAPSHOT_REV);
+
+				for (int i = 0; i < snapshotNames.size(); i++) {
+					if (!lhsSnapshotId[0].equalsIgnoreCase((String) snapshotIds.get(i))) {
+						JsonObjectBuilder snapshotsjson = Json.createObjectBuilder();
+						snapshotsjson.add("snapshotName", snapshotNames.get(i));
+						snapshotsjson.add("snapshotId", snapshotIds.get(i));
+						snapshotsjson.add("snapshotRev", snapshotRevs.get(i));
+						snapshotsArray.add(snapshotsjson.build());
+					}
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "setFormSnapshotcompareFieldName2", (String) nameDisplayValue.get(0),
+					nameActualValue, (String) revValue.get(0), snapshotsArray.build().toString());
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Returns list of snapshots to display on UI
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return MapList
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getSnapshots(Context context, String[] args) throws SnapshotException {
+		List<Map<?, ?>> fileList = new ArrayList<Map<?, ?>>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			String strSnapshot = (String) programMap.get("snapshot");
+			final String ATTR_APP_TYPE = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE);
+			final String SELECT_APP_TYPE = DomainObject.getAttributeSelect(ATTR_APP_TYPE);
+
+			DomainObject dmoObj = DomainObject.newInstance(context, objectId);
+			SnapshotService SnapshotService = getSnapshotService(context);
+			fileList = SnapshotService.getSnapshots(context, dmoObj, strSnapshot, Helper.stringList(DomainConstants.SELECT_ID, SELECT_APP_TYPE), "");
+			MapList returnFileList = new MapList(fileList);
+
+			return returnFileList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * include OID program to get objects for which Snapshot is generated
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getIcludeOIDForSnapshot(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String appName = (String) programMap.get("snapshot");
+			String field = (String) programMap.get("field_actual");
+			StringList sListTypes = FrameworkUtil.split(field, "=");
+			String includeType = (String) sListTypes.get(sListTypes.size() - 1);
+
+			if (Helper.isNullOrEmpty(appName)) {
+				String snapshotParent = (String) programMap.get("snapshotPRT");
+				if (!Helper.isNullOrEmpty(snapshotParent)) {
+					String strType = (String) QueryUtil
+							.getInfo(context, new String[] { snapshotParent }, Helper.stringList(DomainConstants.SELECT_TYPE)).get(0)
+							.get(DomainConstants.SELECT_TYPE);
+					appName = PropertyUtil.getAliasForAdmin(context, DomainConstants.SELECT_TYPE, strType, Boolean.TRUE);
+				}
+			}
+			final String REL_SNAPSHOT_HOLDER = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_REL_SNAPSHOT);
+			final String ATTR_APP_TYPE = PropertyUtil.getSchemaProperty(context, SnapshotConstants.SYMBOLIC_ATTRIBUTE_SNAPSHOT_TYPE);
+
+			String busWhere = new StringBuilder().append("to[").append(REL_SNAPSHOT_HOLDER).append("].from.attribute[").append(ATTR_APP_TYPE)
+					.append("]==").append(appName).toString();
+
+			List<Map<?, ?>> objectList = QueryUtil.findObjects(context, includeType, busWhere,
+					Helper.stringList(DomainConstants.SELECT_ID));
+			StringList includeOIDs = Helper.stringList();
+			for (Map<?, ?> mapObj : objectList) {
+				includeOIDs.add((String) mapObj.get(DomainConstants.SELECT_ID));
+			}
+			return includeOIDs;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public DomainObject generateSnapshot(Context context, String[] args) throws SnapshotException {
+		try {
+			SnapshotService service = getSnapshotService(context);
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get("objectId");
+
+			String[] typeName = new String[1];
+			if (programMap.containsKey("snapshot")) {
+				typeName = (String[]) programMap.get("snapshot");
+			}
+			DomainObject domObj = DomainObject.newInstance(context, strObjectId[0]);
+			return service.generateSnapshot(context, domObj, typeName[0], "");
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.snapshot.services.SnapshotExecuteCallable
+	public String deleteSnapshot(Context context, String[] args) throws SnapshotException {
+		Map<?, ?> programMap;
+		try {
+			programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrEmxTableRowIdActual = (String[]) programMap.get("emxTableRowId");
+			String[] arrObjDI = new String[arrEmxTableRowIdActual.length];
+			for (int i = 0; i < arrEmxTableRowIdActual.length; i++) {
+				String strRow = arrEmxTableRowIdActual[i];
+				StringList sListSplitRow = FrameworkUtil.split(strRow, "|");
+				String strObjId = (String) sListSplitRow.get(1);
+				arrObjDI[i] = strObjId;
+			}
+			SnapshotService service = getSnapshotService(context);
+			service.deleteSnapshots(context, arrObjDI);
+			return Helper.encodeFunctionForJavaScript(context, false, "refreshOpenerWindow");
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * returns mapList of dynamic commands for snapshot compare criteria
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return
+	 * @throws SnapshotException
+	 */
+	public MapList getSnapshotCompareCriteriaCommand(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<String, Object> compareCriteriaCommand = UIMenu.getCommand(context, "AEFStructureCompareCriteria");
+
+			// TODO wrapper in helper for ResourceBundle.getProperty
+			String intlLabel = EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),
+					"emxFramework.Common.StrucutureCompareCriteria");
+			compareCriteriaCommand.put("label", intlLabel);
+			compareCriteriaCommand.put("alt", intlLabel);
+
+			compareCriteriaCommand.put("href", "../Snapshot/emxAdvancedStructureCompare.jsp?fromContext=CriteriaChannel");
+			MapList commandList = new MapList();
+			commandList.add(compareCriteriaCommand);
+			return commandList;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Creates new Snapshot object when user clicks done on slide in form.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return map having id of newly created object
+	 * @throws SnapshotException
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public HashMap<String, String> createSnapshot(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String name = (String) programMap.get("Name");
+			String typeName = (String) programMap.get("snapshot");
+			String partId = (String) programMap.get("objectId");
+			DomainObject partObj = DomainObject.newInstance(context, partId);
+			HashMap<String, String> returnMap = new HashMap<String, String>();
+			SnapshotService service = getSnapshotService(context);
+			DomainObject snapshot = service.generateSnapshot(context, partObj, typeName, name);
+			returnMap.put(DomainConstants.SELECT_ID, snapshot.getObjectId(context));
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+
+	/**
+	 * Access Function on Snapshot Revision Field of Snapshot Compare Form
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return True if policy is listed in property file else False
+	 * @throws SnapshotException
+	 */
+	public boolean canViewSnapshotRevisionFieldOnCompareForm(Context context, String[] args) throws SnapshotException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			String objPolicy = (String) QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainConstants.SELECT_POLICY)).get(0)
+					.get(DomainConstants.SELECT_POLICY);
+			String symbolicPolicyName = FrameworkUtil.getAliasForAdmin(context, "Policy", objPolicy, false);
+			String property = Helper.getProperty(context, "Snapshot.Compare.SnapshotRevisionField.View");
+			List<String> propertyValues = FrameworkUtil.split(property, ";");
+			if (propertyValues.contains(symbolicPolicyName)) {
+				return true;
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new SnapshotException(e);
+		}
+	}
+}
+

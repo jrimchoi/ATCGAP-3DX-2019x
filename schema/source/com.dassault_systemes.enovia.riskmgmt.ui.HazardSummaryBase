@@ -1,0 +1,1501 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.Hazard.HazardProcess;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtRiskAssessmentSummaryBase} {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	private static boolean isProductsDesignProjectMember(Context context, boolean isKindOfDesignProjectOrHazard, String parentObjectId,
+			String hazardId, String projectAccess) throws RiskMgmtException {
+		try {
+			boolean isProjectMember = false;
+			String strProductId = parentObjectId;
+			if (isKindOfDesignProjectOrHazard) {
+				Hazard hazard = new Hazard(hazardId);
+				HazardContext hazardContext = hazard.getProductContext(context);
+				if (!RiskMgmtUtil.isNull(hazardContext)) {
+					strProductId = hazardContext.getObjectId(context);
+				}
+			}
+			if (!RiskMgmtUtil.isNullOrEmpty(strProductId)) {
+				isProjectMember = HazardMgmtUtil.isProductsDesignProjectMember(context, DomainObject.newInstance(context, strProductId),
+						projectAccess);
+			}
+			return isProjectMember;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private static HashMap<String, String> getProcessDetails(Context context, String strHazardId, HazardProcess process) throws RiskMgmtException {
+		try {
+			HashMap<String, String> hmProcessDetails = new HashMap<String, String>();
+			StringBuilder sbProcessStatusImage = new StringBuilder();
+			String strProcessStatus = EMPTY_STRING;
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNull(process)) {
+				List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+						RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)),
+								DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context))));
+				if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+					Map map = lmHazardInfo.get(0);
+					String strProcess = (String) map.get(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)));
+					String riskReductionRequiredAttributeValue = (String) map
+							.get(DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context)));
+					String strProcessStatusImage = EMPTY_STRING;
+					String strToolTip = EMPTY_STRING;
+
+					if (!(RANGE_NO.equals(riskReductionRequiredAttributeValue)
+							&& (process.compareTo(HazardProcess.REDUCTION) == 0 || process.compareTo(HazardProcess.VERIFICATION) == 0))) {
+						if (!RiskMgmtUtil.isNullOrEmpty(strProcess)) {
+							if (process.compareTo(HazardProcess.valueOf(strProcess.toUpperCase())) == 0) {
+								strProcessStatusImage = RiskMgmtConstants.PROCESS_STATUS_IN_PROCESS_IMAGE;
+								strProcessStatus = RiskMgmtConstants.PROCESS_STATUS_IN_PROCESS;
+								strToolTip = RiskMgmtUtil.getI18NString(context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE,
+										"RiskMgmt.Hazard.Process.Status.InProcess");
+							}
+							else if (process.compareTo(HazardProcess.valueOf(strProcess.toUpperCase())) < 0) {
+								strProcessStatusImage = RiskMgmtConstants.PROCESS_STATUS_COMPLETED_IMAGE;
+								strProcessStatus = RiskMgmtConstants.PROCESS_STATUS_COMPLETED;
+								strToolTip = RiskMgmtUtil.getI18NString(context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE,
+										"RiskMgmt.Hazard.Process.Status.Completed");
+							}
+							if (!RiskMgmtUtil.isNullOrEmpty(strProcessStatusImage) && !RiskMgmtUtil.isNullOrEmpty(strProcessStatus)) {
+								sbProcessStatusImage.append("<img src=\"../common/images/");
+								sbProcessStatusImage.append(XSSUtil.encodeForHTML(context, strProcessStatusImage));
+								sbProcessStatusImage.append("\" border=\"0");
+								sbProcessStatusImage.append("\" alt=\"");
+								sbProcessStatusImage.append(strToolTip);
+								sbProcessStatusImage.append("\" title=\"");
+								sbProcessStatusImage.append(strToolTip);
+								sbProcessStatusImage.append("\"/>");
+							}
+						}
+					}
+				}
+			}
+			hmProcessDetails.put(RiskMgmtConstants.PROCESS_STATUS_IMAGE, sbProcessStatusImage.toString());
+			hmProcessDetails.put(RiskMgmtConstants.PROCESS_STATUS, strProcessStatus);
+			return hmProcessDetails;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private static String getMode(Context context, String strHazardId, String strProcessStatus) throws RiskMgmtException {
+		try {
+			String strMode = RiskMgmtConstants.MODE_VIEW;
+			if (RiskMgmtConstants.PROCESS_STATUS_IN_PROCESS.equals(strProcessStatus) && HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(
+					context, DomainObject.newInstance(context, strHazardId), RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+				strMode = RiskMgmtConstants.MODE_EDIT;
+			}
+			return strMode;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnAnalysis(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String strParentOID = (String) paramList.get(RiskMgmtConstants.PARENT_OID);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+			List<String> vcProcess = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+						HashMap<String, String> hmProcessDetails = getProcessDetails(context, strHazardId, HazardProcess.ANALYSIS);
+						String strImage = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS_IMAGE);
+						String strProcessStatus = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS);
+						if (!RiskMgmtUtil.isNullOrEmpty(strImage)) {
+							String strMode = getMode(context, strHazardId, strProcessStatus);
+							// TODO To encode for XSS
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxForm.jsp?form=RiskMgmtHazardAnalysisForm&amp;toolbar=RiskMgmtHazardProcessToolbar&amp;PrinterFriendly=false&amp;showPageURLIcon=false&amp;suiteKey=RiskMgmt&amp;submitAction=doNothing&amp;HelpMarker=emxhelphazardprocess&amp;currentColumn=Analysis");
+							sbHref.append("&amp;mode=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strMode));
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strHazardId));
+							sbHref.append(
+									"&amp;postProcessURL=../RiskMgmt/Execute.jsp?action=com.dassault_systemes.enovia.riskmgmt.ui.HazardSummary:doHazardAnalysisFormSubmitPostProcessActions");
+							sbHref.append("'");
+							sbHref.append(",'800','700','true', 'popup')\">");
+							sbHref.append(strImage);
+							sbHref.append("</a>");
+							vcProcess.add(sbHref.toString());
+						}
+						else {
+							vcProcess.add(EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcProcess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String doHazardAnalysisFormSubmitPostProcessActions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_HAZARD_FRAMES);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnEvaluation(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String strParentOID = (String) paramList.get(RiskMgmtConstants.PARENT_OID);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+			List<String> vcProcess = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+						HashMap<String, String> hmProcessDetails = getProcessDetails(context, strHazardId, HazardProcess.EVALUATION);
+						String strImage = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS_IMAGE);
+						String strProcessStatus = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS);
+						if (!RiskMgmtUtil.isNullOrEmpty(strImage)) {
+							String strMode = getMode(context, strHazardId, strProcessStatus);
+							// TODO To encode for XSS
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxForm.jsp?form=RiskMgmtHazardEvaluationForm&amp;toolbar=RiskMgmtHazardProcessToolbar&amp;preProcessJavaScript=enableDisableFieldsOnRiskReductionRequiredChange;enableDisableRiskAcceptabilityJustification&amp;PrinterFriendly=false&amp;showPageURLIcon=false&amp;suiteKey=RiskMgmt&amp;submitAction=doNothing&amp;currentColumn=Evaluation&amp;HelpMarker=emxhelphazardprocess");
+							sbHref.append("&amp;mode=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strMode));
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strHazardId));
+							sbHref.append(
+									"&amp;postProcessURL=../RiskMgmt/Execute.jsp?action=com.dassault_systemes.enovia.riskmgmt.ui.HazardSummary:doHazardEvaluationFormSubmitPostProcessActions");
+							sbHref.append("'");
+							sbHref.append(",'800','700','true', 'popup')\">");
+							sbHref.append(strImage);
+							sbHref.append("</a>");
+							vcProcess.add(sbHref.toString());
+						}
+						else {
+							vcProcess.add(EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcProcess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String doHazardEvaluationFormSubmitPostProcessActions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_HAZARD_FRAMES);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnReduction(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String strParentOID = (String) paramList.get(RiskMgmtConstants.PARENT_OID);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+			List<String> vcProcess = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+						HashMap<String, String> hmProcessDetails = getProcessDetails(context, strHazardId, HazardProcess.REDUCTION);
+						String strImage = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS_IMAGE);
+						String strProcessStatus = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS);
+						if (!RiskMgmtUtil.isNullOrEmpty(strImage)) {
+							String strMode = getMode(context, strHazardId, strProcessStatus);
+							// TODO To encode for XSS
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxIndentedTable.jsp?table=RiskMgmtHazardRiskReductionOptionsSummary&amp;toolbar=RiskMgmtHazardProcessToolbar&amp;program=com.dassault_systemes.enovia.riskmgmt.ui.HazardRiskReductionOptionSummary:getTableRiskMgmtHazardRiskReductionOptionsSummaryData&amp;showFilter=false&amp;showPageHeader=false&amp;suiteKey=RiskMgmt&amp;currentColumn=Reduction&amp;selection=multiple&amp;HelpMarker=emxhelphazardprocess");
+							sbHref.append("&amp;mode=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strMode));
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strHazardId));
+							sbHref.append("'");
+							sbHref.append(",'800','700','true', 'popup')\">");
+							sbHref.append(strImage);
+							sbHref.append("</a>");
+							vcProcess.add(sbHref.toString());
+						}
+						else {
+							vcProcess.add(EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcProcess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnVerification(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String strParentOID = (String) paramList.get(RiskMgmtConstants.PARENT_OID);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+			List<String> vcProcess = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+						HashMap<String, String> hmProcessDetails = getProcessDetails(context, strHazardId, HazardProcess.VERIFICATION);
+						String strImage = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS_IMAGE);
+						String strProcessStatus = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS);
+						if (!RiskMgmtUtil.isNullOrEmpty(strImage)) {
+							String strMode = getMode(context, strHazardId, strProcessStatus);
+							// TODO To encode for XSS
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxIndentedTable.jsp?table=RiskMgmtHazardRiskReductionOptionsSummary&amp;toolbar=RiskMgmtHazardProcessToolbar&amp;program=com.dassault_systemes.enovia.riskmgmt.ui.HazardRiskReductionOptionSummary:getTableRiskMgmtHazardRiskReductionOptionsSummaryData&amp;showFilter=false&amp;showPageHeader=false&amp;suiteKey=RiskMgmt&amp;currentColumn=Verification&amp;selection=multiple&amp;HelpMarker=emxhelphazardprocess");
+							sbHref.append("&amp;mode=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strMode));
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strHazardId));
+							sbHref.append("'");
+							sbHref.append(",'800','700','true', 'popup')\">");
+							sbHref.append(strImage);
+							sbHref.append("</a>");
+							vcProcess.add(sbHref.toString());
+						}
+						else {
+							vcProcess.add(EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcProcess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnCompletenessCheck(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String strParentOID = (String) paramList.get(RiskMgmtConstants.PARENT_OID);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+			List<String> vcProcess = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+						HashMap<String, String> hmProcessDetails = getProcessDetails(context, strHazardId, HazardProcess.COMPLETION);
+						String strImage = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS_IMAGE);
+						String strProcessStatus = hmProcessDetails.get(RiskMgmtConstants.PROCESS_STATUS);
+						if (!RiskMgmtUtil.isNullOrEmpty(strImage)) {
+							String strMode = getMode(context, strHazardId, strProcessStatus);
+							// TODO To encode for XSS
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxForm.jsp?form=RiskMgmtHazardCompletenessCheckForm&amp;toolbar=RiskMgmtHazardProcessToolbar&amp;PrinterFriendly=false&amp;showPageURLIcon=false&amp;suiteKey=RiskMgmt&amp;submitAction=doNothing&amp;HelpMarker=emxhelphazardprocess&amp;currentColumn=Completion");
+							sbHref.append("&amp;mode=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strMode));
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, strHazardId));
+							sbHref.append(
+									"&amp;postProcessURL=../RiskMgmt/Execute.jsp?action=com.dassault_systemes.enovia.riskmgmt.ui.HazardSummary:doHazardCompletenessCheckFormSubmitPostProcessActions");
+							sbHref.append("'");
+							sbHref.append(",'800','700','true', 'popup')\">");
+							sbHref.append(strImage);
+							sbHref.append("</a>");
+							vcProcess.add(sbHref.toString());
+						}
+						else {
+							vcProcess.add(EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcProcess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String doHazardCompletenessCheckFormSubmitPostProcessActions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_HAZARD_FRAMES);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public StringList getTableRiskMgmtHazardSummaryColumnProcessStyle(Context context, String[] args) throws RiskMgmtException {
+		final String ATTRIBUTE_PROCESS = PropertyUtil.getSchemaProperty(context, "attribute_Process");
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			List<String> vcProcessAnalysis = new Vector<String>();
+			StringList slResult = new StringList();
+			if (!RiskMgmtUtil.isNullOrEmpty(objectList)) {
+				for (Object objHazard : objectList) {
+					Map mapHazard = (Map) objHazard;
+					if (!RiskMgmtUtil.isNullOrEmpty(mapHazard)) {
+						String strHazardId = (String) mapHazard.get(DomainObject.SELECT_ID);
+						if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+							List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+									RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_PROCESS)));
+							if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+								Map mpHazardInfo = (Map) lmHazardInfo.get(0);
+								String strHazardProcess = (String) mpHazardInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_PROCESS));
+								if (!RiskMgmtUtil.isNullOrEmpty(strHazardProcess)) {
+									vcProcessAnalysis.add(DomainConstants.EMPTY_STRING);
+								}
+								else {
+									vcProcessAnalysis.add("ResourcePlanningYellowBackGroundColor");
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return slResult;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnRequirements(Context context, String[] args) throws RiskMgmtException {
+		final String TYPE_HAZARD = RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get("objectList");
+			List<String> vcRequirementsCount = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)) {
+						List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+								RiskMgmtUtil.stringList(DomainConstants.SELECT_TYPE));
+						if (!RiskMgmtUtil.isNullOrEmpty(lmObjectInfo)) {
+							Map mpHazardInfo = (Map) lmObjectInfo.get(0);
+							String strObjectType = (String) mpHazardInfo.get(DomainConstants.SELECT_TYPE);
+							if (!RiskMgmtUtil.isNullOrEmpty(strObjectType) && strObjectType.equals(TYPE_HAZARD)) {
+
+								int iHazardRequirementsCount = RiskMgmtUtil.countConnectionsWithRel(context,
+										DomainObject.newInstance(context, strObjectId), RiskMgmtSymNames.SYM_REL_MITIGATED_BY.toString(), "from");
+								StringBuilder sbHref = new StringBuilder();
+								sbHref.append(
+										"<a href=\"javascript:emxTableColumnLinkClick('../common/emxIndentedTable.jsp?table=RiskMgmtHazardRequirementsSummary&amp;header=RiskMgmt.Common.Requirements&amp;suiteKey=RiskMgmt&amp;program=com.dassault_systemes.enovia.riskmgmt.ui.Hazard:getTableRequirementsSummaryData");
+								sbHref.append("&amp;objectId=");
+								sbHref.append(strObjectId);
+								sbHref.append("'");
+								sbHref.append(",'800','700','true', 'popup')\">");
+								sbHref.append(iHazardRequirementsCount);
+								sbHref.append("</a>");
+
+								vcRequirementsCount.add(sbHref.toString());
+							}
+							else {
+								vcRequirementsCount.add(DomainConstants.EMPTY_STRING);
+							}
+						}
+					}
+				}
+			}
+			return vcRequirementsCount;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List<String> getTableRiskMgmtHazardSummaryColumnParentHazards(Context context, String[] args) throws RiskMgmtException {
+		final String TYPE_HAZARD = RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(OBJECT_LIST);
+			Map<?, ?> paramList = (Map) programMap.get(PARAM_LIST);
+			boolean isCSVExport = false;
+			String reportFormat = (String) paramList.get(REPORT_FORMAT);
+			if (CSV.equalsIgnoreCase(reportFormat)) {
+				isCSVExport = true;
+			}
+			List<String> parentHazardIds = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)) {
+						List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+								RiskMgmtUtil.stringList(DomainConstants.SELECT_TYPE));
+						if (!RiskMgmtUtil.isNullOrEmpty(lmObjectInfo)) {
+							Map mpHazardInfo = (Map) lmObjectInfo.get(0);
+							String strObjectType = (String) mpHazardInfo.get(DomainConstants.SELECT_TYPE);
+							if (!RiskMgmtUtil.isNullOrEmpty(strObjectType) && strObjectType.equals(TYPE_HAZARD)) {
+								Hazard hazard = new Hazard(strObjectId);
+								List<Map<?, ?>> parentHazards = hazard.getParentHazards(context,
+										RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME),
+										RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID));
+								if (!RiskMgmtUtil.isNullOrEmpty(parentHazards)) {
+									StringBuilder sbParentHazards = new StringBuilder();
+									for (Object parentHazard : parentHazards) {
+										Map parentHazardInfo = (Map) parentHazard;
+										String parentHazardId = (String) parentHazardInfo.get(DomainConstants.SELECT_ID);
+										String parentHazardName = (String) parentHazardInfo.get(DomainConstants.SELECT_NAME);
+										if (isCSVExport) {
+											sbParentHazards.append(parentHazardName).append('\n');
+										}
+										else {
+											if (!RiskMgmtUtil.isNullOrEmpty(sbParentHazards.toString())) {
+												sbParentHazards.append("<br/>");
+											}
+											sbParentHazards.append(RiskMgmtUtil.getObjectHTMLLinkModalDialogue(context, parentHazardId, TYPE_HAZARD,
+													parentHazardName));
+										}
+									}
+									parentHazardIds.add(sbParentHazards.toString());
+								}
+								else {
+									parentHazardIds.add(DomainConstants.EMPTY_STRING);
+								}
+							}
+							else {
+								parentHazardIds.add(DomainConstants.EMPTY_STRING);
+							}
+						}
+					}
+				}
+			}
+			return parentHazardIds;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Create Hazard" command from Product's Hazards
+	 * summary table Actions. It is visible to only the members of Design
+	 * Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user a member, False: If not a member
+	 * @throws RiskMgmtException
+	 */
+	public boolean canViewTableRiskMgmtHazardDetailsActionCreateHazard(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strParentOID = (String) programMap.get(OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strParentOID)) {
+				if ((RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strParentOID), SYMBOLIC_TYPE_PRODUCTS.toString()))
+						.containsValue(Boolean.TRUE)) {
+					blAccess = HazardMgmtUtil.isProductsDesignProjectMember(context, DomainObject.newInstance(context, strParentOID), null);
+				}
+				else if ((RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strParentOID), SYM_TYPE_HAZARD.toString()))
+						.containsValue(Boolean.TRUE)) {
+					Hazard hazard = new Hazard(strParentOID);
+					HazardContext hazardContext = hazard.getProductContext(context);
+					blAccess = HazardMgmtUtil.isProductsDesignProjectMember(context, hazardContext, null);
+				}
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before Creating Hazard.If Logged-in user is not the Project
+	 * Member of any of the Design Projects of the Product or if Product is not
+	 * selected in case action is being performed from Design Project context,
+	 * then a JavaScript function is called to show appropriate error message
+	 * alert otherwise JavaScript function to show "Create Hazard" form is
+	 * called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForCreateHazard(Context context, String[] args) throws RiskMgmtException {
+		try {
+			ArrayList<String> lsProjectMemberIds = new ArrayList<String>();
+			String strProductId = EMPTY_STRING;
+			String productLevel = EMPTY_STRING;
+			String strFrameName = EMPTY_STRING;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrObjectId = (String[]) programMap.get(OBJECT_ID);
+			String[] createFromTemplateArr = (String[]) programMap.get(CREATE_FROM_TEMPLATE);
+			boolean createFromTemplate = false;
+			if (!RiskMgmtUtil.isNullOrEmpty(createFromTemplateArr) && createFromTemplateArr[0].equals(TRUE)) {
+				createFromTemplate = true;
+			}
+			if (!RiskMgmtUtil.isNullOrEmpty(arrObjectId) && !RiskMgmtUtil.isNullOrEmpty(arrObjectId[0])) {
+				if ((RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, arrObjectId[0]), SYM_TYPE_DESIGN_PROJECT.toString()))
+						.containsValue(Boolean.TRUE)) {
+					String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+						List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+						if (!emxTableRowIds.isEmpty()) {
+							strProductId = emxTableRowIds.get(0).getObjectId();
+							productLevel = emxTableRowIds.get(0).getLevel();
+						}
+					}
+					if (!RiskMgmtUtil.isNullOrEmpty(strProductId) && !((RiskMgmtUtil.getTypeKindOf(context,
+							DomainObject.newInstance(context, strProductId), SYMBOLIC_TYPE_PRODUCTS.toString())).containsValue(Boolean.TRUE)))
+						return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG,
+								RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.SelectOnlyProductError"));
+
+					StringBuilder sbProjectMemberNames = new StringBuilder();
+					if (!RiskMgmtUtil.isNullOrEmpty(strProductId)) {
+						DomainObject dmoProduct = DomainObject.newInstance(context, strProductId);
+						List<Map<?, ?>> lmDesignProjects = HazardMgmtUtil.getDesignProjects(context, dmoProduct);
+						if (!RiskMgmtUtil.isNullOrEmpty(lmDesignProjects)) {
+							for (Map<?, ?> mpDesignProjects : lmDesignProjects) {
+								String strDesignProjectId = (String) mpDesignProjects.get(DomainConstants.SELECT_ID);
+								String strDesignProjectName = (String) mpDesignProjects.get(DomainConstants.SELECT_NAME);
+								if (!RiskMgmtUtil.isNullOrEmpty(strDesignProjectId) && !RiskMgmtUtil.isNullOrEmpty(strDesignProjectName)) {
+									sbProjectMemberNames.append(strDesignProjectName);
+									DomainObject dmoDesignProject = DomainObject.newInstance(context, strDesignProjectId);
+									List<String> lsDesignProjectMembers = HazardMgmtUtil.getDesignProjectMembers(context, dmoDesignProject, null);
+									if (!RiskMgmtUtil.isNullOrEmpty(lsDesignProjectMembers)) {
+										lsProjectMemberIds.addAll(lsDesignProjectMembers);
+									}
+								}
+							}
+						}
+					}
+					String strContextUserId = PersonUtil.getPersonObjectID(context, context.getUser());
+					if (!lsProjectMemberIds.contains(strContextUserId)) {
+						StringBuilder sbReturn = new StringBuilder();
+						sbReturn.append(RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE,
+								"RiskMgmt.Hazard.Message.CanBeCreatedByProjectMemberOnlyError"));
+						sbReturn.append('\n');
+						sbReturn.append(sbProjectMemberNames.toString());
+						return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG, sbReturn.toString());
+					}
+					strFrameName = FRAME_RISK_MGMT_HAZARD_DETAILS_PRODUCT_HAZARDS;
+				}
+				else if ((RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, arrObjectId[0]), SYM_TYPE_HAZARD.toString()))
+						.containsValue(Boolean.TRUE)) {
+					strProductId = arrObjectId[0];
+					String[] arrFrame = (String[]) programMap.get(RiskMgmtConstants.PORTAL_CMD_NAME);
+					if (!RiskMgmtUtil.isNullOrEmpty(arrFrame)) {
+						strFrameName = arrFrame[0];
+					}
+					if (RiskMgmtUtil.isNullOrEmpty(strFrameName)) {
+						strFrameName = FRAME_DETAILS_DISPLAY;
+					}
+				}
+				else {
+					strProductId = arrObjectId[0];
+					strFrameName = FRAME_RISK_MGMT_HAZARD_CONTROL;
+				}
+			}
+			if (createFromTemplate) {
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_CREATE_HAZARD_FROM_TEMPLATE, strProductId,
+						productLevel);
+			}
+			else {
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_CREATE_HAZARD, strProductId, productLevel,
+						strFrameName);
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForChangeHazardsOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String STATE_CONTROLLED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(),
+					SYM_STATE_CONTROLLED.toString());
+			String productId = DomainConstants.EMPTY_STRING;
+			String objectId = DomainConstants.EMPTY_STRING;
+			List lsProjectMemberIds = new ArrayList<>();
+			List<String> arrHazardIds = new ArrayList<String>();
+			ArrayList<String> arrFailedHazardIds = new ArrayList<String>();
+			StringBuilder sbSuccessHazardIds = new StringBuilder();
+			Set hazardContextIdList = new HashSet();
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			String[] parentOID = (String[]) programMap.get(PARENT_OID);
+
+			if (!RiskMgmtUtil.isNullOrEmpty(parentOID) && !RiskMgmtUtil.isNullOrEmpty(parentOID[0])) {
+				productId = parentOID[0];
+				objectId = productId;
+				if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+					List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+					for (EmxTableRowId rowId : emxTableRowIds) {
+						arrHazardIds.add(rowId.getObjectId());
+					}
+					if (!RiskMgmtUtil.isNullOrEmpty(arrHazardIds)) {
+						String[] strArrayHazardIds = arrHazardIds.toArray(new String[arrHazardIds.size()]);
+						DomainObject parentObj = DomainObject.newInstance(context, productId);
+						boolean isDesignProject = RiskMgmtUtil.getTypeKindOf(context, parentObj, RiskMgmtSymNames.SYM_TYPE_DESIGN_PROJECT.toString())
+								.containsValue(Boolean.TRUE);
+
+						List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayHazardIds,
+								RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE,
+										DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+						if (!RiskMgmtUtil.isNullOrEmpty(returnMap)) {
+							for (Object obj : returnMap) {
+								Map requestMap = (Map) obj;
+								String strType = (String) requestMap.get(DomainConstants.SELECT_TYPE);
+								String strHazardId = (String) requestMap.get(DomainConstants.SELECT_ID);
+								String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+								String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+								String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+								String contextUserId = PersonUtil.getPersonObjectID(context, context.getUser());
+
+								if (!SYM_TYPE_HAZARD.get(context).equals(strType)) {
+									return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG, RiskMgmtUtil
+											.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.InvalidHazardType"));
+								}
+
+								if (isDesignProject) {
+									Hazard hazard = new Hazard(strHazardId);
+									HazardContext hazardContext = hazard.getProductContext(context);
+									if (!RiskMgmtUtil.isNull(hazardContext)) {
+										hazardContextIdList.add(hazardContext.getInfo(context, DomainConstants.SELECT_ID));
+										if (hazardContextIdList.size() > 1) {
+											return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG,
+													RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE,
+															"RiskMgmt.Hazard.Message.MultipleProductsHazardChoosen"));
+										}
+									}
+									if (!RiskMgmtUtil.isNullOrEmpty(hazardContextIdList) && RiskMgmtUtil.isNullOrEmpty(lsProjectMemberIds)) {
+										productId = (String) hazardContextIdList.iterator().next();
+										parentObj = new DomainObject(productId);
+									}
+								}
+
+								if (RiskMgmtUtil.isNullOrEmpty(lsProjectMemberIds)) {
+									lsProjectMemberIds = HazardMgmtUtil.getDesignProjectMembersAssociatedToProduct(context, parentObj,
+											PROJECT_LEAD_ACCESS);
+								}
+								if (!RiskMgmtUtil.isNullOrEmpty(strState) && (!strState.equalsIgnoreCase(STATE_CONTROLLED))
+										&& (context.getUser().equals(strOwner)
+												|| (!RiskMgmtUtil.isNullOrEmpty(lsProjectMemberIds) && lsProjectMemberIds.contains(contextUserId)))) {
+									sbSuccessHazardIds.append(strHazardId);
+									sbSuccessHazardIds.append(',');
+								}
+								else {
+									arrFailedHazardIds.add(strName);
+								}
+							}
+						}
+
+					}
+				}
+			}
+			if (!RiskMgmtUtil.isNullOrEmpty(arrFailedHazardIds)) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.CannotChangeOwnerError"));
+				sbReturn.append('\n');
+				sbReturn.append(arrFailedHazardIds.toString());
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG, sbReturn.toString());
+			}
+
+			sbSuccessHazardIds.deleteCharAt(sbSuccessHazardIds.length() - 1);
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_CHANGE_HAZARD_OWNER,
+					sbSuccessHazardIds.toString(), productId, objectId);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionChangeHazardOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String ATTRIBUTE_COMMENTS = SYM_ATTR_COMMENTS.get(context);
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String[] projectId = (String[]) inputMap.get(PROJECT_ID);
+			String[] objectIds = (String[]) inputMap.get(HAZARD_IDS);
+			String[] newOwner = (String[]) inputMap.get(FIELD_OWNER);
+			String[] transferReason = (String[]) inputMap.get(FIELD_TRANSFER_REASON);
+			if (!RiskMgmtUtil.isNullOrEmpty(projectId) && !RiskMgmtUtil.isNullOrEmpty(objectIds) && !RiskMgmtUtil.isNullOrEmpty(newOwner)
+					&& !RiskMgmtUtil.isNullOrEmpty(transferReason) && !RiskMgmtUtil.isNullOrEmpty(objectIds[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(newOwner[0]) && !RiskMgmtUtil.isNullOrEmpty(transferReason[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(projectId[0])) {
+				DomainObject project = new DomainObject(projectId[0]);
+				List<String> selectedHazardIds = RiskMgmtUtil.getListFromString(objectIds[0], ",");
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				attributeMap.put(ATTRIBUTE_COMMENTS, transferReason[0]);
+				if (!RiskMgmtUtil.isNullOrEmpty(selectedHazardIds)) {
+					for (String selectedHazardId : selectedHazardIds) {
+						Hazard hazard = new Hazard(selectedHazardId);
+						hazard.changeOwnership(context, PersonUtil.getPersonObject(context, newOwner[0]), attributeMap);
+					}
+				}
+
+				if (((RiskMgmtUtil.getTypeKindOf(context, project, RiskMgmtSymNames.SYM_TYPE_DESIGN_PROJECT.toString()))
+						.containsValue(Boolean.TRUE))) {
+					return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_STRUCTURE_WITH_OUT_SORT,
+							"RiskMgmtHazardDetailsProductHazards");
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_STRUCTURE_WITH_OUT_SORT,
+					"RiskMgmtHazardDetails");
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before Deleting Hazard.If user selects any object other than
+	 * hazard, if logged-in user don't have access or if selected hazard object
+	 * is not in Identified state then JavaScript function is called to show
+	 * appropriate error message otherwise Javascript function is called to
+	 * delete hazards.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForDeleteHazard(Context context, String[] args) throws RiskMgmtException {
+		final String STATE_IDENTIFIED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYM_STATE_IDENTIFIED.toString());
+		try {
+			StringBuilder sbSuccessHazardIds = new StringBuilder();
+			ArrayList<String> alFailedHazardIds = new ArrayList<String>();
+			StringBuilder sbRowIds = new StringBuilder();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrObjectId = (String[]) programMap.get(OBJECT_ID);
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrObjectId) && !RiskMgmtUtil.isNullOrEmpty(arrObjectId[0]) && !RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				boolean isKindOfDesignProject = RiskMgmtUtil
+						.getTypeKindOf(context, DomainObject.newInstance(context, arrObjectId[0]), SYM_TYPE_DESIGN_PROJECT.toString())
+						.containsValue(Boolean.TRUE);
+				boolean isKindOfHazard = RiskMgmtUtil
+						.getTypeKindOf(context, DomainObject.newInstance(context, arrObjectId[0]), SYM_TYPE_HAZARD.toString())
+						.containsValue(Boolean.TRUE);
+				boolean isKindOfHazardTemplate = RiskMgmtUtil
+						.getTypeKindOf(context, DomainObject.newInstance(context, arrObjectId[0]), SYM_TYPE_HAZARD_TEMPLATE.toString())
+						.containsValue(Boolean.TRUE);
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strHazardId = rowId.getObjectId();
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+						List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+								RiskMgmtUtil.stringList(DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+										DomainConstants.SELECT_OWNER));
+						for (Map<?, ?> mpHazardInfo : lmHazardInfo) {
+							String strType = (String) mpHazardInfo.get(DomainConstants.SELECT_TYPE);
+							String strName = (String) mpHazardInfo.get(DomainConstants.SELECT_NAME);
+							String strState = (String) mpHazardInfo.get(DomainConstants.SELECT_CURRENT);
+							String strOwner = (String) mpHazardInfo.get(DomainConstants.SELECT_OWNER);
+							if (!SYM_TYPE_HAZARD.get(context).equals(strType)) {
+								return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG,
+										RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.InvalidHazardType"));
+							}
+							if (isKindOfHazardTemplate) {
+								sbSuccessHazardIds.append(strHazardId);
+								sbSuccessHazardIds.append(COMMA);
+								sbRowIds.append(rowId.getLevel());
+								sbRowIds.append(PIPE);
+							}
+							else if (!RiskMgmtUtil.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_IDENTIFIED)
+									&& (context.getUser().equalsIgnoreCase(strOwner) || isProductsDesignProjectMember(context,
+											(isKindOfDesignProject || isKindOfHazard), arrObjectId[0], strHazardId, PROJECT_LEAD_ACCESS))) {
+								sbSuccessHazardIds.append(strHazardId);
+								sbSuccessHazardIds.append(COMMA);
+								sbRowIds.append(rowId.getLevel());
+								sbRowIds.append(PIPE);
+							}
+							else {
+								alFailedHazardIds.add(strName);
+							}
+						}
+					}
+				}
+			}
+			if (!alFailedHazardIds.isEmpty()) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.CannotDeleteError"));
+				sbReturn.append('\n');
+				sbReturn.append(alFailedHazardIds.toString());
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG, sbReturn.toString());
+			}
+
+			if (sbSuccessHazardIds.length() > 1 && sbRowIds.length() > 1) {
+				sbSuccessHazardIds.deleteCharAt(sbSuccessHazardIds.length() - 1);
+				sbRowIds.deleteCharAt(sbRowIds.length() - 1);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_PRE_DELETE_HAZARD, sbSuccessHazardIds.toString(),
+					sbRowIds.toString());
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * To delete Hazards.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function to refresh the calling frame.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionDeleteHazards(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrFrameName = (String[]) programMap.get(FRAME_NAME);
+			String strFrameName = !RiskMgmtUtil.isNullOrEmpty(arrFrameName)
+					? !RiskMgmtUtil.isNullOrEmpty(arrFrameName[0]) && !STRING_NULL.equals(arrFrameName[0]) ? arrFrameName[0] : FRAME_DETAILS_DISPLAY
+					: FRAME_DETAILS_DISPLAY;
+			String[] strHazardIds = (String[]) programMap.get(HAZARD_IDS);
+			String[] strRowIds = (String[]) programMap.get(ROW_IDS);
+			StringBuilder xmlMessage = new StringBuilder();
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardIds) && !RiskMgmtUtil.isNullOrEmpty(strHazardIds[0]) && !RiskMgmtUtil.isNullOrEmpty(strRowIds)
+					&& !RiskMgmtUtil.isNullOrEmpty(strRowIds[1])) {
+				List<String> hazardIdsToBeDeleted = RiskMgmtUtil.getListFromString(strHazardIds[0], COMMA);
+				if (!RiskMgmtUtil.isNullOrEmpty(hazardIdsToBeDeleted)) {
+					for (String strHazardId : hazardIdsToBeDeleted) {
+						Hazard hazard = new Hazard(strHazardId);
+						hazard.delete(context);
+					}
+				}
+				List<String> rowIdsTobeRemoved = RiskMgmtUtil.getListFromString(strRowIds[1], PIPE);
+				if (!RiskMgmtUtil.isNullOrEmpty(rowIdsTobeRemoved)) {
+					xmlMessage.append("<mxRoot>");
+					for (String strLevel : rowIdsTobeRemoved) {
+						StringBuilder partialXML = new StringBuilder();
+						String message = DomainConstants.EMPTY_STRING;
+						partialXML.append("<item id=\"");
+						partialXML.append(strLevel);
+						partialXML.append("\" />");
+						xmlMessage.append("<action refresh=\"true\" fromRMB=\"\"><![CDATA[remove]]></action>");
+						xmlMessage.append(partialXML);
+						xmlMessage.append("<message><![CDATA[" + message + "]]></message>");
+					}
+					xmlMessage.append("</mxRoot>");
+				}
+			}
+			final String findAndReplace = FrameworkUtil.findAndReplace(xmlMessage.toString(), "\"", "\\\"");
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.TRUE, FUNCTION_REMOVE_ROW_AND_REFRESH_HAZARD_MATRIX, findAndReplace,
+					strFrameName);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method checks if user has edit access on column values of hazard
+	 * summary table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return StringList
+	 * @throws RiskMgmtException
+	 */
+	public StringList canEditTableRiskMgmtHazardSummaryColumns(Context context, String[] args) throws RiskMgmtException {
+		boolean access = false;
+		boolean isDesignProject = false;
+		boolean isProduct = false;
+		final String HAZARD_TYPE = RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context);
+		final String STATE_CONTROLLED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYM_STATE_CONTROLLED.toString());
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectMap = (MapList) programMap.get(OBJECT_LIST);
+			StringList accessList = new StringList(objectMap.size());
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectMap) && !RiskMgmtUtil.isNullOrEmpty(requestMap)) {
+				String parentObjectId = (String) requestMap.get(PARENT_OID);
+				if (!RiskMgmtUtil.isNullOrEmpty(parentObjectId)) {
+					DomainObject parentObj = DomainObject.newInstance(context, parentObjectId);
+					isDesignProject = RiskMgmtUtil.getTypeKindOf(context, parentObj, RiskMgmtSymNames.SYM_TYPE_DESIGN_PROJECT.toString())
+							.containsValue(Boolean.TRUE);
+					isProduct = RiskMgmtUtil.getTypeKindOf(context, parentObj, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.toString())
+							.containsValue(Boolean.TRUE);
+					if (isProduct) {
+						access = HazardMgmtUtil.isProductsDesignProjectMember(context, parentObj, PROJECT_LEAD_ACCESS);
+					}
+					else {
+						StringBuilder sbRelPattern = new StringBuilder();
+						StringBuilder sbTypePattern = new StringBuilder();
+						sbRelPattern.append(SYM_REL_HAZARD.toString());
+						sbRelPattern.append(RiskMgmtConstants.COMMA);
+						sbRelPattern.append(SYM_REL_NEW_HAZARD.toString());
+						sbTypePattern.append(SYM_TYPE_PRODUCTS.toString());
+
+						List<Map<?, ?>> productList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, parentObj),
+								sbRelPattern.toString(), sbTypePattern.toString(), RiskMgmtUtil.stringList(DomainConstants.SELECT_ID), null, false,
+								true, (short) 0, null, null);
+
+						if (!RiskMgmtUtil.isNullOrEmpty(productList)) {
+							Map<?, ?> productMap = productList.get(0);
+							if (!RiskMgmtUtil.isNullOrEmpty(productMap)) {
+								String productObjectId = (String) productMap.get(DomainConstants.SELECT_ID);
+								if (!RiskMgmtUtil.isNull(productObjectId)) {
+									DomainObject newParentObject = DomainObject.newInstance(context, productObjectId);
+									if (!RiskMgmtUtil.isNull(newParentObject)
+											&& RiskMgmtUtil.getTypeKindOf(context, newParentObject, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.toString())
+													.containsValue(Boolean.TRUE)) {
+										access = HazardMgmtUtil.isProductsDesignProjectMember(context, newParentObject, PROJECT_LEAD_ACCESS);
+									}
+								}
+							}
+						}
+					}
+				}
+				for (Object object : objectMap) {
+					Map<?, ?> hazardInfo = (Map<?, ?>) object;
+					String hazardId = (String) hazardInfo.get(DomainConstants.SELECT_ID);
+					String state = (String) hazardInfo.get(DomainConstants.SELECT_CURRENT);
+					String type = (String) hazardInfo.get(DomainConstants.SELECT_TYPE);
+					if (HAZARD_TYPE.equals(type) && !RiskMgmtUtil.isNullOrEmpty(state) && !STATE_CONTROLLED.equals(state)) {
+						if (!RiskMgmtUtil.isNullOrEmpty(hazardId) && isDesignProject) {
+							Hazard hazard = new Hazard(hazardId);
+							HazardContext hazardContext = hazard.getProductContext(context);
+							access = HazardMgmtUtil.isProductsDesignProjectMember(context, hazardContext, PROJECT_LEAD_ACCESS);
+						}
+						if (access) {
+							accessList.add(Boolean.toString(true));
+						}
+						else {
+							String contextUser = context.getUser();
+							String owner = (String) hazardInfo.get(DomainConstants.SELECT_OWNER);
+							if (!RiskMgmtUtil.isNullOrEmpty(owner) && contextUser.equals(owner)) {
+								accessList.add(Boolean.toString(true));
+							}
+							else {
+								accessList.add(Boolean.toString(false));
+							}
+
+						}
+					}
+					else {
+						accessList.add(Boolean.toString(false));
+					}
+				}
+			}
+			return accessList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method checks if user has edit access on column values("Known Or
+	 * Foreseeable", "Normal Or Fault", "Major Classification", "Minor
+	 * Classification", "Sequence Of Events", "Hazardous Situation" and Harm) of
+	 * hazard summary table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return StringList
+	 * @throws RiskMgmtException
+	 */
+	public StringList canEditTableRiskMgmtHazardSummaryColumnsHazardAnalysisAttributes(Context context, String[] args) throws RiskMgmtException {
+		boolean access = false;
+		boolean isDesignProject = false;
+		boolean isProduct = false;
+		final String ATTRIBUTE_PROCESS = SYM_ATTR_PROCESS.get(context);
+		final String HAZARD_TYPE = RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context);
+		String strHazardProcess = DomainConstants.EMPTY_STRING;
+		final String STATE_IDENTIFIED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYM_STATE_IDENTIFIED.toString());
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectMap = (MapList) programMap.get(OBJECT_LIST);
+			StringList accessList = new StringList(objectMap.size());
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectMap) && !RiskMgmtUtil.isNullOrEmpty(requestMap)) {
+				String parentObjectId = (String) requestMap.get(PARENT_OID);
+				if (!RiskMgmtUtil.isNullOrEmpty(parentObjectId)) {
+					DomainObject parentObj = DomainObject.newInstance(context, parentObjectId);
+					isDesignProject = RiskMgmtUtil.getTypeKindOf(context, parentObj, RiskMgmtSymNames.SYM_TYPE_DESIGN_PROJECT.toString())
+							.containsValue(Boolean.TRUE);
+					isProduct = RiskMgmtUtil.getTypeKindOf(context, parentObj, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.toString())
+							.containsValue(Boolean.TRUE);
+					if (isProduct) {
+						access = HazardMgmtUtil.isProductsDesignProjectMember(context, parentObj, PROJECT_LEAD_ACCESS);
+					}
+					else {
+						StringBuilder sbRelPattern = new StringBuilder();
+						StringBuilder sbTypePattern = new StringBuilder();
+						sbRelPattern.append(SYM_REL_HAZARD.toString());
+						sbRelPattern.append(RiskMgmtConstants.COMMA);
+						sbRelPattern.append(SYM_REL_NEW_HAZARD.toString());
+						sbTypePattern.append(SYM_TYPE_PRODUCTS.toString());
+
+						List<Map<?, ?>> productList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, parentObj),
+								sbRelPattern.toString(), sbTypePattern.toString(), RiskMgmtUtil.stringList(DomainConstants.SELECT_ID), null, false,
+								true, (short) 0, null, null);
+						if (!RiskMgmtUtil.isNullOrEmpty(productList)) {
+							Map<?, ?> productMap = productList.get(0);
+							if (!RiskMgmtUtil.isNullOrEmpty(productMap)) {
+								String productObjectId = (String) productMap.get(DomainConstants.SELECT_ID);
+								if (!RiskMgmtUtil.isNull(productObjectId)) {
+									DomainObject newParentObject = DomainObject.newInstance(context, productObjectId);
+									if (!RiskMgmtUtil.isNull(newParentObject)
+											&& RiskMgmtUtil.getTypeKindOf(context, newParentObject, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.toString())
+													.containsValue(Boolean.TRUE)) {
+										access = HazardMgmtUtil.isProductsDesignProjectMember(context, newParentObject, PROJECT_LEAD_ACCESS);
+									}
+								}
+							}
+						}
+					}
+				}
+				for (Object object : objectMap) {
+					Map<?, ?> hazardInfo = (Map<?, ?>) object;
+					String state = (String) hazardInfo.get(DomainConstants.SELECT_CURRENT);
+					String hazardId = (String) hazardInfo.get(DomainConstants.SELECT_ID);
+					String type = (String) hazardInfo.get(DomainConstants.SELECT_TYPE);
+					if (HAZARD_TYPE.equals(type) && !RiskMgmtUtil.isNullOrEmpty(state) && STATE_IDENTIFIED.equals(state)) {
+						if (!RiskMgmtUtil.isNullOrEmpty(hazardId)) {
+							List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { hazardId },
+									RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_PROCESS)));
+							if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+								Map mpHazardInfo = (Map) lmHazardInfo.get(0);
+								strHazardProcess = (String) mpHazardInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_PROCESS));
+							}
+							if (isDesignProject) {
+								Hazard hazard = new Hazard(hazardId);
+								HazardContext hazardContext = hazard.getProductContext(context);
+								access = HazardMgmtUtil.isProductsDesignProjectMember(context, hazardContext, PROJECT_LEAD_ACCESS);
+							}
+						}
+
+						if (access && !RiskMgmtUtil.isNullOrEmpty(strHazardProcess) && ANALYSIS.equals(strHazardProcess)) {
+							accessList.add(Boolean.toString(true));
+						}
+						else {
+							String contextUser = context.getUser();
+							String owner = (String) hazardInfo.get(DomainConstants.SELECT_OWNER);
+							if (!RiskMgmtUtil.isNullOrEmpty(owner) && contextUser.equals(owner) && !RiskMgmtUtil.isNullOrEmpty(strHazardProcess)
+									&& ANALYSIS.equals(strHazardProcess)) {
+								accessList.add(Boolean.toString(true));
+							}
+							else {
+								accessList.add(Boolean.toString(false));
+							}
+
+						}
+					}
+					else {
+						accessList.add(Boolean.toString(false));
+					}
+				}
+			}
+			return accessList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean canViewTableRiskMgmtHazardSummaryColumnDrop(Context context, String[] args) throws RiskMgmtException {
+		boolean canView = false;
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String parentId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			String commandName = (String) programMap.get(RiskMgmtConstants.PORTAL_CMD_NAME);
+			if (!RiskMgmtUtil.isNullOrEmpty(parentId) && !RiskMgmtUtil.isNullOrEmpty(commandName)) {
+				if (RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, parentId), SYMBOLIC_TYPE_DESIGN_PROJECT.toString())
+						.containsValue(Boolean.TRUE) && "RiskMgmtHazardDetailsProductHazards".equals(commandName)) {
+					canView = true;
+				}
+			}
+			return canView;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Display drop Icon for hazards only if current user is design project
+	 * member with project Lead access or is the owner of hazard
+	 * 
+	 * @param context
+	 *            - The eMatrix <code>Context</code> object.
+	 * @param args
+	 *            - The args holds information about object.
+	 * @return list of drop icon.
+	 * @throws Exception
+	 *             if operation fails.
+	 */
+	public StringList columnDropZone(Context context, String[] args) throws RiskMgmtException {
+		try {
+			StringList dropIconList = new StringList();
+			List columnIconList = JPO.invoke(context, "emxGenericColumns", null, "columnDropZone", args, Vector.class);
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			int i = 0;
+			if (!RiskMgmtUtil.isNullOrEmpty(objectList)) {
+				for (Object object : objectList) {
+					Map map = (Map) object;
+					String hazardId = (String) map.get(DomainConstants.SELECT_ID);
+					boolean hasAccess = false;
+					String columnIcon = DomainConstants.EMPTY_STRING;
+					if (!RiskMgmtUtil.isNullOrEmpty(hazardId) && !RiskMgmtUtil.isNullOrEmpty(columnIconList)) {
+						columnIcon = (String) columnIconList.get(i);
+						if (!RiskMgmtUtil.isNullOrEmpty(columnIcon)) {
+							Hazard hazard = new Hazard(hazardId);
+							hasAccess = HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard,
+									RiskMgmtConstants.PROJECT_LEAD_ACCESS);
+						}
+						if (hasAccess) {
+							dropIconList.add(columnIcon);
+						}
+						else {
+							dropIconList.add(DomainConstants.EMPTY_STRING);
+						}
+
+					}
+					i++;
+				}
+			}
+			return dropIconList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public void updateTableRiskMgmtHazardSummaryColumnOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> mpParamMap = (HashMap<?, ?>) programMap.get(PARAM_MAP);
+			String strHazardId = (String) mpParamMap.get(OBJECT_ID);
+			String strNewVal = (String) mpParamMap.get(NEW_VALUE);
+			Hazard hazardObject = new Hazard(strHazardId);
+			DomainObject productObject = hazardObject.getProductContext(context);
+			String productName = productObject.getInfo(context, DomainConstants.SELECT_NAME);
+			if (HazardMgmtUtil.isProductsDesignProjectMember(context, productObject, null, PersonUtil.getPersonObjectID(context, strNewVal))) {
+				hazardObject.setOwner(context, strNewVal);
+			}
+			else {
+				String sbErrorMessage = MessageUtil.getMessage(context, null, "RiskMgmt.Hazard.Message.CannotUpdateOwnerError",
+						new String[] { strNewVal, productName }, null, context.getLocale(), RISK_MGMT_STRING_RESOURCE);
+				throw new RiskMgmtException(sbErrorMessage);
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getInitialSeverity(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (Map<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						columnValues.addElement(hazard.getInitialSeverity(context));
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getInitialOccurence(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (Map<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						columnValues.addElement(hazard.getInitialOccurrence(context));
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getInitialRPN(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (HashMap) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+			Map<?, ?> paramList = (Map) paramMap.get(PARAM_LIST);
+			boolean isCSVExport = false;
+			String reportFormat = (String) paramList.get(REPORT_FORMAT);
+			if (CSV.equalsIgnoreCase(reportFormat)) {
+				isCSVExport = true;
+			}
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (HashMap<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						String rpn = hazard.getInitialRPN(context);
+						String occIndex = hazard.getInitialOccurrence(context);
+						String sevIndex = hazard.getInitialSeverity(context);
+						if (isCSVExport) {
+							if (!RiskMgmtUtil.isNull(rpn)) {
+								columnValues.addElement(rpn);
+							}
+							else {
+								columnValues.addElement(DomainConstants.EMPTY_STRING);
+							}
+						}
+						else {
+							columnValues.addElement(RiskMgmtUtil.getRPNDiv(context, occIndex, sevIndex, rpn));
+						}
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getFinalSeverity(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (Map<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						columnValues.addElement(hazard.getCurrentSeverity(context));
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getFinalOccurence(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (Map<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						columnValues.addElement(hazard.getCurrentOccurrence(context));
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Vector getFinalRPN(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map paramMap = (HashMap) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+			Map<?, ?> paramList = (Map) paramMap.get(PARAM_LIST);
+			boolean isCSVExport = false;
+			String reportFormat = (String) paramList.get(REPORT_FORMAT);
+			if (CSV.equalsIgnoreCase(reportFormat)) {
+				isCSVExport = true;
+			}
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (HashMap<String, String>) relBusObjPageList.get(i);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails) && objDetails.containsKey((SELECT_ID))) {
+					String strObjectId = (String) objDetails.get(SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)
+							&& RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), SYMBOLIC_TYPE_HAZARD)
+									.containsValue(Boolean.TRUE)) {
+						Hazard hazard = new Hazard(strObjectId);
+						String rpn = hazard.getCurrentRPN(context);
+						String occIndex = hazard.getCurrentOccurrence(context);
+						String sevIndex = hazard.getCurrentSeverity(context);
+						if (isCSVExport) {
+							if (!RiskMgmtUtil.isNull(rpn)) {
+								columnValues.addElement(rpn);
+							}
+							else {
+								columnValues.addElement(DomainConstants.EMPTY_STRING);
+							}
+						}
+						else {
+							columnValues.addElement(RiskMgmtUtil.getRPNDiv(context, occIndex, sevIndex, rpn));
+						}
+					}
+					else {
+						columnValues.addElement(EMPTY_STRING);
+					}
+				}
+				else {
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

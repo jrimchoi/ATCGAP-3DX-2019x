@@ -1,0 +1,82 @@
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import com.matrixone.apps.domain.util.MapList;
+
+
+public class ${CLASSNAME} {
+	
+	
+	 public StringList sortPDFFilesForMergePDF(Context context, String[] args) throws Exception {
+		
+		 StringList aFileList = (StringList)JPO.unpackArgs(args);
+		 StringList aFinalSortList = new StringList(aFileList.size());
+		 String sSplitArray1[] = {};
+		 try {
+		 String sSplit1Part = "";
+		 String sSortStr = "";
+		 Map<String,String> mSortMap = null;
+		 MapList mSortedList = new MapList(aFileList.size());
+		
+		 for (String sFileName : aFileList) {
+			 if(!sFileName.contains("-") && !sFileName.contains("_"))
+			 {
+				 aFinalSortList.add(sFileName);
+				 continue;
+			 }
+			 if(sFileName.endsWith(".pdf")|| sFileName.endsWith(".PDF"))
+			 { 
+				 if(sFileName.endsWith(".pdf"))
+				 {
+					 sSplitArray1 =  sFileName.split(".pdf");
+				 }
+				 if(sFileName.endsWith(".PDF"))
+				 {
+					 sSplitArray1 = sFileName.split(".PDF");
+				 }
+				 
+				 sSplit1Part = sSplitArray1[0];
+				 int ihypenIndex = sSplit1Part.lastIndexOf("-");
+				 int iUnderScoreIndex = sSplit1Part.lastIndexOf("_");
+				 
+				 if(iUnderScoreIndex > ihypenIndex)
+				 {
+					 sSplitArray1 = sSplit1Part.split("_");
+				 }
+				 else {
+					 sSplitArray1 = sSplit1Part.split("-");
+				 }
+				 sSortStr = sSplitArray1[sSplitArray1.length-1];
+				 sSortStr = sSortStr.trim();
+				 mSortMap = new HashMap<String,String>();
+				 mSortMap.put("filename", sFileName);
+				 mSortMap.put("sortkey", sSortStr);
+				 mSortedList.add(mSortMap);
+			 }
+		}
+		 aFinalSortList.sort();
+		 mSortedList.addSortKey("sortkey","ascending","String");
+		 mSortedList.sortStructure();
+		 for (int i = 0; i < mSortedList.size(); i++) {
+		      Map map = (Map)mSortedList.get(i);
+		      aFinalSortList.addAll((List)getListValue(map, "filename"));
+		    }
+	   }
+		 catch (Exception e) {
+			e.printStackTrace();
+		}
+		return aFinalSortList; 
+	 }
+	 public static StringList getListValue(Map paramMap, String paramString) {
+		    Object object = paramMap.get(paramString);
+		    return (object == null) ? new StringList(0) : ((object instanceof String) ? new StringList((String)object) : (StringList)object);
+		  }
+	
+}
+
+
+

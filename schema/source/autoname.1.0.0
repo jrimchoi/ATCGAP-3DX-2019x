@@ -1,0 +1,30 @@
+function logCmd(c, p, r) {
+	proc.log("debug", "Autoname log:\n\tmql: " + c + 
+		"\n\tparams: [" + ((p != null) ? p.toString() : null) + "]" +
+		"\n\tsuccess:[" + r.success + "], result:[" + ((r.result != null) ? r.result.trim() : null) + "], error:[" + ((r.error != null) ? r.error.trim() : null) + "]");
+}  
+  
+var params = proc.declareParameters(["type"], ["package", "discipline", "usage", "quantity"]);
+
+var pkg = params.get("package"); // package is a reserved keyword, can't use it as a regular variable
+
+try
+{
+    var autoname = new com.dassault_systemes.i3dx.mql.scripting.util.Autoname();
+    var suffixes = Java.from(autoname(mql, type, pkg, discipline, usage, quantity));
+
+    // Define output result
+    var globalResult = new Object();
+    globalResult["package"] = pkg;
+    globalResult.type = type;
+    globalResult.discipline = discipline;
+    globalResult.usage = usage;
+    globalResult.suffix = suffixes;
+
+    proc.write(null, JSON.stringify(globalResult), null);
+}
+catch (e)
+{
+    proc.write(null, null, JSON.stringify({errorcode:"OPERATION_ERROR", errormessage:e.getMessage()}));
+}
+

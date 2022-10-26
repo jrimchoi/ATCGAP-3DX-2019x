@@ -1,0 +1,134 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"}, {name:"SEL_PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                     [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var ExpandPrimitives     = Java.type("com.dassault_systemes.completion.service.ExpandPrimitives");
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var CompletionServicesConstants = Java.type("com.dassault_systemes.completion.service.CompletionServicesConstants");
+var FilterServices = Java.type("com.dassault_systemes.completion.service.FilterServices");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var System = Java.type("java.lang.System");
+var navSets = [PRD, PRCS, PROD_SYS];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+	
+
+	var FI3CompletionID = "FI3";
+	
+	var UserDefCompletionStop = System.getenv().get("UserDefCompletionStop");
+	var completionID="";
+	var primitiveName="";
+	if (UserDefCompletionStop != null)
+	{
+		var UserDefCompletionStopTab = UserDefCompletionStop.split("|");
+		completionID = UserDefCompletionStopTab[0];
+		primitiveName = UserDefCompletionStopTab[1];
+	}
+	
+	while (true)
+	{
+		///////////////////////////////////////
+		// 1- PROD_SYS = PROD_SYS + SmartCompletionProcess->System(SEL_PRCS)
+		///////////////////////////////////////
+		var scPrcsSysNavMode = [true, true]; // [Ref/Ref, Occ/Occ]
+		var scPrcsSysTimer = new DebugTimer(context, 0, "PROD_SYS = PROD_SYS + SmartCompletionProcess->System(SEL_PRCS)", true);
+		var systemFromSmartCompletion = NavigationPrimitives.navigateFromProcessToSystem(context, SEL_PRCS, scPrcsSysNavMode);
+		PROD_SYS = PROD_SYS.merge(systemFromSmartCompletion);
+		scPrcsSysTimer.complete();
+		if (completionID.equalsIgnoreCase(FI3CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionProcessSystemPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 2- TMP = SELECT IN (PROD_SYS) WHERE (Type==OPERATION)
+		///////////////////////////////////////
+		var filterSysTimer = new DebugTimer(context, 0, "TMP = SELECT IN (PROD_SYS) WHERE (Type==OPERATION)", true);
+		var whereClause = "type.kindof["+CompletionServicesConstants.OPERATION_REF_TYPE+"] == TRUE";
+		var TMP = FilterServices.cutOccurrences(context, PROD_SYS, whereClause);
+		filterSysTimer.complete();
+
+		///////////////////////////////////////
+		// 3- PROD_SYS = PROD_SYS + Expand+1(TMP)
+		///////////////////////////////////////
+		var expandSysTimer = new DebugTimer(context, 0, "PROD_SYS = PROD_SYS + Expand+1(TMP)", true);
+		var resExpandSystem = ExpandPrimitives.expandSystem(context, TMP, 1);
+		PROD_SYS = PROD_SYS.merge(resExpandSystem);
+		expandSysTimer.complete();
+		if (completionID.equalsIgnoreCase(FI3CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 4- TMP = SELECT IN (PRCS) WHERE (attribute[PLMEntity.PLM_ExternalID] ~~ '*KIT*')
+		///////////////////////////////////////
+		var filterPrcsTimer = new DebugTimer(context, 0, "TMP = SELECT IN (PRCS) WHERE (attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_NAME+"] ~~ '*KIT*')", true);
+		whereClause = "attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_NAME+"] ~~ '*KIT*'";
+		TMP = FilterServices.cutOccurrences(context, PRCS, whereClause);
+		filterPrcsTimer.complete();
+
+		///////////////////////////////////////
+		// 5- PRCS = PRCS + Expand+1(TMP)
+		///////////////////////////////////////
+		var expandPrcsTimer = new DebugTimer(context, 0, "PRCS = PRCS + Expand+1(TMP)", true);
+		var resExpandPrcs = ExpandPrimitives.expandProcess(context, TMP, 1);
+		PRCS = PRCS.merge(resExpandPrcs);
+		expandPrcsTimer.complete();
+		if (completionID.equalsIgnoreCase(FI3CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandProcessPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 6- PRD = PRD + SmartCompletionProcess->Product(PRCS)
+		///////////////////////////////////////
+		var scPrcsPrdNavMode = [false, false, true]; // [Ref/Ref, Ref/Occ-Ref, Inst/Occ]
+		var scPrcsPrdTimer = new DebugTimer(context, 0, "PRD = PRD + SmartCompletionProcess->Product(PRCS)", true);
+		var productFromSmartCompletion = NavigationPrimitives.navigateFromProcessToProduct(context, PRCS, scPrcsPrdNavMode);
+		PRD = PRD.merge(productFromSmartCompletion);
+		scPrcsPrdTimer.complete();
+		if (completionID.equalsIgnoreCase(FI3CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionProcessProductPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 7- TMP = SELECT IN (PRD) WHERE (attribute[PLMEntity.V_discipline] ~~ '*Fast*')
+		///////////////////////////////////////
+		var filterPrdTimer = new DebugTimer(context, 0, "TMP = SELECT IN (PRD) WHERE (attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_DISCIPLINE+"] ~~ '*Fast*')", true);
+		whereClause = "attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_DISCIPLINE+"] ~~ '*Fast*'";
+		TMP = FilterServices.filterOnLeaves(context, PRD, whereClause);
+		filterPrdTimer.complete();
+
+		///////////////////////////////////////
+		// 8- PRD = PRD + ExpandAll(TMP)
+		///////////////////////////////////////
+		var expandPrdTimer = new DebugTimer(context, 0, "PRD = PRD + ExpandAll(TMP)", true);
+		var resExpandProduct = ExpandPrimitives.expandProduct(context, TMP, 0);
+		PRD = PRD.merge(resExpandProduct);
+		expandPrdTimer.complete();
+		if (completionID.equalsIgnoreCase(FI3CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandProductPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 9- TMP=GetMaterialisation(PRCS)
+		///////////////////////////////////////
+		var getMaterialisationTimer = new DebugTimer(context, 0, "TMP=GetMaterialisation(PRCS)", true);
+		var productFromMaterialisationNavigation = NavigationPrimitives.GetPRDMaterializationFromPRCS(context,PRCS);
+		getMaterialisationTimer.complete();
+
+		///////////////////////////////////////
+		// 10- PRD = PRD + ExpandAll(TMP)
+		///////////////////////////////////////
+		// we will have to do an ExpandAll on each occurrence since they do not have the same root
+		var expandAllTmpTimer = new DebugTimer(context, 0, "PRD = PRD + ExpandAll(TMP)", true);
+		resExpandProduct = ExpandPrimitives.expandMultiRoot(context, productFromMaterialisationNavigation, 0);
+		PRD = PRD.merge(resExpandProduct);
+		expandAllTmpTimer.complete();
+		break;
+	}
+
+	///////////////////////////////////////
+	// 11- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

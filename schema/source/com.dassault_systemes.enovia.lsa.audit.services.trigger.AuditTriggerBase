@@ -1,0 +1,1193 @@
+/************************************************************************************************************
+ * /* ${CLASSNAME}
+ **
+ ** Copyright (c) 2014-2018 Dassault Systemes. All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ **
+ *
+ * 
+ * Author Date Description
+ * 
+ * SCT 22-April-2008 LQIAudit program to handle triggers
+ * 
+ * 
+ ************************************************************************************************************/
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ReviewRoute.RouteCompletionAction;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.AuditUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.dassault_systemes.enovia.snapshot.services.SnapshotService;
+import com.matrixone.apps.common.InboxTask;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkProperties;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.Context;
+import matrix.db.IconMail;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} implements DomainConstants {
+
+	/**
+	 * Contructor ensures that we are conected to eMatrix.
+	 *
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            not used in constructor
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernal
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		if (!context.isConnected())
+			throw new Exception("not supported on desktop client");
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private ReviewRouteService getReviewRouteService(Context context) throws AuditException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			ReviewRouteService reviewRouteService = (ReviewRouteService) component.getService(ReviewRouteService.class);
+			return reviewRouteService;
+		}
+		catch (ComponentException exception) {
+			throw new AuditException(exception);
+		}
+	}
+
+	/**
+	 * This is a trigger method that gets called when Audit is promoted.
+	 * Depending on the Audit state, relevant Date attributes are updated on
+	 * promote.
+	 *
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] String- The Audit object id. args[1] String- The Audit
+	 *            state.
+	 * @return int - 0 if successful
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernal
+	 */
+	public int updateAuditDates(Context context, String[] args) throws Exception {
+		boolean bContextPushed = false;
+		// Get ObjectID
+		String strObjId = args[0];
+		String strCurrentState = args[1];
+		String strStateActive = FrameworkUtil.lookupStateName(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT),
+				"state_Active");
+		String strStateClosed = FrameworkUtil.lookupStateName(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT),
+				"state_Closed");
+		String strStateFinalization = FrameworkUtil.lookupStateName(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT),
+				"state_Finalization");
+		try {
+			// Push context to update the Date Values
+			if (!bContextPushed) {
+				ContextUtil.pushContext(context);
+				bContextPushed = true;
+			}
+			DomainObject doAuditObj = DomainObject.newInstance(context, strObjId);
+			SimpleDateFormat sdf = new SimpleDateFormat(AuditConstants.SIMPLE_DATE_FORMAT, Locale.US);
+
+			/* Process the arguments */
+			if (strStateActive.equalsIgnoreCase(strCurrentState)) {
+				// Update the Actual Start Date
+				doAuditObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITACTUALSTARTDATE),
+						sdf.format(new Date()));
+			}
+			else if (strStateClosed.equalsIgnoreCase(strCurrentState)) {
+				// Update the Closed Date
+				// doAuditObj.setAttributeValue(context,
+				// PropertyUtil.getSchemaProperty(context,
+				// AuditConstants.SYM_ATTR_CLOSEDATE+"]"), sdf
+				// .format(new Date()));
+				doAuditObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_CLOSEDATE),
+						sdf.format(new Date()));
+			}
+			else if (strStateFinalization.equalsIgnoreCase(strCurrentState)) {
+				// Update the Actual End Date
+				doAuditObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITACTUALENDDATE),
+						sdf.format(new Date()));
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+			throw e;
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Expands to get all Inbox Task objects realted to the parent object.
+	 *
+	 * @param context
+	 * @param parentId
+	 * @return
+	 * @throws Exception
+	 */
+	private static MapList getAllInboxTasks(Context context, String parentId) throws Exception {
+		// Expand to all of the related Route, Inbox Tasks
+
+		DomainObject parentObj = DomainObject.newInstance(context, parentId);
+
+		// getRelatedObjects - Start
+		String relPattern = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_OBJECTROUTE) + ","
+				+ PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ROUTETASK) + "," + RELATIONSHIP_TASK_SUBROUTE;
+		String typePattern = TYPE_ROUTE + "," + TYPE_INBOX_TASK;
+		StringList busSelects = new StringList();
+		busSelects.add(DomainConstants.SELECT_ID);
+		busSelects.add(DomainConstants.SELECT_TYPE);
+		busSelects.add(DomainConstants.SELECT_CURRENT);
+		StringList relSelects = new StringList();
+		boolean to = true;
+		boolean from = true;
+		short recurseToLevel = 0;
+		String busWhere = DomainConstants.EMPTY_STRING;
+		String relWhere = DomainConstants.EMPTY_STRING;
+		Pattern busPattern = new Pattern(TYPE_INBOX_TASK);
+
+		MapList maplist = parentObj.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, to, from, recurseToLevel, busWhere,
+				relWhere, busPattern, null, null);
+
+		// getRelatedObjects - End
+
+		return maplist;
+	}
+
+	/**
+	 * This method deletes all related Inbox Tasks and Routes when the Audit is
+	 * demoted.
+	 *
+	 * @param context
+	 *            - eMatrix context
+	 * @param args
+	 *            -
+	 * @return void
+	 * @throws Exception
+	 */
+	public static void deleteAllRelatedRouteComponents(Context context, String[] args) throws Exception {
+		boolean bContextPushed = false;
+		// Get ObjectID
+		String parentId = args[0];
+
+		MapList relatedInboxTasks = getAllInboxTasks(context, parentId);
+		Map taskMap = null;
+		Map routeMap = null;
+		InboxTask task = null;
+
+		String strTaskId = DomainConstants.EMPTY_STRING;
+		String strTaskState = DomainConstants.EMPTY_STRING;
+		String strRouteId = DomainConstants.EMPTY_STRING;
+		String strRouteState = DomainConstants.EMPTY_STRING;
+		String strTaskAssignee = DomainConstants.EMPTY_STRING;
+		StringList toList = new StringList();
+		DomainObject dobRoute = null;
+		String POLICY_AUDITREPLY = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREPLY);
+		String STATE_COMPLETE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREPLY,
+				AuditConstants.SYM_STATE_COMPLETE);
+		// Process the list
+		try {
+			// Code to get all of the Route objects related to the parent object
+			DomainObject dob = DomainObject.newInstance(context, parentId);
+			StringList busSelects = new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			busSelects.add(DomainConstants.SELECT_CURRENT);
+			StringList relSelects = new StringList();
+
+			short recurseToLevel = 1;
+
+			// Getting all the related routes
+			MapList relatedRoutes = dob.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_OBJECTROUTE),
+					TYPE_ROUTE, busSelects, relSelects, false, true, recurseToLevel, null, null);
+			for (int i = 0; i < relatedRoutes.size(); ++i) {
+				routeMap = (Map) relatedRoutes.get(i);
+				// Getting the state of the route
+				strRouteState = (String) routeMap.get(DomainConstants.SELECT_CURRENT);
+				// Only Delete the route that are not completed.
+				if (!strRouteState.equals(STATE_COMPLETE)) {
+					strRouteId = (String) routeMap.get(DomainConstants.SELECT_ID);
+					// Push context to Delete the object
+					if (!bContextPushed) {
+						ContextUtil.pushContext(context);
+						bContextPushed = true;
+					}
+					// Delete the route
+					if (null != strRouteId) {
+						dobRoute = DomainObject.newInstance(context, strRouteId);
+						dobRoute.open(context);
+						dobRoute.delete(context);
+						dobRoute.close(context);
+					}
+					if (bContextPushed) {
+						ContextUtil.popContext(context);
+						bContextPushed = false;
+					}
+				}
+			}
+			// Code to manipulate Route ends here.
+
+			// Code to delete Tasks associated with route
+			for (int i = 0; i < relatedInboxTasks.size(); ++i) {
+				taskMap = (Map) relatedInboxTasks.get(i);
+				strTaskState = (String) taskMap.get(DomainConstants.SELECT_CURRENT);
+
+				// Only delete the tasks that have not been completed.
+				if (!strTaskState.equals(STATE_COMPLETE)) {
+					strTaskId = (String) taskMap.get(DomainConstants.SELECT_ID);
+					task = new InboxTask(strTaskId);
+
+					strTaskAssignee = task.getTaskAssignee(context);
+
+					if (!toList.contains(strTaskAssignee)) {
+						toList.add(strTaskAssignee);
+					}
+					task.remove(context);
+					task.close(context);
+				}
+			}
+			// Send notification to users that their tasks have been deleted
+			// TODO add changeable message
+			IconMail iconmail = new IconMail();
+			iconmail.create(context);
+			iconmail.setToList(toList);
+			iconmail.setMessage("Route Rejected");
+			iconmail.send(context, "Route Rejected");
+		}
+		catch (Exception mex) {
+			mex.printStackTrace();
+			throw mex;
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+
+	}
+
+	/**
+	 * Check if replies exist.
+	 *
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return the int
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public int checkIfRepliesExist(Context context, String[] args) throws Exception {
+		int iReturn = 0;
+		try {
+			String strObjectId = args[0];
+			String strMessage = DomainConstants.EMPTY_STRING;
+			DomainObject doRequest = DomainObject.newInstance(context, strObjectId);
+			StringList busSelects = new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			StringList relSelects = new StringList();
+
+			short recurseToLevel = 1;
+
+			// Getting all the related routes
+			MapList mlRelatedReplies = doRequest.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPLY), busSelects, relSelects, false, true, recurseToLevel,
+					null, null);
+			if (null == mlRelatedReplies || mlRelatedReplies.size() < 1) {
+				strMessage = i18nNow.getI18nString("LQIAudit.Message.RequestCannotPromote", "LQIAuditStringResource",
+						context.getSession().getLanguage());
+
+				// Displaying message
+				mqlNotice(context, strMessage);
+
+			}
+
+		}
+		catch (Exception mex) {
+			mex.printStackTrace();
+			throw mex;
+		}
+		return iReturn;
+
+	}
+
+	/**
+	 * This method displays mql notice message.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param notice
+	 *            String containing notice message
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF Rossini
+	 */
+
+	public static void mqlNotice(Context context, String notice) throws Exception {
+		MqlUtil.mqlCommand(context, "notice $1", notice);
+	}
+
+	/**
+	 * This is check trigger method on Audit Report Summary promote it checks
+	 * for the files attached, at least one file shold be attached with it.
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public int checkTriggerAuditReportPromote(Context context, String[] args) throws Exception {
+		StringList sListSelects = new StringList(2);
+		sListSelects.add(DomainConstants.SELECT_ID);
+		sListSelects.add(DomainConstants.SELECT_NAME);
+		MapList mListFiles = null;
+		int retVal = 0;
+		if (args == null || args.length < 1) {
+			throw (new IllegalArgumentException());
+		}
+		String strAuditReportSummaryFilesNotAttached = i18nNow.getI18nString("LQIAudit.Message.FilesNotAttached", "LQIAuditStringResource",
+				context.getSession().getLanguage());
+		try {
+			String strObjectId = args[0];
+			DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+
+			// Get the Related File Attachment Objects.
+			/*
+			 * mListFiles = doObject.getRelatedObjects(context,
+			 * PropertyUtil.getSchemaProperty(context,AuditConstants.
+			 * SYM_REL_FILEREFERENCE),
+			 * PropertyUtil.getSchemaProperty(context,AuditConstants.
+			 * SYM_TYPE_FILEATTACHMENT), false, true, 1, sListSelects, null,
+			 * null, "", null, null, null);
+			 */
+			StringBuilder relPattern = new StringBuilder();
+			relPattern.append(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_FILEREFERENCE));
+			relPattern.append(",");
+			relPattern.append(DomainConstants.RELATIONSHIP_REFERENCE_DOCUMENT);
+			mListFiles = doObject.getRelatedObjects(context, relPattern.toString(), DomainConstants.QUERY_WILDCARD, false, true, 1, sListSelects,
+					null, null, "", null, null, null);
+
+			if (null == mListFiles || mListFiles.isEmpty()) {
+				// Displaying message
+				mqlNotice(context, strAuditReportSummaryFilesNotAttached);
+				retVal = 1;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	/**
+	 * Its a trigger applied on the relationship Audit Schedule If existing
+	 * audit to be added for the audit schedule, if that audit is already into
+	 * the audit Schedule should not get added. and should display proper error
+	 * message.
+	 *
+	 * @param context
+	 * @param args
+	 * @return 0
+	 * @throws Exception
+	 */
+	public int checkTriggerAuditScheduleConnect(Context context, String[] args) throws Exception {
+		int retVal = 0;
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSCHEDULE);
+
+		if (args == null || args.length < 0) {
+			throw (new IllegalArgumentException());
+		}
+
+		try {
+			// audit Schedule Object id
+			String strAuditScheduleId = args[0];
+
+			// can be audit Schedule or Audit Object id
+			String strToObjectId = args[1];
+
+			if (!Helper.isNullOrEmpty(strAuditScheduleId) && !Helper.isNullOrEmpty(strToObjectId)) {
+				DomainObject doAuditScheduleObject = DomainObject.newInstance(context, strAuditScheduleId);
+
+				List<Map<?, ?>> lmToObjectInfo = QueryUtil.getInfo(context, new String[] { strToObjectId },
+						Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE));
+
+				if (!Helper.isNullOrEmpty(lmToObjectInfo)) {
+					Map<?, ?> mpToObjectInfo = lmToObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpToObjectInfo)) {
+						String strTypeKindOfAudit = (String) mpToObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditSchedule = (String) mpToObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE);
+
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)
+								|| AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSchedule)) {
+
+							MapList mlRelatedAudit = doAuditScheduleObject.getRelatedObjects(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE), DomainConstants.QUERY_WILDCARD,
+									Helper.stringList(DomainConstants.SELECT_ID), null, false, true, (short) 1, "", "");
+
+							if (!Helper.isNullOrEmpty(mlRelatedAudit)) {
+								Iterator itrMap = mlRelatedAudit.iterator();
+								Map tempMap = null;
+								String strTempId = DomainConstants.EMPTY_STRING;
+								int intCount = 0;
+								while (itrMap.hasNext()) {
+									tempMap = (Map) itrMap.next();
+									strTempId = (String) tempMap.get(DomainConstants.SELECT_ID);
+									if (strTempId.equals(strToObjectId)) {
+										intCount++;
+									}
+								}
+
+								if (intCount > 1) {
+									String strMessage = DomainConstants.EMPTY_STRING;
+									if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.AuditExistinSchedule");
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.AuditScheduleExistinSchedule");
+									}
+									retVal = 1;
+									// Displaying message
+									mqlNotice(context, strMessage);
+								}
+							}
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	/**
+	 * Check trigger for the Planned Schedule Date: Its mandatory for promoting
+	 * Audit Schedule to Review state for the Related Audits. If not present
+	 * display message
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public int checkPlannedScheduledDate(Context context, String[] args) throws Exception {
+		int retVal = 0;
+		final String SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSCHEDULE);
+		if (args == null || args.length < 0) {
+			throw (new IllegalArgumentException());
+		}
+
+		try {
+			// audit Schedule Object id
+			String strAuditScheduleId = args[0];
+
+			if (!Helper.isNullOrEmpty(strAuditScheduleId)) {
+				DomainObject doAuditScheduleObject = DomainObject.newInstance(context, strAuditScheduleId);
+				String strTypeKindOfAuditSchedule = doAuditScheduleObject.getInfo(context, SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE);
+
+				if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSchedule)) {
+					// get the attribute from the relationship Audit Schedule
+					StringList sListRelObjectSelect = new StringList();
+					sListRelObjectSelect.add(
+							DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITNEXTSCHEDULEAUDIT)));
+
+					// get all the related audit objects of the Audit Schedule
+					MapList mlRelatedAudit = doAuditScheduleObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT), false, true, 1,
+							Helper.stringList(DomainConstants.SELECT_ID), sListRelObjectSelect, null, "", null, null, null);
+
+					if (!Helper.isNullOrEmpty(mlRelatedAudit)) {
+						Iterator itrMap = mlRelatedAudit.iterator();
+						Map tempMap = null;
+						String strPlannedScheduledDate = DomainConstants.EMPTY_STRING;
+						int intCount = 0;
+						// iterate through all the related audits
+						while (itrMap.hasNext()) {
+							tempMap = (Map) itrMap.next();
+							// get the Planned Schedule Date & check if its
+							// empty.
+							strPlannedScheduledDate = (String) tempMap.get(DomainObject
+									.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITNEXTSCHEDULEAUDIT)));
+							if (DomainConstants.EMPTY_STRING.equals(strPlannedScheduledDate)) {
+								intCount++;
+							}
+						}
+
+						if (intCount >= 1) {
+							String strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+									"LQIAudit.Message.PlannedScheduleDateRequired");
+
+							retVal = 1;
+							// Displaying message
+							mqlNotice(context, strMessage);
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	public int checkRequestStateForDemoteAuditAtActive(Context context, String[] args) throws Exception {
+		int retVal = 0;
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+		final String STATE_NEW = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+				AuditConstants.SYM_STATE_NEW);
+		if (args == null || args.length < 1) {
+			throw (new IllegalArgumentException());
+		}
+		try {
+			String strObjectId = args[0];
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+
+				// check object type to make sure this trigger is used for Audit
+				if (AuditConstants.STR_TRUE.equalsIgnoreCase(doObject.getInfo(context, SELECT_TYPE_KIND_OF_AUDIT))) {
+					// Get the Related Audit Request Objects.
+					MapList mListRequest = doObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST), false, true, 1,
+							Helper.stringList(DomainConstants.SELECT_CURRENT), null, null, "", null, null, null);
+
+					if (!Helper.isNullOrEmpty(mListRequest)) {
+						for (int i = 0; i < mListRequest.size(); i++) {
+							Map mpRequestInfo = (Map) mListRequest.get(i);
+							if (!Helper.isNullOrEmpty(mpRequestInfo)) {
+								String strCurrent = (String) mpRequestInfo.get(DomainConstants.SELECT_CURRENT);
+								if (!Helper.isNullOrEmpty(strCurrent) && !strCurrent.equals(STATE_NEW)) {
+									retVal = 1;
+									mqlNotice(context,
+											Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.RequestBeyondNew"));
+									break;
+								}
+							}
+
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	public int checkFindingExistForDemoteAuditAtActive(Context context, String[] args) throws Exception {
+		int retVal = 0;
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		if (args == null || args.length < 1) {
+			throw (new IllegalArgumentException());
+		}
+		try {
+			String strObjectId = args[0];
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+				// check object type to make sure this trigger is used for Audit
+				if (AuditConstants.STR_TRUE.equalsIgnoreCase(doObject.getInfo(context, SELECT_TYPE_KIND_OF_AUDIT))) {
+					// Get the Related Audit Finding Objects.
+					MapList mListFinding = doObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING), false, true, 1,
+							Helper.stringList(DomainConstants.SELECT_ID), null, null, "", null, null, null);
+
+					if (!Helper.isNullOrEmpty(mListFinding)) {
+						// Displaying message
+						mqlNotice(context, Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.FindingExist"));
+						retVal = 1;
+					}
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	public int checkAuditStateForDemoteFindingAtResolution(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		final String STATE_AUDIT_RESOLUTION = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_AUDIT_RESOLUTION);
+		int retVal = 0;
+		if (args == null || args.length < 1) {
+			throw (new IllegalArgumentException());
+		}
+		try {
+			String strObjectId = args[0];
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+				if (AuditConstants.STR_TRUE.equalsIgnoreCase(doObject.getInfo(context, SELECT_TYPE_KIND_OF_AUDIT_FINDING))) {
+					// Get the Related Audit Object, and there should be only
+					// one Audit
+					MapList mListAudit = doObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT), true, false, 1,
+							Helper.stringList(DomainConstants.SELECT_CURRENT), null, null, "", null, null, null);
+
+					if (!Helper.isNullOrEmpty(mListAudit)) {
+						Map mapAuditInfo = (Map) mListAudit.get(0);
+						if (!Helper.isNullOrEmpty(mapAuditInfo)) {
+							String strCurrentState = (String) mapAuditInfo.get(DomainConstants.SELECT_CURRENT);
+							if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equals(STATE_AUDIT_RESOLUTION)) {
+								retVal = 1;
+								mqlNotice(context,
+										Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.FindingCannotDemoteToOpen"));
+							}
+						}
+
+					}
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return retVal;
+	}
+
+	/**
+	 * Check trigger that checks for empty required attributes before promotion.
+	 *
+	 * @param context
+	 *            User context
+	 * @param args
+	 *            Packaged args
+	 *
+	 * @return int
+	 *
+	 * @throws Exception
+	 */
+	public int checkAttributesforPromote(Context context, String[] args) throws AuditException {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String SELECT_ATTRIBUTE_AUDIT_FOLLOW_UP_REQUIRED = AuditUtil.getObjectAttributeSelectable(context,
+				AuditConstants.SYM_ATTR_AAUDITFOLLOWUPREQUIRED);
+		try {
+			String strObjectId = args[0];
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_REQUEST, SELECT_TYPE_KIND_OF_AUDIT_FINDING,
+								DomainConstants.SELECT_CURRENT, SELECT_ATTRIBUTE_AUDIT_FOLLOW_UP_REQUIRED));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditRequest = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST);
+						String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+						String strCurrentState = (String) mpObjectInfo.get(DomainConstants.SELECT_CURRENT);
+
+						String strTypeToFindMandAttributes = DomainConstants.EMPTY_STRING;
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+							strTypeToFindMandAttributes = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT);
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)) {
+							strTypeToFindMandAttributes = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+							strTypeToFindMandAttributes = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+						}
+
+						/*
+						 * Getting the list of attribute from properties file.
+						 * Pass the type and state name in method and it will
+						 * return the list of mandatory attribute which is
+						 * required before promote the object to next state.
+						 */
+						String strAttributeList = null;
+						try {
+							strAttributeList = getMandatoryAttributeList(context, strTypeToFindMandAttributes, strCurrentState);
+						}
+						catch (Exception e) {
+							strAttributeList = DomainConstants.EMPTY_STRING;
+						}
+
+						/*
+						 * This block is to get the required attribute names
+						 * based on 'AuditFollow-UpRequired' value
+						 */
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+							String strAttrFollowUpRequiredValue = (String) mpObjectInfo.get(SELECT_ATTRIBUTE_AUDIT_FOLLOW_UP_REQUIRED);
+							String strMoreAttributes = DomainConstants.EMPTY_STRING;
+							if (!Helper.isNullOrEmpty(strAttrFollowUpRequiredValue)) {
+								if (strAttrFollowUpRequiredValue.equalsIgnoreCase(AuditConstants.STR_YES)) {
+
+									strMoreAttributes = i18nNow.getI18nString("LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredYes", "LQIAudit",
+											context.getSession().getLanguage());
+									// strMoreAttributes =
+									// FrameworkProperties.getProperty(context,
+									// "LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredYes");
+								}
+								else {
+
+									strMoreAttributes = i18nNow.getI18nString("LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredNo", "LQIAudit",
+											context.getSession().getLanguage());
+									// strMoreAttributes =
+									// FrameworkProperties.getProperty(context,
+									// "LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredNo");
+								}
+								// Adding both the lists
+								if (!Helper.isNullOrEmpty(strMoreAttributes)) {
+									strAttributeList = strAttributeList + "," + strMoreAttributes.trim();
+								}
+							}
+						}
+
+						// Check to see if any of the required attributes are
+						// null.
+						StringBuffer strAttributeNameList = new StringBuffer();
+						if (null != strAttributeList && !"".equals(strAttributeList)) {
+							StringTokenizer strToken = new StringTokenizer(strAttributeList, ",");
+							while (strToken.hasMoreTokens()) {
+								String strAttributeName = (String) strToken.nextToken();
+								String strAttributeNameI18n = i18nNow.getAttributeI18NString(strAttributeName, context.getSession().getLanguage())
+										.trim();
+								String strAttrValue = doObject.getAttributeValue(context, strAttributeName);
+								if (strAttrValue == null || strAttrValue.equals("")) {
+									if (strAttributeNameList.length() > 0) {
+										strAttributeNameList.append(", ");
+									}
+									strAttributeNameList.append(strAttributeNameI18n);
+								}
+							}
+						}
+						// Throw error message if a missing attribute is there.
+						if (strAttributeNameList.length() > 0) {
+							String strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.MandatoryAttribute");
+							mqlNotice(context, strAttributeNameList.toString() + " " + strMessage);
+							return 1;
+
+						}
+					}
+				}
+			}
+
+			return 0;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * pass the type and state name and Gets the attribute list from properties
+	 * file.
+	 *
+	 * @param context
+	 *            the context
+	 * @param strType
+	 *            the str type
+	 * @param strState
+	 *            the str state
+	 *
+	 * @return the attribute list
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	protected String getMandatoryAttributeList(Context context, String strType, String strState) throws Exception {
+		String strAttributeList = "LQIAudit.Attribute." + strType + "." + strState + "State";
+		String strFromattedAttributeList = strAttributeList.replaceAll(" ", "");
+		return FrameworkProperties.getProperty(context, strFromattedAttributeList);
+		// return i18nNow.getI18nString(strFromattedAttributeList, "LQIAudit",
+		// context.getSession().getLanguage());
+	}
+
+	/**
+	 * This method is to get the required attribute names based on
+	 * 'AuditFollow-UpRequired' value.
+	 *
+	 * @param context
+	 *            the context
+	 * @param strRequiredvalue
+	 *            contains the attribute value
+	 *
+	 * @return the attribute list
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String followUpAttributes(Context context, String strRequiredvalue) throws Exception {
+		String strReturn = DomainConstants.EMPTY_STRING;
+		try {
+			if (strRequiredvalue.equalsIgnoreCase(AuditConstants.STR_YES)) {
+				strReturn = i18nNow.getI18nString("LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredYes", "LQIAuditStringResource", "en");
+			}
+			else {
+				strReturn = i18nNow.getI18nString("LQIAudit.Attribute.AuditFinding.AuditFollowUpRequiredNo", "LQIAuditStringResource", "en");
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+		return strReturn;
+	}
+
+	/**
+	 * Creates Approval Route for Audit.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	public void createApprovalRouteForTypeAuditStateClosed(Context context, String[] args) throws AuditException {
+		try {
+			final ReviewRouteService REVIEW_ROUTE_SERVICE = getReviewRouteService(context);
+			final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+			final String STATE_FINALAPPROVAL = FrameworkUtil.lookupStateName(context, POLICY_AUDIT, AuditConstants.SYM_STATE_FINALAPPROVAL);
+			final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+			String strAuditId = args[0];
+			String strCurrentState = args[1];
+			String strOwner = args[2];
+
+			String strCreateRoute = Helper.getProperty(context, "LQIAudit.AutoCreateApprovalRouteForAudit");
+
+			if (!Helper.isNullOrEmpty(strCreateRoute) && AuditConstants.STR_TRUE.equalsIgnoreCase(strCreateRoute)
+					&& !Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_FINALAPPROVAL)
+					&& !Helper.isNullOrEmpty(strAuditId) && !Helper.isNullOrEmpty(strOwner)) {
+				DomainObject dmoAudit = DomainObject.newInstance(context, strAuditId);
+
+				ArrayList<Map<String, String>> routeMemberIdList = new ArrayList<Map<String, String>>();
+				String strApproverId = DomainConstants.EMPTY_STRING;
+				String strApproverName = DomainConstants.EMPTY_STRING;
+
+				List<Map<?, ?>> auditorMapList = QueryUtil.getInfo(context, new String[] { strAuditId },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS)));
+
+				if (!Helper.isNullOrEmpty(auditorMapList)) {
+					Map auditorMap = auditorMapList.get(0);
+					String auditors = (String) auditorMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					StringList auditorList = FrameworkUtil.split(auditors, "~");
+
+					for (Object auditor : auditorList) {
+
+						strApproverName = (String) auditor;
+						StringList nameList = FrameworkUtil.split(strApproverName, ",");
+
+						if (!Helper.isNullOrEmpty(nameList) && nameList.size() == 2) {
+							StringBuilder name = new StringBuilder();
+							name.append(((String) nameList.get(1)).trim());
+							name.append(" ");
+							name.append(((String) nameList.get(0)).trim());
+							strApproverName = name.toString();
+						}
+
+						strApproverId = PersonUtil.getPersonObjectID(context, strApproverName);
+						Map<String, String> membersMap = new HashMap<String, String>();
+						membersMap.put(DomainConstants.SELECT_NAME, strApproverName);
+						membersMap.put(DomainConstants.SELECT_ID, strApproverId);
+						routeMemberIdList.add(membersMap);
+					}
+
+				}
+
+				Helper.runWithUser(context, strOwner, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws AuditException {
+						DomainObject dmoAudit = (DomainObject) args[0];
+						final ArrayList<Map<String, String>> ROUTEMEMBERIDLIST = (ArrayList<Map<String, String>>) args[1];
+						try {
+							return REVIEW_ROUTE_SERVICE.createReviewRoute(context, dmoAudit, DomainConstants.EMPTY_STRING,
+									DomainConstants.EMPTY_STRING, ROUTEMEMBERIDLIST, AuditConstants.SYM_STATE_FINALAPPROVAL,
+									RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+						}
+						catch (Exception e) {
+							throw new AuditException(e);
+						}
+					}
+				}, dmoAudit, routeMemberIdList);
+
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Creates Approval Route for Audit finding.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	public void createApprovalRouteForTypeAuditFindingStateClosed(Context context, String[] args) throws AuditException {
+		try {
+			final ReviewRouteService REVIEW_ROUTE_SERVICE = getReviewRouteService(context);
+			final String POLICY_AUDIT_FINDING = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITFINDING);
+			final String STATE_VERIFY = FrameworkUtil.lookupStateName(context, POLICY_AUDIT_FINDING, AuditConstants.SYM_STATE_VERIFY);
+			final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+			final String RELATIONSHIP_AUDIT_FINDINGS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS);
+			final String TYPE_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT);
+			String strAuditFindingId = args[0];
+			String strCurrentState = args[1];
+			String strOwner = args[2];
+
+			String strCreateRoute = Helper.getProperty(context, "LQIAudit.AutoCreateApprovalRouteForAuditFinding");
+
+			if (!Helper.isNullOrEmpty(strCreateRoute) && AuditConstants.STR_TRUE.equalsIgnoreCase(strCreateRoute)
+					&& !Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_VERIFY)
+					&& !Helper.isNullOrEmpty(strAuditFindingId) && !Helper.isNullOrEmpty(strOwner)) {
+				DomainObject dmoAuditFinding = DomainObject.newInstance(context, strAuditFindingId);
+
+				ArrayList<Map<String, String>> routeMemberIdList = new ArrayList<Map<String, String>>();
+				String strApproverId = DomainConstants.EMPTY_STRING;
+				String strApproverName = DomainConstants.EMPTY_STRING;
+
+				List<Map<?, ?>> auditMapList = QueryUtil.getRelatedObjects(context, dmoAuditFinding, RELATIONSHIP_AUDIT_FINDINGS, TYPE_AUDIT,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS)), null, true, false,
+						(short) 0, null, null);
+
+				if (!Helper.isNullOrEmpty(auditMapList)) {
+					Map auditMap = auditMapList.get(0);
+					String auditors = (String) auditMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					StringList auditorList = FrameworkUtil.split(auditors, "~");
+
+					for (Object auditor : auditorList) {
+
+						strApproverName = (String) auditor;
+
+						StringList nameList = FrameworkUtil.split(strApproverName, ",");
+
+						if (!Helper.isNullOrEmpty(nameList) && nameList.size() == 2) {
+							StringBuilder name = new StringBuilder();
+							name.append(((String) nameList.get(1)).trim());
+							name.append(" ");
+							name.append(((String) nameList.get(0)).trim());
+							strApproverName = name.toString();
+						}
+
+						strApproverId = PersonUtil.getPersonObjectID(context, strApproverName);
+						Map<String, String> membersMap = new HashMap<String, String>();
+						membersMap.put(DomainConstants.SELECT_NAME, strApproverName);
+						membersMap.put(DomainConstants.SELECT_ID, strApproverId);
+						routeMemberIdList.add(membersMap);
+					}
+
+				}
+
+				Helper.runWithUser(context, strOwner, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws AuditException {
+						DomainObject dmoAuditFinding = (DomainObject) args[0];
+						final ArrayList<Map<String, String>> ROUTEMEMBERIDLIST = (ArrayList<Map<String, String>>) args[1];
+						try {
+							return REVIEW_ROUTE_SERVICE.createReviewRoute(context, dmoAuditFinding, DomainConstants.EMPTY_STRING,
+									DomainConstants.EMPTY_STRING, ROUTEMEMBERIDLIST, AuditConstants.SYM_STATE_VERIFY,
+									RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+						}
+						catch (Exception e) {
+							throw new AuditException(e);
+						}
+					}
+				}, dmoAuditFinding, routeMemberIdList);
+
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	public int checkRequestStateResultsReadyDemoteAllowed(Context context, String[] args) throws AuditException {
+		try {
+			final String RELATIONSHIP_AUDIT_REQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST);
+
+			String strAuditRequestId = args[0];
+			DomainObject requestObject = DomainObject.newInstance(context, strAuditRequestId);
+			String auditId = requestObject.getInfo(context, "to[" + RELATIONSHIP_AUDIT_REQUEST + "].from.id");
+			if (!Helper.isNullOrEmpty(auditId)) {
+				String strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+						"LQIAudit.AuditRequest.AuditTemplateStateResultsReadyDemoteError");
+				mqlNotice(context, strMessage);
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	public int checkIfAllFindingClosedBeforeAuditClosure(Context context, String[] args) throws AuditException {
+		try {
+			String strObjectId = args[0];
+			final String POLICY_AUDIT_FINDING = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITFINDING);
+			final String STATE_CLOSED = FrameworkUtil.lookupStateName(context, POLICY_AUDIT_FINDING, AuditConstants.SYM_STATE_CLOSED);
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+				String checkConnectedFindings = Helper.getProperty(context,
+						"LQIAudit.AuditClosure.AllowOnlyIfConnectedFindigsAreClosed");
+				if (AuditConstants.STR_YES.equalsIgnoreCase(checkConnectedFindings)) {
+					List<Map<?, ?>> relObject = QueryUtil.getRelatedObjects(context, doObject,
+							AuditConstants.SYM_REL_AUDITFINDINGS, AuditConstants.SYM_TYPE_AUDITFINDING, Helper.stringList(DomainObject.SELECT_CURRENT),
+							null, false, true, (short) 1, "current!="+STATE_CLOSED, null);
+					if (!relObject.isEmpty()) {
+						Helper.mqlError(context, Helper.StringResource.AUDIT, "LQIAudit.Finding.NotClosed");
+						return 1;
+					} 
+				} 
+			}
+		} catch (Exception e) {
+			throw new AuditException(e);
+		}
+		return 0;
+	}
+	
+	
+	/**
+	 * Gets SnapshotService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return SnapshotService implementation reference
+	 * @throws SnapshotException
+	 *             if operation fails
+	 */
+	private SnapshotService getSnapshotService(Context context) throws AuditException {
+		try {
+			Class<?> implClass = Class.forName("com.dassault_systemes.enovia.snapshot.services.impl.SnapshotServiceImpl", false,
+					this.getClass().getClassLoader());
+			SnapshotService SnapshotService = (SnapshotService) implClass.newInstance();
+			return SnapshotService;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	
+	/**
+	 * Creates Audit Snapshot
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws AuditException
+	 *             if operation fails.
+
+	 */
+	
+	public void actionCreateAuditSnapshot(Context context, String[] args) throws AuditException {
+		String auditOID = args[0];
+		String typeName = "AuditSnapshot";
+		String name = DomainConstants.EMPTY_STRING;
+				
+		try {
+			DomainObject auditObj = DomainObject.newInstance(context, auditOID);		
+			SnapshotService service = getSnapshotService(context);			
+			service.generateSnapshot(context, auditObj, typeName, name);
+			
+		} catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+
+
+}
+

@@ -1,0 +1,538 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Stream;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService;
+import com.dassault_systemes.enovia.lsa.qic.services.DataSourceService;
+import com.dassault_systemes.enovia.processsteps.services.ProcessStepsConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            The ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws QICException {
+		super();
+	}
+
+	/**
+	 * Get the CAPARequestService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARequestService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARequestService getCAPARequestService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARequestService service = (CAPARequestService) LSAQICCore.getService(CAPARequestService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the DataSourceService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return DataSourceService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static DataSourceService getDataSourceService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			DataSourceService service = (DataSourceService) LSAQICCore.getService(DataSourceService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	private boolean checkCurrentState(Context context, String objectId, String symbolicPolicy, String symbolicState) throws QICException {
+		final String ACTUAL_STATE = QICUtil.getActualStateName(context, symbolicPolicy, symbolicState);
+		try {
+			boolean isInCheckedState = false;
+			List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainConstants.SELECT_CURRENT));
+			if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+				Map<?, ?> mpObjectInfo = (Map<?, ?>) lmObjectInfo.get(0);
+				if (ACTUAL_STATE.equals(mpObjectInfo.get(DomainConstants.SELECT_CURRENT))) {
+					isInCheckedState = true;
+				}
+			}
+			return isInCheckedState;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+
+	}
+
+	public boolean canViewStepRequestedCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_REQUESTED);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean canViewStepReviewCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return !checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_REQUESTED);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean canViewStepIntitiateCAPA(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return !checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_NOT_APPROVED);
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean canViewStepFulfilled(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return !checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_NOT_APPROVED);
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean canViewStepNotApproved(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_NOT_APPROVED);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskAcceptCAPARequest(Context context, String[] args) throws QICException {
+		final String STATE_REQUESTED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REQUESTED);
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(false));
+				// String strContextUserOrg =
+				// PersonUtil.getPersonObject(context).getInfo(context,
+				// DomainConstants.SELECT_ORGANIZATION);
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId[0] },
+						Helper.stringList(DomainConstants.SELECT_ORGANIZATION, DomainConstants.SELECT_CURRENT));
+				String strOrganization = DomainObject.EMPTY_STRING;
+				String strState = DomainObject.EMPTY_STRING;
+				for (Object obj : returnMap) {
+					Map requestMap = (Map) obj;
+					strOrganization = (String) requestMap.get(DomainConstants.SELECT_ORGANIZATION);
+					strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+				}
+				if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+						|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && STATE_REQUESTED.equals(strState)) {
+					objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(true));
+				}
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAcceptCAPARequest(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+				String[] arrObjectId = (String[]) programMap.get(QICConstants.OBJECT_ID);
+
+				if (!Helper.isNullOrEmpty(arrObjectId) && !Helper.isNullOrEmpty(arrObjectId[0])) {
+					CAPA_REQUEST_SERVICE.acceptCAPARequests(context, arrObjectId[0]);
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpener");
+				}
+			}
+			else {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForAcceptCAPARequestsUserNotQualityManager");
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpenerWindow");
+		}
+		catch (Exception e) {
+			throw new QICException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map<String, String> canViewTaskReassignCAPARequestOwnership(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(false));
+				String strContextUserOrg = PersonUtil.getPersonObject(context).getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId[0] },
+						Helper.stringList(DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORGANIZATION, DomainConstants.SELECT_CURRENT));
+				String strOwner = DomainObject.EMPTY_STRING;
+				String strOrganization = DomainObject.EMPTY_STRING;
+				String strState = DomainObject.EMPTY_STRING;
+				for (Object obj : returnMap) {
+					Map requestMap = (Map) obj;
+					strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+					strOrganization = (String) requestMap.get(DomainConstants.SELECT_ORGANIZATION);
+					strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+				}
+				if (conditionsToCheckForViewTaskReassignCAPARequestOwnership(context, strOwner, strContextUserOrg, strOrganization, strState)) {
+					objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(true));
+				}
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (
+
+		Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean conditionsToCheckForViewTaskReassignCAPARequestOwnership(Context context, String strOwner, String strContextUserOrg,
+			String strOrganization, String strState) throws QICException {
+		try {
+			final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+					QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+			final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+					QICConstants.SYMBOLIC_STATE_REVIEW);
+			final String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+					QICConstants.SYMBOLIC_STATE_APPROVED);
+			boolean canView = false;
+			if ((context.getUser().equalsIgnoreCase(strOwner) || ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader))
+					&& strContextUserOrg.equalsIgnoreCase(strOrganization)))) {
+				if (!Helper.isNullOrEmpty(strState)
+						&& Stream.of(STATE_PRELIMINARY, STATE_REVIEW, STATE_APPROVED).anyMatch(x -> x.equalsIgnoreCase(strState))) {
+					canView = true;
+				}
+			}
+			return canView;
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskAddSupportingDocumentation(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(!checkCurrentState(context, strCAPARequestId[0],
+						QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_REQUESTED)));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskStartCAPAProcess(Context context, String[] args) throws QICException {
+		final String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_APPROVED);
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				DomainObject dmoCAPARequest = DomainObject.newInstance(context, strCAPARequestId[0]);
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId[0] },
+						Helper.stringList(DomainConstants.SELECT_OWNER, DomainConstants.SELECT_CURRENT));
+				String strOwner = DomainObject.EMPTY_STRING;
+				String strState = DomainObject.EMPTY_STRING;
+				for (Object obj : returnMap) {
+					Map requestMap = (Map) obj;
+					strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+					strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+				}
+				if (!(Helper.countConnectionsWithRel(context, dmoCAPARequest, QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, "to") > 0)
+						&& context.getUser().equalsIgnoreCase(strOwner)
+						&& (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_ProjectLead)
+								|| (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+										|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)))
+						&& !Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_APPROVED)) {
+					objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(true));
+				}
+				else {
+					objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(false));
+				}
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, List<Map<String, String>>> getCAPAForCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<String, List<Map<String, String>>>();
+			Map programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			DomainObject dmoCAPARequest = DomainObject.newInstance(context, objectIds[0]);
+
+			List<Map<?, ?>> lmCAPAInfo = QueryUtil.getRelatedObjects(context, dmoCAPARequest, QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST,
+					QICConstants.SYMBOLIC_TYPE_CAPA, Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME),
+					Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null, null);
+
+			if (!Helper.isNullOrEmpty(lmCAPAInfo)) {
+				Map<?, ?> mpCAPAInfo = lmCAPAInfo.get(0);
+				String strCAPAId = (String) mpCAPAInfo.get(DomainConstants.SELECT_ID);
+				String strCAPAName = (String) mpCAPAInfo.get(DomainConstants.SELECT_NAME);
+
+				List<Map<String, String>> CAPAList = new ArrayList<Map<String, String>>();
+				Map<String, String> CAPAMap = new HashMap<String, String>();
+
+				CAPAMap.put(ProcessStepsConstants.RELATEDACTIONID, strCAPAId);
+				CAPAMap.put(ProcessStepsConstants.RELATEDDATANAME, strCAPAName);
+
+				CAPAList.add(CAPAMap);
+				objectIdRelatedDataMap.put(objectIds[0], CAPAList);
+			}
+
+			return objectIdRelatedDataMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean validateDataSourceIsDefined(Context context, String[] args) throws QICException {
+		try {
+			Map programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String strCAPARequestId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return isDataSourceDefined(context, strCAPARequestId);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private boolean isDataSourceDefined(Context context, String strCAPARequestId) throws QICException {
+		try {
+			DataSourceService DATA_SOURCE_SERVICE = getDataSourceService(context);
+			List<Map<?, ?>> dataSourceList = DATA_SOURCE_SERVICE.getDataSources(context, DomainObject.newInstance(context, strCAPARequestId), false);
+
+			if (!Helper.isNullOrEmpty(dataSourceList) && dataSourceList.size() > 0) {
+				return true;
+			}
+
+			return false;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public String getCAPARequestNeedInformationComments(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_NOTES = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_attribute_Notes);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(QICConstants.REQUEST_MAP);
+			String strCAPARequestId = (String) requestMap.get(QICConstants.OBJECT_ID);
+			String strTransferNotes = DomainConstants.EMPTY_STRING;
+
+			if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES)));
+				if (!Helper.isNullOrEmpty(returnMap)) {
+					Map requestInfoMap = (Map) returnMap.get(0);
+					strTransferNotes = (String) requestInfoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES));
+				}
+
+			}
+			return strTransferNotes;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskShowNeedMoreInfoComments(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_NOTES = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_attribute_Notes);
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(false));
+				String strTransferNotes = DomainConstants.EMPTY_STRING;
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId[0] },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES)));
+				if (!Helper.isNullOrEmpty(returnMap)) {
+					Map requestInfoMap = (Map) returnMap.get(0);
+					strTransferNotes = (String) requestInfoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES));
+				}
+
+				if (!Helper.isNullOrEmpty(strTransferNotes)) {
+					objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(true));
+				}
+
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean validateTaskShowNeedMoreInfoComments(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			return !checkCurrentState(context, objectId, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean validateTaskSupportingDocumentsConnected(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> programMap = (Map<String, String>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(objectId) && Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, objectId),
+					DomainSymbolicConstants.SYMBOLIC_relationship_ReferenceDocument, "from") > 0) {
+				return true;
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskCommittedCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(checkCurrentState(context, strCAPARequestId[0],
+						QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_COMMITTED)));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskFulfilledCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(checkCurrentState(context, strCAPARequestId[0],
+						QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_FULFILLED)));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public Map<String, String> canViewTaskActionAddDataSources(Context context, String[] args) throws QICException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strCAPARequestId = (String[]) programMap.get(QICConstants.OBJECT_IDS);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strCAPARequestId[0])) {
+				objectIdCheckStatusMap.put(strCAPARequestId[0], String.valueOf(checkCurrentState(context, strCAPARequestId[0],
+						QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_PRELIMINARY)));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public boolean canViewActionSubmitCAPARequest(Context context, String args[]) throws QICException {
+		boolean canViewActionSubmitCAPARequest = false;
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strCAPARequestId = (String) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+				canViewActionSubmitCAPARequest = isDataSourceDefined(context, strCAPARequestId);
+			}
+		}
+		catch (Exception e) {
+			canViewActionSubmitCAPARequest = false;
+		}
+
+		return canViewActionSubmitCAPARequest;
+	}
+
+}
+

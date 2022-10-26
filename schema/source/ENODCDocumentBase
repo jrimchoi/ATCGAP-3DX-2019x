@@ -1,0 +1,1198 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.documentcommon.DCDocument;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.VCDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import matrix.db.RelationshipType;
+import com.matrixone.apps.change.util.ECMUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Method to get all documents
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds no value
+	 * @return document list
+	 * @throws MatrixException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getAllDocuments(Context context, String[] args) throws MatrixException
+	{
+		return getDocumentsByFilter(context, "All");
+	}
+	
+	/**
+	 * This method will return complete name of the Person object with link on
+	 * the name and Icon of Person
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds no value
+	 * @return Vector containing complete names of the owner
+	 * @throws FrameworkException if the operation fails
+	 * @exclude
+	 */
+	public Vector<String> getOwnerLink(Context context, String[] args) 
+	throws FrameworkException {
+		// Unpacking the args
+		Map programMap;
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+		
+			// Gets the objectList from args
+			MapList mlObjectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+				Vector<String> lLinks = new Vector<String>();
+			// Getting the bus ids for objects in the table
+	String strPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			Map mPerson=DCUtil.getTypeObjectIds(context, strPerson);
+			for (Object object : mlObjectList) {
+				Map map = (Map) object;
+				String strName = (String) map.get(CommonDocument.SELECT_OWNER);
+				if(UIUtil.isNotNullAndNotEmpty(strName)){
+					
+					String strOwnerId = (String) mPerson.get(strName);
+					if(UIUtil.isNotNullAndNotEmpty(strOwnerId)){						
+				        strName = PersonUtil.getFullName(context, strName);
+				        if (UIUtil.isNullOrEmpty(strReportFormat)&&UIUtil.isNotNullAndNotEmpty(strName)) {
+							strName = DCUtil.getObjectLink(context, strOwnerId, strName);
+						}
+					}
+				}
+				lLinks.add(strName);
+			}
+				
+		return lLinks;
+		} catch (Exception ex) {
+			throw new FrameworkException(ex.getMessage());
+		}
+	}
+	/**
+	 * This method will return complete name of the Person object with link on
+	 * the name and Icon of Person
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds no value
+	 * @return Vector containing complete names of the owner
+	 * @throws FrameworkException if the operation fails
+	 * @exclude
+	 */
+	public String getSummaryReportColumnOwnerLink(Context context, String[] args) 
+			throws FrameworkException {
+		Map programMap;
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId=(String) programMap.get("currentObjectId");
+			DomainObject dobj=DomainObject.newInstance(context,strObjectId);
+				String strName = dobj.getInfo(context,CommonDocument.SELECT_OWNER);
+				if(UIUtil.isNotNullAndNotEmpty(strName)){
+					String strPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+					String strOwnerBus = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 $5", true, strPerson, strName, "-", "id", "dump");
+					if(UIUtil.isNotNullAndNotEmpty(strOwnerBus)){						
+						strName = PersonUtil.getFullName(context, strName);
+					}
+				}
+				return strName;
+
+		} catch (Exception ex) {
+			throw new FrameworkException(ex.getMessage());
+		}
+	}
+	
+	/**
+	 * This method will be called to get all "Documents" which are in states configured in Property File
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds no value
+	 * @return MapList containing Document details
+	 * @throws Exception if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getAllActiveStatesDocuments(Context context,String args[]) throws Exception
+	{
+		return getDocumentsByFilter(context, "Active");
+	}
+
+	private  List<Map> getDocumentsByFilter(Context context, String strFilterKey) throws MatrixException
+	{
+		List<Map> mlDocs = new MapList();
+		StringBuilder sbWhere = new StringBuilder(256);
+		sbWhere.append("( ");
+		sbWhere.append(DCDocument.getGeneralDocumentCondition(context));
+		sbWhere.append(" ) && (");
+		sbWhere.append(DomainConstants.SELECT_OWNER+"==\""+context.getUser()+"\"");
+		sbWhere.append(")");
+
+		String strStates = EnoviaResourceBundle.getProperty(context,"enoDocumentCommon.common.states.Released");
+		StringList slStates = FrameworkUtil.split(strStates, DCConstants.SEPARATOR_COMMA);
+
+		String strCheckState=DomainConstants.EMPTY_STRING;
+		if(strFilterKey.equals("Active"))
+		{
+			strCheckState="!=";
+			sbWhere.append("&&").append(DomainConstants.SELECT_REVISION).append("==last");
+			mlDocs.addAll(getAdditionalDocuments(context,"enoDocumentCommon.Active.AdditionalDocuments"));
+		}
+
+		if(strFilterKey.equals("Released"))
+		{
+			strCheckState="==";
+			mlDocs.addAll(getAdditionalDocuments(context,"enoDocumentCommon.Relased.AdditionalDocuments"));
+		}
+		if(strFilterKey.equals("All"))
+		{
+			/*			sbWhere.append("&& (");
+
+			boolean bFlag = false; 
+			for (Object object : slStates) {
+				if(bFlag){
+					sbWhere.append(" || ");
+				}
+				bFlag = true;
+				sbWhere.append(DomainConstants.SELECT_CURRENT);
+				sbWhere.append(strCheckState);
+				sbWhere.append("const\"");
+				sbWhere.append((String)object);
+				sbWhere.append("\"");
+			}
+			sbWhere.append(" )");
+			//mlDocs.addAll(DCDocument.getDocuments(context, null,DCDocument.getDocumentSelectables(context), sbWhere.toString()));
+		}
+		else
+		{
+			//mlDocs.addAll(DCDocument.getDocuments(context, "CONTROLLED DOCUMENTS",DCDocument.getDocumentSelectables(context), sbWhere.toString()));
+			 */			mlDocs.addAll(getAdditionalDocuments(context,"enoDocumentCommon.Active.AdditionalDocuments"));
+			 mlDocs.addAll(getAdditionalDocuments(context,"enoDocumentCommon.Relased.AdditionalDocuments"));
+			 mlDocs.addAll(getAdditionalDocuments(context,"enoDocumentCommon.All.AdditionalDocuments"));
+		}
+
+		List<Map> mlDocuments=DCUtil.filterDuplicateMaps(context,mlDocs);
+		return mlDocuments;
+	}
+
+	private List<Map> getAdditionalDocuments(Context context, String strKey) throws MatrixException {
+
+		String strJpoKey = EnoviaResourceBundle.getProperty(context,strKey);
+		List<String> slJPOList=FrameworkUtil.split(strJpoKey, ",");
+		List mlDocs=new MapList();
+		for(String strJPO:slJPOList)
+		{
+			List<String> slJPOMethodList=FrameworkUtil.split(strJPO, ":");
+			String strProgramName=slJPOMethodList.get(0);
+			String strMethodName=slJPOMethodList.get(1);
+			mlDocs = JPO.invoke(context, strProgramName, null, strMethodName, null, MapList.class);
+		}
+
+
+		return mlDocs;
+	}
+
+	/**
+	 * This method will be called to get all "Documents" which are in Released States
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds no value
+	 * @return MapList containing Document details
+	 * @throws Exception if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getReleasedStateDocuments(Context context,String args[]) throws MatrixException 
+	{
+		return getDocumentsByFilter(context, "Released");
+	}
+
+	/**
+	 * This method is replicated from emxTeamContent:getContentActions with some modification 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args objectlist
+	 * @return list of action links
+	 * @throws FrameworkException
+	 * @exclude
+	 */
+	public List<String> getActionLinks(Context context, String[] args) throws FrameworkException{
+		List<String> lActions = new StringList();
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+		
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map mapParam = (Map)programMap.get(DCConstants.PARAMLIST);
+			boolean bPrinterFriendly = false;
+			if (mapParam.get(DCConstants.REPORTFORMAT) != null)
+		    {
+				bPrinterFriendly = true;
+		    }
+			String strUiType = (String)mapParam.get("uiType");
+	        String strCustomSortColumns = (String)mapParam.get("customSortColumns");
+	        String strCustomSortDirections = (String)mapParam.get("customSortDirections");
+	        String strTable = (String)mapParam.get("table");
+	        
+			String strTypeDocument = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_DOCUMENTS);
+			for (Object object : objectList) {
+				Map map = (Map)object;
+				String strDocType    = (String)map.get(DomainConstants.SELECT_TYPE);
+				String strParentType = CommonDocument.getParentType(context, strDocType);
+				StringBuilder sbLink = new StringBuilder(1024);
+				if (!bPrinterFriendly && strTypeDocument.equals(strParentType))
+		        {
+					String strId = (String)map.get(DomainConstants.SELECT_ID);
+					sbLink.append(getSubscriptionLink(context, strId));
+					if(CommonDocument.canView(context, map)){
+						Object obj = map.get("format.file.name");
+						boolean bViewFlag = true;
+						if(obj!= null && obj.getClass().equals(String.class)){
+							//This check is required when selectable has multiple values
+							//And if values are not returned as StringList
+							//In such case values are separated by some special character
+							String str = (String)obj;
+							if(str.contains("\7")){
+								bViewFlag = false;
+							}
+						}
+						if(bViewFlag){
+							sbLink.append(getViewLink(context, map));
+						}
+					}
+					if(CommonDocument.canDownload(context, map)){
+						sbLink.append(getDownloadLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if(CommonDocument.canCheckout(context, map)){
+						sbLink.append(getCheckoutLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if(CommonDocument.canCheckin(context, map) || VCDocument.canVCCheckin(context, map)){
+						sbLink.append(getCheckinLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if(CommonDocument.canAddFiles(context, map)){
+						sbLink.append(getAddFilesLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					lActions.add(sbLink.toString());
+		        }else
+		        {
+		        	lActions.add("");
+		        }
+			}
+			return lActions;
+		}catch(Exception e)
+		{
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * // For Designer Central 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param objectId
+	 * @param fileName
+	 * @return viewer URL 
+	 * @exclude
+	 */
+    private Map getViewerURLInfo(Context context, String objectId, String fileName)
+    {
+      Map viewerInfoMap = null;
+      try
+      {
+           DomainObject obj = DomainObject.newInstance(context, objectId);
+           MapList associatedFileList = obj.getAllFormatFiles(context);
+           for (int i = 0; i < associatedFileList.size(); i++)
+           {
+             Map associatedFile = (Map)associatedFileList.get(i);
+             if (fileName.equals(associatedFile.get("filename")))
+             {
+                 viewerInfoMap = new HashMap();
+           viewerInfoMap.put("fileName", fileName);
+           viewerInfoMap.put("format", associatedFile.get("format"));
+           viewerInfoMap.put("id", objectId);
+             break;
+         }
+           }
+
+        }
+        catch (Exception ex)
+        {
+            System.out.println("Error in getViewerURLInfo=" + ex.getMessage());
+            ex.printStackTrace();
+        }
+        return viewerInfoMap;
+    }
+	
+    /**
+     * 
+     * @param context the ENOVIA <code>Context</code> object
+     * @param mContentObject Map with document selectables
+     * @return Viewer link
+     * @throws FrameworkException if operation fails
+     * @exclude
+     */
+	private String getViewLink(Context context, Map mContentObject) throws FrameworkException{
+		try{
+			StringBuilder sbLink = new StringBuilder(256);
+			Object fileObj = mContentObject.get(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION);
+			String strFileName = "";
+			 String strActiveFileVersionID = "";
+	        if (fileObj instanceof String) {
+	            strFileName = (String)fileObj;
+	        } else if(fileObj instanceof StringList) {
+	            strFileName = ((StringList)fileObj).elementAt(0).toString();
+	        }
+	        String SELECT_MOVE_FILES_TO_VERSION = DomainObject.getAttributeSelect(
+	        		PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_INTERFACE_VCDOCUMENT));
+	        boolean moveFilesToVersion = (new Boolean((String) mContentObject.get(SELECT_MOVE_FILES_TO_VERSION))).booleanValue();
+	        if (moveFilesToVersion){
+	                Object obj = mContentObject.get(CommonDocument.SELECT_ACTIVE_FILE_VERSION_ID);
+	                if (obj instanceof String) {
+	                    strActiveFileVersionID = (String)obj;
+	                } else if(obj instanceof StringList) {
+	                    strActiveFileVersionID = ((StringList)obj).elementAt(0).toString();
+	          }
+	               // get the format that the Active version object contains the file
+	            Map viewerURLMap = getViewerURLInfo(context, strActiveFileVersionID, strFileName);
+	            if (viewerURLMap != null){
+	            	sbLink.append(${CLASS:emxCommonFileUI}.getViewerURL(context,
+	                                        strActiveFileVersionID,
+	                                                (String)viewerURLMap.get("format"),
+	                                                strFileName));
+	               }
+	            }
+	            else
+	            { // Designer Central Changes
+	            	String strDocumentId = (String)mContentObject.get(DomainConstants.SELECT_ID);
+	            	DomainObject docObject = DomainObject.newInstance(context,strDocumentId);
+	            	String strFileFormat = CommonDocument.getFileFormat(context,docObject);
+	            	sbLink.append(${CLASS:emxCommonFileUI}.getViewerURL(context,
+	            													strDocumentId,
+	                                                                strFileFormat,
+	                                                                strFileName));
+	            }
+			return sbLink.toString();
+		}catch(Exception ex){
+			throw new FrameworkException(ex);
+		}
+		
+	}
+	/**
+	 * Method to get the hyperlink for Download
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param mContentObject Map with document selectables
+	 * @param strCustomSortColumns customSortColumns value from param map
+	 * @param strCustomSortDirections customSortDirections value from param map
+	 * @param strUiType uiType value from param map
+	 * @param strTable table value from param map
+	 * @return link to download document
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	private String getDownloadLink(Context context, Map mContentObject, String strCustomSortColumns,
+			String strCustomSortDirections, String strUiType, String strTable) throws FrameworkException{
+		try {
+			StringBuilder sbLink = new StringBuilder(1024);
+			String strDocumentId = (String)mContentObject.get(DomainConstants.SELECT_ID);
+			String strTipDownload = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(), "emxTeamCentral.ContentSummary.ToolTipDownload");
+			sbLink.append("<a href=\"javascript:callCheckout('");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+			sbLink.append("','download','', '','");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+			sbLink.append("', '");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+	        sbLink.append("', '");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+	    	sbLink.append("', '");
+	    	sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+	    	sbLink.append("'");
+	    	sbLink.append(")\">");
+	    	sbLink.append("<img border=\"0\" src=\"../common/images/iconActionDownload.gif\" alt=\"");
+	    	sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+	    	sbLink.append("\" title=\"");
+	    	sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+	    	sbLink.append("\"/></a>&#160;");
+
+	    	// Changes for CLC start here..
+	    	//Show Download Icon for ClearCase Linked Objects
+			String linkAttrName = PropertyUtil.getSchemaProperty(context,"attribute_MxCCIsObjectLinked");
+			String isObjLinked = null;
+			if(linkAttrName!=null && !linkAttrName.equals(""))
+			{
+				DomainObject docObject = DomainObject.newInstance(context,strDocumentId);
+	        	isObjLinked = docObject.getAttributeValue(context,linkAttrName);
+			}
+			if(isObjLinked!=null && !isObjLinked.equals(""))
+			{
+				if(isObjLinked.equalsIgnoreCase("True"))
+				{
+					//show download icon for Linked Objects
+					sbLink.append("<a href=\"../servlet/MxCCCS/MxCCCommandsServlet.java?commandName=downloadallfiles&objectId=");
+	                sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+	                sbLink.append("\">");
+	                sbLink.append("<img border=\"0\" src=\"../common/images/iconActionDownload.gif\" alt=\"");
+	                sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+	                sbLink.append("\" title=\"");
+	                sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+	              	sbLink.append("\"/></a>&#160;");
+				}
+
+			}
+			return sbLink.toString();
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Method to get the hyperlink for checkout
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param mContentObject Map with document selectables
+	 * @param strCustomSortColumns customSortColumns value from param map
+	 * @param strCustomSortDirections customSortDirections value from param map
+	 * @param strUiType uiType value from param map
+	 * @param strTable table value from param map
+	 * @return link for document checkout
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	private String getCheckoutLink(Context context, Map mContentObject, String strCustomSortColumns,
+			String strCustomSortDirections, String strUiType, String strTable) throws FrameworkException{
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String strTipCheckout = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(), "emxTeamCentral.ContentSummary.ToolTipCheckout");
+			String strDocumentId = (String)mContentObject.get(DomainConstants.SELECT_ID);
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckout.jsp?objectId=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+			sbLink.append("&amp;action=checkout&amp;refresh=false&amp;appProcessPage=enoDCExecute.jsp?dcAction=ENODCDocument:refreshMyDocTab&amp;appDir=documentcommon&amp;customSortColumns=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+			sbLink.append("&amp;customSortDirections=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+			sbLink.append("&amp;uiType=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+			sbLink.append("&amp;table=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+			sbLink.append("',730,450);\">");
+			sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipCheckout));
+			sbLink.append("\" title=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipCheckout));
+			sbLink.append("\"/></a>&#160;");
+	     
+			return sbLink.toString();
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+		
+	}
+	/**
+	 * Method to get the hyperlink for checkin
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param mContentObject Map with document selectables
+	 * @param strCustomSortColumns customSortColumns value from param map
+	 * @param strCustomSortDirections customSortDirections value from param map
+	 * @param strUiType uiType value from param map
+	 * @param strTable table value from param map
+	 * @return Link for document checkin
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	private String getCheckinLink(Context context, Map mContentObject, String strCustomSortColumns,
+			String strCustomSortDirections, String strUiType, String strTable) throws FrameworkException{
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String strDocumentId = (String)mContentObject.get(DomainConstants.SELECT_ID);
+			String strTipCheckin = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(), "emxTeamCentral.ContentSummary.ToolTipCheckin");
+	        boolean vcFile =(new Boolean((String) mContentObject.get("vcfile"))).booleanValue();
+	        String INTERFACE_VC_DOCUMENT = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_MoveFilesToVersion);
+	        String vcInterface = (String)mContentObject.get("interface.kindof["+ INTERFACE_VC_DOCUMENT +"]");
+	        boolean vcDocument = "TRUE".equalsIgnoreCase(vcInterface)?true:false;
+	        if (!vcDocument)
+	        {
+				sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+				sbLink.append("&amp;customSortColumns="); 
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+				sbLink.append("&amp;customSortDirections=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+				sbLink.append("&amp;uiType=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+				sbLink.append("&amp;table=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+				sbLink.append("&amp;showFormat=true&amp;showComments=required&amp;objectAction=update&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true',730,450);\">");
+				sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+				sbLink.append("\" title=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+				sbLink.append("\"/></a>&#160;");
+	        }
+	        else
+	        {
+	        	if(vcFile){
+	        		sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+	        		sbLink.append("&amp;customSortColumns=");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+	        		sbLink.append("&amp;customSortDirections=");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+	        		sbLink.append("&amp;uiType=");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+	        		sbLink.append("&amp;table=");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+	        		sbLink.append("&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=false&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true',730,450);\">");
+	        		sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strTipCheckin));
+	        		sbLink.append("\" title=\"");
+	        		sbLink.append(XSSUtil.encodeForJavaScript(context, strTipCheckin));
+	        		sbLink.append("\"/></a>&#160;");
+	    		}
+	            else {
+	            	sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+	                sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+	                sbLink.append("&amp;customSortColumns=");
+	                sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+	                sbLink.append("&amp;customSortDirections=");
+	                sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+	                sbLink.append("&amp;uiType=");
+	                sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+	            	sbLink.append("&amp;table=");
+	            	sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+	                sbLink.append("&amp;override=false&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=true&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true',730,450);\">");
+	            	sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+	            	sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+	            	sbLink.append("\" title=\"");
+	            	sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+	            	sbLink.append("\"/></a>&#160;");
+	            }
+	        }
+	        
+	        //   For getting the count of files
+	        String SELECT_MOVE_FILES_TO_VERSION = DomainObject.getAttributeSelect(
+	        		PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_INTERFACE_VCDOCUMENT));
+	        String RELATIONSHIP_ACTIVE_VERSION = PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_relationship_ActiveVersion);
+	        String SELECT_TITLE = DomainObject.getAttributeSelect(
+	        		PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title));
+	        String SELECT_FILE_NAMES_OF_ACTIVE_VERSION = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to."+ SELECT_TITLE;
+	        String SELECT_IDS_OF_ACTIVE_VERSION = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.id";
+	        Map filemap = new HashMap();
+	        filemap.put(SELECT_MOVE_FILES_TO_VERSION, mContentObject.get(SELECT_MOVE_FILES_TO_VERSION));
+	        filemap.put(SELECT_FILE_NAMES_OF_ACTIVE_VERSION, mContentObject.get(SELECT_FILE_NAMES_OF_ACTIVE_VERSION));
+	        filemap.put(CommonDocument.SELECT_FILE_NAME, mContentObject.get(CommonDocument.SELECT_FILE_NAME));
+	        int fileCount = CommonDocument.getFileCount(context,filemap);
+	        
+	        if ((fileCount<=1 && !vcDocument))
+	        {
+	        	String docLocker = DomainConstants.EMPTY_STRING;
+	        	String SELECT_ACTIVE_FILE_LOCKER = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.locker";
+	        	String strFileId; 
+	        	try
+	        	{
+	        		docLocker = (String)mContentObject.get(SELECT_ACTIVE_FILE_LOCKER);
+	                if(docLocker==null)
+	                	docLocker = (String)mContentObject.get(CommonDocument.SELECT_LOCKER);
+	                strFileId = (String)mContentObject.get(SELECT_IDS_OF_ACTIVE_VERSION);
+	        	}catch(ClassCastException ex){
+	        		docLocker = ((StringList)mContentObject.get(SELECT_ACTIVE_FILE_LOCKER)).elementAt(0).toString();
+	        		if(docLocker==null)
+	        			docLocker = ((StringList)mContentObject.get(CommonDocument.SELECT_LOCKER)).elementAt(0).toString();
+	        		strFileId = ((StringList)mContentObject.get(SELECT_IDS_OF_ACTIVE_VERSION)).elementAt(0).toString();
+	            }
+	        	sbLink.append("<a href=\"javascript:submitWithCSRF('../components/emxCommonDocumentUnlock.jsp?objectId=");
+	        	sbLink.append(XSSUtil.encodeForJavaScript(context, strFileId));
+	            sbLink.append("', emxUICore.findFrame(getTopWindow(), 'listHidden'))\">");
+	            sbLink.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\"");
+	            sbLink.append(XSSUtil.encodeForXML(context, docLocker));
+	            sbLink.append("\" title=\"");
+	            sbLink.append(XSSUtil.encodeForXML(context, docLocker));
+	            sbLink.append("\"/></a>&#160;");
+	        }
+			return sbLink.toString();
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Method to get the hyperlink for add files
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param mContentObject Map with document selectables
+	 * @param strCustomSortColumns customSortColumns value from param map
+	 * @param strCustomSortDirections customSortDirections value from param map
+	 * @param strUiType uiType value from param map
+	 * @param strTable table value from param map
+	 * @return link to add new files
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	private String getAddFilesLink(Context context, Map mContentObject, String strCustomSortColumns,
+			String strCustomSortDirections, String strUiType, String strTable) throws FrameworkException{
+		try{
+			StringBuilder sbLink = new StringBuilder(256);
+			String sTipAddFiles = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(), "emxTeamCentral.ContentSummary.ToolTipAddFiles");
+			String strDocumentId = (String)mContentObject.get(DomainConstants.SELECT_ID);
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+	        sbLink.append("&amp;customSortColumns=");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+	        sbLink.append("&amp;customSortDirections=");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+	        sbLink.append("&amp;uiType=");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+	        sbLink.append("&amp;table=");
+	        sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+	        sbLink.append("&amp;showFormat=true&amp;showDescription=required&amp;objectAction=checkin&amp;showTitle=true&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true',730,450);\">");
+	        sbLink.append("<img border=\"0\" src=\"../common/images/iconActionAppend.gif\" alt=\"");
+	        sbLink.append(XSSUtil.encodeForXML(context, sTipAddFiles));
+	        sbLink.append("\" title =\"");
+	        sbLink.append(XSSUtil.encodeForXML(context, sTipAddFiles));
+	        sbLink.append("\"/></a>&#160;");
+			return sbLink.toString();
+		}catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Method to get the hyperlink for subscription
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param strId object id
+	 * @return link to subscription dialog
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	private String getSubscriptionLink(Context context, String strId) throws FrameworkException{
+		try{
+			StringBuilder sbLink = new StringBuilder(256);
+			String strTipSubscription = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(), "emxTeamCentral.ContentSummary.ToolTipSubscription");
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxSubscription.jsp?enablePush=false&amp;objectId=");
+			sbLink.append(XSSUtil.encodeForURL(context, strId));
+			sbLink.append("',575,575)\"><img border=\"0\" src=\"../common/images/iconActionSubscribe.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipSubscription));
+			sbLink.append("\" title=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipSubscription));
+			sbLink.append("\"/></a>&#160;");
+			return sbLink.toString();
+		}catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+		
+	}
+	
+	/**
+	 * Method to refresh the My Document Tab
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds nothing
+	 * @return javascript to be executed in the browser
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map refreshMyDocTab(Context context, String[] args){
+		Map mReturn = new HashMap();
+		mReturn.put(DCConstants.ACTION_INCLUDEJSP, "../common/scripts/emxUIConstants.js");
+		mReturn.put(DCConstants.ACTION_JAVASCRIPT, "var frame = findFrame(getTopWindow(),'DCMyDocumentsTab');\n if(frame) \n frame.location.href = frame.location.href;");
+		return mReturn;
+	}
+
+	/**
+	 * Method to do post process of create document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args pack arguments
+	 * @throws FrameworkException if operation fails 
+	 * @return Map containing script to be executed 
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map createDocumentPostProcess(Context context,String[] args) throws FrameworkException 
+	{
+		try {
+			StringBuilder sbPropertyKey =new StringBuilder(256);
+			Map mpProgram = (Map) JPO.unpackArgs(args);
+			String[] typeName = (String[]) mpProgram.get("TypeActual");
+	        String[] saActionMode= (String[]) mpProgram.get(DCConstants.ACTION_MODE);
+			String[] saClassification= (String[]) mpProgram.get("ReferenceCategory");
+			String[] saEnableChangeControl= (String[]) mpProgram.get("Enable Chang Control");
+			typeName[0] = typeName[0].replaceAll(" ","");
+			sbPropertyKey.append(DCConstants.ENODOCUMENTCOMMON);
+			sbPropertyKey.append(DCConstants.SEPARATOR_DOT);
+			sbPropertyKey.append(DCConstants.CREATE);
+			sbPropertyKey.append(DCConstants.SEPARATOR_DOT);
+			sbPropertyKey.append(typeName[0]);
+			sbPropertyKey.append(DCConstants.SEPARATOR_DOT);
+			sbPropertyKey.append(DCConstants.POSTPROCESSPROGRAM);
+			String strPropertyKey = null;
+			Map mpReturn = null;
+			try{
+				strPropertyKey = EnoviaResourceBundle.getProperty(context,sbPropertyKey.toString());
+			}catch(FrameworkException fe){
+				//Do Nothing
+			}
+			if(!UIUtil.isNullOrEmpty(strPropertyKey)){
+				StringList programInfo = FrameworkUtil.split(strPropertyKey, ":");
+				String programName = (String)programInfo.get(0);
+				String methodName  = (String)programInfo.get(1);
+				mpReturn =  JPO.invoke(context, programName, null, methodName, args, Map.class);
+			}
+			if(mpReturn == null){
+				mpReturn = new HashMap();
+				StringBuilder sb = new StringBuilder();
+				String[] saObjectId = (String[]) mpProgram.get("newObjectId");
+				DomainObject doDocObject = DomainObject.newInstance(context, saObjectId[0]);
+				StringList slSelect = new StringList(3);
+				slSelect.add(DomainConstants.SELECT_TYPE);
+				slSelect.add(DomainConstants.SELECT_NAME);
+				slSelect.add(DomainConstants.SELECT_REVISION);
+				slSelect.add(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+				Map map = doDocObject.getInfo(context, slSelect);
+				if((null != saActionMode) && "ReferenceDocument".equals(saActionMode[0]))
+				{
+					String[] strparentOID=(String[]) mpProgram.get(DCConstants.PARENT_OID);
+				// DCDocument.addReferenceDocuments(context, strparentOID[0], saObjectId);
+				
+				DomainObject dObjDoc = DomainObject.newInstance(context, strparentOID[0]);
+				String strRelRefrenceDocument=PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_relationship_ReferenceDocument);
+				Map mRelData=DomainRelationship.connect(context,dObjDoc,new RelationshipType(strRelRefrenceDocument), true,saObjectId);
+				if(null != saClassification )
+					{
+						DomainRelationship.setAttributeValue(context, (String)mRelData.get(saObjectId[0]), "Document Classification", saClassification[0]);
+					}
+				}
+				
+				if(null != saEnableChangeControl ){
+					ECMUtil.enableChangeControl(context, saObjectId[0]);
+				}
+
+				String strType=EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),"emxFramework.Type." +((String)map.get(DomainConstants.SELECT_TYPE)).replace(" ","_"));
+				
+				final String type_RegulatoryGuideline = PropertyUtil.getSchemaProperty(context, "type_RegulatoryGuideline");
+				if ((DomainConstants.TYPE_DOCUMENT.equals(strType) || type_RegulatoryGuideline.equals(strType))
+						&& UIUtil.isNullOrEmpty((String) map.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)))) {
+					DomainObject.newInstance(context, saObjectId[0]).setAttributeValue(context, DomainConstants.ATTRIBUTE_TITLE, (String)map.get(DomainConstants.SELECT_NAME));
+				}
+				sb.append("var sURL = \"../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+				sb.append(XSSUtil.encodeForJavaScript(context, saObjectId[0]));
+				sb.append("&showComments=true&showFormat=true&objectAction=checkin&appDir=documentcommon&refreshTableContent=true&addToCallerFrame=ForCheckinPage\";");
+				sb.append("top.location.href = sURL;");
+				mpReturn.put(DCConstants.ACTION_JAVASCRIPT, sb.toString());
+			}
+			return mpReturn;
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Deletes the documents as per configuration per type
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args
+	 * @return map for refresh pages from execute JSP
+	 * @throws Exception if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map deleteDocuments(Context context, String[] args)throws Exception{
+		
+		Map mpProgram = (Map) JPO.unpackArgs(args);
+		StringBuilder sbMsg = new StringBuilder();
+		String objectIds[] = com.matrixone.apps.common.util.ComponentsUIUtil.getSplitTableRowIds((String[]) mpProgram.get(DCConstants.EMX_TABLE_ROW_ID));
+		String [] strSelectedTable = (String[])mpProgram.get("table");
+		Map<String, List<String>> mpSortedDocs = new HashMap<String, List<String>>();
+		
+		StringList slSelects = new StringList(2);
+		slSelects.add(DomainObject.SELECT_TYPE);
+		slSelects.add(DomainObject.SELECT_ID);
+		List<Map> mapList = DomainObject.getInfo(context, objectIds, slSelects);
+		
+		for (Map<String, String> map : mapList) {
+			String strType = map.get(DomainObject.SELECT_TYPE);
+			String strId = map.get(DomainObject.SELECT_ID);
+			List<String> sl = null;
+			if(mpSortedDocs.containsKey(strType)){
+				sl = mpSortedDocs.get(strType);
+			}else{
+				sl =  new ArrayList<String>();
+			}
+			sl.add(strId);
+			mpSortedDocs.put(strType, sl);
+		}
+
+		Set<String> skey = mpSortedDocs.keySet();
+		for (String strKey : skey) {
+			
+			List<String> sl = mpSortedDocs.get(strKey);
+			String[] saOID = new String[sl.size()];
+			for (int i = 0; i < saOID.length; i++) {
+				saOID[i] = sl.get(i);
+			}
+			Map map = new HashMap();
+			map.putAll(mpProgram);
+			map.put(DCConstants.OBJECTID, saOID);
+			
+			StringBuilder sbPropertyKey = new StringBuilder(64);
+			sbPropertyKey.append("enoDocumentCommon.Delete.");
+			sbPropertyKey.append(strKey.replaceAll(" ", ""));
+			try{
+				String strPropertyKey = EnoviaResourceBundle.getProperty(context,sbPropertyKey.toString());
+	 
+				if(!UIUtil.isNullOrEmpty(strPropertyKey)){
+					StringList programInfo = FrameworkUtil.split(strPropertyKey, ":");
+					String strProgramName = (String)programInfo.get(0);
+					String strMethodName  = (String)programInfo.get(1);
+					String[] strArgs = JPO.packArgs(map);
+					String strMsg = JPO.invoke(context, strProgramName, null, strMethodName, strArgs, String.class);
+					if(UIUtil.isNotNullAndNotEmpty(strMsg)){
+						sbMsg.append(strMsg);
+						sbMsg.append("\n");
+					}
+				}
+			}catch(FrameworkException fe){
+				String strMessage = MessageUtil.getMessage(context, null, "enoDocumentCommon.Alert.Msg.TypeNotconfiguredForDelete",
+						new String[] {strKey}, null, context.getLocale(), DCConstants.DC_STRING_RESOURCE);
+				sbMsg.append(strMessage + "\n");
+				//Do Nothing
+			}
+		}
+		
+		StringBuilder sbScript = new StringBuilder(256);
+		Map mpReturn = new HashMap();
+		if(sbMsg.length() > 0){
+			sbScript.append("alert(\"");
+			sbScript.append(XSSUtil.encodeForJavaScript(context,sbMsg.toString()));
+			sbScript.append("\");\n");
+		}
+		
+		sbScript.append("if(this.parent.refreshSBTable){\n");
+		sbScript.append("this.parent.refreshSBTable('");
+		sbScript.append(XSSUtil.encodeForJavaScript(context,strSelectedTable[0]));
+		sbScript.append("');\n}\n");
+		mpReturn.put(DCConstants.ACTION_JAVASCRIPT, sbScript.toString());
+		
+		return mpReturn;
+	}
+	/**
+	 * expandProgram used to get Reference Documents for controlled document and make it as read only
+	 * @param context context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return MapList list of reference documents map
+	 * @throws Exception 
+	 * @throws Exception if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getReferenceDocumentsForDocument (Context context,String[] args) throws Exception
+	{
+		try {
+			MapList mlReferenceDocuments = new MapList();
+			Map programMap=(Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCConstants.OBJECTID);
+			String strRelId=(String) programMap.get("relId");
+			if(!UIUtil.isNullOrEmpty(strRelId)){
+				DomainRelationship doRel=DomainRelationship.newInstance(context, strRelId);
+				StringList slSelect= new StringList();
+				slSelect.add(DomainRelationship.SELECT_TO_ID);
+				slSelect.add(DomainRelationship.SELECT_TO_NAME);
+				String strRel[]={strRelId};
+				List<Map> mlRelInfo=DomainRelationship.getInfo(context,strRel, slSelect);
+				for(Map mp:mlRelInfo){
+					String strRelID=(String)mp.get(DomainRelationship.SELECT_TO_ID);
+					String strRelName=(String)mp.get(DomainRelationship.SELECT_TO_NAME);
+					if(strRelID.equals((String) programMap.get("parentId")))
+						return mlReferenceDocuments;
+				}
+			}
+			MapList mlRefrencedDocuments=DCDocument.getReferenceDocuments(context,strObjectId);
+			for(int i=0;i<mlRefrencedDocuments.size();i++)
+			{
+				Map mpReferenceDocs = (Map) mlRefrencedDocuments.get(i);
+				mpReferenceDocs.put("RowEditable","readonly");
+				mpReferenceDocs.put("disableSelection","true");
+				mpReferenceDocs.put("direction",(String)mpReferenceDocs.get(DomainRelationship.SELECT_DIRECTION));
+				if("to".equals((String)mpReferenceDocs.get(DomainRelationship.SELECT_DIRECTION))){
+					mpReferenceDocs.put("hasChildren", "false");
+				}
+			}
+			return mlRefrencedDocuments;
+		}  catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+	/**
+	 * Method to get the type name for which the create document form is defined
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments.
+	 * @return Map of Ajax with type name
+	 * @throws Exception if Operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> getSelectedType(Context context,String[] args) throws Exception{
+
+		try
+		{
+			String strSelType=DomainConstants.EMPTY_STRING;
+			String strAppendFields =DomainConstants.EMPTY_STRING;
+			Map<String,String> mpReturn = new HashMap<String,String> ();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] strSelectedType = (String[]) programMap.get("selectedType");
+			String[] strSuitKey = (String[]) programMap.get("suiteKey");
+			strSelType=PropertyUtil.getSchemaProperty(context, "type_"+strSelectedType[0]);
+
+			try{
+				strAppendFields = EnoviaResourceBundle.getProperty(context,"emx"+strSuitKey[0]+".Create."+strSelectedType[0]);
+				mpReturn.put(DCConstants.ACTION_AJAX, strSelType.replace(" ",""));
+			}
+			catch(Exception e)
+			{
+				strSelType=DCUtil.getParentTypeForm(context,strSelType,strSuitKey[0]);
+				mpReturn.put(DCConstants.ACTION_AJAX, strSelType.replace(" ",""));
+				return mpReturn;
+			}
+			return mpReturn;
+		}
+		catch(Exception e)
+		{
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+	 * Method to create Document Object
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args hold packed arguments
+	 * @return Map contains document object id
+	 * @throws DCLException if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?,?> createDocument(Context context, String[] args) throws Exception {
+		Map<String,String> returnMap     = new HashMap<String,String>();
+		try{
+			String strAttributeTitle = PropertyUtil.getSchemaProperty(context,DCConstants.SYMBOLIC_ATTRIBUTE_TITLE);
+			Map<?,?> programMap   = JPO.unpackArgs(args);
+			Map<?,?> requestValue = (Map<?, ?>) programMap.get(DCConstants.REQUESTVALUEMAP);
+			String [] sType   = (String[])requestValue.get("TypeActual");
+			String [] sDescription = (String[]) requestValue.get("Description");    
+			if (null == sDescription)
+				sDescription = (String[]) requestValue.get("DescriptionDisplay");
+			String [] sDocumentTemplateID  = (String[])requestValue.get("TemplateOID");
+			if (null == sDocumentTemplateID)
+				sDocumentTemplateID = (String[]) requestValue.get("selTemplateId");
+					String [] sTitle  = (String[])requestValue.get("TitleDisplay");
+			String [] sAutoNameCheck  = requestValue.get("autoNameCheck")!=null?(String[])requestValue.get("autoNameCheck"):null;
+			String strName = DomainConstants.EMPTY_STRING;
+			if(null==sAutoNameCheck){
+				String [] sName  = (String[])requestValue.get("Name");
+				strName = sName[0];
+			}	       
+			String strType   = UIUtil.isNotNullAndNotEmpty(sType[0])  ? (String) programMap.get("TypeActual") : DomainConstants.EMPTY_STRING;
+
+			String documentId   = DCDocument.create(context,strType,DomainConstants.EMPTY_STRING,DomainConstants.EMPTY_STRING,strName);
+
+			DomainObject document = DomainObject.newInstance(context, documentId);
+			document.setDescription(context, sDescription[0]);
+			
+			if(sTitle==null)
+				sTitle  = (String[])requestValue.get("TitleDisplay");
+			if(sTitle!=null && sTitle.length>0)
+			document.setAttributeValue(context, strAttributeTitle, sTitle[0]);
+
+			//Logic to apply Interface of Template to Document
+			if (null != sDocumentTemplateID && !UIUtil.isNullOrEmpty(sDocumentTemplateID[0])) {
+				String   sInterfaceName = MqlUtil.mqlCommand(context, "print bus $1 select $2 dump $3",sDocumentTemplateID[0],"interface","|");
+				if(!UIUtil.isNullOrEmpty(sInterfaceName)){
+					Iterator intrItr         = FrameworkUtil.split(sInterfaceName, "|").iterator();
+					//Add all Document Template Interfaces to Document
+					for(int i=0; intrItr.hasNext();i++){
+						MqlUtil.mqlCommand(context, "modify bus $1 add interface $2",documentId,(String)intrItr.next());
+					}
+				}
+			}
+			returnMap.put(DomainConstants.SELECT_ID, documentId);
+
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+		return returnMap;
+	}
+
+	 public Vector columnDropZone(Context context, String[] args) throws Exception {
+		Vector vResult = new Vector();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramList = (HashMap) programMap.get("paramList");
+		String sParentOID = (String) paramList.get("objectId");
+		MapList mlObjects = (MapList) programMap.get("objectList");
+		HashMap columnMap = (HashMap) programMap.get("columnMap");
+		HashMap settings = (HashMap) columnMap.get("settings");
+		String sDragTypes = (String) settings.get("Drag Types");
+		String sDropTypes = (String) settings.get("Drop Types");
+		String sStructureTypes = (String) settings.get("Structure Types");
+		String sDirections = (String) settings.get("Directions");
+		String sRelationships = (String) settings.get("Relationships");
+		String sFileDropRelationship = (String) settings.get("DocumentDrop Relationship"); // if
+																							// user
+																							// drop
+																							// a
+																							// file
+																							// on
+																							// drozone
+		String sFileDropType = (String) settings.get("File Drop Type");
+		String sAttributes = (String) settings.get("Attributes");
+		String sAction = (String) settings.get("Drop Action");
+		String validator = (String) settings.get("Validate");
+
+		String[] aDragTypes = getAdminPropertyActualNames(context, sDragTypes);
+		String[] aDropTypes = getAdminPropertyActualNames(context, sDropTypes);
+		String[] aRelationships = getAdminPropertyActualNames(context, sRelationships);
+		sFileDropRelationship = PropertyUtil.getSchemaProperty(context, sFileDropRelationship);
+		sFileDropType = PropertyUtil.getSchemaProperty(context, sFileDropType);
+
+
+		String[] aDirections = sDirections.split(",");
+		String[] aAttributes = new String[aRelationships.length];
+
+		if (null != sAttributes) {
+			aAttributes = getAdminPropertyActualNames(context, sAttributes);
+			;
+		}
+		else {
+			for (int i = 0; i < aAttributes.length; i++) {
+				aAttributes[i] = "";
+			}
+		}
+		if (UIUtil.isNullOrEmpty(sStructureTypes)) {
+			sStructureTypes = "DOCUMENTS";
+		}
+		if (UIUtil.isNullOrEmpty(sFileDropRelationship)) {
+			sFileDropRelationship = "Reference Document";
+		}
+		if (UIUtil.isNullOrEmpty(sFileDropType)) {
+			sFileDropType = "DOCUMENTS";
+		}
+		if (null == sAction) {
+			sAction = "refreshRow";
+		}
+		else if (sAction.equalsIgnoreCase("Expand")) {
+			sAction = "expandRow";
+		}
+
+		StringList busSelects = new StringList();
+		busSelects.add(DomainConstants.SELECT_NAME);
+		busSelects.add(DomainConstants.SELECT_TYPE);
+		busSelects.add("type.kindof");
+
+		for (int i = 0; i < mlObjects.size(); i++) {
+			StringBuilder sbResult = new StringBuilder();
+			Map mObject = (Map) mlObjects.get(i);
+			String sOID = (String) mObject.get(DomainConstants.SELECT_ID);
+			String sLevel = (String) mObject.get("id[level]");
+			String sFormId = "formDrag" + i + sLevel;
+			String sDivId = "divDrag" + i + sLevel;
+
+			DomainObject dObject = new DomainObject(sOID);
+			Map mInfo = dObject.getInfo(context, busSelects);
+			String sType = (String) mInfo.get(DomainConstants.SELECT_TYPE);
+			String sKind = (String) mInfo.get("type.kindof");
+
+			StringBuilder sbTypes = new StringBuilder();
+			StringBuilder sbRelationships = new StringBuilder();
+			StringBuilder sbAttributes = new StringBuilder();
+			StringBuilder sbFrom = new StringBuilder();
+
+			for (int j = 0; j < aDropTypes.length; j++) {
+				if (aDropTypes[j].equals(sType) || aDropTypes[j].equals(sKind)) {
+					sbTypes.append(aDragTypes[j]).append(",");
+					sbRelationships.append(aRelationships[j]).append(",");
+					sbAttributes.append(aAttributes[j]).append(",");
+					sbFrom.append(aDirections[j]).append(",");
+				}
+			}
+
+			if (sbTypes.length() > 0) {
+				sbTypes.setLength(sbTypes.length() - 1);
+			}
+			if (sbRelationships.length() > 0) {
+				sbRelationships.setLength(sbRelationships.length() - 1);
+			}
+			if (sbAttributes.length() > 0) {
+				sbAttributes.setLength(sbAttributes.length() - 1);
+			}
+			if (sbFrom.length() > 0) {
+				sbFrom.setLength(sbFrom.length() - 1);
+			}
+
+			sbResult.append("<form></form>");
+			sbResult.append("<form id='").append(sFormId).append("' action=\"../common/emxFileUpload.jsp?objectId=").append(sOID)
+					.append("&amp;relationship=").append(sFileDropRelationship).append("&amp;type=").append(sFileDropType)
+					.append("\"  method='post'  enctype='multipart/form-data'>");
+			sbResult.append("   <div id='").append(sDivId).append("' class='dropAreaColumn'");
+			sbResult.append("        ondrop=\"FileSelectHandlerColumn(event, ");
+			sbResult.append("'").append(sOID).append("', ");
+			sbResult.append("'").append(sFormId).append("', ");
+			sbResult.append("'").append(sDivId).append("', ");
+			sbResult.append("'id[level]=").append(sLevel).append(".").append(sAction).append("', ");
+			sbResult.append("'").append(sLevel).append("', ");
+			sbResult.append("'").append(sParentOID).append("', ");
+			sbResult.append("'").append(sType).append("', ");
+			sbResult.append("'").append(sbTypes.toString()).append("', ");
+			sbResult.append("'").append(sbRelationships.toString()).append("', ");
+			sbResult.append("'").append(sbAttributes.toString()).append("', ");
+			sbResult.append("'").append(sbFrom.toString()).append("', ");
+			sbResult.append("'").append(sStructureTypes).append("', ");
+			sbResult.append("'").append(validator).append("')\" ");
+			sbResult.append("    ondragover=\"FileDragHoverColumn(event, '").append(sDivId).append("')\" ");
+			sbResult.append("   ondragleave=\"FileDragHoverColumn(event, '").append(sDivId).append("')\">");
+			sbResult.append("   </div>");
+			sbResult.append("</form>");
+			vResult.add(sbResult.toString());
+		}
+		return vResult;
+	}
+
+	private String[] getAdminPropertyActualNames(Context context, String symbolicNames) {
+
+		if (UIUtil.isNullOrEmpty(symbolicNames)) {
+			return new String[] { "" };
+		}
+
+		StringList symbolicNamesList = FrameworkUtil.split(symbolicNames, ",");
+		String[] arrayActualNames = new String[symbolicNamesList.size()];
+		for (int i = 0; i < symbolicNamesList.size(); i++) {
+			arrayActualNames[i] = PropertyUtil.getSchemaProperty(context, (String) symbolicNamesList.get(i));
+		}
+
+		return arrayActualNames;
+	}
+	
+	public String getChangeEnableField(Context context, String[] args) throws Exception {
+		StringBuilder sbChangeEnable = new StringBuilder();
+		String strLable= EnoviaResourceBundle.getProperty(context, "enoDocumentCommonStringResource", context.getLocale(), "enoDocumentCommon.Label.EnableChangeControl");
+		sbChangeEnable.append("<input type = 'checkbox' name ='Enable Chang Control' id='Enable Chang Control' value='Enable Chang Control'/> "+strLable);
+
+		return sbChangeEnable.toString();
+
+
+	}
+	
+}
+

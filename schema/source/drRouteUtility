@@ -1,0 +1,597 @@
+/***********************************************************************
+ *	drRouteUtility
+ ************************************************************************
+ * This JPO performs the 3dxtools Route Enhancement operations.
+ *
+ ************************************************************************
+ * 
+ * Copyright (c) 2016 Design Rule Consulting Ltd. All Rights Reserved.
+ * 
+ ***********************************************************************/
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+import org.apache.log4j.Logger;
+
+import com.designrule.drConstants;
+import com.designrule.drv6tools.common.drApplicationException;
+import com.designrule.drv6tools.common.drBusinessObject;
+import com.designrule.drv6tools.common.drContext;
+import com.designrule.drv6tools.common.drRelationshipIDsOnly;
+import com.designrule.drv6tools.common.drRelationshipIDsOnlys;
+import com.designrule.drv6tools.route.drRouteSettingBusinessObject;
+import com.designrule.drv6tools.route.drRouteUtil;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIUtil;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+/**
+ * @version AEF Rossini - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxDomainObject}
+{
+	Logger log=Logger.getLogger("com.designrule."+this.getClass());
+	public static String RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP = PropertyUtil.getSchemaProperty("relationship_DRLToolsRouteSettingRelationship");
+	public static String ATTRIBUTE_DRL_ROUTE_ACTION_TIMING = PropertyUtil.getSchemaProperty("attribute_drlRouteActionTiming");
+	public static String ATTRIBUTE_DRL_ROUTE_RESPONSE = PropertyUtil.getSchemaProperty("attribute_drlRouteResponse");
+	public static String TYPE_DRLTOOLS_ACTIVITIES = PropertyUtil.getSchemaProperty("type_DRLToolsActivities");
+	public static String RELATIONSHIP_DRLTOOLS_DEPENDANT_ACTIVITY_RELATIONSHIP = drConstants.getValue("drV6Tools.relationship.DependantActivityRelationship");
+	public static String RELATIONSHIP_DRLTOOLS_ROUTE_DEPENDANT_ACTIVITY_RELATIONSHIP = drConstants.getValue("drV6Tools.relationship.RouteDependantActivityRelationship");
+	
+	/**
+	 *
+	 * @param context the eMatrix <code>Context</code> object
+	 * @param args holds no arguments
+	 * @throws Exception if the operation fails
+	 * @since AEF Rossini
+	 * @grade 0
+	 */
+	public ${CLASSNAME} (Context context, String[] args)
+			throws Exception
+	{
+		super(context, args);
+	}
+
+	/**
+	 * This method is executed if a specific method is not specified.
+	 *
+	 * @param context the eMatrix <code>Context</code> object
+	 * @param args holds no arguments
+	 * @returns nothing
+	 * @throws Exception if the operation fails
+	 * @since AEF Rossini
+	 * @grade 0
+	 */
+	public int mxMain(Context context, String[] args)
+			throws Exception
+	{
+		if (!context.isConnected())
+			throw new Exception(ComponentsUtil.i18nStringNow("emxComponents.Generic.NotSupportedOnDesktopClient", context.getLocale().getLanguage()));
+		return 0;
+	}
+
+	public Vector getRouteTemplateTaskName(Context context, String[] args) throws Exception
+	{
+		Vector taskNameVec = new Vector();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList objectList = (MapList)programMap.get("objectList");
+		Map paramList      = (Map)programMap.get("paramList");
+		String routeId = (String)paramList.get("objectId");
+		String isTypeRouteTemplate="";
+
+		if(routeId!=null)
+		{
+			DomainObject domainObject = new DomainObject(routeId);
+			isTypeRouteTemplate = domainObject.getInfo(context, DomainConstants.SELECT_TYPE);
+		}
+
+		Iterator objectListItr = objectList.iterator();
+		while(objectListItr.hasNext())
+		{
+			Map objectMap = (Map) objectListItr.next();
+			String taskState = (String)objectMap.get(DomainObject.SELECT_CURRENT);
+			String taskId = (String)objectMap.get(DomainObject.SELECT_ID);
+			String taskName = (String)objectMap.get(DomainObject.SELECT_NAME);
+
+			if(isTypeRouteTemplate.equals(DomainConstants.TYPE_ROUTE_TEMPLATE))
+			{
+				taskName = (String)objectMap.get(getAttributeSelect(DomainObject.ATTRIBUTE_TITLE));
+			}
+
+			String tempTask = (String)objectMap.get(getAttributeSelect(DomainObject.ATTRIBUTE_TEMPLATE_TASK));
+			String routeNodeId         = (String)objectMap.get(getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_NODE_ID));
+			String popTreeUrl = "";
+			String popWindowTarget="";
+			StringBuffer sb = new StringBuffer();
+			sb.append(" <script src='../common/scripts/emxUIModal.js'> </script> ");
+			boolean isPrinterFriendly = (paramList.get("reportFormat") != null) ? true : false;
+
+			if(!DomainConstants.RELATIONSHIP_ROUTE_NODE.equals(taskName) && !(isTypeRouteTemplate.equals(DomainConstants.TYPE_ROUTE_TEMPLATE))) {
+				popTreeUrl  = "../common/emxTree.jsp?mode=insert&amp;objectId="+taskId;
+				popWindowTarget="content";
+			}
+			else {
+				StringBuffer buffer = new StringBuffer(200);
+				buffer.append("../common/emxPortal.jsp?");
+				buffer.append("showPageHeader=").append("true").append("&amp;");
+				buffer.append("portal=").append("drV6ToolsRouteTemplateTaskPowerView").append("&amp;");
+				buffer.append("objectId=").append(routeId.trim()).append("&amp;");
+				buffer.append("relId=").append(routeNodeId).append("&amp;");
+				buffer.append("suiteKey=").append("Components").append("&amp;");
+				popTreeUrl  = "javascript:showModalDialog('" + buffer.toString() + "', 800,575)";
+				popWindowTarget="";
+			}
+
+			if (taskName!=null && !taskName.equals("")){
+
+				if(tempTask != null && tempTask.equals("Yes") && !isPrinterFriendly){
+
+					sb.append("<a href=\"").append(popTreeUrl).append("\" target=\"").
+					append(popWindowTarget).append("\"><img src=\"../common/images/iconSmallTask.gif\" name=\"imgTask\" border=\"0\"/>").
+					append(XSSUtil.encodeForHTML(context,taskName)).append("(t) </a>");
+
+				}else if(!isPrinterFriendly){
+
+					sb.append("<a href=\"").append(popTreeUrl).append("\" target=\"").
+					append(popWindowTarget).append("\"><img src=\"../common/images/iconSmallTask.gif\" name=\"imgTask\" border=\"0\"/>").
+					append(XSSUtil.encodeForHTML(context,taskName)).append(" </a>");
+
+				} else {
+					sb.append("<img src=\"../common/images/iconSmallTask.gif\" name=\"imgTask\" border=\"0\"/>").append(XSSUtil.encodeForHTML(context,taskName));
+				}
+			}
+			else{
+
+				sb.append("&#160;");
+
+			}
+			taskNameVec.add(sb.toString());
+		}
+		return taskNameVec;
+	}
+
+	/**
+	 * This method excludes the Route Setting objects connected with Route Template 
+	 * Exclude OID Program method
+	 * @param context
+	 * @param args 
+	 * @throws Exception
+	 */
+	public StringList excludeConnectedRouteSettingsObject(Context context, String[] args)throws Exception{
+		StringList returnList =  new StringList();
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String routeId = (String)programMap.get("objectId");
+			if(UIUtil.isNotNullAndNotEmpty(routeId)){
+				DomainObject routeOject = new DomainObject(routeId);
+				returnList = routeOject.getInfoList(context, "from["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].to.id");
+			}
+
+		}catch(Exception ex){
+			ex.printStackTrace();
+		}
+		return returnList;
+	}
+
+	/**
+	 * This method excludes the Route Setting objects connected with Route Node relationship
+	 * Exclude OID Program method
+	 * @param context
+	 * @param args 
+	 * @throws Exception
+	 */
+	public StringList excludeConnectedRouteSettingObjects(Context context, String[] args)throws Exception{
+		StringList returnList =  new StringList();
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String routeNodeId = (String)programMap.get("relId");
+			String routeNodeIDs = (String)programMap.get("selectedObjectIds");
+			StringList routeNodeList = new StringList();
+			if(UIUtil.isNotNullAndNotEmpty(routeNodeIDs)){
+				routeNodeList = FrameworkUtil.split(routeNodeIDs, "|");
+			}
+			if(UIUtil.isNotNullAndNotEmpty(routeNodeId)){
+				routeNodeList.add(routeNodeId);
+			}
+			for(Object routeNodeRelId : routeNodeList){
+				String dependentTriggers = MqlUtil.mqlCommand(context, "print connection $1 select $2 dump",(String)routeNodeRelId,"frommid["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].to.id");
+				if(UIUtil.isNotNullAndNotEmpty(dependentTriggers)){
+					returnList.addAll(FrameworkUtil.split(dependentTriggers, ","));
+				}
+			}
+		}catch(Exception ex){
+			throw ex;
+		}
+		return returnList;
+	}
+
+	/**
+	 * This method connects the newly created Route Setting object and Route Node relationship corresponding to template task
+	 * Post process JPO Method for Route Node relationship to 3dxtools setting object connection
+	 * @param context
+	 * @param args
+	 * @throws Exception
+	 */
+	public void processRouteTemplateTask3dxtoolsSettings(Context context, String[] args) throws Exception
+	{
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap=(HashMap)programMap.get("paramMap");
+			String newObjectId=(String)paramMap.get("newObjectId");
+			HashMap formMap=(HashMap)programMap.get("formMap");
+			HashMap requestMap=(HashMap)formMap.get("requestMap");
+			String routeNodeRelId=(String)requestMap.get("relId");
+			log.debug("Connecting route setting obebjct and route node relationship. Route Setting Id = "+newObjectId+" and Route Node Id = "+routeNodeRelId);
+			if(UIUtil.isNotNullAndNotEmpty(newObjectId) && UIUtil.isNotNullAndNotEmpty(routeNodeRelId)){
+				MqlUtil.mqlCommand(context,"add connection $1 fromrel $2 to $3",RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP,routeNodeRelId,newObjectId);
+			}
+		}catch(Exception ex){
+			throw ex;
+		}
+	}
+
+	/**
+	 * This method returns the 3dxtools Settings defined for template task
+	 * @param context
+	 * @param args
+	 * @return task 3dxtools Settings list
+	 * @throws Exception
+	 */
+	public MapList getRouteTemplateTask3dxtoolsSettings(Context context, String[] args) throws Exception
+	{
+		MapList taskRouteSettings=new MapList();
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String routeNodeRelID=(String)programMap.get("relId");
+			if(routeNodeRelID==null || routeNodeRelID.isEmpty()){
+				routeNodeRelID=(String)programMap.get("objectId");
+			}
+			log.debug("getRouteTemplateTask3dxtoolsSettings, Route Node Relationship Id = "+routeNodeRelID);
+			if(UIUtil.isNotNullAndNotEmpty(routeNodeRelID)){
+				StringList routeNodeSelect=new StringList(2);
+				routeNodeSelect.add("frommid["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].to.id");
+				routeNodeSelect.add("frommid["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].id");
+				String[] relIds=new String[1];
+				relIds[0]=routeNodeRelID;
+				MapList routeNodeDetails=DomainRelationship.getInfo(context, relIds, routeNodeSelect);
+				log.debug("getRouteTemplateTask3dxtoolsSettings, Route Node Relationship Details = "+routeNodeDetails);
+				if(null!=routeNodeDetails && !routeNodeDetails.isEmpty())
+				{
+					Map routeNodeInfo=(Map)routeNodeDetails.get(0);
+					Object routeSetting=routeNodeInfo.get("frommid["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].to.id");
+					Object routeSettingRel=routeNodeInfo.get("frommid["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].id");
+					StringList routeSettingConfig=new StringList();
+					StringList taskTriggerConfigRel=new StringList();
+					if(routeSetting instanceof String){
+						routeSettingConfig.add((String)routeSetting);
+					}else{
+						routeSettingConfig=(StringList)routeSetting;
+					}
+					if(routeSettingRel instanceof String){
+						taskTriggerConfigRel.add((String)routeSettingRel);
+					}else{
+						taskTriggerConfigRel=(StringList)routeSettingRel;
+					}
+
+					if(null!=routeSettingConfig){
+						Map taskInfo=null;
+						int total=routeSettingConfig.size();
+						drContext drlcontext=new drContext(context);
+						String title="";
+						for(int count=0;count<total;count++){
+							taskInfo=new HashMap();
+							taskInfo.put(DomainConstants.SELECT_ID,routeSettingConfig.get(count));
+							taskInfo.put(DomainRelationship.SELECT_ID,taskTriggerConfigRel.get(count));
+							title = drlcontext.getResultFromMQLCommand("print bus "+routeSettingConfig.get(count)+" select name dump");
+							taskInfo.put(getAttributeSelect(DomainObject.ATTRIBUTE_TITLE),title);
+							taskRouteSettings.add(taskInfo);
+						}
+					}
+				}
+			}
+		}catch(Exception ex){
+			throw ex;
+		}
+		return taskRouteSettings;
+	}
+
+	public boolean checkAccessForRouteTemplateTaskWhereUsed(Context context, String[] args) throws Exception{
+		boolean hasAccess = true;
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		String objectId=(String)programMap.get("objectId");
+		if(UIUtil.isNotNullAndNotEmpty(objectId)){
+			DomainObject object = new DomainObject(objectId);
+			String toObjectType = (String)object.getInfo(context, "to["+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"].from.type");
+			if(UIUtil.isNotNullAndNotEmpty(toObjectType) && DomainConstants.TYPE_ROUTE_TEMPLATE.equalsIgnoreCase(toObjectType)){
+				hasAccess = false;
+			}
+		}
+		return hasAccess;
+	}
+
+	public boolean checkAccessForRouteTemplateWhereUsed(Context context, String[] args)throws Exception{
+		boolean hasAccess = checkAccessForRouteTemplateTaskWhereUsed(context,args);
+		return !hasAccess;
+	}
+
+	public int executeRouteStartAction(Context context, String[] args) throws Exception
+	{
+		try
+		{
+			int retCode;
+			drRouteUtil routeUtil=new drRouteUtil(context);
+			retCode = routeUtil.performConfiguredRouteActions(args);
+			return retCode;
+		} catch  (Exception ex) {
+			throw ex;
+		}
+	}
+	
+	public int executeRouteTaskAction(Context context, String[] args) throws Exception
+	{
+		try
+		{
+			int retCode;
+			drRouteUtil routeUtil=new drRouteUtil(context);
+			retCode = routeUtil.performConfiguredRouteActions(args);
+			return retCode;
+		} catch  (Exception ex) {
+			throw ex;
+		}
+	}
+	
+	public Vector getRouteTaskColumnValue(Context context, String[] args) throws Exception
+	{
+		Vector taskColumnValues = new Vector();
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get("objectList");
+			HashMap columnMap = (HashMap) programMap.get("columnMap");
+			HashMap settings  = (HashMap) columnMap.get("settings"); 
+			String attributeName=(String)settings.get("AttributeName");
+			drContext drlcontext=new drContext(context);
+			String columnValue = DomainConstants.EMPTY_STRING;
+			String relId = DomainConstants.EMPTY_STRING;
+			Iterator objectListItr = objectList.iterator();
+			Map objectInfo;
+			log.debug("Getting "+attributeName+" column values.");
+			while(objectListItr.hasNext())
+			{
+				objectInfo = (Map) objectListItr.next();
+				relId = (String)objectInfo.get(DomainRelationship.SELECT_ID);
+				if(relId!=null && relId.isEmpty()==false){
+					columnValue = drlcontext.getResultFromMQLCommand("print connection "+relId+" select attribute["+attributeName+"].value dump");
+				}
+				taskColumnValues.add(columnValue);
+			}
+			log.debug("Values for "+attributeName+" column are "+taskColumnValues);
+		}catch(Exception ex){
+			throw ex;
+		}
+		return taskColumnValues;
+	}
+	
+	public Vector getRouteTaskNameValue(Context context, String[] args) throws Exception
+	{
+		Vector taskNameValues = new Vector();
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get("objectList");
+			Map paramList      = (Map)programMap.get("paramList");
+			String objectId = (String)paramList.get("objectId");
+			drContext drlcontext=new drContext(context);
+			String columnValue = DomainConstants.EMPTY_STRING;
+			String relId = DomainConstants.EMPTY_STRING;
+			String type = DomainConstants.EMPTY_STRING;
+			String treeURL = DomainConstants.EMPTY_STRING;
+			String popWindowTarget = DomainConstants.EMPTY_STRING;
+			Iterator objectListItr = objectList.iterator();
+			Map objectInfo;
+
+			while(objectListItr.hasNext())
+			{
+				StringBuffer columnLink = new StringBuffer();
+				columnLink.append(" <script src='../common/scripts/emxUIModal.js'> </script> ");
+				objectInfo = (Map) objectListItr.next();
+				relId = (String)objectInfo.get(DomainRelationship.SELECT_ID);
+				columnValue = (String)objectInfo.get(getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+				if(relId!=null && relId.isEmpty()==false){
+					objectId = (String)objectInfo.get(DomainConstants.SELECT_ID);
+					treeURL = "../common/emxTree.jsp?mode=insert&amp;objectId="+objectId;	
+					popWindowTarget="content";
+					columnLink.append("<a href=\"").append(treeURL).append("\" target=\"");
+					type= drlcontext.getResultFromMQLCommand("print bus "+objectId+" select type dump");
+					columnLink.append(popWindowTarget).append("\"><img src=\"../common/images/iconSmall"+type.replaceAll("\\\\s","")+".gif\" name=\"imgTask\" border=\"0\"/>");
+				}else{
+					StringBuffer taskURL = new StringBuffer(200);
+					taskURL.append("../common/emxForm.jsp?");
+					taskURL.append("objectId=").append(objectId).append("&amp;");
+					taskURL.append("relId=").append((String)objectInfo.get(getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_NODE_ID))).append("&amp;");
+					taskURL.append("form=").append("APPRouteNodeTask").append("&amp;");
+					taskURL.append("suiteKey=").append("Components").append("&amp;");
+					taskURL.append("formHeader=").append("emxComponents.Task.Properties").append("&amp;");
+					taskURL.append("HelpMarker=").append("emxhelptaskproperties").append("&amp;");
+					taskURL.append("toolbar=").append("APPRoleNodeTaskActionsToolBar");
+					treeURL  = "javascript:showModalDialog('" + taskURL.toString() + "', 800,575)";
+					popWindowTarget="";
+					columnLink.append("<a href=\"").append(treeURL).append("\" target=\"").
+					append(popWindowTarget).append("\"><img src=\"../common/images/iconSmallTask.gif\" name=\"imgTask\" border=\"0\"/>");
+				}
+				columnLink.append(XSSUtil.encodeForHTML(context,columnValue)).append(" </a>");
+				taskNameValues.add(columnLink.toString());
+			}
+		}catch(Exception ex){
+			throw ex;
+		}
+		return taskNameValues;
+	}
+	
+	public MapList expandRouteTaskSettings(Context context, String[] args) throws drApplicationException{
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String routeNodeRelID=(String)programMap.get("relId");
+			if(routeNodeRelID==null || routeNodeRelID.isEmpty()){
+				routeNodeRelID=(String)programMap.get("objectId");
+				log.debug("Getting route setting objects for route node relationship. Id = "+routeNodeRelID);
+				return getRouteTemplateTask3dxtoolsSettings(context,args);
+			}else{
+				MapList dependantActivities=new MapList();
+				drContext drlcontext=new drContext(context);
+				String routeSettingId=(String)programMap.get("objectId");
+				log.debug("Getting depandant activities for route setting object. Id = "+routeSettingId);
+				drBusinessObject routeSettingObj=new drBusinessObject(drlcontext,routeSettingId);
+				drRelationshipIDsOnlys dependanctActivityIDsOnlys=routeSettingObj.getRelatedBusinessObjectIDs(TYPE_DRLTOOLS_ACTIVITIES,RELATIONSHIP_DRLTOOLS_DEPENDANT_ACTIVITY_RELATIONSHIP+","+RELATIONSHIP_DRLTOOLS_ROUTE_DEPENDANT_ACTIVITY_RELATIONSHIP);
+				String title=DomainConstants.EMPTY_STRING;
+				for(drRelationshipIDsOnly dependanctActivityIDsOnly:dependanctActivityIDsOnlys){
+					Map activityDetails=new HashMap();
+					activityDetails.put(DomainConstants.SELECT_ID, dependanctActivityIDsOnly.getTargetID());
+					activityDetails.put(DomainRelationship.SELECT_ID, dependanctActivityIDsOnly.getRelationshipID());
+					title = drlcontext.getResultFromMQLCommand("print bus "+dependanctActivityIDsOnly.getTargetID()+" select name dump");
+					activityDetails.put(getAttributeSelect(DomainObject.ATTRIBUTE_TITLE),title);
+					dependantActivities.add(activityDetails);
+				}
+				log.debug("Depandant activities are "+dependantActivities);
+				return dependantActivities;
+			}
+		} catch (MatrixException ex) {
+			throw new drApplicationException("Problem occurred getting related objects : "+ex.getMessage(), ex);
+		}catch (Exception ex) {
+			throw new drApplicationException("Problem occurred getting related objects : "+ex.getMessage(), ex);
+		}
+	}
+	
+	public StringList checkEditAccess(Context context, String[] args) throws drApplicationException
+	{
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get("objectList");
+			StringList editAccessList=new StringList(objectList.size());
+			String relId = DomainConstants.EMPTY_STRING;
+			String type = DomainConstants.EMPTY_STRING;
+			drContext drlcontext=new drContext(context);
+			Iterator objectListItr = objectList.iterator();
+			Map objectInfo;
+			boolean hasAccess = false;
+			while(objectListItr.hasNext())
+			{
+				objectInfo = (Map) objectListItr.next();
+				relId = (String)objectInfo.get(DomainRelationship.SELECT_ID);
+				if(relId!=null && relId.isEmpty()==false){
+					type = drlcontext.getResultFromMQLCommand("print bus "+(String)objectInfo.get(DomainConstants.SELECT_ID)+" select type dump");
+					if(drRouteSettingBusinessObject.DRLTOOLS_CODE_TYPE_NAME.equals(type)){
+						hasAccess = true;
+					}
+				}
+				editAccessList.add(String.valueOf(hasAccess));
+			}
+			return editAccessList;
+		}catch (MatrixException ex) {
+			throw new drApplicationException("Problem occurred getting edit access : "+ex.getMessage(), ex);
+		}catch (Exception ex) {
+			throw new drApplicationException("Problem occurred getting edit access : "+ex.getMessage(), ex);
+		}
+	}
+	
+	public boolean updateColumnValues(Context context, String[] args) throws drApplicationException
+	{
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap columnMap = (HashMap) programMap.get("columnMap");
+			HashMap settings  = (HashMap) columnMap.get("settings"); 
+			String attributeName=(String)settings.get("AttributeName");
+			drContext drlcontext=new drContext(context);
+			log.debug("Updating value for "+attributeName+" attribute.");
+			HashMap paramMap = (HashMap)programMap.get("paramMap");
+			log.debug("Parameters details are "+paramMap);
+			String relId  = (String)paramMap.get("relId");
+			String newValue = (String)paramMap.get("New Value");
+			drlcontext.getResultFromMQLCommand("modify connection "+relId+" "+attributeName+" "+newValue);
+			log.debug("Values for "+attributeName+" attribute updated successfully.");
+			return true;
+		}catch (MatrixException ex) {
+			throw new drApplicationException("Problem occurred getting edit access : "+ex.getMessage(), ex);
+		}catch (Exception ex) {
+			throw new drApplicationException("Problem occurred getting edit access : "+ex.getMessage(), ex);
+		}
+	}
+	
+	public HashMap getColumnRanges(Context context,String[] args) throws drApplicationException
+	{
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap columnMap = (HashMap) programMap.get("columnMap");
+			HashMap settings  = (HashMap) columnMap.get("settings"); 
+			String attributeName = (String)settings.get("AttributeName");
+			String languageValue =  context.getSession().getLanguage();
+			log.debug("Getting ranges for "+attributeName+" attribute.");
+			StringList actionTimings = FrameworkUtil.getRanges(context,attributeName);
+			log.debug("Attribute ranges are "+actionTimings);
+			HashMap columnRangeMap = new HashMap();
+			StringList fieldDisplayChoices = new StringList();
+			StringList fieldActualChoices = new StringList();
+			String actualValue = DomainConstants.EMPTY_STRING;
+			String displayValue =DomainConstants.EMPTY_STRING;
+
+			for(Object actionTiming:actionTimings) {
+				actualValue = (String)actionTiming;
+				displayValue = i18nNow.getRangeI18NString(attributeName, actualValue, languageValue);
+				fieldDisplayChoices.add(displayValue);
+				fieldActualChoices.add(actualValue);
+			}
+			log.debug("Actual attribute ranges are "+actionTimings);
+			log.debug("Display attribute ranges are "+fieldDisplayChoices);
+			columnRangeMap.put("field_choices", fieldActualChoices);
+			columnRangeMap.put("field_display_choices", fieldDisplayChoices);
+
+			return columnRangeMap;
+		}catch (Exception ex) {
+			throw new drApplicationException("Problem occurred getting column ranges : "+ex.getMessage(), ex);
+		}
+	}
+	
+	public boolean connectRouteSettingObjects(Context context, String[] args) throws drApplicationException
+	{
+		try{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String routeSettingIDs = (String)programMap.get("RouteSettingIDs");
+			log.debug("Connecting route setting objects. Route Setting IDs are "+routeSettingIDs);
+			String routeNodeIDs = (String)programMap.get("selectedObjectIds");
+			log.debug("Connecting route setting objects. Route Note RelIDs are "+routeNodeIDs);
+			String[] routeNodeIds=routeNodeIDs.split("\\\\|");
+			String[] routeSettingIds=routeSettingIDs.split("\\\\|");
+			drContext drlcontext=new drContext(context);
+			ContextUtil.startTransaction(context, true);
+			for(String routeNodeId:routeNodeIds){
+				for(String routeSettingId:routeSettingIds){
+					log.debug("Connecting "+routeNodeId+" route node with "+routeSettingId+" route settinng object.");
+					drlcontext.getResultFromMQLCommand("add connection \""+RELATIONSHIP_DRLTOOLS_ROUTE_SETTING_RELATIONSHIP+"\" fromrel "+routeNodeId+" to "+routeSettingId); 
+					log.debug("Connected "+routeNodeId+" route node with "+routeSettingId+" route settinng object.");
+				}
+			}
+			ContextUtil.commitTransaction(context);
+			return true;
+		}catch (MatrixException ex) {
+			ContextUtil.abortTransaction(context);
+			throw new drApplicationException("Problem occurred connecting route setting objects : "+ex.getMessage(), ex);
+		}catch (Exception ex) {
+			ContextUtil.abortTransaction(context);
+			throw new drApplicationException("Problem occurred connecting route setting objects : "+ex.getMessage(), ex);
+		}
+	}
+}
+

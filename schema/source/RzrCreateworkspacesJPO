@@ -1,0 +1,183 @@
+import matrix.db.*;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Map;
+import java.util.HashMap;
+import java.io.PrintStream;
+
+public class ${CLASSNAME} 
+{
+    /**
+    * Constructor.
+    *
+    * @param context the eMatrix <code>Context</code> object.
+    * @param args holds no arguments.
+    * @throws Exception if the operation fails.
+    */
+    public ${CLASSNAME} (Context objContext, String[] args) throws Exception
+    {
+    }
+
+    /**
+    * This method is executed if a specific method is not specified.
+    *
+    * @param context the eMatrix <code>Context</code> object.
+    * @param args holds no arguments.
+    * @return int.
+    * @throws Exception if the operation fails.
+    */
+    public int mxMain(Context objContext, String[] args)   throws Exception
+    {
+        if (args.length < 3)
+        {
+            System.out.println("usage: exec prog RzrCreateworkspacesJPO <jobs.txt>  <WorkspaceTemplate> <Revision> <CSpace>");
+            return -1;
+        }
+
+        String strJobsFile = args[0];
+        String strWSTemplate = args[1];
+        String strWSTemplateRev = args[2];
+        String strCSpace = args[3];
+        String strCompany = "GAP";
+        String cvsSplitByPipe = "\\\|";
+
+        System.out.println("Input File: " + strJobsFile);
+        System.out.println("Workspace Template: " + strWSTemplate + " " + strWSTemplateRev);
+        System.out.println("CSpace: " + strCSpace);
+        System.out.println("Company: " + strCompany);
+ 
+        String strCommand1 = "temp query bus 'Workspace Template' '"  + strWSTemplate.trim() + "' " + strWSTemplateRev.trim()+ " select id dump |";
+        MQLCommand mqlCmd1 = new MQLCommand();
+        mqlCmd1.executeCommand(objContext, strCommand1);
+        String strResult1 = mqlCmd1.getResult();
+        String[] strResults1 = strResult1.split(cvsSplitByPipe);
+        String strTemplateId =  strResults1[3].trim();
+
+        String strWS = "";
+        String strDesc = "";
+		String strFrameModel= "";
+		String strCoreEngFolderId = "";
+
+        BufferedReader br = null;
+        String line = "";
+
+        PrintStream m_objLogStream = System.out;        
+        m_objLogStream = new PrintStream(strJobsFile + ".log");
+
+        br = new BufferedReader(new FileReader(strJobsFile));
+
+        while ((line = br.readLine()) != null) {
+		try {
+           // use comma as separator
+           String[] job = line.split(cvsSplitByPipe);
+           strWS = job[0];
+           strDesc = job[1];
+           strFrameModel = job[2];
+		   
+           System.out.println("Creating Workspace=" + strWS) ;
+
+           java.text.DateFormat m_objDateFormat  = java.text.DateFormat.getDateTimeInstance();
+           m_objLogStream.println(m_objDateFormat.format(new java.util.Date())+ ": " + "Creating Workspace=" + strWS);
+
+           strWS = job[0].trim();
+           strDesc = job[1].trim();
+           strFrameModel = job[2].trim();
+
+           Map requestMap = new HashMap();
+           requestMap.put("Name",strWS);
+           requestMap.put("Description",strDesc);
+           requestMap.put("TemplateOID",strTemplateId);
+           requestMap.put("txtBuyerDeskId","");
+           String[] rmap = JPO.packArgs(requestMap);
+           Map wsMap = (Map)JPO.invoke(objContext,"emxWorkspaceBase",null, "createWorkspaceProcess",rmap,Map.class);
+           String strObjectId =  (String)wsMap.get("id"); 
+           String strCommand2 = "promote bus " + strObjectId;
+           MQLCommand mqlCmd2 = new MQLCommand();
+           mqlCmd2.executeCommand(objContext, strCommand2);
+           mqlCmd2.executeCommand(objContext, strCommand2);
+	   
+		   String strCommand7= "modify bus " + strObjectId + " gapFrameModel '" + strFrameModel + "'";
+           MQLCommand mqlCmd7 = new MQLCommand();
+           mqlCmd7.executeCommand(objContext, strCommand7);
+
+		   
+			String strCommand3 = "print bus " + strObjectId + " select relationship[Data Vaults].to.name relationship[Data Vaults].to.id dump |";
+			MQLCommand mqlCmd3 = new MQLCommand();
+			mqlCmd3.executeCommand(objContext, strCommand3);
+			String strResult2 = mqlCmd3.getResult();
+			
+			//System.out.println(strResult2);
+			
+			String[] strResults3 = strResult2.split(cvsSplitByPipe);
+			
+			for (int i = 0; i < strResults3.length; i++) {
+
+				if (strResults3[i].trim().equals("05 - Core Engineering")) {
+					strCoreEngFolderId = strResults3[(strResults3.length/2) + i];
+					break;
+				}
+			}
+			
+		   String strCommand4 = "modify bus " + strCoreEngFolderId + " Project '" + strCSpace + "'";
+		   MQLCommand mqlCmd4 = new MQLCommand();
+		   mqlCmd4.executeCommand(objContext, strCommand4);
+		   
+		   String strCommand41= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+           MQLCommand mqlCmd41 = new MQLCommand();
+           mqlCmd41.executeCommand(objContext, strCommand41);
+
+		   String[] strResults4 = strResult2.split(cvsSplitByPipe);
+			for (int j = 0; j < strResults4.length; j++) {
+
+				if (strResults4[j].trim().equals("09 - Manufacturing")) {
+					strCoreEngFolderId = strResults4[(strResults4.length/2) + j];
+					break;
+				}
+			}
+
+
+           String strCommand5 = "modify bus " + strCoreEngFolderId + " Project '" + strCSpace + "'";
+           MQLCommand mqlCmd5 = new MQLCommand();
+           mqlCmd5.executeCommand(objContext, strCommand5);
+
+		   String strCommand51= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+           MQLCommand mqlCmd51 = new MQLCommand();
+           mqlCmd51.executeCommand(objContext, strCommand51);
+
+		   String[] strResults5 = strResult2.split(cvsSplitByPipe);
+			for (int k = 0; k < strResults5.length; k++) {
+
+				if (strResults5[k].trim().equals("15 - Migrated")) {
+					strCoreEngFolderId = strResults5[(strResults5.length/2) + k];
+					break;
+				}
+			}
+			
+
+           String strCommand6 = "modify bus " + strCoreEngFolderId + " Project '" + strCSpace + "'";
+           MQLCommand mqlCmd6 = new MQLCommand();
+           mqlCmd6.executeCommand(objContext, strCommand6);
+           
+		   String strCommand61= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+           MQLCommand mqlCmd61 = new MQLCommand();
+           mqlCmd61.executeCommand(objContext, strCommand61);
+		   
+		   /*String strCommand4= "modify bus " + strObjectId + " organization '" + strCompany + "'";
+           MQLCommand mqlCmd4 = new MQLCommand();
+           mqlCmd4.executeCommand(objContext, strCommand4);*/
+
+           m_objDateFormat = java.text.DateFormat.getDateTimeInstance();
+           m_objLogStream.println(m_objDateFormat.format(new java.util.Date())+ ": " + "Workspace=" + strWS + " created");
+        } catch (Exception ex) {
+
+          // handle the exception
+           java.text.DateFormat m_objDateFormat = java.text.DateFormat.getDateTimeInstance();
+           m_objLogStream.println(m_objDateFormat.format(new java.util.Date()) + ": " + "Workspace=" + strWS + "  was not created");
+        } 
+      }
+		
+        return 1;
+    }
+}

@@ -1,0 +1,249 @@
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import matrix.db.JPO;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+
+	/**
+	 * Trigger Method to check if  CA connected to document.If connected then it is completed.
+	 * @param context
+	 * @param args[0] arguments is Document id and  args[1] isRequested Change.
+	 * @return 1: if Document is connected to CA and it is not completed
+	 * @return 0: if Document is connected to CA and it is  completed or Document is not connected to any CA.
+	 * @throws Exception
+	 */
+	public int checkIfConnectedChangeActionCompleted(Context context, String[] args) throws Exception {
+		try {
+			String strCACompleteState= FrameworkUtil.lookupStateName(context, ChangeConstants.POLICY_CHANGE_ACTION, ChangeConstants.STATE_SYMBOLIC_COMPLETE);
+			List<Map> mlCA = getConnectedCA(context, args[0], true, true);
+			for (Map map : mlCA) {
+				String strCAState = map.get(DomainRelationship.SELECT_CURRENT).toString();
+				if (!strCACompleteState.equals(strCAState)) {
+							String errorMessage = EnoviaResourceBundle.getProperty(context,"emxEnterpriseChangeMgtStringResource",context.getLocale(),args[1]);
+					${CLASS:emxContextUtilBase}.mqlNotice(context, errorMessage);
+					return 1;
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	
+	/**
+	 * Trigger Method to check if  CA for Obsolesence isconnected to document.If connected then it is completed while promoting Document to OBSOLETE state.
+	 * @param context
+	 * @param args[0] arguments is Document id.
+	 * @return 1: if Document is connected to CA and it is not completed
+	 * @return 0: if Document is connected to CA and it is  completed or Document is not connected to any CA.
+	 * @throws Exception
+	 */
+	public int checkIfConnectedChangeActionForObsolesenceCompleted(Context context, String[] args) throws Exception {
+		try {
+			String strCACompleteState= FrameworkUtil.lookupStateName(context, ChangeConstants.POLICY_CHANGE_ACTION, ChangeConstants.STATE_SYMBOLIC_COMPLETE);
+			List<Map> mlCA = getConnectedCA(context, args[0], true, true);
+			for (Map map : mlCA) {
+				String strCAState = map.get(DomainRelationship.SELECT_CURRENT).toString();
+				String strCAID=(String)map.get(DomainObject.SELECT_ID);
+				ChangeAction changeAction=new ChangeAction();
+				String strChange= changeAction.getRequestedChangeFromChangeAction(context,args[0],strCAID);
+				if (!strCACompleteState.equals(strCAState)&&ChangeConstants.FOR_OBSOLESCENCE.equals(strChange) ) {
+							String errorMessage = EnoviaResourceBundle.getProperty(context,"emxEnterpriseChangeMgtStringResource",context.getLocale(),args[1]);
+					${CLASS:emxContextUtilBase}.mqlNotice(context, errorMessage);
+					return 1;
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public int checkIfChangeProcessInprogress(Context context, String[] args) throws Exception {
+		try {
+			boolean changeInProgres=false;
+			List<Map> mlCA = getConnectedCA(context, args[0], true, true);
+			for (Map map : mlCA) {
+				String strCAState = map.get(DomainRelationship.SELECT_CURRENT).toString();
+				String strCAID=(String)map.get(DomainObject.SELECT_ID);
+				ChangeAction changeAction=new ChangeAction();
+				String strChange= changeAction.getRequestedChangeFromChangeAction(context,args[0],strCAID);
+				if((strChange.equals(ChangeConstants.FOR_REVISE)&&!ChangeConstants.STATE_CHANGE_ACTION_INWORK.equals(strCAState))||!strChange.equals(ChangeConstants.FOR_REVISE)&&!ChangeConstants.STATE_CHANGE_ACTION_COMPLETE.equals(strCAState)) {
+						changeInProgres=true;
+					}
+				}
+				if(changeInProgres){
+				String errorMessage = EnoviaResourceBundle.getProperty(context,"emxEnterpriseChangeMgtStringResource",context.getLocale(),args[1]);
+				${CLASS:emxContextUtilBase}.mqlNotice(context, errorMessage);
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Method to check if  CA connected to document.
+	 * @param context
+	 * @param strDocId objectID of Document
+	 * @return true: if Document is connected to CA 
+	 * @return false: if Document is not connected to any CA.
+	 * @throws Exception
+	 */
+	private boolean checkifChangeConnectedToDocument(Context context, String strDocId) throws Exception {
+		try {
+			if(UIUtil.isNullOrEmpty(strDocId)){
+				throw new Exception("Document Can not be null or empty");
+			}
+			List listChangeInfo = getConnectedCA(context, strDocId,true,true);
+			if(! listChangeInfo.isEmpty())
+				return  true;
+
+			return false;
+		}
+		catch (FrameworkException e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Method to check Document can be deleted.
+	 * @param context
+	 * @param strObjectId objectID of Document
+	 * @return 1: if Document is connected to CA 
+	 * @return 0: if Document is not connected to any CA.
+	 * @throws Exception
+	 */
+
+	public int checkIfDocumentCanBeDeleted(Context context, String[] strObjectId) throws Exception {
+		try {
+			if (checkifChangeConnectedToDocument(context,strObjectId[0])) {
+				String errorMessage = EnoviaResourceBundle.getProperty(context,"emxEnterpriseChangeMgtStringResource",context.getLocale(),
+						"EnterpriseChangeMgt.Alert.Msg.DocumentCanNotBeDeleted");
+				${CLASS:emxContextUtilBase}.mqlNotice(context, errorMessage);
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Method to check Document can be demoted from released or Obsolete state.
+	 * @param context
+	 * @param strObjectId objectID of Document
+	 * @return 1: if Document is connected to CA 
+	 * @return 0: if Document is not connected to any CA.
+	 * @throws Exception
+	 */
+	public int checkIfDocumentCanBeDemotedFromReleasedOrObsoleteState(Context context, String[] strObjectId) throws Exception {
+		try {
+			if (checkifChangeConnectedToDocument(context,strObjectId[0])) {
+				String errorMessage = EnoviaResourceBundle.getProperty(context,"emxEnterpriseChangeMgtStringResource",context.getLocale(),
+						"EnterpriseChangeMgt.Alert.Msg.DocumentCanNotBeDemoted");
+				${CLASS:emxContextUtilBase}.mqlNotice(context, errorMessage);
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to check if Revise command can be shown.
+	 * @param context
+	 * @param strObjectId objectID of Document
+	 * @return false: if Document is connected to CA and it is not completed
+	 * @return true: if Document is connected to CA and it is  completed or Document is not connected to any CA.
+	 * @throws Exception
+	 */
+	public boolean showReviseCommand(Context context, String[] args) throws Exception {
+		try {
+			Map hmProgram = (Map) JPO.unpackArgs(args);
+			String strDocId = (String) hmProgram.get("objectId");
+			boolean showCommand=true;
+			String strCACompleteState= FrameworkUtil.lookupStateName(context, ChangeConstants.POLICY_CHANGE_ACTION, ChangeConstants.STATE_SYMBOLIC_COMPLETE);
+			List<Map> mlCA = getConnectedCA(context, strDocId, true, true);
+			for (Map map : mlCA) {
+				String strCAState = map.get(DomainRelationship.SELECT_CURRENT).toString();
+				if (!strCACompleteState.equals(strCAState)) {
+					showCommand=false;
+				}
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get CA to which the document is connected.
+	 * @param context
+	 * @param strDocId objectID of Document
+	 * @param bProposed true-if CA to which document connected as Proposed Change is to be retrieved, false-otherwise
+	 * @param bRealized true-if CA to which document connected as Realized Change is to be retrieved, false-otherwise
+	 * @return
+	 * @throws Exception
+	 */
+	private List<Map> getConnectedCA(Context context, String strDocId, boolean bProposed, boolean bRealized) throws Exception {
+		//getting CA from document
+		Map changeObjectsInProposedMap = null;
+		Map changeObjectsInRealizedMap = null;
+		List<Map> returnListOfChangeObjects = new ArrayList<Map>();
+		try{
+			StringList slBusSelect = new StringList();
+			slBusSelect.add(DomainObject.SELECT_ID);
+			slBusSelect.add(DomainObject.SELECT_NAME);
+			slBusSelect.add(DomainObject.SELECT_DESCRIPTION);
+			slBusSelect.add(DomainObject.SELECT_TYPE);
+			slBusSelect.add(DomainObject.SELECT_CURRENT);
+			slBusSelect.add(DomainObject.SELECT_OWNER);
+			if(bProposed)	//getting CA from AffectedItems	
+				changeObjectsInProposedMap = ChangeUtil.getChangeObjectsInProposed(context, slBusSelect, new String[]{strDocId}, 1);
+			if(bRealized)	//getting CA from ImplementedItems
+			{
+				changeObjectsInRealizedMap = ChangeUtil.getChangeObjectsInRealized(context, slBusSelect, new String[]{strDocId}, 1);
+			}
+			if(! ((List<Map>)changeObjectsInProposedMap.get(strDocId)).isEmpty())
+				returnListOfChangeObjects = (List<Map>)changeObjectsInProposedMap.get(strDocId);
+			if(! ((List<Map>)changeObjectsInRealizedMap.get(strDocId)).isEmpty()){
+				if(returnListOfChangeObjects.isEmpty())
+					returnListOfChangeObjects = (List<Map>)changeObjectsInRealizedMap.get(strDocId);
+			}
+		}
+		catch(Exception ex){
+			ex.printStackTrace();
+		}
+		return returnListOfChangeObjects;
+	}
+
+}
+

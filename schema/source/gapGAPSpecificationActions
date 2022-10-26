@@ -1,0 +1,198 @@
+/* ${CLASSNAME}.java
+	
+ */
+
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.designrule.drv6tools.common.drApplicationException;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import java.util.Map;
+/**
+ * The <code>${CLASSNAME}</code> class represents the Task JPO
+ * functionality for the AEF type.
+ *
+ * @version AEF 9.5.1.1 - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} {
+
+	public int removeDerviedOutputOrConnectedPDFFileonDemote(Context context, String[] args) throws Exception {
+		
+		try {
+			
+			String objectId = args[0];
+			
+			if(UIUtil.isNotNullAndNotEmpty(objectId)) {
+				
+				DomainObject doDocumentObject = new DomainObject(objectId);
+				StringList derivedOutputIds = doDocumentObject.getInfoList(context, "from[Derived Output].to.id");
+
+				StringList objectSelects = new StringList("format.file.format");
+				objectSelects.add("format.file.name");
+				objectSelects.add(DomainObject.SELECT_ID);
+				
+				MapList mlDerviedOutputObjectList = new MapList();
+				String sMQLCommand = DomainObject.EMPTY_STRING;
+				String deriveOutputObjectId = DomainObject.EMPTY_STRING;
+
+				if(derivedOutputIds!=null && derivedOutputIds.size()>0){
+
+					String[] mlDerviedOutputObjectArray = (String[]) derivedOutputIds.toArray(new String[0]);
+					mlDerviedOutputObjectList= DomainObject.getInfo(context, mlDerviedOutputObjectArray, objectSelects);
+
+					if(mlDerviedOutputObjectList!=null && mlDerviedOutputObjectList.size()>0){
+
+						for(int i=0;i<mlDerviedOutputObjectList.size();i++){
+							Map mpDerivedOutputInfo = (Map)mlDerviedOutputObjectList.get(i);
+							deriveOutputObjectId = (String)mpDerivedOutputInfo.get(DomainObject.SELECT_ID);
+							Object fileFormatName = (Object)mpDerivedOutputInfo.get("format.file.name");
+							Object fileFormat = (Object)mpDerivedOutputInfo.get("format.file.format");
+
+							StringList formatList = new StringList();
+							StringList fileFormatNameList = new StringList();
+
+							if(fileFormatName instanceof String){
+								fileFormatNameList.add((String)fileFormatName);
+							} else if (fileFormatName instanceof StringList){
+								fileFormatNameList.addAll((StringList)fileFormatName);
+							}
+							
+							if(fileFormat instanceof String){
+								formatList.add((String)fileFormat);
+							} else if (fileFormat instanceof StringList){
+								formatList.addAll((StringList)fileFormat);
+							}
+							
+							ContextUtil.startTransaction(context, true);
+							
+							//check for file extension and not file format
+							if(fileFormatNameList!=null && fileFormatNameList.size()==1){
+								//remove the derived Output Object
+								String fileExtension = (String)formatList.get(0);
+								if(fileExtension!= null && !fileExtension.isEmpty() && "PDF".equalsIgnoreCase(fileExtension)){								
+									sMQLCommand = "delete bus '"+deriveOutputObjectId+"'";
+									MqlUtil.mqlCommand(context, sMQLCommand);
+								}
+							} else if (fileFormatNameList!=null && fileFormatNameList.size()>0){
+								for(int k=0;k<fileFormatNameList.size();k++){
+									String fileName = (String)fileFormatNameList.get(k);
+									String format = (String)formatList.get(k);
+									if(UIUtil.isNotNullAndNotEmpty(format) && "PDF".equalsIgnoreCase(format)){
+										
+										sMQLCommand = "delete bus '"+deriveOutputObjectId+"' format '"+format+"' file '"+fileName+"'";
+										System.out.println("Deleted dervice output");
+										MqlUtil.mqlCommand(context,sMQLCommand);
+									}
+								}
+							}
+							
+							ContextUtil.commitTransaction(context);
+						}
+					}
+				}		
+			}
+
+		} catch(Exception ex) {
+			ContextUtil.abortTransaction(context);
+			throw new drApplicationException("Problem occurred while removing PDF files for DerivedOutput Objects : "+ex.getMessage(), ex);
+		}
+		
+		return 0;
+	}
+		public int removeDerviedOutputOrConnectedPDFFileonPromote(Context context, String[] args) throws Exception {
+		
+		try {
+			
+			String objectId = args[0];
+			
+			if(UIUtil.isNotNullAndNotEmpty(objectId)) {
+				
+				DomainObject doDocumentObject = new DomainObject(objectId);
+				StringList derivedOutputIds = doDocumentObject.getInfoList(context, "from[Derived Output].to.id");
+
+				StringList objectSelects = new StringList("format.file.format");
+				objectSelects.add("format.file.name");
+				objectSelects.add(DomainObject.SELECT_ID);
+				
+				MapList mlDerviedOutputObjectList = new MapList();
+				String sMQLCommand = DomainObject.EMPTY_STRING;
+				String deriveOutputObjectId = DomainObject.EMPTY_STRING;
+
+				if(derivedOutputIds!=null && derivedOutputIds.size()>0){
+
+					String[] mlDerviedOutputObjectArray = (String[]) derivedOutputIds.toArray(new String[0]);
+					mlDerviedOutputObjectList= DomainObject.getInfo(context, mlDerviedOutputObjectArray, objectSelects);
+
+					if(mlDerviedOutputObjectList!=null && mlDerviedOutputObjectList.size()>0){
+
+						for(int i=0;i<mlDerviedOutputObjectList.size();i++){
+							Map mpDerivedOutputInfo = (Map)mlDerviedOutputObjectList.get(i);
+							deriveOutputObjectId = (String)mpDerivedOutputInfo.get(DomainObject.SELECT_ID);
+							Object fileFormatName = (Object)mpDerivedOutputInfo.get("format.file.name");
+							Object fileFormat = (Object)mpDerivedOutputInfo.get("format.file.format");
+
+							StringList formatList = new StringList();
+							StringList fileFormatNameList = new StringList();
+
+							if(fileFormatName instanceof String){
+								fileFormatNameList.add((String)fileFormatName);
+							} else if (fileFormatName instanceof StringList){
+								fileFormatNameList.addAll((StringList)fileFormatName);
+							}
+							
+							if(fileFormat instanceof String){
+								formatList.add((String)fileFormat);
+							} else if (fileFormat instanceof StringList){
+								formatList.addAll((StringList)fileFormat);
+							}
+							
+							ContextUtil.startTransaction(context, true);
+							
+							//check for file extension and not file format
+							if(fileFormatNameList!=null && fileFormatNameList.size()==1){
+								//remove the derived Output Object
+								String fileExtension = (String)formatList.get(0);
+								if(fileExtension!= null && !fileExtension.isEmpty() && "PDF".equalsIgnoreCase(fileExtension)){								
+									sMQLCommand = "delete bus '"+deriveOutputObjectId+"'";
+									MqlUtil.mqlCommand(context, sMQLCommand);
+								}
+							} else if (fileFormatNameList!=null && fileFormatNameList.size()>0){
+								for(int k=0;k<fileFormatNameList.size();k++){
+									String fileName = (String)fileFormatNameList.get(k);
+									String format = (String)formatList.get(k);
+									if(UIUtil.isNotNullAndNotEmpty(format) && "PDF".equalsIgnoreCase(format)){
+										sMQLCommand = "delete bus '"+deriveOutputObjectId+"' format '"+format+"' file '"+fileName+"'";
+
+										MqlUtil.mqlCommand(context,sMQLCommand);
+
+									}
+								}
+							}
+							
+							ContextUtil.commitTransaction(context);
+						}
+					}
+				}		
+			}
+
+		} catch(Exception ex) {
+			ContextUtil.abortTransaction(context);
+			throw new drApplicationException("Problem occurred while removing PDF files for DerivedOutput Objects : "+ex.getMessage(), ex);
+		}
+		
+		return 0;
+	}
+}
+
+
+
+
+
+
+

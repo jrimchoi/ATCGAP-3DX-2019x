@@ -1,0 +1,527 @@
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.PrintStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+
+import com.matrixone.apps.common.WorkspaceVault;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static PrintStream m_objLogStream = System.out;    
+	/* public int mxMain(Context objContext, String[] args)   throws Exception
+	    {
+		String str = checkIfWorkspaceAlreadyExists(objContext, "ENS-00040895");
+		if (UIUtil.isNullOrEmpty(str))
+{
+	System.out.println("nooo");
+}
+else {
+	System.out.println("found");
+}
+		 return 0;
+	    }*/
+	 /**
+	    * This method is executed if a specific method is not specified.
+	    * @author ENGMASA
+	    * @param context the eMatrix <code>Context</code> object.
+	    * @param args holds no arguments.
+	    * @return int.
+	    * @throws Exception if the operation fails.
+	    */
+	    public int mxMain(Context objContext, String[] args)   throws Exception
+	    {
+	      /*  if (args.length < 3)
+	        {
+	            System.out.println("usage: exec prog gapRedThreadMigrationmxJPO <jobs.txt>  <WorkspaceTemplate> <Revision> <CSpace>");
+	            return -1;6970
+	        }*/
+
+	        String strJobsFile = args[0];
+	        String strWSTemplate = "GAP Red Thread Migration Workspace Template";//args[1];
+	        String strWSTemplateRev = "1";// args[2];
+	        String strCSpace = "Core Space";// args[3];
+	        String strCompany = "GAP";
+	        String cvsSplitByPipe = "\\|";
+
+	        //String strRedThreatFolderName = "08 - RedThread Migration";
+	       // String strRedThreatFolderRev = "56A2F366000021585E2997B000000149";
+	        
+	        System.out.println("Input File: " + strJobsFile);
+	        System.out.println("Workspace Template: " + strWSTemplate + " " + strWSTemplateRev);
+	        System.out.println("CSpace: " + strCSpace);
+	        System.out.println("Company: " + strCompany);
+	        
+	       /* String strCommand_1 = "temp query bus 'Workspace Vault' '"  + strRedThreatFolderName.trim() + "' " + strRedThreatFolderRev.trim()+ " select id dump |";
+	        MQLCommand mqlCmd_1 = new MQLCommand();
+	        mqlCmd_1.executeCommand(objContext, strCommand_1);
+	        String strResult_1 = mqlCmd_1.getResult();
+	        String[] strResults_1 = strResult_1.split(cvsSplitByPipe);
+	        String strFoldId =  strResults_1[3].trim();*/
+	        WorkspaceVault sourceFolder = (WorkspaceVault)DomainObject.newInstance(objContext,DomainConstants.TYPE_WORKSPACE_VAULT,
+	   			 DomainConstants.TEAM);
+	    //    sourceFolder.setId(strFoldId);
+	   		WorkspaceVault destinationFolder = (WorkspaceVault)DomainObject.newInstance(objContext,DomainConstants.TYPE_WORKSPACE_VAULT,
+	   			 DomainConstants.TEAM);
+	        String strCommand1 = "temp query bus 'Workspace Template' '"  + strWSTemplate.trim() + "' " + strWSTemplateRev.trim()+ " select id dump |";
+	        System.out.println(strCommand1);
+	        MQLCommand mqlCmd1 = new MQLCommand();
+	        mqlCmd1.executeCommand(objContext, strCommand1);
+	        String strResult1 = mqlCmd1.getResult();
+	        String[] strResults1 = strResult1.split(cvsSplitByPipe);
+	        String strTemplateId =  strResults1[3].trim();
+
+	        String strWS = "";
+	        String strDesc = "";
+			String strFrameModel= "";
+			String strGapCode= "";
+			String strCoreEngFolderId = "";
+
+	        BufferedReader br = null;
+	        String line = "";
+
+	        
+	        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd_HH_mm_ss");  
+	        LocalDateTime now = LocalDateTime.now();  
+	        System.out.println(dtf.format(now));  
+	        m_objLogStream = new PrintStream("C:\\temp\\MSangde\\redThreadMigration\\Migration\\logs\\GAPRedThreadCreation_"+dtf.format(now)+".log");
+
+	        br = new BufferedReader(new FileReader(strJobsFile));
+	        String strServiceOrders = null;
+	        while ((line = br.readLine()) != null) {
+			try {
+	           // use comma as separator
+	           String[] job = line.split(cvsSplitByPipe);
+	           String strWSNu = job[0];
+	          
+	           strWS = "ENS-"+job[0];
+	           
+	           if (strWSNu.startsWith("UTB"))
+	        	   strWS = strWSNu;
+			   if (strWSNu.startsWith("TBI"))
+	        	   strWS = strWSNu;
+	           
+	           if (job.length>1)
+	        	   strDesc = job[1].trim();
+	           else
+	        	   strDesc = "";
+	           
+	           if (job.length>2)
+	        	   strFrameModel = job[2].trim();
+	           else
+	        	   strFrameModel = "";
+	           
+	           
+	           strGapCode = strDesc;
+	           if (job.length>3)
+	        	   strServiceOrders = job[3];
+	           else
+	        	   strServiceOrders = "";
+	           String strResult2 = "";
+	           
+	           java.text.DateFormat m_objDateFormat = null;
+	           // check if already exists
+	           String strObjectId =  checkIfWorkspaceAlreadyExists(objContext, strWS);
+	           // if ws does exists then create it else update it
+	           if (UIUtil.isNullOrEmpty(strObjectId))
+	           {
+	        	   System.out.println("Creating Workspace=" + strWS) ;
+	        	   m_objDateFormat  = java.text.DateFormat.getDateTimeInstance();
+		           m_objLogStream.println(m_objDateFormat.format(new java.util.Date())+ ": " + "Creating Workspace=" + strWS);
+
+	           strWS = "ENS-"+job[0].trim();
+	          // strDesc = job[1].trim();
+	         // strFrameModel = job[2].trim();
+	           // populate description
+	           StringBuffer sbDesc = new StringBuffer();
+	           sbDesc.append("Codeword - " + strDesc+ 
+	           		"\r\nType - " + 
+	           		strFrameModel
+	           		+
+	           		"\r\nMachine No. - "+
+	           		"\r\nCRM Opportunity - \r\n" + 
+	           		"CRM Master Project ID - \r\n" + 
+	           		"Sales Order Number Core Unit - \r\n" + 
+	           		"Leego Builder ID -  \r\n" + 
+	           		"Customer - \r\n" + 
+	           		"End User - \r\n" + 
+	           		"References - \r\n" + 
+	           		"Packaging Entity - \r\n" + 
+	           		"Core Manufacturing - \r\n" + 
+	           		"SAP Equipment No(s) - \r\n" + 
+	           		"Application - ");
+	           Map requestMap = new HashMap();
+	           requestMap.put("Name",strWS);
+	           requestMap.put("Description",sbDesc.toString());
+	           requestMap.put("TemplateOID",strTemplateId);
+	           requestMap.put("txtBuyerDeskId","");
+	           String[] rmap = JPO.packArgs(requestMap);
+	           Map wsMap = (Map)JPO.invoke(objContext,"emxWorkspaceBase", null, "createWorkspaceProcess", rmap, Map.class);
+	           strObjectId =  (String)wsMap.get("id"); 
+	           String strCommand2 = "promote bus " + strObjectId;
+	           MQLCommand mqlCmd2 = new MQLCommand();
+	           mqlCmd2.executeCommand(objContext, strCommand2);
+	           mqlCmd2.executeCommand(objContext, strCommand2);
+		   
+			   String strCommand7= "modify bus " + strObjectId + " gapFrameModel '" + strFrameModel + "'";
+	           MQLCommand mqlCmd7 = new MQLCommand();
+	           mqlCmd7.executeCommand(objContext, strCommand7);
+	           // add code attribute
+	           String strAddCode= "modify bus " + strObjectId + " gapProjectCodeWord '" + strGapCode + "'";
+	           MQLCommand mqlCmdAddCode = new MQLCommand();
+	           mqlCmdAddCode.executeCommand(objContext, strAddCode);
+			   
+				String strCommand3 = "print bus " + strObjectId + " select relationship[Data Vaults].to.name relationship[Data Vaults].to.id dump |";
+				MQLCommand mqlCmd3 = new MQLCommand();
+				mqlCmd3.executeCommand(objContext, strCommand3);
+				strResult2 = mqlCmd3.getResult();
+				
+				//System.out.println(strResult2);
+				
+				String[] strResults3 = strResult2.split(cvsSplitByPipe);
+				
+				for (int i = 0; i < strResults3.length; i++) {
+
+					if (strResults3[i].trim().equals("05 - Core Engineering")) {
+						strCoreEngFolderId = strResults3[(strResults3.length/2) + i];
+						// update subfolders
+						updateSubFolders(objContext, strCoreEngFolderId, strCSpace, strCompany);
+						break;
+					}
+				}
+				
+			   String strCommand4 = "modify bus " + strCoreEngFolderId + " project '" + strCSpace + "'";
+			   MQLCommand mqlCmd4 = new MQLCommand();
+			   mqlCmd4.executeCommand(objContext, strCommand4);
+			   
+			   String strCommand41= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+	           MQLCommand mqlCmd41 = new MQLCommand();
+	           mqlCmd41.executeCommand(objContext, strCommand41);
+	          // System.out.println("set..");
+	           // add commercial folders only for new workspace
+	           
+	       
+
+			/*   String[] strResults4 = strResult2.split(cvsSplitByPipe);
+				for (int j = 0; j < strResults4.length; j++) {
+
+					if (strResults4[j].trim().equals("09 - Manufacturing")) {
+						strCoreEngFolderId = strResults4[(strResults4.length/2) + j];
+						break;
+					}
+				}
+
+
+	           String strCommand5 = "modify bus " + strCoreEngFolderId + " project '" + strCSpace + "'";
+	           MQLCommand mqlCmd5 = new MQLCommand();
+	           mqlCmd5.executeCommand(objContext, strCommand5);
+
+			   String strCommand51= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+	           MQLCommand mqlCmd51 = new MQLCommand();
+	           mqlCmd51.executeCommand(objContext, strCommand51);
+
+			   String[] strResults5 = strResult2.split(cvsSplitByPipe);
+				for (int k = 0; k < strResults5.length; k++) {
+
+					if (strResults5[k].trim().equals("15 - Migrated")) {
+						strCoreEngFolderId = strResults5[(strResults5.length/2) + k];
+						break;
+					}
+				}
+				
+
+	           String strCommand6 = "modify bus " + strCoreEngFolderId + " project '" + strCSpace + "'";
+	           MQLCommand mqlCmd6 = new MQLCommand();
+	           mqlCmd6.executeCommand(objContext, strCommand6);
+	           
+			   String strCommand61= "modify bus " + strCoreEngFolderId + " organization '" + strCompany + "'";
+	           MQLCommand mqlCmd61 = new MQLCommand();
+	           mqlCmd61.executeCommand(objContext, strCommand61);
+	           */
+			   
+			   /*String strCommand4= "modify bus " + strObjectId + " organization '" + strCompany + "'";
+	           MQLCommand mqlCmd4 = new MQLCommand();
+	           mqlCmd4.executeCommand(objContext, strCommand4);*/
+
+	           // add Migration folder	           
+	           // find applications handover folder and the add commercial folder
+	           String strApplicationHandoverFolderId = getFolderId(objContext, strObjectId, "01 - Applications Handover", "Data Vaults");	           
+	           // modify space for commercial folder
+	           updateAccessLevel(objContext, strApplicationHandoverFolderId, "01 - Commercial","ENS","ENS Commercial", "Sub Vaults", false);
+	        // find applications handover folder and the add commercial folder
+	           String strShippDocFoldId = getFolderId(objContext, strObjectId, "13 - Shipping Documents", "Data Vaults");	           
+	           // modify space for commercial folder
+	           updateAccessLevel(objContext, strShippDocFoldId, "02 - Commercial Invoices","ENS","ENS Commercial", "Sub Vaults", false);
+	           }
+	           else {
+	        	   System.out.println("Updating Workspace=" + strWS) ;
+	        	   m_objDateFormat  = java.text.DateFormat.getDateTimeInstance();
+	        	   // get id from mql result
+	        	   String[] strResults12 = strObjectId.split(cvsSplitByPipe);
+	        	   strObjectId =  strResults12[3].trim();
+		           m_objLogStream.println(m_objDateFormat.format(new java.util.Date())+ ": " + "Updating Workspace=" + strWS);
+		          // System.out.println("strObjectId b4 : "+strObjectId);
+	        	   String strCommand3 = "print bus " + strObjectId + " select relationship[Data Vaults].to.name relationship[Data Vaults].to.id dump |";
+					MQLCommand mqlCmd3 = new MQLCommand();
+					mqlCmd3.executeCommand(objContext, strCommand3);
+					strResult2 = mqlCmd3.getResult();		
+		        	// add red thread migration folder if does not exists	
+					String strAfterMArketFoldId = getFolderId(objContext, strObjectId, "14 - Aftermarket", "Data Vaults");
+					String strRedThreadMigrationFoldId = getFolderIdContains(objContext, strAfterMArketFoldId, "Red Thread Migration", "Sub Vaults");
+					if (UIUtil.isNullOrEmpty(strRedThreadMigrationFoldId))
+					{
+						// get source Id
+						String strRedThreadMigTemp =  checkIfWorkspaceAlreadyExists(objContext, "GAP Red Thread Migration Workspace Template");
+						  String[] strResults123 = strRedThreadMigTemp.split(cvsSplitByPipe);
+						  strRedThreadMigTemp =  strResults123[3].trim();
+						//System.out.println("strRedThreadMigTemp : "+strRedThreadMigTemp);
+						String strAfterMArketFoldIdSource = getFolderId(objContext, strRedThreadMigTemp, "14 - Aftermarket", "Data Vaults");
+						//System.out.println("strRedThreadMigTemp : "+strAfterMArketFoldIdSource);
+						String strRedThreadMigrationFoldIdSource = getFolderIdContains(objContext, strAfterMArketFoldIdSource, "Red Thread Migration", "Sub Vaults");
+						//System.out.println("strRedThreadMigrationFoldIdSource : "+strRedThreadMigrationFoldIdSource);
+						
+						//System.out.println("strAfterMArketFoldId : "+strAfterMArketFoldId);
+						// if does not exists then add new
+						destinationFolder.setId(strAfterMArketFoldId);
+						sourceFolder.setId(strRedThreadMigrationFoldIdSource);
+						sourceFolder.cloneStructure(objContext, destinationFolder, true);
+					}
+	           }
+				// build redThread sourceIds
+				 String strMQLCmd = "temp query bus 'Workspace' 'GAP Service Order Template' * select id dump |";
+			        MQLCommand mqlCmd11 = new MQLCommand();
+			        mqlCmd11.executeCommand(objContext, strMQLCmd);
+			        String strResult11 = mqlCmd11.getResult();
+			        String[] strResults11 = strResult11.split(cvsSplitByPipe);
+			        String strRedTMIGWrkId =  strResults11[3].trim();
+				String strRedTMIGWrk = "print bus " + strRedTMIGWrkId + " select relationship[Data Vaults].to.name relationship[Data Vaults].to.id dump |";
+				MQLCommand mqlCmd33 = new MQLCommand();
+				mqlCmd33.executeCommand(objContext, strRedTMIGWrk);
+				String strResult22 = mqlCmd33.getResult();
+				
+				//System.out.println(strResult2);
+				
+				/*String[] strResults32 = strResult22.split(cvsSplitByPipe);
+				for (int k = 0; k < strResults32.length; k++) {
+
+					if (strResults32[k].trim().equals("00 - ENS Finance")) {
+						String strFinanceFoldId = strResults32[(strResults32.length/2) + k];
+						//System.out.println("strFinanceFoldId : "+strFinanceFoldId);
+						// check if already not exists
+						String strTargetId = getFolderId(objContext, strObjectId, "00 - ENS Finance", "Data Vaults");
+						
+						if (UIUtil.isNullOrEmpty(strTargetId))
+						{
+							//System.out.println("strFinanceFoldId : "+strFinanceFoldId);
+						//	System.out.println("strObjectId : "+strObjectId);
+							// add redThread folder structure
+							destinationFolder.setId(strObjectId);
+							sourceFolder.setId(strFinanceFoldId);
+							sourceFolder.cloneStructure(objContext, destinationFolder, true);
+							// once copied modify access level
+							updateAccessLevel(objContext, strObjectId, "00 - ENS Finance","ENS","ENS Commercial", "Data Vaults");
+						}
+						else
+						{
+							m_objLogStream.println("Finance folder is already exists");
+						}
+					}
+				}*/
+				// update AfterMarket folder
+				String strAfterMarkId = DomainObject.EMPTY_STRING;
+		           String[] strResults6 = strResult2.split(cvsSplitByPipe);
+					for (int k = 0; k < strResults6.length; k++) {
+
+						if (strResults6[k].trim().equals("14 - Aftermarket")) {
+							strAfterMarkId = strResults6[(strResults6.length/2) + k];
+							/* String strServiceOrderFoldId = getFolderId(objContext, strRedTMIGWrkId, strRedThreatFolderName, "Data Vaults");
+							 // check if already not exists
+								String strTargetId = getFolderId(objContext, strAfterMarkId, strRedThreatFolderName, "Sub Vaults");
+								if (UIUtil.isNullOrEmpty(strTargetId))
+								{
+									 sourceFolder.setId(strServiceOrderFoldId);
+									// add redThread folder structure
+									destinationFolder.setId(strAfterMarkId);
+									sourceFolder.cloneStructure(objContext, destinationFolder, true);
+								}
+								else
+								{
+									 m_objLogStream.println(strRedThreatFolderName+ " : Already exists!!!");
+								}*/
+							// add service orders under Engineered solutions
+							if (UIUtil.isNotNullAndNotEmpty(strServiceOrders))
+							{
+								StringList slServiceOrderList = FrameworkUtil.split(strServiceOrders, ",");
+								for (int y=0; y<slServiceOrderList.size(); y++)
+								{
+									String strServiceOrderNu = (String) slServiceOrderList.get(y);
+									addServiceOrderToPrimeOrder(objContext, strObjectId, strAfterMarkId, strRedTMIGWrkId, "ENS-"+strServiceOrderNu);
+								}
+							}
+							break;
+						}
+					}
+	           m_objDateFormat = java.text.DateFormat.getDateTimeInstance();
+	           m_objLogStream.println(m_objDateFormat.format(new java.util.Date())+ ": " + "Workspace=" + strWS + " created/updated");
+	        } catch (Exception ex) {
+//ex.printStackTrace();
+	          // handle the exception
+	           java.text.DateFormat m_objDateFormat = java.text.DateFormat.getDateTimeInstance();
+	           m_objLogStream.println(m_objDateFormat.format(new java.util.Date()) + ": " + "Workspace=" + strWS + "  was not created/updated due to error : "+ex.getMessage());
+	        } 
+	      }
+			
+	        return 1;
+	    }
+	    public static String getFolderId(Context context, String strObjectId, String strDestFoldName, String strRel) throws Exception
+	    {
+	    	 String cvsSplitByPipe = "\\|";
+	    	String strRedTMIGWrk = "print bus " + strObjectId + " select relationship["+strRel+"].to.name relationship["+strRel+"].to.id dump |";
+			MQLCommand mqlCmd33 = new MQLCommand();
+			mqlCmd33.executeCommand(context, strRedTMIGWrk);
+			String strResult22 = mqlCmd33.getResult();
+			
+			//System.out.println(strResult2);
+			
+			String[] strResults32 = strResult22.split(cvsSplitByPipe);
+			for (int k = 0; k < strResults32.length; k++) {
+
+				if (strResults32[k].trim().equals(strDestFoldName)) {
+					String strTargetFoldId = strResults32[(strResults32.length/2) + k];
+					return strTargetFoldId;
+				}
+					
+			}
+			return null;
+	    }
+	    public static String getFolderIdContains(Context context, String strObjectId, String strDestFoldName, String strRel) throws Exception
+	    {
+	    	 String cvsSplitByPipe = "\\|";
+	    	String strRedTMIGWrk = "print bus " + strObjectId + " select relationship["+strRel+"].to.name relationship["+strRel+"].to.id dump |";
+			MQLCommand mqlCmd33 = new MQLCommand();
+			mqlCmd33.executeCommand(context, strRedTMIGWrk);
+			String strResult22 = mqlCmd33.getResult();
+			
+			//System.out.println(strResult2);
+			
+			String[] strResults32 = strResult22.split(cvsSplitByPipe);
+			for (int k = 0; k < strResults32.length; k++) {
+
+				if (strResults32[k].trim().contains(strDestFoldName)) {
+					String strTargetFoldId = strResults32[(strResults32.length/2) + k];
+					return strTargetFoldId;
+				}
+					
+			}
+			return null;
+	    }
+	    public static void updateAccessLevel(Context context, String strObjectId, String strDestFoldName, String strOrg, String strSpace, String strRel, boolean bUpdateSubFolders) throws Exception
+	    {
+	    	 String cvsSplitByPipe = "\\|";
+	    	 
+	    	String strTargetFoldId = getFolderId(context, strObjectId, strDestFoldName, strRel);
+	    //	m_objLogStream.println("strDestFoldName :: "+strDestFoldName+ " : "+strTargetFoldId);
+			String strCommand6 = "modify bus " + strTargetFoldId + " project '" + strSpace + "'";
+			MQLCommand mqlCmd6 = new MQLCommand();
+			 mqlCmd6.executeCommand(context, strCommand6);
+			String strCommand61= "modify bus " + strTargetFoldId + " organization '" + strOrg + "'";
+			 MQLCommand mqlCmd61 = new MQLCommand();
+			 mqlCmd61.executeCommand(context, strCommand61);
+			 if (bUpdateSubFolders)
+			 {
+				// update subfolders
+					updateSubFolders(context, strTargetFoldId, strSpace, strOrg);
+			 }
+	    }
+	    public static void addServiceOrderToPrimeOrder(Context context, String strTargetWrkId, String strAfterMarkFoldId, String strRedTMIGWrkId, String strServiceOrderNu) throws Exception
+	    {
+	    	 String cvsSplitByPipe = "\\|";
+	    	// boolean bEnggSolFoldExists = false;
+	    	// find Engineering solutions fold id
+	    	 String strEnggSolId = getFolderIdContains(context, strAfterMarkFoldId, "Engineered Solutions", "Sub Vaults");
+	    	 if (UIUtil.isNullOrEmpty(strEnggSolId))
+	    		 m_objLogStream.println("Engineered Solutions folder is missing...");		
+	    	    // check if already not exists
+				String strTargetId = getFolderId(context, strEnggSolId, strServiceOrderNu, "Sub Vaults");
+				if (UIUtil.isNullOrEmpty(strTargetId))
+				{
+			    	 // copy fold structure from red thread migration folder
+			    	 String strServiceOrderFoldId = getFolderId(context, strRedTMIGWrkId, "SERVICE_ORDER", "Data Vaults");
+			    	 
+			    	 WorkspaceVault sourceFolder = (WorkspaceVault)DomainObject.newInstance(context,DomainConstants.TYPE_WORKSPACE_VAULT,
+				   			 DomainConstants.TEAM);
+				        sourceFolder.setId(strServiceOrderFoldId);
+				   	WorkspaceVault destinationFolder = (WorkspaceVault)DomainObject.newInstance(context,DomainConstants.TYPE_WORKSPACE_VAULT,
+				   			 DomainConstants.TEAM);
+				   	destinationFolder.setId(strEnggSolId);
+				   	
+				   	sourceFolder.cloneStructure(context, destinationFolder, true);
+				   	
+				   	// rename service order folder
+				   	String strNewServiceOrderName = getFolderId(context, strEnggSolId, "SERVICE_ORDER", "Sub Vaults");
+				   	DomainObject doOrder = DomainObject.newInstance(context, strNewServiceOrderName);
+				   	doOrder.setName(context, strServiceOrderNu);
+					doOrder.setDescription(context, "Service order");
+				   	// update access level for Core Package and Instrumentation folder to core
+				   //	String strCoreFoldId = getFolderId(context, strNewServiceOrderName, "05 - Core Engineering", "Sub Vaults");
+				   	updateAccessLevel(context, strNewServiceOrderName, "05 - Core Engineering","GAP","Core Space", "Sub Vaults", true);
+				   	
+				   	updateAccessLevel(context, strNewServiceOrderName, "06 - Package Mechanical Engineering","GAP","Core Space", "Sub Vaults", true);
+				   	updateAccessLevel(context, strNewServiceOrderName, "07 - Instrumentation and Controls Engineering","GAP","Core Space", "Sub Vaults", true);
+				}
+				else 
+				{
+					m_objLogStream.println("Service order "+strServiceOrderNu+ " : is already exists");					
+				}
+	    }
+	    public static String checkIfWorkspaceAlreadyExists(Context context, String strWSName) throws Exception
+	    {
+	    	String strWrkId = null;
+	    	 String strCommand1 = "temp query bus 'Workspace' '*"  + strWSName.trim() + "*' *"+" select id dump |";
+		        MQLCommand mqlCmd1 = new MQLCommand();
+		        mqlCmd1.executeCommand(context, strCommand1);
+		        strWrkId = mqlCmd1.getResult();
+		        //System.out.println("strResult1 " +strWrkId);
+	    	return strWrkId;
+	    }
+	    public static void updateSubFolders(Context context, String strParentFolderId, String strCollabSpace, String strCompany) throws Exception
+	    {
+	    	String strCommand3 = "print bus " + strParentFolderId + " select relationship[Sub Vaults].to.id dump |";
+			MQLCommand mqlCmd3 = new MQLCommand();
+			mqlCmd3.executeCommand(context, strCommand3);
+			String cvsSplitByPipe = "\\|";
+			String strResult2 = mqlCmd3.getResult();
+			
+			//System.out.println(strResult2);
+			
+			String[] strResults3 = strResult2.split(cvsSplitByPipe);
+			
+			for (int i = 0; i < strResults3.length; i++) {
+				try {
+								String strTargetFoldId = strResults3[i];
+							//	System.out.println(strResults3.length + "  yupp : "+strTargetFoldId);
+								String strCommand6 = "modify bus " + strTargetFoldId + " project '" + strCollabSpace + "'";
+								MQLCommand mqlCmd6 = new MQLCommand();
+								 mqlCmd6.executeCommand(context, strCommand6);
+								String strCommand61= "modify bus " + strTargetFoldId + " organization '" + strCompany + "'";
+								 MQLCommand mqlCmd61 = new MQLCommand();
+								 mqlCmd61.executeCommand(context, strCommand61);
+				}
+				catch (Exception e) {
+					// TODO: handle exception
+					System.out.println("err : "+e.getMessage());
+				}
+			}
+	    }
+}
+

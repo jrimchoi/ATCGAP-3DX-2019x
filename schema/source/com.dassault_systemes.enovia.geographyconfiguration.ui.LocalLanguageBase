@@ -1,0 +1,317 @@
+/*
+* Copyright (c) 2013-2016 Dassault Systemes. All Rights Reserved This program
+* contains proprietary and trade secret information of Dassault Systemes.
+* Copyright notice is precautionary only and does not evidence any actual or
+* intended publication of such program.
+*/
+
+
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfiguration;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfigurationException;
+import com.dassault_systemes.enovia.geographyconfiguration.Helper;
+import com.matrixone.apps.common.util.ComponentsUIUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.StringUtil;
+import com.matrixone.apps.framework.ui.UITableIndented;
+import com.matrixone.jdom.Element;
+
+public class ${CLASSNAME} {
+
+	private final static String				TYPE_SYMBOLIC_LOCAL_LANGUAGE		= "type_LocalLanguage";
+	private final static String				POLICY_SYMBOLIC_LANGUAGE			= "policy_Language";
+	private final static String				ATTRIBUTE_SYMBOLIC_ISOCODE			= "attribute_ISOCode";
+	private final static String				ATTRIBUTE_SYMBOLIC_LANGUAGE_2Letter			= "attribute_LanguageCode2Letter";
+	private final static String				ATTRIBUTE_SYMBOLIC_LANGUAGE_3Letter			= "attribute_LanguageCode3Letter";
+	
+	/**
+	 * Default constructor
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The arguments (Ignored)
+	 * @throws GeographyConfigurationException
+	 *             If operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws GeographyConfigurationException {
+		super();
+	}
+	
+	
+	
+	//Added by Y2H to create and connect the Local Language to Language Object
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map connectLocalLanguageToLanguage(Context context, String args[]) throws FrameworkException{	
+            try{
+                String TYPE_LOCAL_LANGUAGE = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_LOCAL_LANGUAGE);
+                String ATTRIBUTE_ISOCODE = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_ISOCODE);
+                String ATTRIBUTE_LOCALCODE2 = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_LANGUAGE_2Letter);
+                String ATTRIBUTE_LOCALCODE3 = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_LANGUAGE_3Letter);		
+                String policyLanguage = PropertyUtil.getSchemaProperty(context, "policy_Language");
+                String relLocalLanguage = PropertyUtil.getSchemaProperty(context, "relationship_LocalLanguage");
+                String strVault = context.getVault().getName();
+					
+                HashMap programMap = (HashMap)JPO.unpackArgs(args);		
+								
+                String strLanguageID  	= (String) programMap.get("objectId");			
+                String strLocalLangName = (String) programMap.get("Name");
+                String strLocalLangDesc = (String) programMap.get("Description");
+                String strISOCode 		=  (String) programMap.get("ISOCode");
+                String strLanguageCode2L  = (String) programMap.get("LanguageCode2L");
+                String strLanguageCode3L  = (String) programMap.get("LanguageCode3L");
+					
+                DomainObject languageObj = null;
+                if(!(strLanguageID== null || strLanguageID.isEmpty() ) ){
+                        languageObj = DomainObject.newInstance(context, strLanguageID);
+                }
+                if (languageObj == null || languageObj.isKindOf(context, TYPE_LOCAL_LANGUAGE))
+                {  
+                        String errorMsg = Helper.getI18NString(context, "GeographyConfiguration.Message.SelectLanguageErrorMsg");
+                        //Helper.mqlError(context, errorMsg);
+                        HashMap returnMap=new HashMap();
+                        returnMap.put("ErrorMessage",errorMsg);
+
+                        return returnMap;
+						
+                }
+                Map newLanguageMap = new HashMap();
+                newLanguageMap.put(ATTRIBUTE_ISOCODE, strISOCode);
+					
+                if( !( strLanguageCode2L == null || strLanguageCode2L.isEmpty() )){
+                        newLanguageMap.put(ATTRIBUTE_LOCALCODE2, strLanguageCode2L); 
+                }
+                if( !(strLanguageCode3L==null || strLanguageCode3L.isEmpty())){
+                        newLanguageMap.put(ATTRIBUTE_LOCALCODE3, strLanguageCode3L);
+                }
+					
+                DomainObject localLanguageObj = DomainObject.newInstance(context);
+                localLanguageObj.createAndConnect(context, TYPE_LOCAL_LANGUAGE, strLocalLangName, "-", policyLanguage, strVault, relLocalLanguage, new DomainObject(strLanguageID), true);
+					
+                localLanguageObj.setAttributeValues(context, newLanguageMap);
+                if(strLocalLangDesc != null){
+                        localLanguageObj.setDescription(context, strLocalLangDesc);
+                }
+					
+                Map newLanguageMapId = new HashMap();
+                newLanguageMapId.put(DomainConstants.SELECT_ID, localLanguageObj.getId(context));
+                return newLanguageMapId;
+					
+            }catch(Exception e)
+            {
+                    throw new FrameworkException(e);
+            }
+	}
+		
+	
+
+	/**
+	 * Saves rows for Local Language creation
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+         * @deprecated
+	 */
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map createNewLocalLanguage(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Element rootElement = (Element) programMap.get("contextData");
+			String parentId= (String) programMap.get("parentOID");
+			
+			MapList chgRowsMapList = UITableIndented.getChangedRowsMapFromElement(context, rootElement);
+			String ATTRIBUTE_ISOCODE = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_ISOCODE);
+			String TYPE_LOCAL_LANGUAGE = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_LOCAL_LANGUAGE);
+			
+			/** added by k3d 24/01/13 for AWL - START
+			 * If Parent object is null or is not Language type
+			 * send error msg : "Local Language can be created only under the Language object"
+			 */
+			DomainObject parentObj = null;
+			if(!Helper.isNullOrEmpty(parentId)){
+				parentObj = new DomainObject(parentId);
+			}
+			
+			if (parentObj == null || parentObj.isKindOf(context, TYPE_LOCAL_LANGUAGE))
+			{
+				Map errorMap = new HashMap();
+				errorMap.put("Action", "ERROR");
+				String errorMsg = Helper.getI18NString(context, "GeographyConfiguration.Message.SelectLanguageErrorMsg");
+				errorMap.put("Message", errorMsg);
+				return errorMap;
+			}
+			//added by k3d 24/01/13 for AWL - END
+				Map<String, Object> newLanguagesMap = new HashMap<String, Object>();
+				MapList changedRowsMapList = new MapList();
+				for (Object obj : chgRowsMapList) {
+					Map<?, ?> chgRowsMap = (Map<?, ?>) obj;
+					Map<?, ?> newLanguageMap = (Map<?, ?>) chgRowsMap.get("columns");
+					String strMsg = Helper.getI18NString(context, "GeographyConfiguration.Message.LanguageAlreadyExists");
+					String languageName = (String) newLanguageMap.get("Name");
+					String languageDescription = (String) newLanguageMap.get("Description");
+					String languageISOCode = (String) newLanguageMap.get(ATTRIBUTE_ISOCODE);
+					if (GeographyConfiguration.isLocalLanguageExist(context, languageName)) {
+						newLanguagesMap.put("Action", "ERROR");
+						newLanguagesMap.put("Message", strMsg);
+					}else{
+						DomainObject localLanguageObj = GeographyConfiguration.createLocalLanguageAndConnectToLanguage(context, languageName, 
+																						languageDescription,languageISOCode, parentId);
+						Map newLanguageRowMap = new HashMap();
+						newLanguageRowMap.put("markup", "new");
+						newLanguageRowMap.put("oid", localLanguageObj.getId(context));
+						newLanguageRowMap.put("columns", newLanguageMap);
+						newLanguageRowMap.put("rowId", chgRowsMap.get("rowId"));
+						newLanguageRowMap.put("pid", parentId);
+						changedRowsMapList.add(newLanguageRowMap);
+						}	
+				}
+				if(!newLanguagesMap.containsKey("Action"))
+				{
+					newLanguagesMap.put("Action", "success");
+					newLanguagesMap.put("changedRows", changedRowsMapList);
+				}
+				return newLanguagesMap;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+	
+	/**
+	 * Gets the Local Languages for language
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return map of Local Language values
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getLocalLanguages(Context context, String[] args) throws GeographyConfigurationException
+	{	
+		try {
+			HashMap programMap = (HashMap)JPO.unpackArgs(args);
+			String strObjectid = (String)programMap.get("objectId");
+			return  GeographyConfiguration.getLocalLanguages(context,strObjectid, null, "");
+		} catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+	
+	/**
+	 * Gets the default value for Type column of language table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return map of default values with key Default_AddNewRow
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	public Map<String, String> getDefaultLocalLanguagesType(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<String, String> languageType = new HashMap<String, String>();
+			String sType_Local_Language = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_LOCAL_LANGUAGE);
+			//IR-216084V6R2014 k3d - type translation to browser lang -Start
+			sType_Local_Language = EnoviaResourceBundle.getTypeI18NString(context, sType_Local_Language, context.getSession().getLanguage());
+			//IR-216084V6R2014 k3d - End
+			languageType.put("Default_AddNewRow", sType_Local_Language);
+			return languageType;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+	
+	public Map<String, String> getDefaultLocalLanguagesState(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			//IR-216084V6R2014 k3d - state translation to browser lang -Start	
+			String strDefaultState = EnoviaResourceBundle.getProperty(context,"GeographyConfiguration.LocalLanguage.DefaultState");
+			//IR-216084V6R2014 k3d - End
+			Map<String, String> languagesState = new HashMap<String, String>();
+			String POLICY_LANGUAGE = PropertyUtil.getSchemaProperty(context, POLICY_SYMBOLIC_LANGUAGE);
+			String stateDefault = PropertyUtil.getSchemaProperty(context, "policy", POLICY_LANGUAGE, strDefaultState);
+			//IR-216084V6R2014 k3d - state translation to browser lang -Start
+			stateDefault = EnoviaResourceBundle.getStateI18NString(context, POLICY_LANGUAGE, stateDefault, context.getSession().getLanguage());
+			//IR-216084V6R2014 k3d - End
+			languagesState.put("Default_AddNewRow", stateDefault);
+			return languagesState;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+	
+	/**
+	 * Removes rows for Local Language deletion
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions
+	 * @throws GeographyConfigurationException
+	 */
+	@com.dassault_systemes.enovia.geographyconfiguration.ExecuteCallable
+	public String actionDeleteGEOLocalLanguages(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] objList = (String[]) programMap.get("emxTableRowId");
+			String[] emxTableRowIds = ComponentsUIUtil.getSplitTableRowIds(objList);
+			
+			String TYPE_LOCAL_LANGUAGE = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_LOCAL_LANGUAGE);
+			if (!Helper.isAllKindOfType(context, Arrays.asList(emxTableRowIds), TYPE_LOCAL_LANGUAGE)) {
+				return "alertPleaseSelectLocalLanguageOnly()";
+			}
+
+			GeographyConfiguration.deleteLocalLanguage(context, emxTableRowIds);
+		    //Modified by N94 send object list with position for delete refresh issue
+			return Helper.encodeFunctionForJavaScript(context, false, "removeRowsUnderLocalLanguagesFromStructureBrowser",
+					StringUtil.join(objList, ";"));
+			
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+	
+	public void updateLetterCodeForLocalLanguage(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			String strLanguageId = args[0];
+			String strLocalLanguage = args[1];
+			DomainObject languageObj = new DomainObject(strLanguageId);
+			String ATTRIBUTE_2Letter = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_LANGUAGE_2Letter);
+			String ATTRIBUTE_3Letter = PropertyUtil.getSchemaProperty(context, ATTRIBUTE_SYMBOLIC_LANGUAGE_3Letter);
+			
+			DomainObject localLanguageObj = new DomainObject(strLocalLanguage);
+			localLanguageObj.setAttributeValue(context, ATTRIBUTE_2Letter, languageObj.getAttributeValue(context, ATTRIBUTE_2Letter));
+			localLanguageObj.setAttributeValue(context, ATTRIBUTE_3Letter, languageObj.getAttributeValue(context, ATTRIBUTE_3Letter));
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new GeographyConfigurationException(e);
+		}
+		
+	}
+
+}
+

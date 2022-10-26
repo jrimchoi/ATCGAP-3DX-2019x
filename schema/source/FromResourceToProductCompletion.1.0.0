@@ -1,0 +1,52 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}, {name:"SEL_RSC", type:"NavigationSet"}],
+                                    [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, function(context, outputData) {
+
+	///////////////////////////////////////
+	// 1- SmartCompletionResourceSystem(SEL_RES)
+	///////////////////////////////////////
+	var RscToSystTimer = new DebugTimer(context, 0, "SmartCompletionResourceSystem(SEL_RSC)", true);
+	var navMode = [true,true,true,true];// [Ref/Ref, Occ/Occ with resource, Occ/Occ where resource, Occ/Port/Occ who resource]
+	var  ResSys = NavigationPrimitives.navigateFromResourceToSystem(context, SEL_RSC, navMode);
+	PROD_SYS = PROD_SYS.merge(ResSys);
+	RscToSystTimer.complete();
+	
+	///////////////////////////////////////
+	//2 - FromSystemOperationToProcess
+	///////////////////////////////////////
+	var SysToPrcsTimer = new DebugTimer(context, 0, "navigate system -> process", true);
+	var SysPrcsNavMode = [true,true]; // [Ref/Ref, Occ/Occ]
+	var ResPrcs = NavigationPrimitives.navigateFromSystemToProcess(context, ResSys, SysPrcsNavMode);
+	PRCS = PRCS.merge(ResPrcs);
+	SysToPrcsTimer.complete();
+	
+	///////////////////////////////////////
+	//3 - FromProcessToProduct
+	///////////////////////////////////////
+	var PrcsToProdTimer = new DebugTimer(context, 0, "navigate Process -> product", true);
+	var PrcsProdNavMode = [true,true]; // [Ref/Ref, Occ/Occ]
+	var ResProd = NavigationPrimitives.navigateFromProcessToProduct(context, ResPrcs, PrcsProdNavMode);
+	PRD = PRD.merge(ResProd);
+	PrcsToProdTimer.complete();
+
+	///////////////////////////////////////
+	// 4- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

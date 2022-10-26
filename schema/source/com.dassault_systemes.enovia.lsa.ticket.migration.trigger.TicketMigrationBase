@@ -1,0 +1,103 @@
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+
+public class ${CLASSNAME} {
+	
+	public ${CLASSNAME}(Context context, String[] args) throws TicketException {
+		super();
+	}
+	
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws TicketException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new TicketException(exception);
+		}
+	}
+	
+	
+	/**
+	 * @param context
+	 * @param args
+	 * @throws TicketException
+	 */
+	public void changeOwnershipOfTicketRelatedObjects(Context context, String[] args) throws TicketException {
+		try {
+			String strComplaintId = args[0];
+			String STRNEWOWNER = args[1];
+			
+			final DomainObject DMOCOMPLAINTTICKET = DomainObject.newInstance(context, strComplaintId);
+			
+			if (!Helper.isNullOrEmpty(STRNEWOWNER)) {
+				final StringBuilder SBRELPATTERN = new StringBuilder();
+				SBRELPATTERN.append(TicketConstants.COMMA);
+				SBRELPATTERN.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+				SBRELPATTERN.append(TicketConstants.COMMA);
+				SBRELPATTERN.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_PRODUCT_RETURN);
+				SBRELPATTERN.append(TicketConstants.COMMA);
+				SBRELPATTERN.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_PRODUCT_FULFILLMENT);
+				
+				final StringBuilder SBTYPEPATTERN = new StringBuilder();
+				SBTYPEPATTERN.append(TicketConstants.COMMA);
+				SBTYPEPATTERN.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+				SBTYPEPATTERN.append(TicketConstants.COMMA);
+				SBTYPEPATTERN.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_RETURN);
+				SBTYPEPATTERN.append(TicketConstants.COMMA);
+				SBTYPEPATTERN.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_FULFILLMENT);
+				
+				final List<Map<?, ?>> MAPRELATEDITEMS = QueryUtil.getRelatedObjects(context, DMOCOMPLAINTTICKET, SBRELPATTERN.toString(),
+						SBTYPEPATTERN.toString(),
+						Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT, DomainObject.SELECT_OWNER),
+						Helper.stringList(DomainRelationship.SELECT_ID, DomainRelationship.SELECT_NAME), Boolean.FALSE, Boolean.TRUE,
+						(short) 0, null, null);
+				List changeOwnerReqObjList = new ArrayList<>();
+				for (Object obj : MAPRELATEDITEMS) {
+					final Map<?, ?> MAPRELITEM = (Map) obj;
+					final String STRRELITEMID = (String) MAPRELITEM.get(DomainObject.SELECT_ID);
+					final String STRRELITEMOWNER = (String) MAPRELITEM.get(DomainObject.SELECT_OWNER);
+					final String STRRELITEMNAME = (String) MAPRELITEM.get(DomainRelationship.SELECT_NAME);
+					if (!STRRELITEMOWNER.equalsIgnoreCase(STRNEWOWNER)&&!STRRELITEMNAME
+							.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_relationship_ObjectRoute))) {
+						changeOwnerReqObjList.add(STRRELITEMID);
+					}
+				}
+				if(!Helper.isNullOrEmpty(changeOwnerReqObjList)){
+					ComplaintTicketService ticketService = getComplaintTicketService(context);
+					ticketService.changeObjectOwnership(context, STRNEWOWNER, changeOwnerReqObjList);
+				}
+			}
+		}catch (Exception exception) {
+			throw new TicketException(exception);
+		}
+	}
+}
+

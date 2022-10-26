@@ -1,0 +1,303 @@
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import matrix.db.Policy;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalService;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.ImpactQuestionnaireService;
+import com.dassault_systemes.enovia.questionnaire.ImpactQuestionnaireServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+public class ${CLASSNAME}{
+
+	public void checkIfConnectedToImpactQuestionnaire(Context context, String args[]) throws Exception {
+		try{
+
+			String strObjectId = args[0];
+			DomainObject dObj=DomainObject.newInstance(context, strObjectId);
+			String strRelEFormTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE);
+			StringBuilder sbRelEFormTemplate = new StringBuilder().append("to[").append(strRelEFormTemplate).append("].from.id");
+			String strPolicyEFormTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strStateObsolete = PropertyUtil.getSchemaProperty(context, "policy", strPolicyEFormTemplate,
+					QuestionnaireConstants.SYMBOLIC_STATE_OBSOLETE);
+
+			String strMessage = DomainObject.EMPTY_STRING;
+			String strState = dObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (strStateObsolete.equals(strState)) {
+				strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ImpactQuestionnaireTemplateDemoteErrorObsolete");
+				throw new Exception(strMessage);
+			}
+			MapList sObjectList = dObj.getRelatedObjects(
+					context,                // matrix context
+					PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_Question), // relationship
+					PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Question), // object
+					new StringList(DomainConstants.SELECT_ID), // object selects
+					DomainConstants.EMPTY_STRINGLIST, // relationship selects
+					true, // to direction
+					false, // from direction
+					(short) 0,          // recursion level
+					DomainConstants.EMPTY_STRING, // object where clause
+					DomainConstants.EMPTY_STRING, // relationship where clause
+					0);
+
+			if(!sObjectList.isEmpty()){
+
+				strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ImpactQuestionnaireTemplateDemoteError");
+				throw new Exception(strMessage);
+			}
+			List<String> slInfoList = dObj.getInfoList(context, sbRelEFormTemplate.toString());
+			if ((slInfoList != null && slInfoList.size() > 0)) {
+				strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ImpactQuestionnaireTemplateDemoteErrorEformConnected");
+				throw new Exception(strMessage);
+			}
+		}catch(Exception e){
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void checkAllQuestionAnswerGiven(Context context, String args[]) throws Exception {
+		QuestionService questionService = new QuestionServiceImpl();
+		String strObjectId = args[0];
+		DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+
+		List<Map> sObjectList = dObj.getRelatedObjects(context, // matrix
+																// context
+				DomainObject.RELATIONSHIP_OBJECT_ROUTE, // relationship pattern
+				DomainObject.TYPE_ROUTE, // object pattern
+				new StringList(DomainConstants.SELECT_ID), // object selects
+				DomainConstants.EMPTY_STRINGLIST, // relationship selects
+				false, // to direction
+				true, // from direction
+				(short) 0, // recursion level
+				DomainConstants.EMPTY_STRING, // object where clause
+				DomainConstants.EMPTY_STRING, // relationship where clause
+				0);
+		for (Map map : sObjectList) {
+			String strRouteId = (String) map.get(DomainConstants.SELECT_ID);
+			DomainObject routeObject = DomainObject.newInstance(context, strRouteId);
+			String strCurrent = routeObject.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (!strCurrent.equals("Complete")) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ImpactQuestionnaireTaskNotCompleteError");
+				throw new Exception(strMessage);
+			}
+		}
+	}
+
+	public void checkIfActionTaskIsComplate(Context context, String args[]) throws Exception {
+		QuestionService questionService = new QuestionServiceImpl();
+		String strObjectId = args[0];
+		DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+		String strRelEFormtemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE);
+		String strPoliCYTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+		String strPolicyStateActive = PropertyUtil.getSchemaProperty(context, "policy", strPoliCYTemplate,
+				QuestionnaireConstants.SYMBOLIC_STATE_ACTIVE);
+		String strImpactTemplate = dObj.getInfo(context, "from[" + strRelEFormtemplate + "].to.id");
+		if (UIUtil.isNotNullAndNotEmpty(strImpactTemplate)) {
+			StringBuilder sbObjectWhere = new StringBuilder();
+			sbObjectWhere.append(DomainConstants.SELECT_CURRENT).append("==").append(strPolicyStateActive);
+			List<Map> mListRelatedQuestions = questionService.getQuestionRelatedObjects(context, strImpactTemplate, "Question", (short) 1,
+					sbObjectWhere.toString(), "");
+			Map<String, Map<String, String>> mQuesIdResponse = new HashMap<String, Map<String, String>>();
+			ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+			mQuesIdResponse = configureApprovalService.getEFormConfigureConnectedQuestions(context, strObjectId);
+
+			if (mQuesIdResponse != null && mListRelatedQuestions != null && mListRelatedQuestions.size() != mQuesIdResponse.size()) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ImpactQuestionnaireNotCompleted");
+				throw new Exception(strMessage);
+
+			}
+		}
+
+	}
+
+	public void promoteOriginalRevisionToObsolele(Context context, String args[]) throws Exception
+	{
+		try
+		{
+			String strEFormTemplatePolicy = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strStateObsolete = PropertyUtil.getSchemaProperty(context, "policy", strEFormTemplatePolicy,
+					QuestionnaireConstants.SYMBOLIC_STATE_OBSOLETE);
+			String strStateActive = PropertyUtil.getSchemaProperty(context, "policy", strEFormTemplatePolicy,
+					QuestionnaireConstants.SYMBOLIC_STATE_ACTIVE);
+			String strObjectId = (String) args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			// To promote eForm Template to Obsolete on reviseR
+			String strPolicy = dObj.getInfo(context, DomainObject.SELECT_POLICY);
+			String strCurrent = dObj.getInfo(context, DomainObject.SELECT_CURRENT);
+			
+			if (strPolicy.equals(strEFormTemplatePolicy) && strCurrent.equals(strStateActive))
+			{
+				BusinessObject bus=dObj.getPreviousRevision(context);
+				if(UIUtil.isNotNullAndNotEmpty(bus.getObjectId()))
+				{
+					DomainObject lastRevision=DomainObject.newInstance(context,bus);
+					lastRevision.setState(context, strStateObsolete);
+				}
+				
+			}
+			
+		}
+		catch(Exception e)
+		{
+			throw new Exception(e);
+		}
+	}
+
+	/**
+	 * check all mandatory eForm are completed before CO goes to complete state
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            objectId of eForm
+	 * @return 0 if all eForm are complete
+	 * @throws Exception
+	 *             if operation fails
+	 * @exclude
+	 */
+	public int checkAllEFormsCompleted(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = args[0];
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM);
+			String strTypeChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String strStateComplete = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname,
+					QuestionnaireConstants.SYMBOLIC_STATE_COMPLETE);
+			String strTaskrequirement = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			String strRelChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER);
+			ImpactQuestionnaireService eFormService = new ImpactQuestionnaireServiceImpl();
+			List<Map> mlEForms = eFormService.getObjectRelatedEForms(context, strObjectId);
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+			String strErrorMessage = "";
+			for (Object objEForm : mlEForms) {
+				Map mEform = (Map) objEForm;
+				String strCurrent = (String) mEform.get(DomainConstants.SELECT_CURRENT);
+				String strTaskRequirement = (String) mEform.get("attribute[" + strTaskrequirement + "]");
+				if (strTaskRequirement.equals(QuestionnaireConstants.MANDATORY) && !strStateComplete.equals(strCurrent)) {
+					strErrorMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+							"enoQuestionnaire.Alert.CREFormNotCompleted");
+					throw new Exception(strErrorMessage);
+				}
+			}
+
+			if (dobj.isKindOf(context, strTypeChangeOrder)) {
+				String strCRId = dobj.getInfo(context, "to[" + strRelChangeOrder + "].from.id");
+				if (UIUtil.isNotNullAndNotEmpty(strCRId)) {
+					mlEForms = eFormService.getObjectRelatedEForms(context, strCRId);
+					for (Object objEForm : mlEForms) {
+						Map mEform = (Map) objEForm;
+						String strCurrent = (String) mEform.get(DomainConstants.SELECT_CURRENT);
+						if (!strStateComplete.equals(strCurrent)) {
+							strErrorMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+									context.getLocale(), "enoQuestionnaire.Alert.EFormNotCompleted");
+							throw new Exception(strErrorMessage);
+						}
+					}
+				}
+			}
+			return 0;
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	public void promoteLastRevisionToObsolete(Context context, String args[]) throws Exception {
+		try {
+			String strEFormTemplatePolicy = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strObjectId = (String) args[0];
+
+			copyQuestionToNewRevision(context, strObjectId);
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	private void copyQuestionToNewRevision(Context context, String strObjectId) throws Exception {
+		try {
+			String strAttrSequenceOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_SEQUENCE_ORDER);
+			String attributeQuestionCategory = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_CATEGORY);
+			String attributeQuestionText = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_COMMENT);
+			String strAttrQuestionRangeType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_TYPE);
+			String strAttrQuestionRangeValue = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_VALUES);
+
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			BusinessObject newRev = dObj.getNextRevision(context);
+			DomainObject newRevObj = DomainObject.newInstance(context, newRev);
+			QuestionService questionService = new QuestionServiceImpl();
+			List<Map> questionOnLastRev = questionService.getQuestionRelatedObjects(context, strObjectId, "Question", (short) 1, "", "");
+			for (Map mp : questionOnLastRev) {
+				Map attrMap = new HashMap();
+				attrMap.put(attributeQuestionCategory, (String) mp.get(DomainObject.getAttributeSelect(attributeQuestionCategory)));
+				attrMap.put(attributeQuestionText, (String) mp.get(DomainObject.getAttributeSelect(attributeQuestionText)));
+				attrMap.put(strAttrQuestionRangeType, (String) mp.get(DomainObject.getAttributeSelect(strAttrQuestionRangeType)));
+				attrMap.put(strAttrQuestionRangeValue, (String) mp.get(DomainObject.getAttributeSelect(strAttrQuestionRangeValue)));
+
+				String strNewObjectId = FrameworkUtil.autoName(context, DomainSymbolicConstants.SYMBOLIC_type_Question,
+						DomainSymbolicConstants.SYMBOLIC_policy_Question);
+				DomainObject dobjObject = DomainObject.newInstance(context, strNewObjectId);
+				dobjObject.setAttributeValues(context, attrMap);
+				dobjObject.setDescription(context, (String) mp.get(DomainObject.SELECT_DESCRIPTION));
+				DomainRelationship doRel = DomainRelationship.connect(context, newRevObj, "Question", dobjObject);
+				doRel.setAttributeValue(context, strAttrSequenceOrder, (String) mp.get(DomainRelationship.getAttributeSelect(strAttrSequenceOrder)));
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+	
+	/**
+	 * Cannot connect eFormTemplate on to side of eForm Template relationship
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args 
+	 * @return 0 if eForm policy is not eForm Template
+	 * @throws Exception if operation fails
+	 * @exclude
+	 */
+	public int checkConnectEFormTemplateToEForm(Context context,String args[])throws Exception
+	{
+		try {
+			String strToObjectId= args[0];
+			String strPolicyName = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_EFORM);
+			DomainObject dobj =DomainObject.newInstance(context,strToObjectId);
+			Policy policy =dobj.getPolicy(context);
+			if(!strPolicyName.equalsIgnoreCase(policy.toString()))
+			{
+				String strErrorMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(), "enoQuestionnaire.Alert.CannotConnectEForm");
+				throw new Exception(strErrorMessage);
+			}
+			return 0;
+		
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+}
+

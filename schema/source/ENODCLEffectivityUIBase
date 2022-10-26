@@ -1,0 +1,2665 @@
+/**
+ * ENODCLEffectivityUIBase.java
+ * 
+ * Class to hold the business logic related to Effectivity and Implementation functionality 
+ */
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TimeZone;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.dcl.service.DCLLifecycleService;
+import com.dassault_systemes.enovia.dcl.service.EffectivityImplementationService;
+import com.dassault_systemes.enovia.dcl.service.HistoryAuditTrailService;
+import com.dassault_systemes.enovia.dcl.service.impl.NotificationUtil;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeOrder;
+import com.dassault_systemes.enovia.questionnaire.QuestionUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.AttributeType;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Get all Implementing Organizations connected to Document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @param strDocObjectId  holds Document Object Id
+	 * @return MapList containing filtered result
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getImplementingOrganization(Context context, String[] args)
+			throws DCLException {
+
+		EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+		String strDocObjectId = null;
+		try
+		{
+			Map<?, ?> mapProgram = (Map) JPO.unpackArgs(args);
+			strDocObjectId = (String) mapProgram.get(DCConstants.OBJECTID);
+			return effectivityService.getAllImplementingOrganization(context,
+					strDocObjectId);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+
+	}
+
+	/**
+	 * Add Implementing Organization
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> addImplementingOrganizations(Context context,
+			String[] args) throws DCLException {
+		try
+		{
+			String strIsOneSearchEnabled = DCLConstants.TRUE;
+			try{
+				strIsOneSearchEnabled =	EnoviaResourceBundle.getProperty(context, DCLConstants.SEARCH_MODE);
+			}
+			catch(Exception e){}
+			Map notificationAtrMap = new HashMap<>();
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] strDocObjectId = (String[]) mapProgram.get(DCConstants.OBJECTID);
+			String[] arrOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] arrOrgIds = null;
+			StringBuilder sbJavaScript = new StringBuilder();
+			StringList slOrganizations = new StringList();
+			for (String strRowId : arrOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				String strOrgId = tr.getObjectId();
+				slOrganizations.add(strOrgId);
+				String[] strNotificationEnabled = (String[]) mapProgram.get(tr.getObjectId());
+				String[] str = (String[]) mapProgram.get(tr.getObjectId().replace(".", "_"));
+				if(!DCLUtil.isNullOrEmpty(str)){
+					notificationAtrMap.put(tr.getObjectId(), str[0]);
+				}else{
+					notificationAtrMap.put(tr.getObjectId(), DomainObject.EMPTY_STRING);
+				}
+				notificationAtrMap.put(tr.getObjectId()+"NotificationEnabled", "Yes");
+			}
+			arrOrgIds = new String[slOrganizations.size()];
+			slOrganizations.copyInto(arrOrgIds);
+
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			effectivityService.addImplementingOrganizations(context, strDocObjectId[0], arrOrgIds, notificationAtrMap);
+
+			/*if(DCLConstants.FALSE.equalsIgnoreCase(strIsOneSearchEnabled)){
+				sbJavaScript.append("var contentFrame = findFrame(getTopWindow().opener.getTopWindow(),\"detailsDisplay\");contentFrame.location.href = contentFrame.location.href;");
+				sbJavaScript.append("\n");
+				sbJavaScript.append("getTopWindow().close();");
+
+			}
+			else{
+				sbJavaScript.append("findFrame(getTopWindow().opener.getTopWindow(),\"detailsDisplay\").location.href = findFrame(getTopWindow().opener.getTopWindow(),\"detailsDisplay\").location.href;\n getTopWindow().close();");
+			}
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT, sbJavaScript.toString());*/
+			Map mReturn=new HashMap();
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "findFrameAndRefresh"));
+            return mReturn;
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * Add Implementing Organization Representative
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @return MapList containing Representative details
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> preProcessAddImplementingOrganizationRep(Context context,
+			String[] args) throws DCLException {
+		try{
+			String strRelId = null;
+			String strOrgId = null;
+
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] strDocId = (String[]) mapProgram.get(DCConstants.OBJECTID);
+			String[] strSuiteKey = (String[]) mapProgram.get("suiteKey");
+			String[] strRole = (String[]) mapProgram.get("role");
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+
+			StringBuilder sbSearchURL = new StringBuilder("../common/emxFullSearch.jsp?form=AEFSearchPersonForm&suiteKey="
+					+ XSSUtil.encodeForJavaScript(context, strSuiteKey[0]) + "&");
+
+			for (String strRowId : strOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strRelId = (String)tr.getRelationshipId();
+				strOrgId = (String)tr.getObjectId();
+			}
+			sbSearchURL.append("field=TYPES=type_Person:CURRENT=policy_Person.state_Active");
+			sbSearchURL.append(":MEMBER_ID=");
+			sbSearchURL.append(XSSUtil.encodeForJavaScript(context, strOrgId));
+			sbSearchURL.append(":USERROLE=");
+			sbSearchURL.append(XSSUtil.encodeForJavaScript(context, strRole[0]));
+			sbSearchURL.append("&table=AEFPersonChooserDetails&selection=single&showSavedQuery=True");
+			sbSearchURL.append("&objectId=");
+			sbSearchURL.append(XSSUtil.encodeForJavaScript(context, strDocId[0]));
+			sbSearchURL.append("&orgRelId=");
+			sbSearchURL.append(XSSUtil.encodeForJavaScript(context, strRelId));
+			sbSearchURL
+			.append("&submitURL=../documentcontrol/enoDCLExecute.jsp?dclAction=ENODCLEffectivityUIBase:addImplementingOrganizationRep&submitAction=refreshCaller&excludeOIDprogram=ENODCLEffectivityUI:excludeConnectedImplementingOrganizationRepresentative");
+
+			String strHref = "javascript:emxShowModalDialog('" + sbSearchURL.toString() + "', 600, 400, false);";
+
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "preProcessAddImplementingOrganizationRep", strSuiteKey[0], strOrgId, strRole[0], strDocId[0], strRelId));
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+
+	/**
+	 * Add Implementing Organization Representative
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> addImplementingOrganizationRep(Context context, String[] args)
+			throws DCLException {
+		try{
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] strOrgRelId = (String[]) mapProgram.get("orgRelId");
+			String[] arrPersonTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strPersonId = DomainConstants.EMPTY_STRING;
+			String strMessage = DomainConstants.EMPTY_STRING;
+
+			for (String strRowId : arrPersonTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strPersonId = tr.getObjectId();
+			}
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			int iReturnValue =effectivityService.addImplementingOrganizationRep(context, strOrgRelId[0], strPersonId);
+
+			if (iReturnValue == 0) {
+				strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.ReplaceOrgRep", null, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+			}
+			else {
+				strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.AddOrgRep", null, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+			}
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "reloadParentWindowWithAlert",strMessage));
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * Removes Implementing Organization
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeImplementingOrganizations(Context context, String[] args)
+			throws DCLException {
+		try{
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] arrOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+
+			String strOrgRelId = null;
+			String[] arrOrgRelIds = null;
+			StringList slOrganizations = new StringList();
+
+			for (String strRowId : arrOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strOrgRelId = tr.getRelationshipId();
+				slOrganizations.add(strOrgRelId);
+			}
+			arrOrgRelIds = new String[slOrganizations.size()];
+			slOrganizations.copyInto(arrOrgRelIds);
+
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			effectivityService.removeImplementingOrganizations(context, arrOrgRelIds);
+
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT,"parent.location.reload();");
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * Removes Implementing Organization Representative
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeImplementingOrganizationRep(Context context, String[] args) 
+			throws DCLException {
+		try{
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] arrOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strOrgId = null;
+			String strDocId = null;
+
+			for (String strRowId : arrOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strOrgId = tr.getObjectId();
+				strDocId = tr.getParentObjectId();
+			}
+
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			effectivityService.removeImplementingOrganizationRep(context, strOrgId, strDocId);
+
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT,"parent.location.reload();");
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * List all Approved documents that are yet
+	 * to be implemented in the User's organization where login user is
+	 * Implementing Organization Representative
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @return MapList containing Document details
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMyImplementationDocuments(Context context, String[] args)
+			throws DCLException {
+		try {
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			Map mapRequest = (Map) mapProgram.get(DCLConstants.REQUESTVALUEMAP);
+			String strPendingFilterValue = (String) mapProgram.get("DCLPendingFilter");
+			String strActiveFilterValue = (String) mapProgram.get("DCLActiveFilter");
+			String[] strStartDateFilterValue = (String[]) mapRequest.get("DCLStartDateFilter");
+			String[] strEndDateFilterValue = (String[]) mapRequest.get("DCLEndDateFilter");
+			MapList mlPendingImplDocuments = null;
+			long lStartDatems_Value = 0;
+			long lEndDatems_Value = 0;
+
+			if (!UIUtil.isNullOrEmpty(strPendingFilterValue) && !UIUtil.isNullOrEmpty(strActiveFilterValue)) 
+			{
+				EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+				mlPendingImplDocuments = effectivityService.getMyImplementationDocuments(context, strPendingFilterValue, strActiveFilterValue);
+				if (null != mlPendingImplDocuments && mlPendingImplDocuments.size() > 0
+						&& (null != strStartDateFilterValue && !UIUtil.isNullOrEmpty(strStartDateFilterValue[0]))
+						&& (null != strEndDateFilterValue && !UIUtil.isNullOrEmpty(strEndDateFilterValue[0]))) {
+					strStartDateFilterValue[0] = eMatrixDateFormat.getFormattedInputDate(context, strStartDateFilterValue[0], (new Double(
+							(String) mapProgram.get(DCLConstants.TIME_ZONE)).doubleValue()), (Locale) mapProgram.get("localeObj"));
+					Date dStartDate = eMatrixDateFormat.getJavaDate(strStartDateFilterValue[0]);
+					lStartDatems_Value = dStartDate.getTime();
+
+					strEndDateFilterValue[0] = eMatrixDateFormat.getFormattedInputDate(context, strEndDateFilterValue[0], (new Double(
+							(String) mapProgram.get(DCLConstants.TIME_ZONE)).doubleValue()), (Locale) mapProgram.get("localeObj"));
+					Date dEndDate = eMatrixDateFormat.getJavaDate(strEndDateFilterValue[0]);
+					lEndDatems_Value = dEndDate.getTime();
+
+					mlPendingImplDocuments = getDateFilteredDocuments(context, mlPendingImplDocuments, lStartDatems_Value, lEndDatems_Value);
+				}   
+			}
+			return mlPendingImplDocuments;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * List all Approved documents that have been
+	 * implemented in the User's organization where the Documents which belong
+	 * to login users organization
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @throws DCLException if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllImplementationDocuments(Context context,String[] args) 
+			throws DCLException {
+		try {
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			Map mapRequest = (Map) mapProgram.get(DCLConstants.REQUESTVALUEMAP);
+			String strPendingFilterValue = (String) mapProgram.get(DCLConstants.DCLPendingFilter);
+			String strActiveFilterValue = (String) mapProgram.get(DCLConstants.DCLActiveFilter);
+			String[] strStartDateFilterValue = (String[]) mapRequest.get(DCLConstants.DCLStartDateFilter);
+			String[] strEndDateFilterValue = (String[]) mapRequest.get(DCLConstants.DCLEndDateFilter);
+
+			MapList mlImplDocuments = null;
+			long lStartDatems_Value = 0;
+			long lEndDatems_Value = 0;
+
+			if (!UIUtil.isNullOrEmpty(strPendingFilterValue) && !UIUtil.isNullOrEmpty(strActiveFilterValue))
+			{
+				EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+				mlImplDocuments = effectivityService.getAllImplementationDocuments(context, strPendingFilterValue, strActiveFilterValue);
+				if (null != mlImplDocuments && mlImplDocuments.size() > 0
+						&& (null != strStartDateFilterValue && !UIUtil.isNullOrEmpty(strStartDateFilterValue[0]))
+						&& (null != strEndDateFilterValue && !UIUtil.isNullOrEmpty(strEndDateFilterValue[0]))) {
+					strStartDateFilterValue[0] = eMatrixDateFormat.getFormattedInputDate(context, strStartDateFilterValue[0], (new Double(
+							(String) mapProgram.get(DCLConstants.TIME_ZONE)).doubleValue()), (Locale) mapProgram.get("localeObj"));
+					Date dStartDate = eMatrixDateFormat.getJavaDate(strStartDateFilterValue[0]);
+					lStartDatems_Value = dStartDate.getTime();
+
+					strEndDateFilterValue[0] = eMatrixDateFormat.getFormattedInputDate(context, strEndDateFilterValue[0], (new Double(
+							(String) mapProgram.get(DCLConstants.TIME_ZONE)).doubleValue()), (Locale) mapProgram.get("localeObj"));
+					Date dEndDate = eMatrixDateFormat.getJavaDate(strEndDateFilterValue[0]);
+					lEndDatems_Value = dEndDate.getTime();
+
+					mlImplDocuments = getDateFilteredDocuments(context, mlImplDocuments, lStartDatems_Value, lEndDatems_Value);
+				}   
+			}
+			return mlImplDocuments;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Retrieve the Documents as per Date Range Filter
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return List of Organizations
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+
+	private MapList getDateFilteredDocuments(Context context, MapList mlDocuments, long lStartDatems_Value, 
+			long lEndDatems_Value) throws DCLException {
+		MapList mlReturn = new MapList();
+		try {
+			Map mapDocument = null;
+			String strImplDate = null;
+			long lstrImplDatems_Value = 0;
+			String strAttributeImplDate = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE);
+			if (lStartDatems_Value > lEndDatems_Value) {
+				String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.StartDateIsGreaterThanEndDate", null, null,
+						context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+				${CLASS:emxContextUtil}.mqlNotice(context,strMessage);	
+
+				return mlDocuments;
+			}
+			else {
+				for (Object object : mlDocuments) {
+					mapDocument = (Map)object;
+					strImplDate = (String) mapDocument.get("to["
+							+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION) + "].attribute["
+							+ strAttributeImplDate + "].value");
+					if (!UIUtil.isNullOrEmpty(strImplDate)) {
+						Date dImplDate = eMatrixDateFormat.getJavaDate(strImplDate);
+						lstrImplDatems_Value = dImplDate.getTime();
+						if(lStartDatems_Value <= lstrImplDatems_Value && lstrImplDatems_Value <= lEndDatems_Value)
+						{
+							mlReturn.add(mapDocument);
+						}
+					}
+				}
+			}
+			return mlReturn;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Get the link of CO connected with document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return List returns the link for CO
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public List<String> getColumnImplementationStatus(Context context,String[] args) 
+			throws DCLException
+	{
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List mlObject = (List) programMap.get(DCConstants.OBJECTLIST);
+			String strEffectiveDate = null;
+			StringList ImplementationStatus = new StringList(mlObject.size());
+			String strEllapseTip = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.tooltip.EffectiveDateElapsed");
+			String strApproachTip = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.tooltip.EffectiveDateApproaching");
+			String strEffectivedateTip = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.tooltip.EffectiveDate");
+			String strYellowPeriod = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.YellowIcon.Period");
+
+			String strAttributeEffectiveDate = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			for(Object object: mlObject) {
+				Map<?, ?> mapDocument = (Map<?, ?>)object;
+				strEffectiveDate = (String) mapDocument.get(DomainObject.getAttributeSelect(strAttributeEffectiveDate));
+
+				if (!UIUtil.isNullOrEmpty(strEffectiveDate)) 
+				{
+					DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+					if (lifecycleService.getEffectiveDateDifference(context,strEffectiveDate) < 0) 
+					{
+						StringBuilder sbImageURL = new StringBuilder();
+						sbImageURL.append( "<img src=\"../common/images/iconStatusRed.gif\" border='0' alt=\"");
+						sbImageURL.append(strEllapseTip);
+						sbImageURL.append("\" title=\"");
+						sbImageURL.append(strEllapseTip);
+						sbImageURL.append("\"></img>");
+						ImplementationStatus.add(sbImageURL.toString());
+					}
+					else if (lifecycleService.getEffectiveDateDifference(context,strEffectiveDate) == 0) 
+					{
+						StringBuilder sbImageURL = new StringBuilder();
+						sbImageURL.append( "<img src=\"../common/images/iconStatusGreen.gif\" border='0' alt=\"");
+						sbImageURL.append(strEffectivedateTip);
+						sbImageURL.append("\" title=\"");
+						sbImageURL.append(strEffectivedateTip);
+						sbImageURL.append("\"></img>");
+						ImplementationStatus.add(sbImageURL.toString());
+					}
+					else if(lifecycleService.getEffectiveDateDifference(context,strEffectiveDate) < Integer.parseInt(strYellowPeriod))
+					{
+						StringBuilder sbImageURL = new StringBuilder();
+						sbImageURL.append( "<img src=\"../common/images/iconStatusYellow.gif\" border='0' alt=\"");
+						sbImageURL.append(strApproachTip);
+						sbImageURL.append("\" title=\"");
+						sbImageURL.append(strApproachTip);
+						sbImageURL.append("\"></img>");
+						ImplementationStatus.add(sbImageURL.toString());
+					}
+					else
+					{
+						ImplementationStatus.add("");
+					}
+				}
+				else
+				{
+					ImplementationStatus.add("");
+				}
+			}
+			return ImplementationStatus;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Access Function on Toolbar Command
+	 * Hide Complete Implementation and Deactivate command for Inactive filer View
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return boolean status to hide Complete Implementation and Deactivate command
+	 * @throws  DCLException if operation fails
+	 */
+	public  Boolean hideCompleteImplementationOrDeactivateCommandForInactiveFilerView(Context context, String[] args) throws DCLException
+	{
+		try {
+			Boolean showColumn = new Boolean(true);
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strDocStatusValue = (String) programMap.get(DCLConstants.DCLPendingFilter);
+			Map requestValuesMap = (Map) programMap.get(DCLConstants.REQUESTVALUEMAP);
+			String[] arrFilerValue = (String[]) requestValuesMap.get(DCLConstants.DCLActiveFilter);
+			if (arrFilerValue != null) {
+				String strFilterValue = arrFilerValue[0];
+				if(strFilterValue.equals(DCLConstants.INACTIVE)) 
+				{
+					return new Boolean(false);
+				}
+			}
+			if(DCLConstants.FILTER_IMPLEMENTED.equals(strDocStatusValue))
+			{
+				return new Boolean(false);
+			}
+			return showColumn;
+		} 
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+
+	/**
+	 * Access Function on Toolbar Command
+	 * Hide Activate command for Inactive filer View
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return boolean status to hide Activate command
+	 * @throws  DCLException if operation fails
+	 */
+	public  Boolean hideActivateCommandForActiveFilerView(Context context, String[] args) throws DCLException
+	{
+		try {
+			Boolean showColumn = new Boolean(false);
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestValuesMap = (Map) programMap.get(DCLConstants.REQUESTVALUEMAP);
+			String[] arrFilerValue = (String[]) requestValuesMap.get(DCLConstants.DCLActiveFilter);
+			if (arrFilerValue != null) {
+				String strFilterValue = arrFilerValue[0];
+				if(strFilterValue.equals(DCLConstants.INACTIVE)) 
+				{
+					return new Boolean(true);
+				}
+			}
+			return showColumn;
+		} 
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+	/**
+	 * Get the ImplementationOrganizationSummary field on Complete Implementation form
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return String Summary value
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public String getFieldImplementationOrganizationSummary(Context context,String[] args)
+			throws DCLException
+	{
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strRelId = (String) requestMap.get("relId");
+			Map<String, String> mapOrg = null;
+			String strAttributeImplSummary = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_SUMMARY);
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+
+			mapOrg = effectivityService.getImplementingOrgRelAttributes(context, strRelId);
+			return (String) mapOrg.get(DomainObject.getAttributeSelect(strAttributeImplSummary));
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}       
+	}
+
+	/**
+	 * Get the Implementation Date on Complete Implementation form
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return String Date value
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public String getFieldImplementationDate(Context context,String[] args)
+			throws DCLException
+	{ 
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strObjid = (String) requestMap.get(DCLConstants.OBJECTID);
+			DomainObject dobj=DomainObject.newInstance(context, strObjid);
+			String strli=dobj.getInfo(context,DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_EFFECTIVE_DATE));
+
+			Date date=new Date();
+			Date dater=eMatrixDateFormat.getJavaDate(strli);
+			SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			String strCD = sdf.format(date);
+			String strcd1=sdf.format(dater);
+			int idiff= DCLUtil.compareDates(context, strcd1, strCD);
+			if(idiff==-1)
+				return strCD;
+			else
+				return strcd1;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} 
+	}
+
+	/**
+	 * Completes Implementation form
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public Map<String, String> postProcessCompleteImplementation(Context context, String[] args) throws DCLException {
+		Map mapProgram = null;
+		try {
+			mapProgram = (Map) JPO.unpackArgs(args);
+			String strMessage = DomainObject.EMPTY_STRING;
+			Map<String, String> mReturnMap = new HashMap<>();
+			Map programMap = JPO.unpackArgs(args);
+			String[] strreadAndUnderstood = (String[]) programMap.get("readAndUnderstood");
+			String[] strImplDate = (String[]) mapProgram.get("ImplementationDate");
+			String strTimeZOne[] = (String[]) mapProgram.get(DCLConstants.TIME_ZONE);
+			String strDate = DomainObject.EMPTY_STRING;
+			if (UIUtil.isNotNullAndNotEmpty(strImplDate[0]))
+				strDate = DCLUtil.getDateinEmatrixFormat(context, strImplDate[0], strTimeZOne[0]);
+			else {
+				SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+				strDate = sdf.format(new Date());
+			}
+			if (!DCLUtil.isNullOrEmpty(strreadAndUnderstood)) {
+
+				String[] strDocId = (String[]) mapProgram.get(DCConstants.OBJECTID);
+				String[] strImplSummary = (String[]) mapProgram.get("ImplementationSummary");
+				String[] strRelId = (String[]) mapProgram.get("relId");
+
+				EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+				effectivityService.completeImplementation(context, strDate, strImplSummary[0], strDocId[0], strRelId[0]);
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "parentRefresh"));
+			}
+			else {
+				strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.ErrorMsg.ReadUnderstoodCheckboxNotChecked");
+			}
+			if (!strMessage.isEmpty()) {
+				StringBuilder sbURL=new StringBuilder();
+				sbURL.append("alert(\"" + strMessage + "\");\n");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,sbURL.toString());
+			}
+			return mReturnMap;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Activates the Document for implementation
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public Map<String,String> activateImplementation(Context context,String[] args)
+			throws DCLException 
+	{
+		try{
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strOrgRelId = null;
+			for (String strRowId : strOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strOrgRelId = tr.getRelationshipId();
+			}
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			effectivityService.activateDeactivateForImplementation(context, strOrgRelId, true);
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "reloadParentLocation"));
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Deactivates the Document for implementation
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments.
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public Map<String,String> deactivateImplementation(Context context,String[] args)
+			throws DCLException 
+	{
+		try{
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strOrgRelId = null;
+			for (String strRowId : strOrgTableRowIds) {
+				TableRowId tr = new TableRowId(strRowId);
+				strOrgRelId = tr.getRelationshipId();
+			}
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			effectivityService.activateDeactivateForImplementation(context, strOrgRelId, false);
+			mapProgram.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "reloadParentLocation"));
+			return mapProgram;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Get filter values map for My Implementations table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return filter values map for Template List table
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public Map getPendingFilterValues(Context context, String[] args)
+			throws DCLException {
+		try {
+			StringList slChoice = new StringList(2);
+			slChoice.addElement(DCLConstants.FILTER_PENDING_IMPLEMENTATION);
+			slChoice.addElement(DCLConstants.FILTER_IMPLEMENTED);
+			StringList slDisplay = new StringList(2);
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.PendingImplementation"));
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Implemented"));
+			Map rangeMap = new HashMap();
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slChoice);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, slDisplay);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * Get Active/Inactive filter values map for My Implementations table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return filter values map for Template List table
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public Map getActiveInactiveFilterValues(Context context, String[] args)    throws DCLException {
+		try {
+			StringList slChoice = new StringList(2);
+			slChoice.addElement(DCLConstants.ACTIVE);
+			slChoice.addElement(DCLConstants.INACTIVE);
+			StringList slDisplay = new StringList(2);
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Active"));
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Inactive"));
+
+			Map rangeMap = new HashMap();
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slChoice);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, slDisplay);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	/**
+	 * Shows Implementation Summary column on My Implementations table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return List of Implementation Summary
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public List<String> getColumnImplementationSummary(Context context,String[] args) 
+			throws DCLException {
+		try{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List mlObject = (List) programMap.get(DCConstants.OBJECTLIST);
+			String strAttributeImplSummary = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_SUMMARY);
+
+			String strImplSummary = null;
+			StringList slImplementationSummary = new StringList(mlObject.size());
+
+			for(Object object:mlObject) {
+				Map objectMap = (Map)object;
+				strImplSummary = (String) objectMap.get("from["
+						+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION) + "].attribute["
+						+ strAttributeImplSummary + "]");
+
+				if(!UIUtil.isNullOrEmpty(strImplSummary))
+				{
+					slImplementationSummary.add(strImplSummary);
+				}
+				else
+					slImplementationSummary.add("");
+			}
+			return slImplementationSummary;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+
+	}   
+
+	/**
+	 * Access Function on Table Column
+	 * Display the columns in My Implementation table when Filtered by Implemented
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return boolean status to show Accepted/Rejected Status  Column
+	 * @throws  DCLException if operation fails
+	 * @exclude
+	 */
+	public  Boolean showColumns(Context context, String[] args) 
+			throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strDCLPendingFilter = (String) programMap.get(DCLConstants.DCLPendingFilter);
+			Boolean showColumn = new Boolean(false);
+			if (DCLConstants.FILTER_IMPLEMENTED.equals(strDCLPendingFilter)) {
+				return new Boolean(true);
+			}
+			return showColumn;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+	/**
+	 * Excludes the connected Implementing Organization objects to the given object Document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return List of connected Implementing Organization
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public List<String> excludeConnectedImplementingOrganization(Context context, String[] args)
+			throws DCLException {
+		try{
+			StringList slOganizations = new StringList();
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			String strDocObjectId = (String) mapProgram.get(DCConstants.OBJECTID);
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			MapList mlOrgnization = effectivityService.getAllImplementingOrganization(context, strDocObjectId);
+
+			for(Object object:mlOrgnization) {
+				Map map = (Map) object;
+				slOganizations.addElement((String) map.get(DomainConstants.SELECT_ID));
+			}
+			return slOganizations;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+
+	}
+	/**
+	 * Excludes the connected Implementing Organization Representative objects to the given object Document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return List of connected Implementing Organization Representative
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public List<String> excludeConnectedImplementingOrganizationRepresentative(Context context, String[] args) throws DCLException {
+		try{
+			StringList sList = new StringList();
+			String strRelImplOrg=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			StringList sExcludePersonList = new StringList();
+			Map mapProgram = (Map) JPO.unpackArgs(args);
+			sList.add((String)mapProgram.get("orgRelId"));
+			String[] arr = new String[sList.size()];
+			sList.toArray(arr);
+			StringList objectSelects = new StringList();
+			objectSelects.add("frommid["+strRelImplOrg+"].to.id");
+			MapList ml = DomainRelationship.getInfo(context, arr,objectSelects);
+			Map m = (Map)ml.get(0);
+			String strPersonId = (String) m.get("frommid["+strRelImplOrg+"].to.id");
+			if(!DCLUtil.isNullOrEmpty(strPersonId))
+		        	sExcludePersonList.add(strPersonId);
+			return sExcludePersonList;
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+
+	public Map getRangeForEffectivityOption(Context context, String[] args)throws DCLException
+	{
+		try {
+			StringList slResponseRange = new StringList();
+			slResponseRange.add(DCLConstants.EFFECTIVE_BY_DATE);
+			slResponseRange.add(DCLConstants.EFFECTIVE_ON_DATE);
+			String strEffectivePeriod = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.EffectiveByDate");
+			String strEffectiveDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.EffectiveOnDate");
+			StringList slResponseDisplay = new StringList();
+			slResponseDisplay.add(strEffectivePeriod);
+			slResponseDisplay.add(strEffectiveDate);
+			Map<String,StringList> rangeMap = new HashMap<String,StringList>();
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slResponseRange);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES,slResponseDisplay);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}   
+	}
+	public Map getRangeForImplementationPeriodOption(Context context, String[] args)throws DCLException
+	{
+		try {
+			StringList slResponseRange = new StringList();
+			slResponseRange.add(DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD);
+			slResponseRange.add(DCLConstants.SPECIFY_IMPLEMENTATION_DATE);
+			slResponseRange.add(DCLConstants.SPECIFY_IMPLEMENTATION_PERIOD);
+			String strDefaultPeriod = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.DefaultImplementationPeriod");
+			String strSpecifyImplDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.SpecifyImplementationDate");
+			String strSpecifyImplPeriod = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.SpecifyImplementationPeriod");
+			StringList slResponseDisplay = new StringList();
+			slResponseDisplay.add(strDefaultPeriod);
+			slResponseDisplay.add(strSpecifyImplDate);
+			slResponseDisplay.add(strSpecifyImplPeriod);
+
+			Map<String,StringList> rangeMap = new HashMap<String,StringList>();
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slResponseRange);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES,slResponseDisplay);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Set the selected value to the Form field
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return String value to be set
+	 * @throws DCLException if operation fails
+	 */
+	public String setEffectivityOption(Context context,String args[]) throws DCLException
+	{
+
+		try{		String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+
+	
+Map mapProgram = (Map) JPO.unpackArgs(args);
+
+			Map requestmap=(Map)mapProgram.get("requestMap"); 
+			if(requestmap!=null)
+
+				{String objectId=(String)requestmap.get("objectId");
+			if(UIUtil.isNotNullAndNotEmpty(objectId))
+			{
+			
+
+						
+						DomainObject dobj=DomainObject.newInstance(context,objectId);
+						String strEffectivityOption=dobj.getAttributeValue(context,strAttributeEffectivityOption);
+if(UIUtil.isNotNullAndNotEmpty(strEffectivityOption))
+			return strEffectivityOption;
+			
+			}
+				}
+		return DCLConstants.EFFECTIVE_BY_DATE;
+	}
+catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}  
+
+		//return DCLConstants.EFFECTIVE_BY_DATE;
+	}
+	public String setImplementationPeriodOption(Context context,String args[]) throws DCLException
+	{
+		try{	
+			String strAttributeImplementationOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+
+		
+Map mapProgram = (Map) JPO.unpackArgs(args);
+
+			Map requestmap=(Map)mapProgram.get("requestMap"); 
+			if(requestmap!=null) {
+			String objectId=(String)requestmap.get("objectId");
+			if(UIUtil.isNotNullAndNotEmpty(objectId))
+			{
+			DomainObject dobj=DomainObject.newInstance(context,objectId);
+		String strImplementationOption=dobj.getAttributeValue(context,strAttributeImplementationOption);
+if(UIUtil.isNotNullAndNotEmpty(strImplementationOption))
+		return strImplementationOption;
+			}
+			}
+		return DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD;
+	}
+catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}  
+
+		//return DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD;
+	}
+	public List<String> getColumnEffectivityOptionValuesForDocument(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List<Map> mlObject = (List) programMap.get(DCConstants.OBJECTLIST);
+			String strAttributeEffectivityOption = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			String strEffectivityOption=DomainObject.EMPTY_STRING;
+			String strEffectivityOptionType=DomainObject.EMPTY_STRING;
+
+			List<String> slEffectivityOption=new StringList();
+			List<String> slAttrEffectivityOption=new StringList();
+			for(Map mObjectMap:mlObject)
+			{
+				strEffectivityOption=(String) mObjectMap.get(DomainObject.getAttributeSelect(strAttributeEffectivityOption));
+				slEffectivityOption.add(strEffectivityOption);
+			}
+			return slEffectivityOption;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getImplOrgRepLink(Context context,String[] args) throws Exception
+	{
+		Map programMap=JPO.unpackArgs(args);
+		MapList mlObjectList= (MapList) programMap.get(DCConstants.OBJECTLIST);
+		Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+		String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+		String strRelImplOrgRep=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+		StringList lLinks=new StringList();
+		for(Object object : mlObjectList)
+		{
+			Map map=(Map) object;
+			String strObjName=(String) map.get("frommid["+strRelImplOrgRep+"].to.name");
+			String strObjId=(String) map.get("frommid["+strRelImplOrgRep+"].to.id");
+			if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strObjName)){
+				String strName=DCUtil.getObjectLink(context, strObjId, strObjName);
+				lLinks.add(strName);
+			}
+			else if(UIUtil.isNotNullAndNotEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strObjName))
+				lLinks.add(strObjName);
+			else
+				lLinks.add(DomainConstants.EMPTY_STRING);
+		}
+		return lLinks;	
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> preProcessCompleteImplementation(Context context, String[] args) throws DCLException {
+		Map mapProgram = null;
+		String strErrImplDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Error.Msg.NotSetImplDate");
+
+		try{
+			mapProgram = (Map) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[])mapProgram.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strTimeZone[]=(String[])mapProgram.get(DCLConstants.TIME_ZONE);
+			Map mReturn = new HashMap();
+			EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+			for (int i = 0; i <= emxTableRowId.length - 1; i++) {
+
+				TableRowId tr = new TableRowId(emxTableRowId[i]);
+				boolean bIsEffective=effectivityService.checkDocumentIsEffective(context, tr.getObjectId());
+				if (bIsEffective) {
+					mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "completeImplementation", tr.getObjectId(), tr.getRelationshipId(), strTimeZone[0]));
+				}
+				else
+					mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strErrImplDate));
+			}
+
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> cancelPage(Context context, String[] args) throws DCLException {
+
+		try {
+			Map mReturn = new HashMap();
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "closeOnlyTopWindow"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean hideFilterForPendingImpl(Context contex,String[] args) throws DCLException{
+		try
+		{
+			Map programMap = JPO.unpackArgs(args);
+			Boolean showColumn = new Boolean(true);
+			String strDocStatusValue = (String)programMap.get("DCLPendingFilter"); 
+			if(DCLConstants.FILTER_IMPLEMENTED.equals(strDocStatusValue))
+			{
+				return new Boolean(true);
+			}
+			else
+				return new Boolean(false);
+		}catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Method to create link for Implementing Organization in My Implementation Table.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList of Links created for organizations
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getImplementingOrganizationName(Context context, String args[]) throws DCLException{
+		try {
+			StringList orgList = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			List ObjectList = (List) programMap.get(DCConstants.OBJECTLIST);
+			StringList dataList = new StringList();
+			dataList.add(DomainRelationship.SELECT_FROM_NAME);
+			dataList.add(DomainRelationship.SELECT_FROM_ID);
+
+			Iterator itr = ObjectList.iterator();
+			while(itr.hasNext()){
+				Map objectMap = (Map) itr.next();
+				String strRelId = (String) objectMap.get(DomainRelationship.SELECT_ID);
+				List dataMapList = DomainRelationship.getInfo(context, new String[]{strRelId}, dataList);
+				for(Object obj  : dataMapList){
+					Map map = (Map) obj;
+					orgList.add(DCUtil.getObjectLink(context, (String) map.get(DomainRelationship.SELECT_FROM_ID),
+							(String) map.get(DomainRelationship.SELECT_FROM_NAME)));
+				}
+			}
+			return orgList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to display Implementation Date in My Implementation Table.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList of Links created for organizations
+	 * @throws DCLException if operation fails
+	 */
+	public List<String> getImplementationDate(Context context, String args[]) throws DCLException{
+		try {
+			List<String> dateList = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			List ObjectList = (List) programMap.get(DCConstants.OBJECTLIST);
+			StringList dataList = new StringList();
+			dataList.add("attribute[" + PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE) + "]");
+
+			Iterator itr = ObjectList.iterator();
+			while(itr.hasNext()){
+				Map objectMap = (Map) itr.next();
+				String strRelId = (String) objectMap.get(DomainRelationship.SELECT_ID);
+				List dataMapList = DomainRelationship.getInfo(context, new String[]{strRelId}, dataList);
+				for(Object obj  : dataMapList){
+					Map map = (Map) obj;
+					String strImplDate = (String) map.get("attribute["
+							+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE) + "]");
+					dateList.add(strImplDate);
+				}
+			}
+			return dateList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to create link for Implementing Organization Representative in My Implementation Table.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList of Links created for organizations
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getImplementingOrgReponMyImplementationsTable(Context context, String args[]) throws DCLException{
+		try {
+			StringList implOrgRepList = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			List ObjectList = (List) programMap.get(DCConstants.OBJECTLIST);
+			StringList dataList = new StringList();
+			dataList.add("frommid[" + PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE) + "].to.id");
+			dataList.add("frommid[" + PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE)
+			+ "].to.name");
+
+			Iterator itr = ObjectList.iterator();
+			while(itr.hasNext()){
+				Map objectMap = (Map) itr.next();
+				String strRelId = (String) objectMap.get(DomainRelationship.SELECT_ID);
+				List dataMapList = DomainRelationship.getInfo(context, new String[]{strRelId}, dataList);
+				for(Object obj  : dataMapList){
+					Map map = (Map) obj;
+					implOrgRepList.add(DCUtil.getObjectLink(context, (String) map.get("frommid["
+							+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE) + "].to.id"),
+							(String) map.get("frommid["
+									+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE)
+									+ "].to.name")));
+				}
+			}
+			return implOrgRepList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	// ------------------------------------------------------Notification
+	// Methods---------------------------------------------------------------
+
+	/**
+	 * Get the list of documents for Reminder Notification associated wit CA owner or Impl Org Representative.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing personId as "key" and DocList as "value" eg [personId(String), docId(StringList)]
+	 * @throws DCLException if operation fails
+	 */
+	public MapList getDocumentListforReminderNotification(Context context,String args[]) throws DCLException{
+		try {
+
+			String strPersonName = DomainConstants.EMPTY_STRING;
+			String strRelImplOrgRep = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			String strControlledDocumentType = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);			
+			String strImplementationOrgRel = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			String strImplementationOrg = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION);
+			String strAttributeEffectiveDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			String strAttributeImplementationDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE);
+
+			//checks if implementation date is not present and effective date is set
+
+			StringBuilder strWhere = new StringBuilder();
+			strWhere.append("attribute["+strAttributeEffectiveDate+"].value" + "!=\"" + DomainConstants.EMPTY_STRING + "\"");
+
+			StringList objectSelects = new StringList();
+			objectSelects.add(DomainConstants.SELECT_ID);
+			objectSelects.add(DomainObject.SELECT_NAME);
+			objectSelects.add("to[" + strImplementationOrg + "].attribute[" + strAttributeImplementationDate + "].value");
+			objectSelects.add("to[" + strImplementationOrg + "].from.id");
+			objectSelects.add("to[" + strImplementationOrg + "].id");
+			objectSelects.add("to[" + strImplementationOrg + "].frommid[" + strRelImplOrgRep + "].to.id");
+
+			//finds the documents according to the where clause
+			MapList documentList = DomainObject.findObjects(context, strControlledDocumentType, null, strWhere.toString(), objectSelects);
+
+			//return the data map in [personId(String), docId(StringList)] format  
+			return getCAOwnerOrImplOrgReprAndAssociatedDocuments(context, documentList);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Get the list of documents for Reminder Notification associated with CA owner or Impl Org Representative.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing personId as "key" and DocList as "value" eg [personId(String), docId(StringList)]
+	 * @throws DCLException if operation fails
+	 */
+	private MapList getCAOwnerOrImplOrgReprAndAssociatedDocuments(Context context, MapList documentList) throws DCLException{
+		try{
+			MapList dataMapList = new MapList();
+			StringList slImplDateList = new StringList();
+			StringList slOrgList = new StringList();
+			String strImplementationOrg = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION);
+			String strAttributeImplementationDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE);
+			String strRelImplOrgRep = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			String strImplementationOrgRepRel = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			StringList relSelects = new StringList("frommid[" + strImplementationOrgRepRel + "].to.id");
+			relSelects.add("attribute[" + strAttributeImplementationDate + "]");
+			//Iterate over the list of documents
+			Iterator<?> itrList = documentList.iterator();
+			while(itrList.hasNext()){
+				Map dataMap = new HashMap<>();
+				Map documentMap = (Map) itrList.next();
+				String strDocId = (String) documentMap.get(DomainConstants.SELECT_ID);
+				String strImplOrgId = (String)documentMap.get("to[" + strImplementationOrg + "].from.id");
+				String strRelId = (String) documentMap.get("to[" + strImplementationOrg + "].id");
+
+				if(UIUtil.isNotNullAndNotEmpty(strImplOrgId)){
+					slOrgList = FrameworkUtil.split(strImplOrgId,"\7");
+					StringList sl = FrameworkUtil.split(strRelId, "\7");
+
+					for(int i=0; i<slOrgList.size(); i++){
+						MapList ml = DomainRelationship.getInfo(context, new String[] { sl.get(i).toString() }, relSelects);
+						String strImplOrgRep = (String) ((Map)ml.get(0)).get("frommid[" +strImplementationOrgRepRel+ "].to.id");
+						String strImplDate = (String) ((Map) ml.get(0)).get("attribute[" + strAttributeImplementationDate + "]");
+						if(DCLUtil.isNullOrEmpty(strImplDate))
+							dataMap = createMapList(context,strImplOrgRep, strDocId);
+						if(!dataMap.isEmpty()) 
+						{
+							dataMapList.add(dataMap);
+							break;
+						}
+					}
+				}
+
+
+			}
+			if(dataMapList !=null && !dataMapList.isEmpty())
+				return createNotificationDataMap(context, dataMapList);
+			else
+				return dataMapList;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	private Map createMapList(Context context,String notificationMemberId, String strDocId)throws DCLException{
+		try{
+			String strImplementationOrg = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION);
+			String strRelImplOrgRep = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPL_ORG_REPRESENTATIVE);
+			String strPolicyChangeAction = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CA);
+			String strCACompleteState = PropertyUtil.getSchemaProperty(context, "policy", strPolicyChangeAction, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			Map dataMap = new HashMap<>();
+			String strSender = DCLConstants.SENDER;
+			DomainObject dobjDocument = DomainObject.newInstance(context, strDocId);
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+
+			if(UIUtil.isNullOrEmpty(notificationMemberId)){
+				// if I.O.R is not present check for CA owner (check for
+				// Affected Item)
+				List<Map> listOfCADetailMaps = cdService.getConnectedCA(context, strDocId, true, true);
+				for (Map caDetailMap : listOfCADetailMaps) {
+					String strCACurrent = (String) caDetailMap.get(DomainRelationship.SELECT_CURRENT);
+					String strCAOwner = (String) caDetailMap.get(DomainRelationship.SELECT_OWNER);
+					notificationMemberId = strCAOwner;
+					notificationMemberId = PersonUtil.getPersonObjectID(context, notificationMemberId);
+					dataMap.put(strSender, DCLConstants.CA_OWNER);
+				}
+			}
+			else{
+				dataMap.put(strSender, DCLConstants.IMPL_ORG_REP);
+			}
+			dataMap.put(DomainObject.SELECT_ID, strDocId);
+			dataMap.put("notification member id", notificationMemberId);
+			return dataMap;
+		}
+		catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Creates two maps one for Implementing Organization Representative and its documents and
+	 * 					the other for CA Owner and its documents
+	 * 					to be sent.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param dataMapList holds the data
+	 * @return Map containing personId as "key" and DocList as "value" eg [personId(String), docId(StringList)]
+	 * @throws DCLException if operation fails
+	 */
+	private MapList createNotificationDataMap(Context context, MapList dataMapList) throws DCLException{
+		try {
+			MapList personMapList = new MapList();
+			Map ImplOrgRepMap =  new LinkedHashMap<>();
+			String strSender = DCLConstants.SENDER;
+			ImplOrgRepMap.put(strSender, DCLConstants.IMPL_ORG_REP);
+
+			Map CAOwnerMap = new LinkedHashMap<>();
+			CAOwnerMap.put(strSender, DCLConstants.CA_OWNER);
+
+			StringList docList = new StringList();
+			for(Object obj : dataMapList){
+				Map map = (Map) obj;
+				String Sender = (String) map.get(strSender);
+				String strDocId = (String) map.get(DomainObject.SELECT_ID);
+				String notificationMemberId = (String) map.get("notification member id");
+				if (Sender.equals(DCLConstants.IMPL_ORG_REP)) {
+					/*
+					 * If the Impl Org Rel map does not contain notification
+					 * member Id then add a key value pair in the ImplOrgMap as:
+					 * Id of the person to whom notification is sent = [List of
+					 * docs for which notification to be sent] else add the
+					 * document to the list of docs for which notification to be
+					 * sent
+					 */
+					if(!ImplOrgRepMap.containsKey(notificationMemberId)){
+						ImplOrgRepMap.put(notificationMemberId, new StringList(strDocId));
+					}
+					else{
+						docList = (StringList) ImplOrgRepMap.get(notificationMemberId);
+						docList.add(strDocId);
+						ImplOrgRepMap.put(notificationMemberId, docList);
+					}
+				}
+				else{
+					/*If the CAOwner map does not contain notification member Id then
+										add a key value pair in the CAOwnerMap as:
+										Id of the person to whom notification is sent = [List of docs for which notification to be sent]
+										else add the document to the list of docs for which notification to be sent
+					 */
+					if(!CAOwnerMap.containsKey(notificationMemberId)){
+						CAOwnerMap.put(notificationMemberId, new StringList(strDocId));
+					}
+					else{
+						docList = (StringList) CAOwnerMap.get(notificationMemberId);
+						docList.add(strDocId);
+						CAOwnerMap.put(notificationMemberId, docList);
+					}
+				}
+
+			}
+			//add both maps to MapList
+			personMapList.add(ImplOrgRepMap);
+			personMapList.add(CAOwnerMap);
+			return personMapList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method which sends Notification.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args String[] of command line arguments
+	 * @throws DCLException if operation fails
+	 */
+	public void sendNotificationBasedOnEffectivity(Context context, String args[]) throws DCLException{
+		try{
+			Map payload = new HashMap<>();
+			Map tableDataImplOrgRepMap = new HashMap<>();
+			tableDataImplOrgRepMap.put("Subject", "enoDocumentControl.Notification.EffectivityByImplementationOrganizationRepresenatative.Subject");
+			tableDataImplOrgRepMap.put("Body", "enoDocumentControl.Notification.EffectivityByImplementationOrganizationRepresenatative.Body");
+			tableDataImplOrgRepMap.put("TableHeader", "enoDocumentControl.TableHeader.ImplemetationDocuments");
+			tableDataImplOrgRepMap.put("TableData", "enoDocumentControl.TableDATA.ImplemetationDocuments");
+
+
+			Map tableDataCAOwnerMap = new HashMap<>();
+			tableDataCAOwnerMap.put("Subject", "enoDocumentControl.Notification.EffectivityByCAOwner.Subject");
+			tableDataCAOwnerMap.put("Body", "enoDocumentControl.Notification.EffectivityByCAOwner.Body");
+			tableDataCAOwnerMap.put("TableHeader", "enoDocumentControl.TableHeader.MissingImplemetationDocuments");
+			tableDataCAOwnerMap.put("TableData", "enoDocumentControl.TableDATA.MissingImplemetationDocuments");
+
+			StringList documentList = new StringList();
+			String strSubjectKey = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.Subject");
+			String strMessageText = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.MessageText");
+			String strMessageHTML = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.MessageHTML");
+
+
+			MapList personMapList= getDocumentListforReminderNotification(context, args);
+			if(!personMapList.isEmpty() && personMapList!=null){
+				for(Object object:personMapList){
+					Map map=(Map)object;
+					Set<?> keys= map.keySet();
+					Iterator<?> itr=keys.iterator();
+					itr.next();
+					while(itr.hasNext()){
+						String strKey=(String) itr.next();
+						String strTOName = DomainObject.newInstance(context, strKey).getInfo(context, DomainConstants.SELECT_NAME);
+						StringList slDocument=(StringList)map.get(strKey);
+						String strSender = (String) map.get(DCLConstants.SENDER);
+
+						documentList = getDetailsOfDoc(context,slDocument, strSender);
+						if(!DCLUtil.isNullOrEmpty(documentList)){
+							NotificationUtil notification = new NotificationUtil();
+							if ((DCLConstants.IMPL_ORG_REP).equals(strSender)) {
+								payload = notification
+										.getTableStructureDate(context, documentList, new StringList(strTOName), tableDataImplOrgRepMap);
+							}
+							else
+								payload = notification.getTableStructureDate(context, documentList, new StringList(strTOName), tableDataCAOwnerMap);
+
+							payload = getEffectivityFieldsData(context, payload, documentList, strSender);
+
+							//sends both notification and email 
+							${CLASS:emxNotificationUtil}.sendNotification(context, documentList.get(0).toString(), // id
+									// (argument
+									// to
+									// check
+									// if
+									// it
+									// is
+									// object
+									// or
+									// relationship)
+									"object", 						//id Type
+									DomainConstants.EMPTY_STRING, 	//String notificationName, 
+									payload,  						//payload
+									new StringList(strTOName), 		//toList,
+									null, 							//ccList,
+									null, 							//bccList,
+									strSubjectKey, 					//String subjectKey,
+									strMessageText, 				//String messageKey, 
+									strMessageHTML, 				//String messageHTMLKey,
+									null, 							//StringList objectIdList,
+									DCLConstants.DCL_STRING_RESOURCE, //String basePropFile, 
+									null, 							//String urlSuffix,
+									DCLConstants.USER_AGENT, // String fromAgent,
+									null, 							//StringList replyTo,
+									DomainConstants.EMPTY_STRING, 	//String preprocessJPOMethod,
+									"both" 							//String notifyType)
+									);
+						}
+					}
+				}
+			}
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Filters the List of documents for which notification has to be sent based on effective date and threshold value of that document.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param slDocument holds the list of documents
+	 * @return StringList of documents for which notification has to be sent
+	 * @throws DCLException if operation fails
+	 */
+	private StringList getDetailsOfDoc(Context context, StringList slDocument, String strSender) throws DCLException {
+		try{
+			String strImplementationOrg = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION);
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_ENABLED);
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD);
+			StringList enabledList = new StringList();
+			StringList thresholdList = new StringList();
+			StringList documentList = new StringList();
+			DCLLifecycleService service = DCLServiceUtil.getDCLLifecycleService(context);
+			String strAttributeEffectiveDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			Date currentDate = new Date();
+			StringList objectSelects = new StringList("to[" + strImplementationOrg + "].attribute["
+					+ ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD + "].value");
+			objectSelects.add("to[" +strImplementationOrg+ "].attribute[" +ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED+ "].value");
+
+			for(Object document:slDocument){
+				if ((DCLConstants.IMPL_ORG_REP).equals(strSender)) {
+					DomainObject dobjDocument=DomainObject.newInstance(context, document.toString());
+					//get values of Implementation Enabled attribute
+					MapList attrMapList = dobjDocument.getInfo(context, new String[]{dobjDocument.getObjectId(context)}, objectSelects);
+					Map attributeMap = (Map) attrMapList.get(0);
+					String strNotificationEnabled = (String) attributeMap.get("to[" + strImplementationOrg + "].attribute["
+							+ ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED + "].value");
+					String strNotificationThreshold = (String) attributeMap.get("to[" + strImplementationOrg + "].attribute["
+							+ ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD + "].value");
+
+					if(UIUtil.isNotNullAndNotEmpty(strNotificationEnabled))
+					{
+
+						enabledList = FrameworkUtil.split(strNotificationEnabled, "\7");
+					}
+					if(UIUtil.isNotNullAndNotEmpty(strNotificationThreshold))
+					{
+
+						thresholdList = FrameworkUtil.split(strNotificationThreshold, "\7");
+					}
+
+					for(int i=0; i<enabledList.size(); i++){
+						String str = (String) enabledList.get(i);
+						if(str.equalsIgnoreCase("True")){
+
+							//get the effective date of a particular document
+							String strEffectiveDate = dobjDocument.getInfo(context, "attribute["+strAttributeEffectiveDate+"].value");
+							SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+							Date effectiveDate=eMatrixDateFormat.getJavaDate(strEffectiveDate);
+
+							//difference between effective date and current date
+							int days = service.getEffectiveDateDifference(context, strEffectiveDate);
+							days = Math.abs(days);
+							String strThresholdValue = (String) thresholdList.get(i);
+							int intThresholdValue = Integer.parseInt(strThresholdValue);
+
+							//check if the no of days are less than threshold value for that doc then send notification for that doc
+							if(days < intThresholdValue && !documentList.contains(document.toString())){
+								documentList.add(document.toString());
+							}
+						}
+					}
+				}
+				else{
+					documentList.add(document.toString());
+				}
+			}
+			return documentList;
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+
+	/**
+	 * Populate the Table with training data (eg attributes - Training Status, Training Required, Percen Complete, DueDate) .
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param payload Map containing structure and data of table to be populated
+	 * @param documentList StringList of documents.
+	 * @param relIdList List of relIds from which attribute values have to be retrieved.
+	 * @return updated payload
+	 * @throws DCLException if operation fails
+	 */
+	private Map getEffectivityFieldsData(Context context, Map payload, StringList documentList, String strSender) throws DCLException{
+		try {
+			String strSMERel = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			String sSMELink = DomainConstants.EMPTY_STRING;
+			String strChangeActionOwner = DomainConstants.EMPTY_STRING;
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> listOfCADetailMap = new ArrayList<Map>();
+
+			StringList attributeList = new StringList();
+			attributeList.add("relationship[" + strSMERel + "].to.name");
+			attributeList.add("relationship[" + strSMERel + "].to.id");
+			attributeList.add(DomainObject.SELECT_OWNER);
+
+			String[] strTableKeys = (String[]) payload.get("tableRowKeys");
+			String[][] strTableValues = (String[][]) payload.get("tableRowValues");
+			String[] strTrainingKeys = new String[]{"EffectivityOption", "SubjectMatterExpert", "Owner", "ChangeInformation", "ChangeActionOwner"};
+			String[] strfinalarray = new String[11];
+			String[] strActualTableValues = new String[]{};
+			String strTrainingTableValues[] = new String[]{};
+
+			String [][] strfinalValues;
+			System.arraycopy(strTableKeys, 0, strfinalarray, 0, strTableKeys.length);
+			System.arraycopy(strTrainingKeys, 0, strfinalarray, strTableKeys.length, strTrainingKeys.length);
+			for(int i=0; i<documentList.size(); i++){
+				String strDocId = (String) documentList.get(i);
+				DomainObject dobj = DomainObject.newInstance(context, strDocId);
+
+				Map infoMap = dobj.getInfo(context, attributeList);
+
+				//get sme details
+				if(UIUtil.isNotNullAndNotEmpty((String)infoMap.get("relationship[" + strSMERel + "].to.id")))
+					sSMELink = NotificationUtil.getObjectLinkHTML(context, (String) infoMap.get("relationship[" + strSMERel + "].to.name"),
+							(String) infoMap.get("relationship[" + strSMERel + "].to.id"));
+
+				//get CA owner
+				listOfCADetailMap = cdService.getConnectedCA(context, strDocId, true, true);
+				for(Map mapCADetails : listOfCADetailMap) {
+					strChangeActionOwner = (String) mapCADetails.get(DomainObject.SELECT_OWNER);
+				}
+				strActualTableValues = strTableValues[i];
+
+				if ((DCLConstants.IMPL_ORG_REP).equals(strSender)) {
+					strTrainingTableValues = new String[] {
+							NotificationUtil.getEffectivityOptionForEmail(context, dobj),
+							sSMELink,
+							NotificationUtil.getObjectLinkHTML(context, (String) infoMap.get(DomainObject.SELECT_OWNER),
+									PersonUtil.getPersonObjectID(context, (String) infoMap.get(DomainObject.SELECT_OWNER))),
+							NotificationUtil.getConnectedCRCOCALink(context, (String) documentList.get(i)), strChangeActionOwner };
+				}
+				else{
+					strTrainingTableValues = new String[] {
+							NotificationUtil.getEffectivityOptionForEmail(context, dobj),
+							sSMELink,
+							NotificationUtil.getObjectLinkHTML(context, (String) infoMap.get(DomainObject.SELECT_OWNER),
+									PersonUtil.getPersonObjectID(context, (String) infoMap.get(DomainObject.SELECT_OWNER))),
+							NotificationUtil.getConnectedCRCOCALink(context, (String) documentList.get(i)) };
+				}
+				String[] strfinalarrayValues = new String[11];
+				System.arraycopy(strActualTableValues, 0, strfinalarrayValues, 0, strActualTableValues.length);
+				System.arraycopy(strTrainingTableValues, 0, strfinalarrayValues, strActualTableValues.length, strTrainingTableValues.length);
+				strTableValues[i] = strfinalarrayValues;
+			}
+			payload.put("tableRowKeys", strfinalarray);
+			payload.put("tableRowValues", strTableValues);
+			payload.put(DCLConstants.SENDER, strSender);
+			return payload;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Method to get the HTML part of the message to be sent in notification and email.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args[] String array of command line arguments
+	 * @return HTML message in string form
+	 * @throws DCLException if operation fails
+	 */
+	public String getMessageHTML(Context context, String[] args) throws DCLException {
+		try {
+			return NotificationUtil.getMessageHTML(context, args);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Method to get the TEXT part of the message to be sent in notification and email.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args[] String array of command line arguments
+	 * @return TEXT message in string form
+	 * @throws DCLException if operation fails
+	 */
+	public String getMessageText(Context context, String args[]) throws DCLException{
+		try{
+			Map info = (Map) JPO.unpackArgs(args);
+			Map payload = (Map) info.get("payload");
+			String strSenderType = (String) payload.get(DCLConstants.SENDER);
+			StringBuilder sbMessage = new StringBuilder(NotificationUtil.getMessageText(context, args));
+			if (!DCLUtil.isNullOrEmpty(strSenderType) && !(DCLConstants.CA_OWNER).equals(strSenderType)) {
+				sbMessage.append("&treeMenu=" + "DOCOPendingImplementationTreeMenu");
+			}
+			else{
+				sbMessage.append("&treeMenu=" + "DOCOMissingImplementationInfoTreeMenu");	
+			}
+			return sbMessage.toString();
+		}
+		catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Method to populate the table with documents, which opens when we hit the link in the icon notification mail.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args[] String array of command line arguments
+	 * @return Maplist of documents to populate the table.
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDocumentList(Context context,String args[]) throws DCLException{
+		try {
+			String strAttributeEffectiveDate = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			String strSMERel = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			String strRelImplementedItem =PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTED_ITEM);
+			String strAffectedItem=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM);
+			String strEffectivityOption=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+
+			StringList attributeList = new StringList();
+			attributeList.add(DomainObject.SELECT_ID);
+			attributeList.add(DomainObject.SELECT_TYPE);
+			attributeList.add(DomainObject.SELECT_NAME);
+			attributeList.add(DomainObject.SELECT_REVISION);
+			attributeList.add("attribute["+DomainConstants.ATTRIBUTE_TITLE+"]");
+			attributeList.add(DomainObject.SELECT_CURRENT);
+			attributeList.add("attribute[" + strAttributeEffectiveDate + "]");
+			//Effectivity option
+			attributeList.add("attribute["+strEffectivityOption+"]");
+			attributeList.add("relationship[" + strSMERel + "].to.name");
+			attributeList.add(DomainObject.SELECT_OWNER);
+			attributeList.add("to[" + strAffectedItem + "].owner.name");
+			attributeList.add("to[" + strRelImplementedItem + "].owner.name");
+
+			StringList docList =  new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			String strSender = (String) programMap.get(DCLConstants.SENDER);
+
+			//MapList for documents to be displayed
+			MapList mldoc = getDocumentListforReminderNotification(context, args);
+			Collection c;
+			for(Object obj: mldoc){
+				Map map = (Map) obj;
+				if(!DCLUtil.isNullOrEmpty(strSender)){
+					//check if notification has to be sent to Implementing Org Representative
+					if(strSender.equals("implorgrep")){
+
+						// if map is for Change Action Owner then move to the
+						// next map
+						if (map.containsValue(DCLConstants.CA_OWNER)) {
+							continue;
+						}
+						else{
+							map.remove(DCLConstants.SENDER);
+							c = map.values();						
+						}
+					}
+					//if notification has to be sent to Change Action Owner
+					else{
+						// //if map is for Implementing Org Representative then
+						// move to the next map
+						if (map.containsValue(DCLConstants.IMPL_ORG_REP)) {
+							continue;
+						}
+						else{
+							map.remove(DCLConstants.SENDER);
+							c = map.values();						
+						}	
+					}
+					//selecting documents related to caller
+					String strOwnerId=(String) programMap.get("parentOID");
+					if(!UIUtil.isNullOrEmpty(strOwnerId)){
+						docList=(StringList)map.get(strOwnerId);
+
+						//filter the list of documents to be displayed in the table
+						docList = getDetailsOfDoc(context, docList, strSender);
+						String[] strArr = new String[docList.size()];
+
+						((StringList) docList).copyInto(strArr);
+						mldoc = DomainObject.getInfo(context, strArr, attributeList);
+						break;
+					}
+				}
+			}
+			return mldoc;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * Access program to check access on Change Action Owner column.
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args[] String array of command line arguments
+	 * @return true will display column , false will hide the column.
+	 * @throws DCLException if operation fails
+	 */
+	public boolean showChangeActionOwnerColumn(Context context, String args[]) throws DCLException{
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strSender = (String) programMap.get(DCLConstants.SENDER);
+			if(strSender.equals("CAOwner"))
+				return false;
+			else
+				return true;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public List<String> getImplementationNotificationEnabledRangeValues(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			Map paramList=(Map) programMap.get(DCConstants.PARAMLIST);
+			List<Map> objectList=(List<Map>) programMap.get(DCConstants.OBJECTLIST);
+			List<String> slResponse=new StringList();
+			for(Object objMap:objectList)
+			{
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<select id='EN_");
+				sBuff.append(strobjectId);
+				sBuff.append("' name='");
+				sBuff.append(strobjectId);
+				sBuff.append("' onchange=\"disableImplementationNotificationsThreshold('");
+				sBuff.append("EN_");
+				sBuff.append(XSSUtil.encodeForJavaScript(context, strobjectId));
+				sBuff.append("')\"><option value=\'"
+						+ DCLConstants.TRUE
+						+ "\'>"
+						+ EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Range.Yes") + "</option>");
+				sBuff.append("<option value=\'"
+						+ DCLConstants.FALSE
+						+ "\'>"
+						+ EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Range.No") + "</option>");
+				sBuff.append("</select>");
+				slResponse.add(sBuff.toString());
+			}
+			return slResponse;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public List<String> getImplementationNotificationThresholdDefaultValue(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			Map paramList=(Map) programMap.get(DCConstants.PARAMLIST);
+			List<Map> objectList=(List<Map>) programMap.get(DCConstants.OBJECTLIST);
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_THRESHOLD = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD);
+			AttributeType attrType = new AttributeType(ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_THRESHOLD);
+			String strThresholdValue = attrType.getDefaultValue(context);
+			List<String> slResponse=new StringList();
+			for (Object objMap : objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<input size='5' type='text' onchange=\"validateThresholdValue(this");
+				sBuff.append(")\" id='TH_");
+				sBuff.append(strobjectId);
+				sBuff.append("' name='");
+				sBuff.append(strobjectId.replace(".", "_"));
+				sBuff.append("' value='"); 
+				sBuff.append(strThresholdValue);
+				sBuff.append("'/>");
+				slResponse.add(sBuff.toString());
+			}
+			return slResponse;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getEffectivityOptionForIconMail(Context context,String[] args) throws DCLException{
+		try {
+			StringList effectivityOptionList = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			List<Map> mlObject = (List) programMap.get(DCConstants.OBJECTLIST);
+			for(Map mObjectMap:mlObject)
+			{
+				String strObjectId = (String) mObjectMap.get(DomainConstants.SELECT_ID);
+				DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+				String strEffectivityOption = NotificationUtil.getEffectivityOptionForEmail(context, dobj);
+				effectivityOptionList.add(strEffectivityOption);
+			}
+			return effectivityOptionList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public HashMap showNotificationEnabledRangeValuesOnEdit(Context context,String []args) throws Exception {
+		try{
+			HashMap paramMap = (HashMap)JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) paramMap.get(DCLConstants.REQUESTMAP);
+			HashMap fieldMap = (HashMap) paramMap.get(DCLConstants.FIELD_MAP);
+			String language = (String) requestMap.get(DCLConstants.LANGUAGE_STR);
+			String propertyFile = (String) requestMap.get(DCLConstants.STRING_RESOURCE_FIELD);
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+			HashMap tempMap = new HashMap();
+
+			String policy = DomainConstants.EMPTY_STRING;
+			HashMap fieldValues = (HashMap) paramMap.get(DCLConstants.FIELD_VALUES);
+			fieldRangeValues.addElement(DCLConstants.TRUE);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.Yes"));
+			fieldRangeValues.addElement(DCLConstants.FALSE);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Range.No"));
+
+			tempMap.put("field_choices", fieldRangeValues);
+			tempMap.put("field_display_choices", fieldDisplayRangeValues);
+
+			return tempMap;
+		}
+		catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getNotificationEnabledDisplayValue(Context context, String args[]) throws DCLException{
+		StringList slDisplay=new StringList();
+		try{
+			Map programMap=JPO.unpackArgs(args);
+			MapList objectList=(MapList)programMap.get(DCConstants.OBJECTLIST);
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_ENABLED);
+			for(Object obj:objectList){
+				Map map=(Map)obj;
+				String strRelId = (String) map.get(DomainRelationship.SELECT_ID);
+				String strId = (String) map.get(DomainObject.SELECT_ID);
+				String strNotificationEnbaleValue = DomainRelationship.getAttributeValue(context, strRelId,
+						ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED);
+				if(strNotificationEnbaleValue.equalsIgnoreCase(DCLConstants.TRUE))
+					slDisplay.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Range.Yes"));
+				else
+					slDisplay.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Range.No"));
+			}
+			return slDisplay;
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateImplementationNotificationEnabledValue(Context context, String args[]) throws DCLException {
+		try {
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_ENABLED);
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD);
+			Map programMap=(Map) JPO.unpackArgs(args);
+			Map requestMap=(Map) programMap.get(DCLConstants.REQUESTMAP);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+			AttributeType attrType = new AttributeType(ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD);
+			String strThresholdValue = attrType.getDefaultValue(context);
+
+			DomainRelationship.setAttributeValue(context, strRelId, ATTRIBUTE_IMPLEMENTATION_NOTIFICATION_ENABLED, strNewValue);
+			if (strNewValue.equalsIgnoreCase(DCLConstants.FALSE))
+				DomainRelationship.setAttributeValue(context, strRelId, ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD,
+						DomainConstants.EMPTY_STRING);
+			else{
+				DomainRelationship.setAttributeValue(context, strRelId, ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD, strThresholdValue);
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateImplementationNotificationThresholdValue(Context context, String args[]) throws DCLException {
+		try {
+			String ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD);
+			Map programMap=(Map) JPO.unpackArgs(args);
+			Map requestMap=(Map) programMap.get(DCLConstants.REQUESTMAP);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+			DomainRelationship.setAttributeValue(context, strRelId, ATTRIBUTE_IMPLEMENTATION_NOTIFICATIONS_THRESHOLD, strNewValue);
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public boolean checkIfDocumentContainsEffectivityInterface(Context context, String strObjectId) throws DCLException {
+		try {
+			DomainObject dDoc=DomainObject.newInstance(context, strObjectId);
+			String strInterfaceOnDocument=DCLUtil.mqlCommand(context, "print bus $1 select interface dump $2", false, strObjectId,"\\|");
+			if(strInterfaceOnDocument.contains(DCLConstants.Interface_DCLEffectivity)){
+				return true;
+			}else
+				return false;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+
+	public StringList getEffectivityOptionForDocument(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slEffectivityOptions=new StringList();
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+				slEffectivityOptions.add(dObj.getAttributeValue(context, strAttributeEffectivityOption));
+			}
+			return slEffectivityOptions;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public StringList getPlannedImplementationPeriodOption(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slEffectivityOptions=new StringList();
+			String strAttributeImplPeriodOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+				slEffectivityOptions.add(dObj.getAttributeValue(context, strAttributeImplPeriodOption));
+			}
+			return slEffectivityOptions;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	} 
+
+	public StringList getPlannedEffectiveDateForDocument(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slEffectivityOptions=new StringList();
+			String strAttributeImplDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+
+				if(UIUtil.isNullOrEmpty(dObj.getAttributeValue(context, strAttributeImplDate))){
+					slEffectivityOptions.add(DomainObject.EMPTY_STRING);
+				}else
+					slEffectivityOptions.add(dObj.getAttributeValue(context, strAttributeImplDate));
+			}
+			return slEffectivityOptions;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public StringList getPlannedImplPeriodForDocument(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slEffectivityOptions=new StringList();
+			String strAttributeImplPeriod=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD);
+			String strAttributeImplPeriodOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			StringList slSelect=new StringList();
+			slSelect.add(DomainObject.SELECT_TYPE);
+			slSelect.add(DomainObject.SELECT_ORGANIZATION);
+			slSelect.add(DomainObject.SELECT_CURRENT);
+			slSelect.add(DomainObject.getAttributeSelect(strAttributeImplPeriodOption));
+			slSelect.add(DomainObject.getAttributeSelect(strAttributeImplPeriod));
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+				Map mInfo=dObj.getInfo(context, slSelect);
+				String strImpOpnVal=(String)mInfo.get(DomainObject.getAttributeSelect(strAttributeImplPeriodOption));
+				if(strImpOpnVal.equals(DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD)){
+					EffectivityImplementationService service = DCLServiceUtil.getEffectivityImplementationService(context);
+					int defaultPeriod= service.getDefaultImplementationPeriod(context, (String)mInfo.get(DomainObject.SELECT_TYPE), (String)mInfo.get(DomainObject.SELECT_ORGANIZATION));
+					slEffectivityOptions.add(Integer.toString(defaultPeriod));
+				}else if(strImpOpnVal.equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE)){
+					slEffectivityOptions.add(DomainObject.EMPTY_STRING);
+				}else
+					slEffectivityOptions.add((String)mInfo.get(DomainObject.getAttributeSelect(strAttributeImplPeriod)));
+			}
+			return slEffectivityOptions;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+
+	public StringList getActualImplementationPeriodOfDocument(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slActualImplPeriod=new StringList();
+			String strAttributeEffectiveDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			for(Map map:objectList){
+				Map historyMap=DCLUtil.getDataFromHistory(context, (String)map.get(DomainObject.SELECT_ID), "Promote", "Released");
+				String strReleaseDate=(String)historyMap.get(DCLConstants.SELECT_TIME);
+				if(!DCLUtil.isNullOrEmpty(strReleaseDate)){
+					DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+					String strEffectiveDateVal=dObj.getAttributeValue(context, strAttributeEffectiveDate);
+					int result=DCLUtil.getDiffinDates(context, strReleaseDate, strEffectiveDateVal);
+					slActualImplPeriod.add(Integer.toString(result));
+				}else
+					slActualImplPeriod.add(DomainObject.EMPTY_STRING);
+			}
+			return slActualImplPeriod;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateEffectivityOptionInImplementationPlan(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String strDocId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String newValueforEffectivityOption = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			DomainObject dobj=DomainObject.newInstance(context,strDocId);
+			dobj.setAttributeValue(context, strAttributeEffectivityOption, newValueforEffectivityOption);
+
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	public void updateImplPeriodOptionInImplementationPlan(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String strDocId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String newValueforEffectivityOption = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			String strAttributeImplPeriod=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD);
+			String strAttributeEffectiveDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			DomainObject dobj=DomainObject.newInstance(context,strDocId);
+			StringList slSelect=new StringList();
+			slSelect.add(DomainObject.SELECT_TYPE);
+			slSelect.add(DomainObject.SELECT_ORGANIZATION);
+			slSelect.add(DomainObject.SELECT_CURRENT);
+			Map mInfo=dobj.getInfo(context, slSelect);
+			dobj.setAttributeValue(context, strAttributeEffectivityOption, newValueforEffectivityOption);
+			if(newValueforEffectivityOption.equals(DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD)){
+				if((mInfo.get(DomainObject.SELECT_CURRENT)).equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_APPROVED))){
+					EffectivityImplementationService service = DCLServiceUtil.getEffectivityImplementationService(context);
+					int defaultPeriod= service.getDefaultImplementationPeriod(context, (String)mInfo.get(DomainObject.SELECT_TYPE), (String)mInfo.get(DomainObject.SELECT_ORGANIZATION));
+					String strDate=service.calculateEffectiveDate(context, defaultPeriod);
+					dobj.setAttributeValue(context, strAttributeEffectiveDate, strDate);
+				}else{
+					dobj.setAttributeValue(context, strAttributeEffectiveDate, DomainObject.EMPTY_STRING);
+				}
+			}
+
+
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	public void updateEffectivityDateInImplPlan(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String strDocId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String newValueforEffectivityOption = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			DomainObject dobj=DomainObject.newInstance(context,strDocId);
+			TimeZone tz = TimeZone.getTimeZone(context.getSession().getTimezone());
+			double dbMilisecondsOffset = (double) (-1) * tz.getRawOffset();
+			double clientTZOffset = (new Double(dbMilisecondsOffset / (1000 * 60 * 60))).doubleValue();
+			String strDate = QuestionUtil.getDateinEmatrixFormat(context, newValueforEffectivityOption, String.valueOf(clientTZOffset)); 
+
+			dobj.setAttributeValue(context, strAttributeEffectivityOption, strDate);
+
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+	public void updateEffectivityPeriodInImplPlan(Context context, String[] args) throws Exception {
+		try {
+			EffectivityImplementationService service=DCLServiceUtil.getEffectivityImplementationService(context);
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String strDocId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String newValueforEffectivityOption = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD);
+			String strAttributeImpPeriodOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			String strAttributeEffectivDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			DomainObject dobj=DomainObject.newInstance(context,strDocId);
+			dobj.setAttributeValue(context, strAttributeEffectivityOption, newValueforEffectivityOption);
+			String strImpOptionVal=dobj.getAttributeValue(context, strAttributeImpPeriodOption);
+			if(!strImpOptionVal.equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE)){
+				if(((String)dobj.getInfo(context, DomainObject.SELECT_CURRENT)).equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,DCLConstants.SYMBOLIC_STATE_APPROVED))){
+					String strEffectiveDate=service.calculateEffectiveDate(context, Integer.parseInt(newValueforEffectivityOption));
+					dobj.setAttributeValue(context, strAttributeEffectivDate, strEffectiveDate);
+				}else {
+					dobj.setAttributeValue(context, strAttributeEffectivDate, DomainObject.EMPTY_STRING);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	public void writeHistoryForreasonForChange(Context context, String[] args) throws DCLException {
+		try {
+			String strReasonForChange = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE,
+					context.getLocale(), "enoDocumentControl.Label.EffectivityReasonForChange");
+			StringBuilder sbHistory = new StringBuilder();
+			Map hmProgram = (Map) JPO.unpackArgs(args);
+			Map hmParam = (Map) hmProgram.get(DCLConstants.PARAMMAP);
+			String strValue = (String) hmParam.get(DCLConstants.NEW_VALUE);
+			HistoryAuditTrailService auditTrailService = DCLServiceUtil.getHistoryAuditTrailService(context);
+			auditTrailService.customHistoryUpdation(context, (String) hmParam.get(DCLConstants.OBJECTID), "", strValue,
+					strReasonForChange);
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getActualEffectiveDateOnDocuments(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slEffectivityOptions=new StringList();
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			HistoryAuditTrailService service = DCLServiceUtil.getHistoryAuditTrailService(context);
+
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+				Map data= DCLUtil.getDataFromHistory(context, (String)map.get(DomainObject.SELECT_ID), "Promote", "Released");
+				//slEffectivityOptions.add(data.get(DCLConstants.SELECT_TIME));
+				slEffectivityOptions.add((String)data.get(DCLConstants.SELECT_TIME));
+			}
+			return slEffectivityOptions;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getControlledDocuemntsForChangeOrder(Context context, String[] args) throws DCLException {
+		try {
+			ControlledDocumentService service=DCLServiceUtil.getControlledDocumentService(context);
+			String strControlledDocument=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+
+			MapList mlReturn=new MapList();
+			StringList mpCDDocuments=new StringList();
+			HashMap programMap = (HashMap)JPO.unpackArgs(args);
+			Map paramMap       = (HashMap)programMap.get(ChangeConstants.PARAM_MAP);
+			String strParentId = (String) programMap.get("parentOID");
+			List<Map> mlconnectedDocs=new MapList();
+boolean isCA =false;
+			
+if (UIUtil.isNotNullAndNotEmpty(strParentId ))
+{
+String strType=PropertyUtil.getSchemaProperty(context, "type_ChangeAction");
+String objecttype=DomainObject.newInstance(context, strParentId ).getInfo(context,DomainConstants.SELECT_TYPE);
+isCA 		= objecttype.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeAction")) ? true : false;
+
+
+}
+
+
+List<Map> mlCA=new MapList();
+
+if(!isCA)
+{
+
+			ChangeOrder changeorder=new ChangeOrder();
+			changeorder.setId(strParentId);
+			 mlCA= changeorder.getChangeActions(context);
+}
+else if(isCA)
+{
+	Map mCA=new HashMap();
+mCA.put(DomainObject.SELECT_ID,strParentId);
+mlCA.add(mCA);
+}
+
+			for(Map boCA:mlCA){
+				String strCAId=(String) boCA.get(DomainObject.SELECT_ID);
+
+				StringList slBusSelect=new StringList();
+				slBusSelect.add(DomainObject.SELECT_ID);
+				slBusSelect.add(DomainObject.SELECT_TYPE);
+				slBusSelect.add(DomainObject.SELECT_NAME);
+
+				slBusSelect.add(DomainObject.SELECT_REVISION);
+				slBusSelect.add("attribute["+DomainConstants.ATTRIBUTE_TITLE+"]");
+				slBusSelect.add(DomainObject.SELECT_CURRENT);
+				mlconnectedDocs.addAll( service.getRealizedFromChangeAction(context, strCAId, slBusSelect));
+				if(mlconnectedDocs.isEmpty()){
+					mlconnectedDocs.addAll( service.getProposedFromChangeAction(context, strCAId, slBusSelect));
+				}
+			}
+			for(Map map:mlconnectedDocs){
+				DomainObject dObj=DomainObject.newInstance(context, ((List)map.get(DomainObject.SELECT_ID)).get(0).toString());
+				if(dObj.isKindOf(context, strControlledDocument)){
+					Map proposedChangeMap = new HashMap<>();
+					proposedChangeMap.put(DomainConstants.SELECT_ID, ((List)map.get(DomainConstants.SELECT_ID)).get(0).toString());
+					mlReturn.add(proposedChangeMap);
+				}
+
+			}
+			return mlReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public StringList checkEditAccessForEffectivity(Context context, String[] args) throws DCLException {
+		//public List<Boolean> checkEditAccessForEffectivity(Context context, String[] args) throws DCLException {	
+		try{
+			//List<Boolean> sAccessList = new ArrayList<Boolean>();
+			StringList sAccessList = new StringList();
+			Map<?,?> paramMap = (Map<?,?>)JPO.unpackArgs(args);
+			MapList mobjectList = (MapList)paramMap.get(DCConstants.OBJECTLIST);
+			Map<?,?> columnMap = (Map<?,?>)paramMap.get(DCLConstants.COLUMN_MAP);
+			String strColName=(String)columnMap.get(DomainConstants.SELECT_NAME);
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			for(Object map:mobjectList){
+				boolean editAcess=true;
+				Map mp =(Map)map;
+				DomainObject dObj=DomainObject.newInstance(context, (String)mp.get(DomainObject.SELECT_ID));
+				String strCurrent=dObj.getInfo(context, DomainObject.SELECT_CURRENT);
+				String strAttrImpOption=dObj.getAttributeValue(context, strAttributeEffectivityOption);
+				String strReleasedState=DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_RELEASED);
+				if(strCurrent.equals(strReleasedState)){
+					editAcess=false;
+				}
+				else if (strColName.equals("Planned Effective Date")) {
+					if(!strAttrImpOption.equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE))
+						editAcess=false;
+
+				}else if (strColName.equals("Planned Imp Period")) {
+					if(strAttrImpOption.equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE)||strAttrImpOption.equals(DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD))
+						editAcess=false;
+				}
+
+				sAccessList.add(String.valueOf(editAcess));
+			}
+			return sAccessList;
+
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public String getActualEffectveDateOnForm(Context context, String[] args) throws DCLException{
+
+		String strActualEffectiveDate = DomainObject.EMPTY_STRING;
+		try {
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			Map<?,?> requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strObjectId = (String)requestMap.get(DCConstants.OBJECTID);
+			Map historyData=DCLUtil.getDataFromHistory(context, strObjectId, "Promote", "Released");
+			strActualEffectiveDate=(String)historyData.get(DCLConstants.SELECT_TIME);
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return strActualEffectiveDate;
+	}
+
+	public String getActualImplPeriodOnForm(Context context, String[] args) throws DCLException{
+
+		String strActualImplPeriod = DomainObject.EMPTY_STRING;
+		try {
+			String strAttributeEffectiveDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			Map<?,?> requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strObjectId = (String)requestMap.get(DCConstants.OBJECTID);
+			Map historyData=DCLUtil.getDataFromHistory(context, strObjectId, "Promote", "Released");
+			String strActualEffectiveDate=(String)historyData.get(DCLConstants.SELECT_TIME);
+			if(!DCLUtil.isNullOrEmpty(strActualEffectiveDate)){
+				DomainObject dObj=DomainObject.newInstance(context,strObjectId);
+				String strEffectiveDate=	dObj.getAttributeValue(context, strAttributeEffectiveDate);
+				int result=DCLUtil.getDiffinDates(context, strActualEffectiveDate, strEffectiveDate);
+				strActualImplPeriod=Integer.toString(result);
+			}
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return strActualImplPeriod;
+	}
+
+	public String getPlannedImplPeriodOnForm(Context context, String[] args) throws DCLException{
+
+		String strPlannedImplPeriod = DomainObject.EMPTY_STRING;
+		try {
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			Map<?,?> requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strObjectId = (String)requestMap.get(DCConstants.OBJECTID);
+			String strAttributeImplPeriod=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD);
+			String strAttributeImplPeriodOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+			StringList slSelect=new StringList();
+			slSelect.add(DomainObject.SELECT_TYPE);
+			slSelect.add(DomainObject.SELECT_ORGANIZATION);
+			slSelect.add(DomainObject.SELECT_CURRENT);
+			slSelect.add(DomainObject.getAttributeSelect(strAttributeImplPeriodOption));
+			slSelect.add(DomainObject.getAttributeSelect(strAttributeImplPeriod));
+			DomainObject dObj=DomainObject.newInstance(context, strObjectId);
+			Map mInfo=dObj.getInfo(context, slSelect);
+			String strImpOpnVal=(String)mInfo.get(DomainObject.getAttributeSelect(strAttributeImplPeriodOption));
+			if(strImpOpnVal.equals(DCLConstants.DEFAULT_IMPLEMENTATION_PERIOD)){
+				EffectivityImplementationService service = DCLServiceUtil.getEffectivityImplementationService(context);
+				int defaultPeriod= service.getDefaultImplementationPeriod(context, (String)mInfo.get(DomainObject.SELECT_TYPE), (String)mInfo.get(DomainObject.SELECT_ORGANIZATION));
+				strPlannedImplPeriod=Integer.toString(defaultPeriod);
+			}else if(strImpOpnVal.equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE)){
+				strPlannedImplPeriod=DomainObject.EMPTY_STRING;
+			}else
+				strPlannedImplPeriod=(String)mInfo.get(DomainObject.getAttributeSelect(strAttributeImplPeriod));
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return strPlannedImplPeriod;
+	}
+
+
+	public StringList getEffectivityIcon(Context context, String[] args) throws DCLException{
+		StringList slIconLink=new StringList();
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slActualImplPeriod=new StringList();
+			String strAttributeEffectiveDate=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			String sRouteNextUrl = "./emxIndentedTable.jsp?program=ENODCLEffectivityUI:getImplementingOrganization&table=DCLImplementingOrgList&toolbar=DCLImplementingOrgListToolbar&selection=multiple&helpMarker=emxhelpimplementingorg&header=enoDocumentControl.Header.ImplementingOrganization&suiteKey=DocumentControl&editLink=true&objectId=";
+
+			String tipMessage = EnoviaResourceBundle.getProperty(context, "enoDocumentControlStringResource", context.getLocale(),
+					"enoDocumentControl.Label.Implementation");
+			StringBuilder sbLink = new StringBuilder();
+			sbLink.append("<img src = \"../common/images/iconSmallOrganization.gif").append("\"").append(" title=\"").append(tipMessage).append("\"").append("/>&#160;");
+
+
+			for(Map map:objectList){
+				String sObjectId=(String)map.get(DomainObject.SELECT_ID);
+				String sRouteUrl  = XSSUtil.encodeForHTML(context, "javascript:emxTableColumnLinkClick('" + sRouteNextUrl  + XSSUtil.encodeForJavaScript(context, sObjectId)+ "','800','575',false,'popup','')");
+				String sRouteString = "<a  href=\""+sRouteUrl+"\">"+sbLink+"</a>&#160;";
+				slIconLink.add(sRouteString);
+			}
+		}catch(Exception e){
+
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slIconLink;
+	}
+
+
+
+	public StringList getConnectedChangeActiontoDocument(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap=JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>)programMap.get(DCConstants.OBJECTLIST);
+			StringList slChageAction=new StringList();
+			String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			ControlledDocumentService service = DCLServiceUtil.getControlledDocumentService(context);
+			String strLink=DomainObject.EMPTY_STRING;
+			for(Map map:objectList){
+				DomainObject dObj=DomainObject.newInstance(context, (String)map.get(DomainObject.SELECT_ID));
+				List<Map> listOfCADetailMaps = service.getConnectedCA(context,  (String)map.get(DomainObject.SELECT_ID), true, true);
+				for (Map caDetailMap : listOfCADetailMaps) {
+					strLink=DCUtil.getObjectLink(context, (String) caDetailMap.get(DomainObject.SELECT_ID), (String) caDetailMap.get(DomainObject.SELECT_NAME));
+				}
+				slChageAction.add(strLink);
+			}
+			return slChageAction;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+ public Map<String, String> updateEffectiveDateOnDocument(Context context,String[] args)
+		 throws DCLException {
+	try
+	{
+		if (args.length == 0) {
+			throw new IllegalArgumentException();
+		}
+		Map<String, String> hmURL = new HashMap<String, String>();
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String[] arrObjectId = (String[]) programMap.get(DCConstants.OBJECTID);
+		String strDocumentId = arrObjectId[0];
+
+		String strAttributeImplementationPeriodOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD_OPTION);
+		String strAttributeImplementationPeriod=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_PERIOD);
+		String strAttributeImplementation=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+		String strAttributeReasonForChange=PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_ReasonforChange);
+		String strAttributeEffectivityOption=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+
+		String[] strImplementationId = (String[]) programMap.get("ImplementationPeriodOption");
+		String[] strEffectivityOption = (String[]) programMap.get("Effectivity Option");
+		String[] strImplementationPeriod = (String[]) programMap.get("Implementation Period");
+		String[] strImplementationDate = (String[]) programMap.get("Implementation Date");
+		String[] strReasonForChange = (String[]) programMap.get("ReasonForChange");
+		String[] strReasonForChangeNoRequired = (String[]) programMap.get("ReasonForChangeNotRequired");
+		DomainObject dobjDocument =DomainObject.newInstance(context,strDocumentId);
+		String strReasonForChangeValue = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE,
+				context.getLocale(), "enoDocumentControl.Label.EffectivityReasonForChange");
+		HistoryAuditTrailService auditTrailService = DCLServiceUtil.getHistoryAuditTrailService(context);
+
+		EffectivityImplementationService effectivityService = DCLServiceUtil.getEffectivityImplementationService(context);
+
+		ContextUtil.startTransaction(context, true);
+		if(strReasonForChangeNoRequired !=null)
+		{
+			auditTrailService.customHistoryUpdation(context, strDocumentId, "", strReasonForChangeNoRequired[0],
+					strReasonForChangeValue);
+		}
+		if(strReasonForChange!=null)
+		{
+
+
+			auditTrailService.customHistoryUpdation(context, strDocumentId, "", strReasonForChange[0],
+					strReasonForChangeValue);
+
+			// effectivityService.updateAttributeValue(context,dobjCO,strAttributeReasonForChange,strReasonForChange1[0]);
+		}
+		if(null!=strImplementationId)
+			effectivityService.updateAttributeValue(context,dobjDocument,strAttributeImplementationPeriodOption,strImplementationId[0]);
+		if(null!=strImplementationId && !strImplementationId[0].equals(DCLConstants.SPECIFY_IMPLEMENTATION_DATE))
+		{
+			EffectivityImplementationService service=DCLServiceUtil.getEffectivityImplementationService(context);
+
+			if(((String)dobjDocument.getInfo(context, DomainObject.SELECT_CURRENT)).equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,DCLConstants.SYMBOLIC_STATE_APPROVED)))
+			{
+				String strEffectiveDate=service.calculateEffectiveDate(context, Integer.parseInt(strImplementationPeriod[0]));
+				dobjDocument.setAttributeValue(context, strAttributeImplementation, strEffectiveDate);
+			}else {
+				dobjDocument.setAttributeValue(context, strAttributeImplementation, DomainObject.EMPTY_STRING);
+			}
+
+
+
+		}
+		if(null!=strEffectivityOption)
+			effectivityService.updateAttributeValue(context,dobjDocument,strAttributeEffectivityOption,strEffectivityOption[0]);
+		if(UIUtil.isNotNullAndNotEmpty(strImplementationDate[0]))
+		{
+			TimeZone tz = TimeZone.getTimeZone(context.getSession().getTimezone());
+			double dbMilisecondsOffset = (double)(-1)*tz.getRawOffset();
+			double clientTZOffset = (new Double(dbMilisecondsOffset/(1000*60*60))).doubleValue();
+			String strDate = DCLUtil.getDateinEmatrixFormat(context, strImplementationDate[0], String.valueOf(clientTZOffset));
+			effectivityService.updateAttributeValue(context,dobjDocument,strAttributeImplementation,strDate);
+		}
+		if(null!=strImplementationPeriod)
+			effectivityService.updateAttributeValue(context,dobjDocument,strAttributeImplementationPeriod,strImplementationPeriod[0]);
+
+		//  effectivityService.updateEffectiveDateOnDocument(context, strCOId);
+		ContextUtil.commitTransaction(context);
+		hmURL.put(DCLConstants.ACTION_JAVASCRIPT, "\n \n" +
+				"");
+
+		return hmURL;
+	} catch (Exception e) {
+		ContextUtil.abortTransaction(context);
+		throw new DCLException(e.getLocalizedMessage());
+	}
+}
+
+
+
+}
+
+

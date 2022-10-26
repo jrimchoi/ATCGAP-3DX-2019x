@@ -1,0 +1,791 @@
+
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.projectmgmtextensions.CalendarDashBoardUtility;
+import com.dassault_systemes.enovia.projectmgmtextensions.Helper;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEConstants;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEException;
+import com.dassault_systemes.enovia.projectmgmtextensions.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.program.ProjectSpace;
+import com.matrixone.apps.program.Task;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	public MapList getTablePMEPhaseGateReportDashboardDynamicColumns(Context context, String[] args) throws PMEException {
+		final String ATTRIBUTE_TASK_ESTIMATED_START_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_START_DATE);
+		final String ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE);
+		try {
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) mapProgram.get(PMEConstants.REQUEST_MAP);
+			String strObjectId = (String) requestMap.get(PMEConstants.OBJECT_ID);
+			String strCalendarFilter = (String) requestMap.get(PMEConstants.CALENDAR_FILTER);
+			if (Helper.isNullOrEmpty(strCalendarFilter)) {
+				strCalendarFilter = PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY;
+			}
+			MapList mlColumns = new MapList();
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				List<Map<?, ?>> mlObjectInfo = QueryUtil.getInfo(
+						context,
+						new String[] { strObjectId },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE),
+								DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE)));
+				if (mlObjectInfo.size() > 0) {
+					Map<?, ?> mObjectInfo = mlObjectInfo.get(0);
+					String strEstimatedStartDate = (String) mObjectInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE));
+					String strEstimatedFinishDate = (String) mObjectInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+					if (!Helper.isNullOrEmpty(strEstimatedStartDate) && !Helper.isNullOrEmpty(strEstimatedFinishDate)) {
+						Date dtEstimatedStartDate = eMatrixDateFormat.getJavaDate(strEstimatedStartDate);
+						Date dtEstimatedFinishDate = eMatrixDateFormat.getJavaDate(strEstimatedFinishDate);
+						Calendar calendar = Calendar.getInstance();
+						calendar.setTime(dtEstimatedStartDate);
+						if (null != dtEstimatedStartDate && null != dtEstimatedFinishDate) {
+							if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY)) {
+								mlColumns = getMonthlyColumnMap(context, dtEstimatedStartDate, dtEstimatedFinishDate);
+							}
+							else if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_QUARTERLY)) {
+								mlColumns = getQuarterlyColumnMap(context, dtEstimatedStartDate, dtEstimatedFinishDate);
+							}
+							else if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_ANNUALLY)) {
+								mlColumns = getAnnuallyColumnMap(context, dtEstimatedStartDate, dtEstimatedFinishDate);
+							}
+						}
+					}
+				}
+
+			}
+			return mlColumns;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	public List<String> getTablePMEPhaseGateReportDashboardDynamicColumnData(Context context, String args[]) throws PMEException {
+		final String STATE_COMPLETE = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_TASK,
+				PMEConstants.SYMBOLIC_STATE_COMPLETE);
+		final String TYPE_PHASE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_TYPE_PHASE);
+		final String TYPE_GATE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_TYPE_GATE);
+		final String TYPE_MILESTONE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_TYPE_MILESTONE);
+		final String ATTRIBUTE_TASK_ESTIMATED_START_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_START_DATE);
+		final String ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE);
+		final String ATTRIBUTE_TASK_ACTUAL_START_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ACTUAL_START_DATE);
+		final String ATTRIBUTE_TASK_ACTUAL_END_DATE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ACTUAL_END_DATE);
+		final String ATTRIBUTE_PERCENT_COMPLETE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_ATTRIBUTE_PERCENT_COMPLETE);
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(PMEConstants.PARAM_LIST);
+			String strTimeZone = (String) paramList.get(PMEConstants.TIME_ZONE);
+			double dbTimeZone = Double.parseDouble(strTimeZone);
+			String strCalendarFilter = (String) paramList.get(PMEConstants.CALENDAR_FILTER);
+			List<?> objectList = (MapList) programMap.get(PMEConstants.OBJECT_LIST);
+			Map<?, ?> columnMap = (Map<?, ?>) programMap.get(PMEConstants.COLUMN_MAP);
+			String strColumnMonth = (String) columnMap.get(PMEConstants.LABEL);
+			strColumnMonth = strColumnMonth.substring(0, 3);
+			if (!Helper.isNullOrEmpty(strCalendarFilter) && strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY)) {
+				strColumnMonth = (String) columnMap.get(PMEConstants.MONTH);
+			}
+			Map<?, ?> mpSettings = (Map<?, ?>) columnMap.get(PMEConstants.SETTINGS);
+			String strGroupYear = (String) mpSettings.get(PMEConstants.GROUP_SPACE_HEADER);
+			StringList slBusSelects = new StringList();
+			slBusSelects.add(DomainConstants.SELECT_ID);
+			slBusSelects.add(DomainConstants.SELECT_NAME);
+			slBusSelects.add(DomainConstants.SELECT_TYPE);
+			slBusSelects.add(DomainConstants.SELECT_CURRENT);
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_START_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_END_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_PERCENT_COMPLETE));
+
+			List<String> slColumnData = new StringList();
+			for (Object objMap : objectList) {
+				Map<?, ?> mpObject = (Map<?, ?>) objMap;
+				String strObjectId = (String) mpObject.get(DomainConstants.SELECT_ID);
+				DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+				List<Map<?, ?>> mlStatusData = new MapList();
+				MapList mlRelatedTaskList = new MapList();
+				if (isOfConfigurableType(context, dObj)) {
+					ProjectSpace project = new ProjectSpace(dObj);
+					mlRelatedTaskList = project.getAllWBSTasks(context, slBusSelects, "");
+				}
+				if (dObj.isKindOf(context, TYPE_PHASE)) {
+					Task task = new Task(dObj);
+					mlRelatedTaskList = task.getTasks(context, task, 1, slBusSelects, null);
+				}
+				for (Object object : mlRelatedTaskList) {
+					Map<?, ?> mpTaskObject = (Map<?, ?>) object;
+					String strId = (String) mpTaskObject.get(DomainConstants.SELECT_ID);
+					String strType = (String) mpTaskObject.get(DomainConstants.SELECT_TYPE);
+					String strFinishDate = (String) mpTaskObject.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+					if (!Helper.isNullOrEmpty(strId) && !Helper.isNullOrEmpty(strFinishDate) && !Helper.isNullOrEmpty(strCalendarFilter)
+							&& !Helper.isNullOrEmpty(strType) && (strType.equals(TYPE_MILESTONE) || strType.equals(TYPE_GATE))) {
+						if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_QUARTERLY)) {
+							if (checkDate(eMatrixDateFormat.getJavaDate(strFinishDate), strColumnMonth, strGroupYear)) {
+								mlStatusData.add(mpTaskObject);
+							}
+						}
+						strFinishDate = eMatrixDateFormat.getJavaDate(strFinishDate).toString();
+						String strMonth = strFinishDate.substring(4, 7);
+						String strYear = strFinishDate.substring(strFinishDate.length() - 4, strFinishDate.length());
+						if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY) && strMonth.equals(strColumnMonth)
+								&& strYear.equals(strGroupYear)) {
+							mlStatusData.add(mpTaskObject);
+						}
+						if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_ANNUALLY) && strYear.equals(strGroupYear)) {
+							mlStatusData.add(mpTaskObject);
+						}
+					}
+				}
+
+				int intSlipThreshold = Integer.parseInt(Helper.getProperty(context, "eServiceApplicationProgramCentral.SlipThresholdYellowRed"));
+
+				StringBuilder sbColumnIcon = new StringBuilder();
+				for (Map<?, ?> objectMap : mlStatusData) {
+					String strName = (String) objectMap.get(DomainConstants.SELECT_NAME);
+					String strId = (String) objectMap.get(DomainConstants.SELECT_ID);
+					String strObjectType = (String) objectMap.get(DomainConstants.SELECT_TYPE);
+					String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+					String strEstimatedStartDate = (String) objectMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE));
+					String strEstimatedFinishDate = (String) objectMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+					String strAcualStartDate = (String) objectMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_START_DATE));
+					String strAcualEndDate = (String) objectMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_END_DATE));
+					String strPercentComplete = (String) objectMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_PERCENT_COMPLETE));
+
+					if (!Helper.isNullOrEmpty(strEstimatedStartDate) && !Helper.isNullOrEmpty(strEstimatedFinishDate)) {
+						int intDaysRemaining = Integer.parseInt(Helper.daysBetween(context, Helper.getFormattedTodaysInputDate(context),
+								strEstimatedFinishDate));
+						Date dtTodaysDate = new Date();
+						Date dtEstimatedFinishDate = eMatrixDateFormat.getJavaDate(strEstimatedFinishDate);
+						strEstimatedStartDate = eMatrixDateFormat.getFormattedDisplayDate(strEstimatedStartDate, dbTimeZone, context.getLocale());
+						strEstimatedFinishDate = eMatrixDateFormat.getFormattedDisplayDate(strEstimatedFinishDate, dbTimeZone, context.getLocale());
+						strAcualStartDate = !Helper.isNullOrEmpty(strAcualStartDate) ? eMatrixDateFormat.getFormattedDisplayDate(strAcualStartDate,
+								dbTimeZone, context.getLocale()) : DomainConstants.EMPTY_STRING;
+						strAcualEndDate = !Helper.isNullOrEmpty(strAcualEndDate) ? eMatrixDateFormat.getFormattedDisplayDate(strAcualEndDate,
+								dbTimeZone, context.getLocale()) : DomainConstants.EMPTY_STRING;
+						String strStatus = DomainConstants.EMPTY_STRING;
+						sbColumnIcon.append("<a href=\"JavaScript:showModalDialog('emxTree.jsp?objectId=");
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strId));
+						sbColumnIcon.append("', '', '', true, 'popup')\">");
+
+						if (!Helper.isNullOrEmpty(strCurrentState) && !Helper.isNullOrEmpty(strPercentComplete)
+								&& !Helper.isNullOrEmpty(strObjectType) && (strObjectType.equals(TYPE_MILESTONE) || strObjectType.equals(TYPE_GATE))) {
+							if (strCurrentState.equals(STATE_COMPLETE) || strPercentComplete.equals("100.0")) {
+								sbColumnIcon.append("<img src='../common/images/iconMilestoneCompleted.png' border='0' alt=\"");
+								strStatus = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.OnTime");
+							}
+							else if (!strCurrentState.equals(STATE_COMPLETE) && dtTodaysDate.after(dtEstimatedFinishDate)) {
+								sbColumnIcon.append("<img src='../common/images/iconMilestoneLate.png' border='0' alt=\"");
+								strStatus = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.Late");
+							}
+							else if (!strCurrentState.equals(STATE_COMPLETE) && intDaysRemaining <= intSlipThreshold) {
+								sbColumnIcon.append("<img src='../common/images/iconMilestoneDelayed.png' border='0' alt=\"");
+								strStatus = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.BehindSchedule");
+							}
+							else {
+								sbColumnIcon.append("<img src='../common/images/iconMilestoneInactive.png' border='0' alt=\"");
+								strStatus = DomainConstants.EMPTY_STRING;
+							}
+						}
+
+						sbColumnIcon.append(getI18NObjectType(context, strObjectType));
+						sbColumnIcon.append(" : ");
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strName));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.EstimatedStartDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strEstimatedStartDate));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.EstimatedFinishDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strEstimatedFinishDate));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.ActualStartDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strAcualStartDate));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.ActualFinishDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strAcualEndDate));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.PercentComplete"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strPercentComplete));
+						sbColumnIcon.append("\n");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.Status"));
+						sbColumnIcon.append(strStatus);
+						sbColumnIcon.append("\" title=\"");
+						sbColumnIcon.append(getI18NObjectType(context, strObjectType));
+						sbColumnIcon.append(" : ");
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strName));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.EstimatedStartDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strEstimatedStartDate));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.EstimatedFinishDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strEstimatedFinishDate));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.ActualStartDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strAcualStartDate));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.ActualFinishDate"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strAcualEndDate));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.PercentComplete"));
+						sbColumnIcon.append(XSSUtil.encodeForHTML(context, strPercentComplete));
+						sbColumnIcon.append("&#10;");
+						sbColumnIcon.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.Label.Status"));
+						sbColumnIcon.append(strStatus);
+						sbColumnIcon.append("\"/>");
+						sbColumnIcon.append("</a>");
+					}
+
+				}
+				slColumnData.add(sbColumnIcon.toString());
+			}
+			return slColumnData;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	public List<String> getStyleTablePMEPhaseGateReportDashboardDynamicColumn(Context context, String args[]) throws PMEException {
+		final String STATE_COMPLETE = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_SPACE,
+				PMEConstants.SYMBOLIC_STATE_COMPLETE);
+		final String ATTRIBUTE_TASK_ESTIMATED_START_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_START_DATE);
+		final String ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE);
+		final String ATTRIBUTE_TASK_ACTUAL_START_DATE = PropertyUtil.getSchemaProperty(context,
+				PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ACTUAL_START_DATE);
+		final String ATTRIBUTE_TASK_ACTUAL_END_DATE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_ATTRIBUTE_TASK_ACTUAL_END_DATE);
+		final String ATTRIBUTE_PERCENT_COMPLETE = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_ATTRIBUTE_PERCENT_COMPLETE);
+		try {
+			StringList slStyles = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(PMEConstants.PARAM_LIST);
+			String strCalendarFilter = (String) paramList.get(PMEConstants.CALENDAR_FILTER);
+			Map<?, ?> columnMap = (Map<?, ?>) programMap.get(PMEConstants.COLUMN_MAP);
+			String strColumnMonth = (String) columnMap.get(PMEConstants.LABEL);
+			strColumnMonth = strColumnMonth.substring(0, 3);
+			if (!Helper.isNullOrEmpty(strCalendarFilter) && strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY)) {
+				strColumnMonth = (String) columnMap.get(PMEConstants.MONTH);
+			}
+			Map<?, ?> mpSettings = (Map<?, ?>) columnMap.get(PMEConstants.SETTINGS);
+			String strGroupYear = (String) mpSettings.get(PMEConstants.GROUP_SPACE_HEADER);
+			List<?> objectList = (MapList) programMap.get(PMEConstants.OBJECT_LIST);
+			String[] arrObject = new String[objectList.size()];
+			StringList slBusSelects = new StringList();
+			slBusSelects.add(DomainConstants.SELECT_ID);
+			slBusSelects.add(DomainConstants.SELECT_CURRENT);
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_START_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ACTUAL_END_DATE));
+			slBusSelects.add(DomainObject.getAttributeSelect(ATTRIBUTE_PERCENT_COMPLETE));
+
+			for (int i = 0; i < objectList.size(); i++) {
+				Map<?, ?> mpObject = (Map<?, ?>) objectList.get(i);
+				arrObject[i] = (String) mpObject.get(DomainConstants.SELECT_ID);
+			}
+			List<Map<?, ?>> mlPhase = QueryUtil.getInfo(context, arrObject, slBusSelects);
+			int intSlipThreshold = Integer.parseInt(Helper.getProperty(context, "eServiceApplicationProgramCentral.SlipThresholdYellowRed"));
+			for (Map<?, ?> mpPhase : mlPhase) {
+				String strObjectId = (String) mpPhase.get(DomainConstants.SELECT_ID);
+				String strCurrentState = (String) mpPhase.get(DomainConstants.SELECT_CURRENT);
+				String strEstimatedStartDate = (String) mpPhase.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_START_DATE));
+				String strEstimatedFinishDate = (String) mpPhase.get(DomainObject.getAttributeSelect(ATTRIBUTE_TASK_ESTIMATED_FINISH_DATE));
+				String strPercentComplete = (String) mpPhase.get(DomainObject.getAttributeSelect(ATTRIBUTE_PERCENT_COMPLETE));
+				if (!Helper.isNullOrEmpty(strEstimatedStartDate) && !Helper.isNullOrEmpty(strEstimatedFinishDate)
+						&& !Helper.isNullOrEmpty(strObjectId) && !isOfConfigurableType(context, DomainObject.newInstance(context, strObjectId))
+						&& !Helper.isNullOrEmpty(strCurrentState) && !Helper.isNullOrEmpty(strPercentComplete)
+						&& !Helper.isNullOrEmpty(strCalendarFilter)) {
+					int intDaysRemaining = Integer.parseInt(Helper.daysBetween(context, Helper.getFormattedTodaysInputDate(context),
+							strEstimatedFinishDate));
+					Date dtTodaysDate = new Date();
+					Date dtEstimatedStartDate = eMatrixDateFormat.getJavaDate(strEstimatedStartDate);
+					Date dtEstimatedFinishDate = eMatrixDateFormat.getJavaDate(strEstimatedFinishDate);
+
+					boolean bStatus = false;
+					if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_MONTHLY)) {
+						bStatus = getMonthCode(dtEstimatedStartDate.toString(), dtEstimatedFinishDate.toString(), strColumnMonth, strGroupYear);
+					}
+					else if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_QUARTERLY)) {
+						bStatus = checkDate(dtEstimatedFinishDate, strColumnMonth, strGroupYear);
+					}
+					else if (strCalendarFilter.equals(PMEConstants.CALENDAR_FILTER_RANGE_ANNUALLY)) {
+						bStatus = strGroupYear.equals(dtEstimatedFinishDate.toString().substring(dtEstimatedFinishDate.toString().length() - 4,
+								dtEstimatedFinishDate.toString().length()));
+					}
+
+					if (bStatus && (strCurrentState.equals(STATE_COMPLETE) || (strPercentComplete.equals("100.0")))) {
+						slStyles.addElement("ResourcePlanningGreenBackGroundColor");
+					}
+					else if (bStatus && !strCurrentState.equals(STATE_COMPLETE) && dtTodaysDate.after(dtEstimatedFinishDate)) {
+						slStyles.addElement("ResourcePlanningRedBackGroundColor");
+					}
+					else if (bStatus && !strCurrentState.equals(STATE_COMPLETE) && intDaysRemaining <= intSlipThreshold) {
+						slStyles.addElement("ResourcePlanningYellowBackGroundColor");
+					}
+					else if (bStatus) {
+						slStyles.addElement("arp-plan-brand-sg");
+					}
+					else {
+						slStyles.addElement("");
+					}
+				}
+				else {
+					slStyles.addElement("");
+				}
+			}
+			return slStyles;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private MapList getMonthlyColumnMap(Context context, Date dtEstimatedStartDate, Date dtEstimatedFinishDate) throws PMEException {
+		try {
+			MapList mlColumns = new MapList();
+			if (null != dtEstimatedStartDate && null != dtEstimatedFinishDate) {
+				String strStartDay = dtEstimatedStartDate.toString().substring(8, 10);
+				String strStartMonth = dtEstimatedStartDate.toString().substring(4, 7);
+				String strStartYear = (dtEstimatedStartDate.toString().substring(dtEstimatedStartDate.toString().length() - 4, dtEstimatedStartDate
+						.toString().length()));
+				String strFinishDay = dtEstimatedFinishDate.toString().substring(8, 10);
+				String strFinishMonth = dtEstimatedFinishDate.toString().substring(4, 7);
+				String strFinishYear = (dtEstimatedFinishDate.toString().substring(dtEstimatedFinishDate.toString().length() - 4,
+						dtEstimatedFinishDate.toString().length()));
+
+				List<Date> alMonthlyDateList = CalendarDashBoardUtility.getMonthlyDateList(dtEstimatedStartDate, dtEstimatedFinishDate);
+				Set<Integer> intervals = new HashSet<Integer>();
+				for (Iterator itrTableRows = alMonthlyDateList.iterator(); itrTableRows.hasNext();) {
+					Date dtIntervalDate = (Date) itrTableRows.next();
+					Calendar intervalCalendar = Calendar.getInstance();
+					intervalCalendar.setTime(dtIntervalDate);
+					int day = intervalCalendar.get(Calendar.DAY_OF_MONTH);
+					int month = intervalCalendar.get(Calendar.MONTH) + 1;
+					int nDisplayYear = CalendarDashBoardUtility.getFiscalYear(dtIntervalDate);
+					intervals.add(nDisplayYear);
+					int intYear = intervalCalendar.get(Calendar.YEAR);
+					String strMonth = getMonthNameI18N(context, (dtIntervalDate.getMonth() + 1));
+					StringBuilder sbMonth = new StringBuilder();
+					sbMonth.append(strMonth);
+					SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), context.getLocale());
+					String strTodayDate = sdf.format(new Date());
+					strTodayDate = eMatrixDateFormat.getJavaDate(strTodayDate, context.getLocale()).toString();
+					if (strTodayDate.substring(4, 7).equalsIgnoreCase(sbMonth.toString())
+							&& strTodayDate.substring(strTodayDate.length() - 4, strTodayDate.length()).equalsIgnoreCase(String.valueOf(intYear))) {
+						sbMonth.append("<img src='../common/images/iconActionDown.png' border='0' />");
+					}
+					if (mlColumns.size() == 0 && !itrTableRows.hasNext()) {
+						sbMonth.append(" (").append(strStartDay).append("-").append(strStartMonth).append("-").append(strStartYear).append(" to ")
+								.append(strFinishDay).append("-").append(strFinishMonth).append("-").append(strFinishYear).append(")");
+					}
+
+					else if (mlColumns.size() == 0 && itrTableRows.hasNext()) {
+						sbMonth.append(" (").append(strStartDay).append("-").append(strStartMonth).append("-").append(strStartYear).append(")");
+					}
+					else if (mlColumns.size() != 0 && !itrTableRows.hasNext()) {
+						sbMonth.append(" (").append(strFinishDay).append("-").append(strFinishMonth).append("-").append(strFinishYear).append(")");
+					}
+					Map mapColumn = new HashMap();
+					mapColumn.put("label", sbMonth.toString());
+					mapColumn.put("Month", getMonthName(context, (dtIntervalDate.getMonth() + 1)));
+					mapColumn.put("name", month + "/" + day + "/" + intYear);
+					Map<String, String> mapSettings = phaseGateReportMapSettings(nDisplayYear);
+					mapColumn.put("settings", mapSettings);
+					mlColumns.add(mapColumn);
+				}
+			}
+			return mlColumns;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private MapList getQuarterlyColumnMap(Context context, Date dtEstimatedStartDate, Date dtEstimatedFinishDate) throws PMEException {
+		try {
+			MapList mlColumns = new MapList();
+			if (null != dtEstimatedStartDate && null != dtEstimatedFinishDate) {
+				String strStartDay = dtEstimatedStartDate.toString().substring(8, 10);
+				String strStartMonth = dtEstimatedStartDate.toString().substring(4, 7);
+				String strStartYear = (dtEstimatedStartDate.toString().substring(dtEstimatedStartDate.toString().length() - 4, dtEstimatedStartDate
+						.toString().length()));
+				String strFinishDay = dtEstimatedFinishDate.toString().substring(8, 10);
+				String strFinishMonth = dtEstimatedFinishDate.toString().substring(4, 7);
+				String strFinishYear = (dtEstimatedFinishDate.toString().substring(dtEstimatedFinishDate.toString().length() - 4,
+						dtEstimatedFinishDate.toString().length()));
+
+				List<Date> alQuarterlyDateList = CalendarDashBoardUtility.getQuarterlyDateList(dtEstimatedStartDate, dtEstimatedFinishDate);
+				Set<Integer> intervals = new HashSet<Integer>();
+				for (Iterator itrTableRows = alQuarterlyDateList.iterator(); itrTableRows.hasNext();) {
+					Date dtIntervalDate = (Date) itrTableRows.next();
+					Calendar intervalCalendar = Calendar.getInstance();
+					intervalCalendar.setTime(dtIntervalDate);
+					int intDay = intervalCalendar.get(Calendar.DAY_OF_MONTH);
+					int intMonth = intervalCalendar.get(Calendar.MONTH) + 1;
+					int intDisplayYear = CalendarDashBoardUtility.getFiscalYear(dtIntervalDate);
+					intervals.add(intDisplayYear);
+					int intYear = intervalCalendar.get(Calendar.YEAR);
+					String strMonth = getMonthNameI18N(context, (dtIntervalDate.getMonth() + 1));
+					String strLabelDate = new StringBuilder().append("").append(dtIntervalDate.getDate()).append("-").append(strMonth).append("-")
+							.append(dtIntervalDate.getYear() + 1900).toString();
+					int iIntervalYear = dtIntervalDate.getYear() + 1900;
+					int intTimeframe = CalendarDashBoardUtility.getFiscalQuarterNumber(dtIntervalDate);
+					int i = 0;
+					Map mapColumn = new HashMap();
+					if (mlColumns.size() == 0 && itrTableRows.hasNext()) {
+						mapColumn.put("label", new StringBuilder().append("Q-").append(intTimeframe).append(" (").append(strStartDay).append("-")
+								.append(strStartMonth).append("-").append(strStartYear).append(" to ").append(strLabelDate).append(")").toString());
+					}
+					else if (mlColumns.size() == 0 && !itrTableRows.hasNext()) {
+						mapColumn.put(
+								"label",
+								new StringBuilder().append("Q-").append(intTimeframe).append(" (").append(strStartDay).append("-")
+										.append(strStartMonth).append("-").append(strStartYear).append(" to ").append(strFinishDay).append("-")
+										.append(strFinishMonth).append("-").append(strFinishYear).append(")").toString());
+						i++;
+					}
+					else if (intTimeframe == 1 && i != 1) {
+						mapColumn.put(
+								"label",
+								new StringBuilder().append("Q-").append(intTimeframe).append(" (1-Jan-").append(iIntervalYear).append(" to ")
+										.append(strLabelDate).append(")").toString());
+					}
+					else if (intTimeframe == 2 && i != 1) {
+						mapColumn.put(
+								"label",
+								new StringBuilder().append("Q-").append(intTimeframe).append(" (1-Apr-").append(iIntervalYear).append(" to ")
+										.append(strLabelDate).append(")").toString());
+					}
+					else if (intTimeframe == 3 && i != 1) {
+						mapColumn.put(
+								"label",
+								new StringBuilder().append("Q-").append(intTimeframe).append(" (1-Jul-").append(iIntervalYear).append(" to ")
+										.append(strLabelDate).append(")").toString());
+					}
+					else if (intTimeframe == 4 && i != 1) {
+						mapColumn.put(
+								"label",
+								new StringBuilder().append("Q-").append(intTimeframe).append(" (1-Oct-").append(iIntervalYear).append(" to ")
+										.append(strLabelDate).append(")").toString());
+					}
+					mapColumn.put("name", intMonth + "/" + intDay + "/" + intYear);
+					Map<String, String> mapSettings = phaseGateReportMapSettings(intDisplayYear);
+					mapColumn.put("settings", mapSettings);
+					mlColumns.add(mapColumn);
+				}
+			}
+			return mlColumns;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private MapList getAnnuallyColumnMap(Context context, Date dtEstimatedStartDate, Date dtEstimatedFinishDate) throws PMEException {
+		try {
+			MapList mlColumns = new MapList();
+			if (null != dtEstimatedStartDate && null != dtEstimatedFinishDate) {
+				List<Date> alAnnualyDateList = CalendarDashBoardUtility.getAnnualDateList(dtEstimatedStartDate, dtEstimatedFinishDate);
+				Set<Integer> intervals = new HashSet<Integer>();
+				for (Iterator itrTableRows = alAnnualyDateList.iterator(); itrTableRows.hasNext();) {
+					Date dtIntervalDate = (Date) itrTableRows.next();
+					Calendar intervalCalendar = Calendar.getInstance();
+					intervalCalendar.setTime(dtIntervalDate);
+					int day = intervalCalendar.get(Calendar.DAY_OF_MONTH);
+					int month = intervalCalendar.get(Calendar.MONTH) + 1;
+					int nDisplayYear = CalendarDashBoardUtility.getFiscalYear(dtIntervalDate);
+					intervals.add(nDisplayYear);
+					int intYear = intervalCalendar.get(Calendar.YEAR);
+					StringBuilder sbDisplayYear = new StringBuilder();
+					sbDisplayYear.append(String.valueOf(nDisplayYear));
+					if (mlColumns.size() == 0) {
+						sbDisplayYear
+								.append(" (")
+								.append(dtEstimatedStartDate.toString().substring(8, 10))
+								.append("-")
+								.append(dtEstimatedStartDate.toString().substring(4, 7))
+								.append("-")
+								.append(dtEstimatedStartDate.toString().substring(dtEstimatedStartDate.toString().length() - 4,
+										dtEstimatedStartDate.toString().length())).append(")");
+					}
+					if (mlColumns.size() == 0 && !itrTableRows.hasNext()) {
+						sbDisplayYear
+								.append(" to (")
+								.append(dtEstimatedFinishDate.toString().substring(8, 10))
+								.append("-")
+								.append(dtEstimatedFinishDate.toString().substring(4, 7))
+								.append("-")
+								.append(dtEstimatedFinishDate.toString().substring(dtEstimatedFinishDate.toString().length() - 4,
+										dtEstimatedFinishDate.toString().length())).append(")");
+					}
+					if (mlColumns.size() != 0 && !itrTableRows.hasNext()) {
+						sbDisplayYear
+								.append(" (")
+								.append(dtEstimatedFinishDate.toString().substring(8, 10))
+								.append("-")
+								.append(dtEstimatedFinishDate.toString().substring(4, 7))
+								.append("-")
+								.append(dtEstimatedFinishDate.toString().substring(dtEstimatedFinishDate.toString().length() - 4,
+										dtEstimatedFinishDate.toString().length())).append(")");
+					}
+					Map mapColumn = new HashMap();
+					mapColumn.put("label", sbDisplayYear.toString());
+					mapColumn.put("name", month + "/" + day + "/" + intYear);
+					Map<String, String> mapSettings = phaseGateReportMapSettings(nDisplayYear);
+					mapColumn.put("settings", mapSettings);
+					mlColumns.add(mapColumn);
+				}
+			}
+			return mlColumns;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private Map<String, String> phaseGateReportMapSettings(int nDisplayYear) throws PMEException {
+		try {
+			Map<String, String> mapSettings = new HashMap<String, String>();
+			mapSettings.put("Registered Suite", "ProjectMgmtExtensions");
+			mapSettings.put("program", "com.dassault_systemes.enovia.projectmgmtextensions.ui.PhaseGateReportDashboard");
+			mapSettings.put("function", "getTablePMEPhaseGateReportDashboardDynamicColumnData");
+			mapSettings.put("Column Type", "programHTMLOutput");
+			mapSettings.put("Export", "true");
+			mapSettings.put("Style Program", "com.dassault_systemes.enovia.projectmgmtextensions.ui.PhaseGateReportDashboard");
+			mapSettings.put("Style Function", "getStyleTablePMEPhaseGateReportDashboardDynamicColumn");
+			mapSettings.put("Group Header", +nDisplayYear + "");
+			return mapSettings;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private Boolean checkDate(Date endDate, String strColumnName, String strGroupYear) {
+		boolean status = false;
+		Calendar intervalCalendar = Calendar.getInstance();
+		intervalCalendar.setTime(endDate);
+		int month = intervalCalendar.get(Calendar.MONTH) + 1;
+		int year = intervalCalendar.get(Calendar.YEAR);
+		Map<String, String> mpQuarters = new HashMap<String, String>();
+
+		mpQuarters.put("Q-1", "1,2,3");
+		mpQuarters.put("Q-2", "4,5,6");
+		mpQuarters.put("Q-3", "7,8,9");
+		mpQuarters.put("Q-4", "10,11,12");
+
+		if (mpQuarters.containsKey(strColumnName)) {
+			String strValue = (String) mpQuarters.get(strColumnName);
+			StringList slMonthValue = FrameworkUtil.split(strValue, ",");
+			if (slMonthValue.contains(String.valueOf(month)) && strGroupYear.equals(String.valueOf(year))) {
+				status = true;
+			}
+		}
+		return status;
+	}
+
+	private boolean getMonthCode(String strEstimatedStartDate, String strEstimatedEndDate, String strColumnMonth, String strGroupYear) {
+		Map<String, String> mpMonthCode = new HashMap<String, String>();
+		mpMonthCode.put("Jan", "01");
+		mpMonthCode.put("Feb", "02");
+		mpMonthCode.put("Mar", "03");
+		mpMonthCode.put("Apr", "04");
+		mpMonthCode.put("May", "05");
+		mpMonthCode.put("Jun", "06");
+		mpMonthCode.put("Jul", "07");
+		mpMonthCode.put("Aug", "08");
+		mpMonthCode.put("Sep", "09");
+		mpMonthCode.put("Oct", "10");
+		mpMonthCode.put("Nov", "11");
+		mpMonthCode.put("Dec", "12");
+		StringBuilder sbStartDate = new StringBuilder();
+		StringBuilder sbEndDate = new StringBuilder();
+		StringBuilder sbDate = new StringBuilder();
+		boolean bStatus = true;
+		String strEstStartMonth = strEstimatedStartDate.substring(4, 7);
+		String strEstStartYear = strEstimatedStartDate.substring(strEstimatedStartDate.length() - 4, strEstimatedStartDate.length());
+		String strEstEndMonth = strEstimatedEndDate.substring(4, 7);
+		String strEstEndYear = strEstimatedEndDate.substring(strEstimatedEndDate.length() - 4, strEstimatedEndDate.length());
+		String strStartDate = sbStartDate.append(strEstStartYear).append(mpMonthCode.get(strEstStartMonth)).toString();
+		String strEndDate = sbEndDate.append(strEstEndYear).append(mpMonthCode.get(strEstEndMonth)).toString();
+		String strCurrentDate = sbDate.append(strGroupYear).append(mpMonthCode.get(strColumnMonth)).toString();
+
+		if (Integer.parseInt(strCurrentDate) < Integer.parseInt(strStartDate) || Integer.parseInt(strCurrentDate) > Integer.parseInt(strEndDate)) {
+			bStatus = false;
+		}
+		return bStatus;
+	}
+
+	private String getMonthNameI18N(Context context, int nCurrentMonthValue) throws PMEException {
+		try {
+			String strI18MonthName = DomainConstants.EMPTY_STRING;
+			switch (nCurrentMonthValue) {
+			case 1:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Jan");
+				break;
+			case 2:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Feb");
+				break;
+			case 3:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Mar");
+				break;
+			case 4:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Apr");
+				break;
+			case 5:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.May");
+				break;
+			case 6:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Jun");
+				break;
+			case 7:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Jul");
+				break;
+			case 8:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Aug");
+				break;
+			case 9:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Sep");
+				break;
+			case 10:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Oct");
+				break;
+			case 11:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Nov");
+				break;
+			case 12:
+				strI18MonthName = Helper.getI18NString(context, Helper.StringResource.PME, "PME.Common.Dec");
+			}
+			return strI18MonthName;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private String getMonthName(Context context, int nCurrentMonthValue) throws PMEException {
+		try {
+			String strMonthName = DomainConstants.EMPTY_STRING;
+			switch (nCurrentMonthValue) {
+			case 1:
+				strMonthName = "Jan";
+				break;
+			case 2:
+				strMonthName = "Feb";
+				break;
+			case 3:
+				strMonthName = "Mar";
+				break;
+			case 4:
+				strMonthName = "Apr";
+				break;
+			case 5:
+				strMonthName = "May";
+				break;
+			case 6:
+				strMonthName = "Jun";
+				break;
+			case 7:
+				strMonthName = "Jul";
+				break;
+			case 8:
+				strMonthName = "Aug";
+				break;
+			case 9:
+				strMonthName = "Sep";
+				break;
+			case 10:
+				strMonthName = "Oct";
+				break;
+			case 11:
+				strMonthName = "Nov";
+				break;
+			case 12:
+				strMonthName = "Dec";
+			}
+			return strMonthName;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private boolean isOfConfigurableType(Context context, DomainObject domainObject) throws PMEException {
+		try {
+			boolean isOfConfigurableType = false;
+			if (null != domainObject) {
+				String strConfigurableTypes = Helper.getProperty(context, "ProjectMgmtExtensions.ConfigurableTypes");
+				if (!Helper.isNullOrEmpty(strConfigurableTypes)) {
+					StringList slConfigurableTypes = FrameworkUtil.split(strConfigurableTypes, PMEConstants.COMMA);
+					if ((Helper.getTypeKindOf(context, domainObject, (String[]) slConfigurableTypes.toArray(new String[slConfigurableTypes.size()])))
+							.containsValue(Boolean.TRUE)) {
+						isOfConfigurableType = true;
+					}
+				}
+			}
+			return isOfConfigurableType;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private String getI18NObjectType(Context context, String objectType) throws PMEException {
+		try {
+			if (!Helper.isNullOrEmpty(objectType)) {
+				String strSymbolicType = FrameworkUtil.getAliasForAdmin(context, DomainConstants.SELECT_TYPE, objectType, true);
+				if (!Helper.isNullOrEmpty(strSymbolicType) && strSymbolicType.equalsIgnoreCase(PMEConstants.SYMBOLIC_TYPE_MILESTONE)) {
+					objectType = Helper.getI18NString(context, Helper.StringResource.FRAMEWORK, "emxFramework.Type.Milestone");
+				}
+				else if (!Helper.isNullOrEmpty(strSymbolicType) && strSymbolicType.equalsIgnoreCase(PMEConstants.SYMBOLIC_TYPE_GATE)) {
+					objectType = Helper.getI18NString(context, Helper.StringResource.FRAMEWORK, "emxFramework.Type.Gate");
+				}
+			}
+			return objectType;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+}
+

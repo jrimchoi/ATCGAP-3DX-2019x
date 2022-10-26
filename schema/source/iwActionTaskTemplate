@@ -1,0 +1,265 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.Collections;
+import java.util.HashMap;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ *
+ */
+@Deprecated
+public class ${CLASSNAME} extends ${CLASS:iwActionItemTemplate} {
+
+	/** The full list of active action item templates. */
+	private static MapList	allActionTasks;
+
+	// TODO: Nothing is ever done with this variable.
+	/** The list of default, active action item templates. */
+	private static MapList	defaultActionTasks;
+
+	/**
+	 * Creates a new action task template using the given name and description,
+	 * and returns the template's object id. The template's other attributes are
+	 * set to their respective default values, but most of them are editable
+	 * after creation.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @return A map containing the newly created template's object id.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public HashMap createNewActionTaskTemplate(Context context, String[] args) throws Exception {
+		// TODO: Add static modifier?
+		// TODO: Any way to make this method more generic and simply pass in the
+		// type of template we'd like to create?
+
+		HashMap returnMap = new HashMap();
+
+		// Retrieve the to-be-created template's name and description
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String strName = (String) paramMap.get("Name");
+		String strDesc = (String) paramMap.get("Description");
+		String strType = (String) paramMap.get("Type");
+		String strPolicy = (String) paramMap.get("Policy");
+
+		// Set up the type, policy, and vault
+		if (strType == null || strType.equals("")) {
+			strType = ${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_TASK_TEMPLATE;
+		}
+		else {
+			strType = PropertyUtil.getSchemaProperty(context, strType);
+		}
+
+		if (strPolicy == null || strPolicy.equals("")) {
+			strPolicy = PropertyUtil.getSchemaProperty(context, "policy_ActionItemTemplate");
+		}
+		else {
+			strPolicy = PropertyUtil.getSchemaProperty(context, strPolicy);
+		}
+
+		String strVault = context.getVault().getName();
+
+		// check to see if this template type name already exists.
+		// and if so return an error message
+		String where = "name == '" + strName + "'";
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		MapList found = DomainObject.findObjects(context, strType, strVault, where, objSelects);
+		if (found.size() > 0) {
+			// this name already exists. so we will return an error message
+			String message = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionTask.ErrorMsg.TemplateNameNotUnique");
+			returnMap.put("Action", "Stop");
+			returnMap.put("Message", message + ": '" + strName + "'");
+			return returnMap;
+		}
+
+		// Create the new action task template
+		DomainObject doImpTaskTemp = new DomainObject();
+		doImpTaskTemp.createObject(context, strType, // type
+				strName, // name
+				"", // rev
+				strPolicy, // policy
+				strVault); // vault
+
+		doImpTaskTemp.setDescription(context, strDesc);
+
+		// Setup attribute values
+		// TODO: i18n this trigger message
+		// TODO: If the label of the template is changed, shouldn't that be
+		// reflected in this message? Or, is it?
+		// String strCheckTriggerMessage = "Action Item '" + strName +
+		// "' must be completed.";
+		String strCheckTriggerMessage = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionTask.ErrorMsg.ActionItem")
+				+ " '" + strName + "' " + Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionTask.ErrorMsg.MustComplete");
+		String strRank = "1";
+		String strIsDefault = "FALSE";
+
+		doImpTaskTemp.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_ActionItemTemplateLabel"), strName);
+		doImpTaskTemp.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_CheckTriggerMessage"), strCheckTriggerMessage);
+		doImpTaskTemp.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_Rank"), strRank);
+		doImpTaskTemp.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_isDefault"), strIsDefault);
+
+		returnMap.put("objectId", doImpTaskTemp.getId());
+		return returnMap;
+	}
+
+	/**
+	 * Retrieves the list of all active action item templates, sorts them, and
+	 * returns them.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @returns The sorted list of all active action item templates.
+	 */
+	public static MapList getAllSorted(Context context) throws MatrixException {
+		/*
+		 * TODO: This method is generic enough to be placed in the superclass as
+		 * it retrieves Action Item Templates.
+		 * 
+		 * TODO: What is the purpose for sorting? Is there a place in the
+		 * application where you cannot do a sort after the fact? What if you
+		 * want to sort by some field other than name?
+		 * 
+		 * TODO: This method may be unnecessary as it simply wraps an API call
+		 * (DomainObject.findObjects) and adds a sort.
+		 */
+
+		// TODO: Instance variables in JPOs = no bueno
+		allActionTasks = new MapList();
+		defaultActionTasks = new MapList();
+
+		try {
+			// Retrieve the list of all active action item templates
+			// TODO: Remove hardcoded state name.
+			MapList ittObjs = DomainObject.findObjects(context, ${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_ITEM_TEMPLATE, "*",
+					"(current == \"Active\")", ${CLASS:iwActionItemStaticVariables}.actionTaskTemplateSelectList);
+
+			// Iterate over the full list of active templates, copying the
+			// default templates into a separate list
+			for (int i = 0; i < ittObjs.size(); i++) {
+				HashMap map = (HashMap) ittObjs.get(i);
+
+				// TODO: Any particular reason for taking *all* items from one
+				// MapList and adding them to another? In the same order?
+				allActionTasks.add(map);
+				Boolean isDefault = Boolean.valueOf((String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ISDEFAULT));
+
+				if (isDefault.booleanValue()) {
+					defaultActionTasks.add(map);
+				}
+			}
+
+			// Sort all templates by rank and template name
+			// TODO: We're using the parent JPO as a Comparator?
+			Collections.sort(allActionTasks,
+					new ${CLASS:iwActionItemTemplate}(${CLASS:iwActionItemTemplate}.RANK, ${CLASS:iwActionItemTemplate}.TEMPLATE_NAME));
+
+			// Sort default templates by rank and template name
+			// TODO: If sorting is kept, it would be faster to sort the full
+			// list
+			// first and then iterate and place them into this list - they will
+			// go in presorted.
+			Collections.sort(defaultActionTasks, new ${CLASS:iwActionItemTemplate}(${CLASS:iwActionItemTemplate}.RANK,
+					${CLASS:iwActionItemTemplate}.TEMPLATE_NAME));
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		// TODO: Why return an instance variable? Why store in an instance
+		// variable? If for lazy instantiation this method does not check to
+		// see if the instance variable is already populated. Are the calling
+		// methods supposed to do this?
+		return allActionTasks;
+	}
+
+	/**
+	 * Returns a map of the action item template whose label corresponds to the
+	 * given {@code key}.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param key
+	 *            Template label for which to search.
+	 * @return A map of the action item template corresponding to the given key
+	 *         if the template is found, {@code null} otherwise.
+	 */
+	public static HashMap getAllSortedMap(Context context, String key) throws MatrixException {
+		// TODO: Very misleading method name.
+		// TODO: This method is unnecessary. Just use DomainObject.findObject().
+
+		// TODO: Lazy instantiation is probably better kept in the retrieval
+		// method.
+		if (allActionTasks == null || allActionTasks.size() == 0) {
+			getAllSorted(context);
+		}
+
+		HashMap map = null;
+
+		// Iterate over this full list of action item templates
+		for (int i = 0; i < allActionTasks.size(); i++) {
+			map = (HashMap) allActionTasks.get(i);
+			if (((String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_TEMPLATE_LABEL)).equalsIgnoreCase(key)
+					|| ((String) map.get(DomainConstants.SELECT_ID)).equalsIgnoreCase(key)) {
+				// If the template is found, return it
+				return map;
+			}
+			else {
+				map = null;
+			}
+		}
+
+		// TODO: Do calling methods handle the possibly null return value?
+		// TODO: Actually, this return statement will always return null.
+		return map;
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public HashMap deleteActionTaskTemplate(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+		try {
+			// Get Parameters
+			HashMap programArgs = (HashMap) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programArgs.get("emxTableRowId");
+			String callback = "";
+
+			for (int i = 0; i < emxTableRowId.length; i++) {
+				String actionTaskTemplateId = emxTableRowId[i];
+				DomainObject doActionTaskTemplate = DomainObject.newInstance(context, actionTaskTemplateId);
+
+				doActionTaskTemplate.deleteObject(context);
+			}
+
+			callback += "getTopWindow().refreshTablePage();";
+			returnMap.put("callback", "javascript:" + callback);
+		}
+		catch (Exception mx1E) {
+			mx1E.printStackTrace();
+			return returnMap;
+		}
+
+		return returnMap;
+	}
+
+}
+

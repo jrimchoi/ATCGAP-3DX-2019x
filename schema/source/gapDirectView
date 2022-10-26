@@ -1,0 +1,693 @@
+/***********************************************************************
+*	gapDirectView
+************************************************************************
+*
+* Holding JPO
+* 
+************************************************************************
+*	Ver 	Date		Who		Update description
+*
+*	1		2018-06-18	PHW		Initial Version
+*	2		2018-08-02	Michael		Migration Methods
+*
+************************************************************************
+* 
+* Copyright (c) 2018 Design Rule Consulting Ltd. All Rights Reserved.
+* 
+***********************************************************************/
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.designrule.drv6tools.drToolsRunOnObjects;
+import com.designrule.drv6tools.drlToolsEnoviaObject;
+import com.designrule.drv6tools.activities.drLookupValuesActivity;
+import com.designrule.drv6tools.common.drBusinessObject;
+import com.designrule.drv6tools.common.drContext;
+import com.designrule.drv6tools.common.drRelationshipInfo;
+import com.designrule.drv6tools.common.utilities.drUsefulFunctions;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * @version AEF 9.5.0.0 - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME}
+{
+	
+	public static final String ATTRIBUTE_GAP_ACTUAL_COMPLETION_DATE = PropertyUtil.getSchemaProperty("attribute_gapActualCompletionDate");
+	public static final String ATTRIBUTE_GAP_APPROVER = PropertyUtil.getSchemaProperty("attribute_gapApprover");
+	public static final String ATTRIBUTE_GAP_CHANGE_ACTION_NAME = PropertyUtil.getSchemaProperty("attribute_gapChangeActionName");
+	public static final String ATTRIBUTE_GAP_PARTS = PropertyUtil.getSchemaProperty("attribute_gapParts");
+	public static final String ATTRIBUTE_GAP_PROJECTS = PropertyUtil.getSchemaProperty("attribute_gapProjects");
+	public static final String ATTRIBUTE_GAP_LEGACY_PDM_IDENTIFIER = PropertyUtil.getSchemaProperty("attribute_gapLegacyPDMIdentifier");
+	public static final String ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION = PropertyUtil.getSchemaProperty("attribute_gapDirectViewMigration");
+	public static final String ATTRIBUTE_GAP_MIGRATED_OBJECT = PropertyUtil.getSchemaProperty("attribute_gapMigratedObject");
+	public static final String TYPE_GAP_SPECIFICATION = PropertyUtil.getSchemaProperty("type_gapGAPSpecification");
+	public static final String POLICY_VERSION = PropertyUtil.getSchemaProperty("policy_Version");
+	public static final String POLICY_VERSIONED_DESIGN_POLICY = PropertyUtil.getSchemaProperty("policy_VersionedDesignPolicy");
+	public static final String POLICY_VERSIONED_DESIGN_TEAM_POLICY = PropertyUtil.getSchemaProperty("policy_VersionedDesignTEAMPolicy");
+	private String LOOKUP_ACTIVITY_NAME = "DirectView - Set RunExport Lookup Value";
+	private drLookupValuesActivity lookupValuesActivity;
+	private String revisionNumber = "";
+	private int queryLimit = 0;
+	private boolean debug = false;
+	private boolean forceImport;
+    private boolean forceUpdate;
+
+	
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since AEF 9.5.0.0
+     * @grade 0
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+        if (!context.isConnected())
+            throw new Exception("not supported on desktop client");
+    }
+    /**
+     * This method is executed if a specific method is not specified.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @returns nothing
+     * @throws Exception if the operation fails
+     * @since AEF 9.5.0.0
+     */
+    public int mxMain(Context context, String[] args)
+        throws Exception
+    {
+        if (!context.isConnected())
+            throw new Exception("not supported on desktop client");
+        return 0;
+    }
+
+    public int updatePartsAndProjectsList(Context context, String[] args) throws Exception {
+    
+        String objectID = args[0];
+        drContext drcontext = new drContext(context);
+        drBusinessObject busObj = new drBusinessObject(drcontext, objectID);
+        ArrayList<drRelationshipInfo> relatedPartInfoObjs = busObj.getExpandResultFromQuery("Part", "Part Specification");
+        String gapPart = "";  
+        if(relatedPartInfoObjs != null && !relatedPartInfoObjs.isEmpty()) {
+        	if(relatedPartInfoObjs.size() == 1) {
+        		drRelationshipInfo relatedPartInfoObj;
+        		relatedPartInfoObj = relatedPartInfoObjs.get(0);
+        		gapPart = relatedPartInfoObj.getBusAttributeValue("name") + " R" + relatedPartInfoObj.getBusAttributeValue("revision");
+        	} else {
+        		ArrayList<String> partNumbers = new ArrayList<>();
+        		for (drRelationshipInfo relatedPartInfoObj : relatedPartInfoObjs) {
+        			partNumbers.add(relatedPartInfoObj.getBusAttributeValue("name") + " R" + relatedPartInfoObj.getBusAttributeValue("revision"));
+				}
+        		gapPart = "<![CDATA[" + String.join("<br/>", partNumbers) + "]]>";
+        	}
+        }
+        busObj.setValue("gapParts", gapPart);
+        
+        String gapProject = "";
+        ArrayList<drRelationshipInfo> relatedProjectInfoObjs = busObj.getExpandResultFromQuery("Workspace,Workspace Vault", "Data Vaults,Vaulted Objects,Sub Vaults", "", "", true, false, -1);
+        if(relatedProjectInfoObjs != null && !relatedProjectInfoObjs.isEmpty()) {
+        	ArrayList<drRelationshipInfo> topLevelRelatedProjectInfoObjs = this.getTopLevelRelatedProjects(relatedProjectInfoObjs);
+           	if(topLevelRelatedProjectInfoObjs.size() == 1) {
+        		drRelationshipInfo relatedProjectInfoObj;
+        		relatedProjectInfoObj = topLevelRelatedProjectInfoObjs.get(0);
+        		gapProject = relatedProjectInfoObj.getBusAttributeValue("name");
+        	} else {
+        		ArrayList<String> projectNames = new ArrayList<>();
+        		for (drRelationshipInfo relatedProjectInfoObj : topLevelRelatedProjectInfoObjs) {
+					String projectName = relatedProjectInfoObj.getBusAttributeValue("name");
+					if(!projectNames.contains(projectName)) {
+						projectNames.add(projectName);
+					}
+				}
+        		gapProject = "<![CDATA[" + String.join("<br/>", projectNames) + "]]>";
+        	}   	
+        }
+        busObj.setValue("gapProjects", gapProject);
+        
+        busObj.save();
+        
+		return 0;
+		
+    }
+  
+    private ArrayList<drRelationshipInfo> getTopLevelRelatedProjects(ArrayList<drRelationshipInfo> relatedProjectInfoObjs) {
+    	ArrayList<drRelationshipInfo> topLevelRelatedProjectInfoObjs = new ArrayList<>();
+    	for (int i = 0; i < relatedProjectInfoObjs.size(); i++) {
+    		drRelationshipInfo currentRelInfo = relatedProjectInfoObjs.get(i);
+    		drRelationshipInfo nextRelInfo = null;
+    		if(relatedProjectInfoObjs.size() > (i + 1)) {
+    			nextRelInfo  = relatedProjectInfoObjs.get(i + 1);
+    		}
+    		if(nextRelInfo != null) {
+    			if(currentRelInfo.getLevelAsNumber() >= nextRelInfo.getLevelAsNumber()) {
+    				topLevelRelatedProjectInfoObjs.add(currentRelInfo);
+    			}
+    		} else {
+    			topLevelRelatedProjectInfoObjs.add(currentRelInfo);
+    		}
+		}
+    	return topLevelRelatedProjectInfoObjs;
+    }
+	
+    public int updateDependantDocuments(Context context, String[] args) throws Exception {
+    
+        String objectID = args[0];
+
+		System.out.println("Running JPO 'gapDirectView' funtion 'updateDependantDocuments' on " + objectID );
+		
+		return 0;
+		
+    }
+
+    public String isExportObject(Context context, String[] args) throws Exception {
+    
+    	try{
+    		String returnValue = "true";
+            HashMap programMap  = (HashMap)JPO.unpackArgs(args);
+            String objectId = (String)programMap.get("objectId");
+            drContext drcontext = new drContext(context);
+            drBusinessObject busObj = new drBusinessObject(drcontext, objectId);
+            String project =  busObj.getValueUsingMQLSelectable("project");
+            if(project != null && !project.isEmpty()) {
+            	if(project.equalsIgnoreCase("R&D Space")) {
+            		returnValue = this.isExportObjectUsingOwnership(drcontext, busObj);
+            	}
+            }
+            return returnValue;
+    	}catch(Exception ex){
+    		throw ex;
+    	}	
+    }
+
+    private String isExportObjectUsingOwnership(drContext drcontext, drBusinessObject busObj) throws Exception {
+    	try{
+    		String returnValue = "false";
+          
+           ArrayList<String> ownershipsValues = busObj.getValueUsingMQLSelectableAsList("ownership",",");
+	       for (String ownership : ownershipsValues) {
+	        	ArrayList<String> ownershipValues = new ArrayList<String>();
+	        	ownershipValues.addAll(Arrays.asList(ownership.split("\\|", -1)));
+	        	String ownershipProject = ownershipValues.get(0);
+	        	if(ownershipProject != null && !ownershipProject.isEmpty() ) {
+	        		if(drUsefulFunctions.isObjectID(ownershipProject)) {
+	        			drBusinessObject owningBusObj = new drBusinessObject(drcontext, ownershipProject);
+	        			String owningObjectReturnValue = this.isExportObjectUsingOwnership(drcontext, owningBusObj);
+	        			if(owningObjectReturnValue != null && owningObjectReturnValue.equalsIgnoreCase("true")) {
+	        				returnValue = "true";
+            	        	break;
+	        			}
+	        		} else if(!ownershipProject.equals("-")) {
+	        			returnValue = "true";
+        	        	break;
+	        		}
+	        	}
+			}
+    	   return returnValue;
+    	}catch(Exception ex){
+    		throw ex;
+    	}	
+    }
+	
+	/**
+	 * Promote action trigger on Approved state of Change Action
+	 * Generic method to update document attributes from CA details when CA is moved from In Approval to Approved state
+	 * Attributes will be updated only if current CA is configured as For Release requested change
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public int updateContentAttributeWhenForRelease(Context context, String[] args) throws Exception
+	{
+		String changeActionId = args[0];
+		String includeTypes = args[1];
+		try{
+			ChangeAction caObj = new ChangeAction(changeActionId);
+			MapList documentList = caObj.getAffectedItems(context);
+			
+			ArrayList<String> toBeUpdateIds = getUpdateIds(context, includeTypes, documentList);
+			if(toBeUpdateIds.size()>0){
+				HashMap attributes = new HashMap();
+				StringList changeActionSelects = new StringList(2);
+				changeActionSelects.add(DomainConstants.SELECT_NAME);
+				changeActionSelects.add(DomainConstants.SELECT_CURRENT);
+				changeActionSelects.add("attribute["+DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE+"]");
+				Map caDetails  = caObj.getInfo(context, changeActionSelects);
+				String actualCompletionDate = (String)caDetails.get("attribute["+DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE+"]");
+				String name = (String)caDetails.get(DomainConstants.SELECT_NAME);
+				attributes.put(ATTRIBUTE_GAP_ACTUAL_COMPLETION_DATE, actualCompletionDate);
+				attributes.put(ATTRIBUTE_GAP_CHANGE_ACTION_NAME, name);
+
+				//Get Approver Name
+				String where = "attribute["+DomainConstants.ATTRIBUTE_ROUTE_BASE_STATE+"] == 'state_InApproval'";
+				MapList routes = caObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE, new StringList(DomainConstants.SELECT_ID), null, false, true, (short)1, "(current != 'Archive')", where, 0);
+				if(routes.size()>0){
+					Map routeInfo = (Map)routes.get(0);
+					String routeId = (String)routeInfo.get(DomainConstants.SELECT_ID);
+					DomainObject routeObj = DomainObject.newInstance(context,routeId);
+					StringList taskSelects = new StringList(3);
+					taskSelects.add(DomainConstants.SELECT_ID);
+					taskSelects.add(DomainConstants.SELECT_MODIFIED);
+					taskSelects.add("from["+DomainConstants.RELATIONSHIP_PROJECT_TASK+"].to["+DomainConstants.TYPE_PERSON+"].id");
+
+					MapList tasks = routeObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_ROUTE_TASK, DomainConstants.TYPE_INBOX_TASK, taskSelects, null, true, false, (short)1, "", "", 0);
+					if(tasks.size()>0){
+						tasks.sort("modified", "decending","date");
+						Map taskInfo = (Map)tasks.get(0);
+						String taskAssignee = (String)taskInfo.get("from["+DomainConstants.RELATIONSHIP_PROJECT_TASK+"].to["+DomainConstants.TYPE_PERSON+"].id");
+						DomainObject objPerson = DomainObject.newInstance(context,taskAssignee);
+						StringList objectSelects= new StringList();
+						objectSelects.addElement(DomainConstants.SELECT_ATTRIBUTE_FIRSTNAME);
+						objectSelects.addElement(DomainConstants.SELECT_ATTRIBUTE_LASTNAME);
+						Map personInfo = objPerson.getInfo(context, objectSelects);
+						String firstName = (String)personInfo.get(DomainConstants.SELECT_ATTRIBUTE_FIRSTNAME);
+						String lastName = (String)personInfo.get(DomainConstants.SELECT_ATTRIBUTE_LASTNAME);
+						attributes.put(ATTRIBUTE_GAP_APPROVER, firstName+" "+lastName);
+					}
+				}
+				//Update Mapping Values
+				ContextUtil.startTransaction(context, true);
+				DomainObject objDoc = DomainObject.newInstance(context);
+				for(String documentId : toBeUpdateIds){
+					objDoc.setId(documentId);
+					objDoc.setAttributeValues(context, attributes);
+				}
+				ContextUtil.commitTransaction(context);
+			}
+			return 0;
+		}catch(Exception ex){
+			ContextUtil.abortTransaction(context);
+			throw ex;
+		}
+	}
+
+	private ArrayList<String> getUpdateIds(Context context, String includeTypes, MapList documentList) throws Exception 
+	{
+		try{
+			Map documentInfo = null;
+			String requestedChange = "";
+			ArrayList<String> toBeUpdateIds = new ArrayList<String>();
+			if(includeTypes != null && !includeTypes.isEmpty()){
+				//Build Include Types kinfOf selects
+				ArrayList<String> types = new ArrayList<String>();
+				types.addAll(Arrays.asList(includeTypes.split(",")));
+
+				drContext drcontext = new drContext(context);
+				for(Object document : documentList){
+					documentInfo = (Map)document;
+					requestedChange = (String)documentInfo.get("Requested Change");
+					if(requestedChange != null){
+						if(requestedChange.equalsIgnoreCase("For Release"))
+						{
+							String docType = (String)documentInfo.get(DomainConstants.SELECT_TYPE);
+							StringBuilder matchCommand = new StringBuilder();
+							matchCommand.append("print type '"+docType+"' select");
+							for(String type : types){
+								matchCommand.append(" 'kindof[" + PropertyUtil.getSchemaProperty(context, type) + "]'");
+							}
+							matchCommand.append(" dump |");
+							String mqlCommand  = matchCommand.toString();
+							String matchingValues = drcontext.getResultFromMQLCommand(mqlCommand);
+							if(matchingValues.isEmpty()==false){
+								if(matchingValues.contains("TRUE")){
+									String objectId = (String)documentInfo.get(DomainConstants.SELECT_ID);
+									toBeUpdateIds.add(objectId);
+								}
+							}
+						}
+					}
+				}
+			}
+			return toBeUpdateIds;
+		}catch(Exception ex){
+			throw ex;
+		}
+	}
+	
+	/**
+	 * This method will be executed in MQL session that runs a query, passes the resulting list to a method that for each object 
+	 * runs the DirectView export code
+	 * @param context
+	 * @param args If passing argument first args[0] is revision, ags[1] is queryLimit and args[2] is debug
+	 * Example. exec prog gapDirectView -method runDirectViewForMigratedObjects "1" "50" "true"
+	 * @throws Exception
+	 */
+	public void runDirectViewForMigratedObjects(Context context, String[] args) throws Exception
+	{
+		int size = args.length;
+		System.out.println("DEBUG ::: args.length is '"+size+"'");
+		if(size==3){
+			String revisionNumber = args[0];
+			if(revisionNumber.isEmpty()==false){
+				this.setRevisionNumber(revisionNumber);
+			}
+			System.out.println("DEBUG ::: revisionNumber is '"+revisionNumber+"'");
+			String queryLimit = args[1];
+			if(queryLimit.isEmpty()==false){
+				this.setQueryLimit(Integer.parseInt(queryLimit));
+			}
+			System.out.println("DEBUG ::: queryLimit is '"+queryLimit+"'");
+			String debug = args[2];
+			if(debug.isEmpty()==false){
+				this.setDebug(Boolean.valueOf(debug));
+			}
+			System.out.println("DEBUG ::: debug is '"+debug+"'");
+		}
+		if(size==4){
+			String force = args[3];
+			if(force != null) {
+				if(force.equalsIgnoreCase("gapForceImport")) {
+					this.setForceImport(true);
+				}
+				if(force.equalsIgnoreCase("gapForceUpdate")) {
+					this.setForceUpdate(true);
+				}           
+			}
+		}
+		MapList migratedObjects = getMigratedObjects(context);
+		processMigratedObjects(context, migratedObjects);
+	}
+	
+	/**
+	 * This method will be executed in MQL session that runs the DirectView export code on a specific object
+	 * @param context
+	 * @param args If passing argument first args[0] is the object ID of the object to process
+	 * Example. exec prog gapDirectView -method runDirectViewForMigratedObjectID "1234.1234.1234.12345"
+	 * @throws Exception
+	 */
+	public void runDirectViewForMigratedObjectID(Context context, String[] args) throws Exception
+	{
+		int size = args.length;
+		System.out.println("DEBUG ::: args.length is '"+size+"'");
+		this.setDebug(true);
+		String objectId = args[0];
+		System.out.println("DEBUG ::: ID is '"+ objectId +"'");
+		if(size>=2){
+			String force = args[1];
+			if(force != null) {
+				if(force.equalsIgnoreCase("gapForceImport")) {
+					System.out.println("DEBUG ::: Setting gapForceImport");
+					this.setForceImport(true);
+				}
+				if(force.equalsIgnoreCase("gapForceUpdate")) {
+					System.out.println("DEBUG ::: Setting gapForceUpdate");
+					this.setForceUpdate(true);
+				}           
+			}
+		}
+		MapList migratedObjects = new MapList();
+		Map migratedObject = new HashMap();
+		migratedObject.put(DomainConstants.SELECT_ID, objectId);
+		migratedObjects.add(migratedObject);
+		
+		processMigratedObjects(context, migratedObjects);
+	}
+	
+	public void pushToDirectView(Context context, String args[]) throws Exception
+	{
+		String file = "C:\\temp\\MSangde\\DirectView\\ENS_12Aug.txt";
+		String line = "";
+        try {
+            FileReader fReader = new FileReader(file);
+            BufferedReader fileBuff = new BufferedReader(fReader);
+            StringList slList = new StringList();
+            String strName = null;
+            String strRev = null;
+			drlToolsEnoviaObject toolsEnoviaObject = new drlToolsEnoviaObject(context);
+			if(args != null && args.length > 0) {
+				String force = args[0];
+				if(force != null) {
+					if(force.equalsIgnoreCase("gapForceImport")) {
+						System.out.println("DEBUG ::: Setting gapForceImport");
+						toolsEnoviaObject.setEnvironmentVariable("gapForceImport", "True");
+					}
+					if(force.equalsIgnoreCase("gapForceUpdate")) {
+						System.out.println("DEBUG ::: Setting gapForceUpdate");
+						toolsEnoviaObject.setEnvironmentVariable("gapForceUpdate", "True");
+					}           
+				}
+			}
+            
+            while ((line = fileBuff.readLine()) != null) {
+	            	if (line!=null) {
+	            	line = line.trim();
+	            	slList = FrameworkUtil.split(line, "|");
+					System.out.println("slList  :"+slList);
+	            	if (slList.size()==2) {
+	            	strName = (String) slList.get(0);
+	            	strRev = (String) slList.get(1);
+	            	// read objectId
+	            	
+	            	String objectId = toolsEnoviaObject.getResultFromMQLCommand("print bus 'gapGAPSpecification' '"+strName +"' '"+strRev+"' select id dump |");
+					System.out.println("objectId  :"+objectId);
+	            	Object obj = new Object();
+	            	try {
+	            		  synchronized (obj) {
+	            		   while (true) {//Or any Loops
+	            			// push
+	       	            	if(UIUtil.isNotNullAndNotEmpty(objectId)){
+	       	    				
+	       	    				toolsEnoviaObject.setLookupValue("RunImportXML", "TRUE");
+	       	    				drLookupValuesActivity activity = getLookupValuesActivity(toolsEnoviaObject);
+	       	    				if(activity != null){
+	       	    						System.out.println("DEBUG ::: processMigratedObjects, Processing object : "+objectId);
+	       	    						drBusinessObject busObj = new drBusinessObject(toolsEnoviaObject, objectId);
+	       	    						drToolsRunOnObjects runOnObjects = new drToolsRunOnObjects(busObj);
+	       	    						activity.runActions(runOnObjects);
+	       	    						System.out.println("DEBUG ::: processMigratedObjects, Processed object : "+objectId);
+	       	    						busObj.setValue(ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION, "Yes");
+	       	    						busObj.Update();
+	       	    				}
+	       	            	}
+	            		   obj.wait(2000);//Sample obj.wait(1000); 1 second sleep
+	            		   }
+	            		  }
+	            		 } catch (InterruptedException ex) {
+	            		   //SomeFishCatching
+	            		 }	
+            	}
+            }
+            }
+            fileBuff.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
+	}
+	
+	/**
+	 * This method will search the ENOVIA database for all GAP Specification and CAD Drawing objects where the gapLegacyPDMIdentifier 
+	 * attribute value is not empty and the gapDirectViewMigration attribute value equals No and gapMigratedObject attribute value is Yes.
+	 * @param context
+	 * @return The output of this method is a MapList of migrated objects that need to be processed by DirectView
+	 * @throws Exception
+	 */
+	public MapList getMigratedObjects(Context context) throws Exception
+	{
+		MapList migratedObjects = new MapList();
+		try{
+			String revisionNumber = getRevisionNumber();
+			StringBuilder whereBuilder = new StringBuilder();
+                                                whereBuilder.append("attribute["+ATTRIBUTE_GAP_LEGACY_PDM_IDENTIFIER+"].value != ''");
+			whereBuilder.append(" && ");
+			whereBuilder.append("attribute["+ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION+"].value == 'No'");
+			whereBuilder.append(" && ");
+			whereBuilder.append("attribute["+ATTRIBUTE_GAP_MIGRATED_OBJECT+"].value == 'Yes'");
+			whereBuilder.append(" && ");
+			whereBuilder.append("policy != '"+POLICY_VERSION+"' && policy != '"+POLICY_VERSIONED_DESIGN_POLICY+"' && policy != '"+POLICY_VERSIONED_DESIGN_TEAM_POLICY+"'");
+			whereBuilder.append(" && ");
+			whereBuilder.append("revision == '"+revisionNumber+"'");
+
+			String where = whereBuilder.toString();
+			System.out.println("DEBUG ::: getMigratedObjects, Searching for GAP Specification, CAD Drawing, MS Excel Document, MS Word Document, SW Drawing");
+			System.out.println("DEBUG ::: getMigratedObjects, Where clause is '"+where+"'");
+			StringList busSelects = new StringList(4);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add("attribute["+ATTRIBUTE_GAP_LEGACY_PDM_IDENTIFIER+"]");
+			busSelects.add("attribute["+ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION+"]");
+			busSelects.add("attribute["+ATTRIBUTE_GAP_MIGRATED_OBJECT+"]");
+			
+			int queryLimit = getQueryLimit();
+			//System.out.println("DEBUG ::"+TYPE_GAP_SPECIFICATION+","+DomainConstants.TYPE_CAD_DRAWING);
+			migratedObjects = DomainObject.findObjects(context, 
+					TYPE_GAP_SPECIFICATION+","+DomainConstants.TYPE_CAD_DRAWING+",SW Drawing,MS Excel Document,MS Word Document,gapAutoCAD",
+					DomainConstants.QUERY_WILDCARD, 
+					DomainConstants.QUERY_WILDCARD, 
+					DomainConstants.QUERY_WILDCARD, 
+					DomainConstants.QUERY_WILDCARD, 
+					where, 
+					"", false, busSelects, (short)queryLimit);
+			System.out.println("DEBUG ::: getMigratedObjects, Found GAP Specification, CAD Drawing, MS Excel Document, MS Word Document, SW Drawing object count is "+migratedObjects.size());
+		}catch(Exception ex){
+			ex.printStackTrace();
+			throw ex;
+		}
+		return migratedObjects;
+	}
+	
+	/**This method will retrieve each object for signle objectId  and call the DirectView Integration method to 
+	 * process the object ï¿½ passing in the objectï¿½s OID and a parameter indicating an Import XML file needs to be created.  
+	 * Once the list of objects has been processed, or if the list of objects was empty to begin with, this method will exit.
+	 * @author ENGMASA
+	 * @param context
+	 * @param migratedObjects
+	 * @throws Exception
+	 */
+	public void processMigratedObjects(Context context, String args[]) throws Exception
+	{
+		try{
+			drlToolsEnoviaObject toolsEnoviaObject = new drlToolsEnoviaObject(context);
+			toolsEnoviaObject.setLookupValue("RunImportXML", "TRUE");
+			drLookupValuesActivity activity = getLookupValuesActivity(toolsEnoviaObject);
+			if(activity != null){
+				int size = args.length;
+				String objectId = args[0];
+				if(size>=2){
+					String force = args[1];
+					if(force != null) {
+						if(force.equalsIgnoreCase("gapForceImport")) {
+							System.out.println("DEBUG ::: Setting gapForceImport");
+							toolsEnoviaObject.setEnvironmentVariable("gapForceImport", "True");
+						}
+						if(force.equalsIgnoreCase("gapForceUpdate")) {
+							System.out.println("DEBUG ::: Setting gapForceUpdate");
+							toolsEnoviaObject.setEnvironmentVariable("gapForceUpdate", "True");
+						}           
+					}
+				}
+				System.out.println("DEBUG ::: processMigratedObjects, Processing object : "+objectId);
+				drBusinessObject busObj = new drBusinessObject(toolsEnoviaObject, objectId);
+				drToolsRunOnObjects runOnObjects = new drToolsRunOnObjects(busObj);
+				activity.runActions(runOnObjects);
+				System.out.println("DEBUG ::: processMigratedObjects, Processed object : "+objectId);
+				busObj.setValue(ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION, "Yes");
+				busObj.Update();
+				
+			}
+		}catch(Exception ex){
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+	
+	/**This method will retrieve each object from the MapList and call the DirectView Integration method to 
+	 * process the object � passing in the object�s OID and a parameter indicating an Import XML file needs to be created.  
+	 * Once the list of objects has been processed, or if the list of objects was empty to begin with, this method will exit.
+	 * @param context
+	 * @param migratedObjects
+	 * @throws Exception
+	 */
+	public void processMigratedObjects(Context context, MapList migratedObjects) throws Exception
+	{
+		try{
+			if(migratedObjects != null && migratedObjects.size()>0){
+				drlToolsEnoviaObject toolsEnoviaObject = new drlToolsEnoviaObject(context);
+				if(this.isForceImport()) {
+					toolsEnoviaObject.setEnvironmentVariable("gapForceImport", "True");
+					System.out.println("DEBUG ::: Setting gapForceImport to True");
+				}
+				if(this.isForceUpdate()) {
+					toolsEnoviaObject.setEnvironmentVariable("gapForceUpdate", "True");
+					System.out.println("DEBUG ::: Setting gapForceUpdate to True");
+				}
+				toolsEnoviaObject.setLookupValue("RunImportXML", "TRUE");
+				drLookupValuesActivity activity = getLookupValuesActivity(toolsEnoviaObject);
+				if(activity != null){
+					Map info;
+					String objectId = DomainConstants.EMPTY_STRING;
+					for(Object migratedObject : migratedObjects){
+						info = (Map)migratedObject;
+						objectId = (String)info.get(DomainConstants.SELECT_ID);
+						System.out.println("DEBUG ::: processMigratedObjects, Processing object : "+objectId);
+						drBusinessObject busObj = new drBusinessObject(toolsEnoviaObject, objectId);
+						drToolsRunOnObjects runOnObjects = new drToolsRunOnObjects(busObj);
+						activity.runActions(runOnObjects);
+						System.out.println("DEBUG ::: processMigratedObjects, Processed object : "+objectId);
+						busObj.setValue(ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION, "Yes");
+						busObj.Update();
+					}
+				}
+			}
+		}catch(Exception ex){
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+		
+	public drLookupValuesActivity getLookupValuesActivity(drlToolsEnoviaObject toolsEnoviaObject) throws Exception 
+	{
+		if(lookupValuesActivity == null){
+			try {
+				String activityId = toolsEnoviaObject.getResultFromMQLCommand("print bus '"+drLookupValuesActivity.DRLTOOLS_CODE_TYPE_NAME+"' '"+LOOKUP_ACTIVITY_NAME+"' 1 select id dump |");
+				System.out.println("DEBUG ::: getLookupValuesActivity, Activity object id is : "+activityId);
+				if(activityId != null && activityId.isEmpty()==false){
+					lookupValuesActivity = new drLookupValuesActivity(toolsEnoviaObject, activityId);
+				}
+			} catch (Exception ex){
+				ex.printStackTrace();
+				throw ex;
+			}
+		}
+		return lookupValuesActivity;
+	}
+	
+	public String getRevisionNumber() {
+		return revisionNumber;
+	}
+	
+	public void setRevisionNumber(String revisionNumber) {
+		this.revisionNumber = revisionNumber;
+	}
+	
+	public int getQueryLimit() {
+		return queryLimit;
+	}
+	
+	public void setQueryLimit(int queryLimit) {
+		this.queryLimit = queryLimit;
+	}
+	
+	public boolean isDebug() {
+		return debug;
+	}
+	
+	public void setDebug(boolean debug) {
+		this.debug = debug;
+	}
+	
+	public boolean isForceImport() {
+        return forceImport;
+    }
+
+    public void setForceImport(boolean forceImport) {
+        this.forceImport = forceImport;
+    }
+
+    public boolean isForceUpdate() {
+        return forceUpdate;
+    }
+
+    public void setForceUpdate(boolean forceUpdate) {
+        this.forceUpdate = forceUpdate;
+    }
+}
+

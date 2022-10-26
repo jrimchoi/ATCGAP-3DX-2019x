@@ -1,0 +1,267 @@
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.MigrationService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME}
+{
+    /**
+     * Method to show Documents for Migration
+     * @param context the ENOVIA <code>Context</code> object
+     * @param args holds packed arguments
+     * @return Map containing ACTION_JAVASCRIPT
+     * @throws DCLException if operation fails
+     */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> showDocumentsForMigration(Context context,
+			String[] args) throws DCLException {
+		try {
+			StringBuilder sbURL = new StringBuilder();
+			Map<String, String> mReturn = new HashMap<String, String>();
+			String strMigrationType = EnoviaResourceBundle.getProperty(context,"enoDocumentChangeControl.Migration.Type");
+			StringBuilder sbType = new StringBuilder();
+			if (strMigrationType.contains(DCLConstants.COMMA)) 
+			{
+				List<String> slType = FrameworkUtil.split(strMigrationType, DCLConstants.COMMA);
+				for (String strType : slType)
+					sbType.append(strType).append(",");
+			} 
+			else
+			{
+				sbType.append(strMigrationType).append(",");
+			}
+			sbType.deleteCharAt(sbType.length() - 1);
+			sbURL.append("var submitURL=\"../common/emxFullSearch.jsp?field=TYPES=")
+			.append(sbType.toString()).append("&table=AEFGeneralSearchResults&includeOIDprogram=ENODCLMigrationUI:includeLatestRevisionDocumentsForMigration");
+			sbURL.append("&selection=multiple&submitURL=../documentcontrol/enoDCLExecute.jsp?dclAction=ENODCLMigrationUI:migrateData");
+			sbURL.append("\";\n showModalDialog(submitURL,250,250,true);");
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, sbURL.toString());
+			return mReturn;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+    /**
+     * Includes the Latest Revision of LHC Controlled Document for Migration to DCL Quality System Document
+     * @param context the ENOVIA <code>Context</code> object.
+     * @param args holds packed arguments
+     * @return List of Latest Revision LHC Controlled Document
+     * @throws  DCLException if operation fails
+     */
+    @com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+    public List<String> includeLatestRevisionDocumentsForMigration(Context context, String[] args) throws DCLException
+        {
+            try {
+                 List<String> slIncludeDocId = new StringList();
+                 StringList slObjectSelect = new StringList();
+                 slObjectSelect.add(DomainConstants.SELECT_ID);
+                 slObjectSelect.add(DomainConstants.SELECT_REVISION);
+                 slObjectSelect.add(DomainConstants.SELECT_LAST_ID);
+                 slObjectSelect.add(DomainConstants.SELECT_CURRENT);   
+                 List<Map> mlFinalObjectList = getLHCDataToMigrate(context, slObjectSelect);
+                 for(Map<String,String> objectMap : mlFinalObjectList )
+                 {
+                	 slIncludeDocId.add(objectMap.get(DomainConstants.SELECT_ID));
+                 }
+                 return slIncludeDocId;
+            } 
+            catch (Exception e)
+            {
+                throw new DCLException(e.getLocalizedMessage());
+            }
+        }
+
+
+    /**
+     * Method to migrate selected Documents from LHC Controlled Document to DCL Quality System Document
+     * @param context the ENOVIA <code>Context</code> object
+     * @param args holds packed arguments
+     * @return Map containing ACTION_JAVASCRIPT
+     * @throws DCLException if operation fails
+     */
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+    public Map<String,String> migrateData(Context context, String[] args) throws DCLException {
+        try {
+            MigrationService migration = DCLServiceUtil.getMigrationService(context);
+            String strAttributeTitle = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title);
+            Map<?,?> programMap = JPO.unpackArgs(args);
+            Map<String, String> mpReturn = new HashMap<String, String>();
+            StringList slLHCDocInfo = new StringList();
+            slLHCDocInfo.add(DomainConstants.SELECT_NAME);
+            slLHCDocInfo.add("attribute["+strAttributeTitle+"]");
+            StringBuilder sbReturnScript =new StringBuilder();
+            String arrTableRowIds[] = (String[]) programMap.get(DCLConstants.TABLEROWID);
+            MapList mlMigrationObjectList = new MapList();
+            for (String strRowIds : arrTableRowIds) {
+                String strRowId = strRowIds;
+                TableRowId tableRowId = new TableRowId(strRowId);
+                String strMigrateDocId = tableRowId.getObjectId();
+                Map<String,String> mpMigrateDoc = new HashMap<String, String>();
+                Map <String,String> mpDocInfo = DCLUtil.getInfo(context, strMigrateDocId, slLHCDocInfo);
+                mpMigrateDoc.put(DomainConstants.SELECT_ID, strMigrateDocId);
+                mpMigrateDoc.put(DomainConstants.SELECT_NAME,mpDocInfo.get(DomainConstants.SELECT_NAME));
+                mpMigrateDoc.put("attribute["+strAttributeTitle+"]",mpDocInfo.get("attribute["+strAttributeTitle+"]"));
+                mlMigrationObjectList.add(mpMigrateDoc);
+            }
+            migration.migrate(context, mlMigrationObjectList,false);
+            String strAlertMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.AlertMsg.MigrationDone",
+                    new String[] {String.valueOf(mlMigrationObjectList.size())}, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE); 
+            sbReturnScript.append("alert(\"").append(strAlertMessage).append("\");");
+            sbReturnScript.append("getTopWindow().close();");
+            mpReturn.put(DCLConstants.ACTION_JAVASCRIPT,sbReturnScript.toString());
+            return mpReturn;
+        } catch (Exception e) {
+            throw new DCLException(e.getLocalizedMessage());
+        }
+    }
+
+    /**
+     * Method to migrate all Documents from LHC Controlled Document to DCL Quality System Document
+     * @param context the ENOVIA <code>Context</code> object
+     * @param args holds packed arguments
+      * @return Map containing ACTION_JAVASCRIPT
+     * @throws DCLException if operation fails
+     */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+    public static Map<String,String> migrateAllData(Context context, String[] args) throws DCLException {
+        try {
+            MigrationService migration = DCLServiceUtil.getMigrationService(context);
+            String strAttributeTitle = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title);
+          
+            Map<String, String> mpReturn = new HashMap<String, String>();
+            StringBuilder sbReturnScript =new StringBuilder();
+            List<Map> mlFinalObjectList = new MapList();
+            StringList slObjectSelect = new StringList();
+            slObjectSelect.add(DomainConstants.SELECT_ID);
+            slObjectSelect.add(DomainConstants.SELECT_TYPE);
+            slObjectSelect.add(DomainConstants.SELECT_NAME);
+            slObjectSelect.add(DomainConstants.SELECT_REVISION);
+            slObjectSelect.add(DomainConstants.SELECT_LAST_ID);
+            slObjectSelect.add(DomainConstants.SELECT_CURRENT);   
+            slObjectSelect.add(DomainConstants.SELECT_OWNER);     
+            slObjectSelect.add(DomainObject.getAttributeSelect(strAttributeTitle));
+            mlFinalObjectList = getLHCDataToMigrate(context,slObjectSelect);
+            migration.migrate(context, mlFinalObjectList,true);
+            String strAlertMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.AlertMsg.MigrationDone",
+                    new String[] {String.valueOf(mlFinalObjectList.size())}, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE); 
+            sbReturnScript.append("alert(\"").append(strAlertMessage).append("\");");
+            mpReturn.put(DCLConstants.ACTION_JAVASCRIPT,sbReturnScript.toString());
+            return mpReturn;
+        }
+        catch (Exception e) {
+            throw new DCLException(e.getLocalizedMessage());
+        }
+    }
+    
+    /**
+     * Method to find the LHC Data for Migration
+     * @param context the ENOVIA <code>Context</code> object
+     * @param slBusSelects StringList of object selects
+     * @return List<Map> of LHC Data for Migration
+     * @throws DCLException if operation fails
+     */
+    public static List<Map> getLHCDataToMigrate(Context context,StringList slBusSelects) throws DCLException
+    {
+    	try {
+			MigrationService migration = DCLServiceUtil.getMigrationService(context);
+			String strMigrationType = EnoviaResourceBundle.getProperty(context,"enoDocumentChangeControl.Migration.Type");
+			String strMigrationTypePolicy = EnoviaResourceBundle.getProperty(context, "enoDocumentChangeControl.Migration.Type.Policy");
+			String strMigrationTypePolicyState = EnoviaResourceBundle.getProperty(context,"enoDocumentControl.Migration.Type.Policy.States");
+			StringList sListType = FrameworkUtil.split(strMigrationType, ",");
+			StringList sListPolicy = FrameworkUtil.split(strMigrationTypePolicy, ",");
+			StringList sListStates = FrameworkUtil.split(strMigrationTypePolicyState, ",");
+			StringBuilder sbReturnScript =new StringBuilder();
+			List<Map> mlFinalObjectList = new MapList();
+			for(int k=0;k<sListType.size();k++)
+			{
+				 StringBuilder sbStatesWhere = new StringBuilder();
+			    String strPolicyname = (String) sListPolicy.get(k);
+			    strPolicyname = PropertyUtil.getSchemaProperty(context, strPolicyname);
+			    String strPolicyStates = (String) sListStates.get(k);
+			    sbStatesWhere.append("(");
+			    if (strPolicyStates.contains(":")) {
+			        List<String> slStates = FrameworkUtil.split(strPolicyStates, ":");
+			        
+			        for(int j=0;j<slStates.size();j++)
+			        {
+			            sbStatesWhere.append(DomainConstants.SELECT_CURRENT);
+			            sbStatesWhere.append("==const\"");
+			            sbStatesWhere.append(PropertyUtil.getSchemaProperty(context, "policy", strPolicyname,slStates.get(j)));
+			            sbStatesWhere.append("\"");
+			            sbStatesWhere.append("||");
+			        }
+			    } 
+			    else
+			    {
+			        sbStatesWhere.append(DomainConstants.SELECT_CURRENT);
+			        sbStatesWhere.append("==const\"");
+			        sbStatesWhere.append(PropertyUtil.getSchemaProperty(context, "policy", strPolicyname,strPolicyStates));
+			        sbStatesWhere.append("\"");
+			        sbStatesWhere.append("||");
+			    }
+			    sbStatesWhere.delete(sbStatesWhere.lastIndexOf("||"), sbStatesWhere.length());
+			    sbStatesWhere.append(")||");
+			
+			sbStatesWhere.delete(sbStatesWhere.lastIndexOf("||"), sbStatesWhere.length());
+			List<Map> mlObjectsList = DCLUtil.getObjects(context,PropertyUtil.getSchemaProperty(context, sListType.get(k).toString()), "*", sbStatesWhere.toString(), slBusSelects); 
+			for(Map<String,String> objectMap  : mlObjectsList)
+				mlFinalObjectList.add(objectMap);
+      
+      }
+			mlFinalObjectList = DCLUtil.getLatestRevisionDocumentsOfEffectiveState(context, mlFinalObjectList);
+			return mlFinalObjectList;
+		} catch (FrameworkException e) {
+			 throw new DCLException(e.getLocalizedMessage());
+		}
+    }
+    
+
+    /**
+     * Access Function on Command MigrateLHCAllData and MigrateLHCData of Migration
+     * Show Command for Migration
+     * @param context the ENOVIA <code>Context</code> object
+     * @param args holds packed arguments
+     * @return boolean status to show "Migrate LHC All Data" and "Migrate LHC Data" Command
+     * @throws  DCLException if operation fails
+     */
+    public boolean showCommandsForMigration(Context context,String [] args) throws DCLException
+    {
+    	try {
+    		boolean showCommand = false;
+    		if (FrameworkUtil.isSuiteRegistered(context, "appVersionLifeSciencesAcceleratorforChangeControl", false, null, null))
+    		{
+    			showCommand = true;
+    		}
+    		return showCommand;
+    	} catch (Exception e) {
+    		throw new DCLException(e.getLocalizedMessage());
+    	}
+    }
+    
+    public static void mxMain(Context context,String [] args) throws DCLException
+    {
+        migrateAllData(context,args);
+    }
+} 
+

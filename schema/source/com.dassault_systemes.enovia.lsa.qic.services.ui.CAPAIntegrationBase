@@ -1,0 +1,864 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPAIntegrationService;
+import com.dassault_systemes.enovia.lsa.qic.services.DataSourceService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws QICException
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws QICException {
+		super();
+	}
+
+	/**
+	 * Get the CAPAIntegrationService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPAIntegrationService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPAIntegrationService getCAPAIntegrationService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPAIntegrationService service = (CAPAIntegrationService) LSAQICCore.getService(CAPAIntegrationService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the DataSourceService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return DataSourceService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static DataSourceService getDataSourceService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			DataSourceService service = (DataSourceService) LSAQICCore.getService(DataSourceService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessToAssignCAPA(Context context, Map<?, ?> objectMap) throws QICException {
+		try {
+			boolean hasAccess = false;
+			String strType = (String) objectMap.get(DomainConstants.SELECT_TYPE);
+			if (!Helper.isNullOrEmpty(strType)) {
+				String strSymbolicType = FrameworkUtil.getAliasForAdmin(context, "Type", strType, true);
+				switch (strSymbolicType) {
+				case QICConstants.SYMBOLIC_TYPE_COMPLAINT:
+					hasAccess = hasAccessFromComplaint(context, objectMap);
+					break;
+				case QICConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST:
+					hasAccess = hasAccessFromEquipmentServiceRequest(context, objectMap);
+					break;
+				case QICConstants.SYMBOLIC_TYPE_NCR:
+					hasAccess = hasAccessFromNCR(context, objectMap);
+					break;
+				case QICConstants.SYMBOLIC_TYPE_AUDIT_FINDING:
+					hasAccess = hasAccessFromAuditFinding(context, objectMap);
+					break;
+				case QICConstants.SYMBOLIC_TYPE_CMDR:
+				case QICConstants.SYMBOLIC_TYPE_MDV:
+				case QICConstants.SYMBOLIC_TYPE_MDR:
+				case QICConstants.SYMBOLIC_TYPE_PMDA:
+					hasAccess = hasAccessFromAdverseEventReport(context, objectMap);
+					break;
+				case QICConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_RETURN:
+					hasAccess = hasAccessFromComplaintProductReturn(context, objectMap);
+				}
+			}
+
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromComplaint(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_IN_PROCESS = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+				QICConstants.SYMBOLIC_STATE_IN_PROCESS);
+		boolean hasAccess = false;
+		try {
+			String strComplaintId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, strComplaintId);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_IN_PROCESS)
+					&& domObj.checkAccess(context, (short) AccessConstants.cFromConnect)) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromAdverseEventReport(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_SUBMITTED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_ADVERSE_EVENT_REPORT,
+				QICConstants.SYMBOLIC_STATE_SUBMITTED);
+		final String STATE_COMPLETE = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_ADVERSE_EVENT_REPORT,
+				QICConstants.SYMBOLIC_STATE_COMPLETE);
+		try {
+			boolean hasAccess = false;
+			String strAerId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, strAerId);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if (!Helper.isNullOrEmpty(strCurrentState)
+					&& !(strCurrentState.equalsIgnoreCase(STATE_SUBMITTED) || strCurrentState.equalsIgnoreCase(STATE_COMPLETE))
+					&& domObj.checkAccess(context, (short) AccessConstants.cFromConnect)) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromComplaintProductReturn(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_IN_PROCESS = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_RETURN,
+				QICConstants.SYMBOLIC_STATE_IN_PROCESS);
+		try {
+			boolean hasAccess = false;
+			String strComplaintId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, strComplaintId);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if (!Helper.isNullOrEmpty(strCurrentState) && (strCurrentState.equalsIgnoreCase(STATE_IN_PROCESS))
+					&& domObj.checkAccess(context, (short) AccessConstants.cFromConnect)) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromEquipmentServiceRequest(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_IN_PROCESS = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+				QICConstants.SYMBOLIC_STATE_IN_PROCESS);
+		boolean hasAccess = false;
+		try {
+			String strESRId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, strESRId);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if (!Helper.isNullOrEmpty(strCurrentState) && (strCurrentState.equalsIgnoreCase(STATE_IN_PROCESS))
+					&& domObj.checkAccess(context, (short) AccessConstants.cFromConnect)) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromNCR(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_NCR_RECORD, QICConstants.SYMBOLIC_STATE_REVIEW);
+		boolean hasAccess = false;
+		try {
+			String strNCRId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			DomainObject domObj = DomainObject.newInstance(context, strNCRId);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if (!Helper.isNullOrEmpty(strCurrentState) && (strCurrentState.equalsIgnoreCase(STATE_REVIEW))
+					&& domObj.checkAccess(context, (short) AccessConstants.cFromConnect)) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean hasAccessFromAuditFinding(Context context, Map<?, ?> objectMap) throws QICException {
+		final String STATE_CLOSED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_FINDING, QICConstants.SYMBOLIC_STATE_CLOSED);
+		try {
+			boolean hasAccess = false;
+			String strAuditFindingId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			String strCurrentState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager, QICConstants.SYMBOLIC_role_VPLMProjectLeader)
+					|| isLeadAuditorOrAuditor(context, strAuditFindingId))
+					&& (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_CLOSED))) {
+				hasAccess = true;
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static boolean isLeadAuditorOrAuditor(Context context, String strAuditFindingId) throws QICException {
+		final String ATTRIBUTE_AUDIT_LEAD_AUDITOR = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_AUDIT_LEAD_AUDITOR);
+		final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_AUDIT_AUDITORS);
+		try {
+			boolean isLeadAuditorOrAuditor = false;
+			if (!Helper.isNullOrEmpty(strAuditFindingId)) {
+				List<Map<?, ?>> lmAuditInfo = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strAuditFindingId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_AUDIT_FINDING, QICConstants.SYMBOLIC_TYPE_AUDIT,
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEAD_AUDITOR),
+								DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS)),
+						Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null, null);
+				if (!Helper.isNullOrEmpty(lmAuditInfo)) {
+					Map auditInfoMap = lmAuditInfo.get(0);
+					String strAuditLeadAuditor = (String) auditInfoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEAD_AUDITOR));
+					String strAuditors = (String) auditInfoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					if (!Helper.isNullOrEmpty(strAuditLeadAuditor) && strAuditLeadAuditor.equals(context.getUser())) {
+						isLeadAuditorOrAuditor = true;
+					}
+					else if (!Helper.isNullOrEmpty(strAuditors)) {
+						List<String> lsAuditors = FrameworkUtil.split(strAuditors, QICConstants.TILDE);
+						if (!Helper.isNullOrEmpty(lsAuditors) && lsAuditors.contains(context.getUser())) {
+							isLeadAuditorOrAuditor = true;
+						}
+					}
+				}
+			}
+			return isLeadAuditorOrAuditor;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Create CAPA Request" and "Add to Existing" CAPA
+	 * commands from Related CAPA table Actions.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewActionCommandsFromRelatedCAPATable(Context context, String[] args) throws QICException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strDataSourceId = (String) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strDataSourceId)) {
+				List<Map<?, ?>> lmDataSourceInfo = QueryUtil.getInfo(context, new String[] { strDataSourceId },
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+								DomainConstants.SELECT_OWNER, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_POLICY));
+				if (lmDataSourceInfo.size() > 0) {
+					Map dataSourceMap = (Map) lmDataSourceInfo.get(0);
+					hasAccess = hasAccessToAssignCAPA(context, dataSourceMap);
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before Create and connecting CAPA Request to the selected Data
+	 * Source Objects.All Data Sources must be of same Type, must be in "In
+	 * Process" or "Closed" or "Final Approval" state, Logged-in User must be is
+	 * either Quality Manager or the Owner having "Complaint Investigator"
+	 * role,If these conditions fails then a JavaScript function is called to
+	 * show appropriate error message alert otherwise JavaScript function to
+	 * show "Create CAPA Request" form is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForCreateAndConnectCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			ArrayList<String> arrDataSourceIds = new ArrayList<String>();
+			ArrayList<String> arrFailedDataSourceIds = new ArrayList<String>();
+			StringBuilder sbSuccessDataSourceIds = new StringBuilder();
+			HashSet<String> hsType = new HashSet<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrDataSourceIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrDataSourceIds)) {
+					String[] strArrayDataSourceIds = arrDataSourceIds.toArray(new String[arrDataSourceIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayDataSourceIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_POLICY));
+					for (Object obj : returnMap) {
+						Map dataSourceMap = (Map) obj;
+						String strDataSourceId = (String) dataSourceMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) dataSourceMap.get(DomainConstants.SELECT_NAME);
+						String strType = (String) dataSourceMap.get(DomainConstants.SELECT_TYPE);
+						hsType.add(strType);
+						if (hasAccessToAssignCAPA(context, dataSourceMap)) {
+							sbSuccessDataSourceIds.append(strDataSourceId);
+							sbSuccessDataSourceIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedDataSourceIds.add(strName);
+						}
+					}
+				}
+			}
+			if (hsType.size() > 1) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForAllDataSourcesTypeNotUnique");
+			}
+			else if (arrFailedDataSourceIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPAIntegration.PreChecksFailedError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedDataSourceIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			sbSuccessDataSourceIds.deleteCharAt(sbSuccessDataSourceIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "createAndConnectCAPARequest", sbSuccessDataSourceIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Creates CAPA Request and Associates it with DataSources.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing value for CAPA Request Object Id.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createAndConnectCAPARequest(Context context, String args[]) throws QICException {
+		final String ATTRIBUTE_CAPA_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_TYPE);
+		final String ATTRIBUTE_CAPA_SEVERITY = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_SEVERITY);
+		final String ATTRIBUTE_SOURCE_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_SOURCE_TYPE);
+		final String ATTRIBUTE_CAPA_SCOPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_SCOPE);
+		final String ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_COMMENTS);
+		final CAPAIntegrationService CAPA_INTEGRATION_SERVICE = getCAPAIntegrationService(context);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			StringList slDataSourceIds = new StringList();
+			String strDataSourceIds = (String) programMap.get(QICConstants.DATA_SOURCE_IDS);
+			String strParentDataSourceId = (String) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strDataSourceIds)) {
+				slDataSourceIds = FrameworkUtil.split(strDataSourceIds, QICConstants.COMMA);
+			}
+			else if (!Helper.isNullOrEmpty(strParentDataSourceId)) {
+				slDataSourceIds.add(strParentDataSourceId);
+			}
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<String, String> attributeMap = new HashMap<String, String>();
+			Map<?, ?> requestValuesMap = (HashMap<?, ?>) programMap.get(QICConstants.REQUEST_VALUES_MAP);
+			String[] strResponsibleOrgIdArray = (String[]) requestValuesMap.get(QICConstants.FIELD_RESPONSIBLE_ORGANIZATION_OID);
+			String strResponsibleOrgId = DomainConstants.EMPTY_STRING;
+			if (strResponsibleOrgIdArray != null && strResponsibleOrgIdArray.length > 0) {
+				strResponsibleOrgId = strResponsibleOrgIdArray[0];
+			}
+			// String strResponsibleOrgId = ((String[])
+			// requestValuesMap.get(QICConstants.FIELD_RESPONSIBLE_ORGANIZATION_OID))[0];
+			DomainObject dmoResponsibleOrg = !Helper.isNullOrEmpty(strResponsibleOrgId) ? DomainObject.newInstance(context, strResponsibleOrgId)
+					: DomainObject.newInstance(context);
+			String strCAPAType = (String) programMap.get(QICConstants.FIELD_CAPA_TYPE);
+			strCAPAType = !Helper.isNullOrEmpty(strCAPAType) ? strCAPAType : QICConstants.RANGE_CORRECTIVE;
+			// String[] str = ((String[])
+			// requestValuesMap.get(QICConstants.FIELD_SOURCE_TYPE));
+
+			// Attribute Map for CAPA Request
+			attributeMap.put(ATTRIBUTE_CAPA_TYPE, strCAPAType);
+			attributeMap.put(ATTRIBUTE_CAPA_SEVERITY, (String) programMap.get(QICConstants.FIELD_CAPA_SEVERITY));
+			attributeMap.put(ATTRIBUTE_SOURCE_TYPE, (String) programMap.get(QICConstants.FIELD_SOURCE_TYPE));
+			attributeMap.put(ATTRIBUTE_CAPA_SCOPE, (String) programMap.get(QICConstants.FIELD_CAPA_SCOPE));
+			attributeMap.put(ATTRIBUTE_COMMENTS, (String) programMap.get(QICConstants.FIELD_PROBLEM_STATEMENT));
+			attributeMap.put(DomainConstants.ATTRIBUTE_TITLE, (String) programMap.get(QICConstants.FIELD_TITLE));
+			attributeMap.put(DomainConstants.ATTRIBUTE_ORIGINATOR, context.getUser());
+			if (!Helper.isNullOrEmpty(slDataSourceIds)) {
+				String[] dataSourceIds = (String[]) slDataSourceIds.toArray(new String[slDataSourceIds.size()]);
+				DomainObject dmoCAPARequest = CAPA_INTEGRATION_SERVICE.createAndConnectCAPARequest(context, attributeMap, dmoResponsibleOrg,
+						dataSourceIds);
+				returnMap.put(DomainConstants.SELECT_ID, dmoCAPARequest.getObjectId(context));
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before associating CAPA or "CAPA Request" to the selected Data
+	 * Source Objects.All Data Sources must be of same Type, must be in "In
+	 * Process" or "Closed" or "Final Approval" state, Logged-in User must be is
+	 * either Quality Manager or the Owner having "Complaint Investigator"
+	 * role,If these conditions fails then a JavaScript function is called to
+	 * show appropriate error message alert otherwise JavaScript function to
+	 * show "CAPa or CAPA Request Search" form is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForAddToExistingCAPA(Context context, String[] args) throws QICException {
+		try {
+			ArrayList<String> arrDataSourceIds = new ArrayList<String>();
+			ArrayList<String> arrFailedDataSourceIds = new ArrayList<String>();
+			StringBuilder sbSuccessDataSourceIds = new StringBuilder();
+			HashSet<String> hsType = new HashSet<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrDataSourceIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrDataSourceIds)) {
+					String[] strArrayDataSourceIds = arrDataSourceIds.toArray(new String[arrDataSourceIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayDataSourceIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_POLICY));
+					for (Object obj : returnMap) {
+						Map dataSourceMap = (Map) obj;
+						String strDataSourceId = (String) dataSourceMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) dataSourceMap.get(DomainConstants.SELECT_NAME);
+						String strType = (String) dataSourceMap.get(DomainConstants.SELECT_TYPE);
+						hsType.add(strType);
+						if (hasAccessToAssignCAPA(context, dataSourceMap)) {
+							sbSuccessDataSourceIds.append(strDataSourceId);
+							sbSuccessDataSourceIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedDataSourceIds.add(strName);
+						}
+					}
+				}
+			}
+			if (hsType.size() > 1) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForAllDataSourcesTypeNotUnique");
+			}
+			else if (arrFailedDataSourceIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPAIntegration.PreChecksFailedError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedDataSourceIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessageAndCloseParentWindow", sbReturn.toString());
+			}
+			sbSuccessDataSourceIds.deleteCharAt(sbSuccessDataSourceIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionAddExistingDataSourceToExistingCAPA",
+					sbSuccessDataSourceIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Associates DataSource to existing CAPA Request or CAPA.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function to refresh properties page.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddDataSourceToExistingCAPA(Context context, String[] args) throws QICException {
+		final DataSourceService DATA_SOURCE_SERVICE = getDataSourceService(context);
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			StringList slDataSourceIds = new StringList();
+			String[] strDataSourceIds = (String[]) programMap.get(QICConstants.DATA_SOURCE_IDS);
+			String[] strParentDataSourceId = (String[]) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strDataSourceIds) && !Helper.isNullOrEmpty(strDataSourceIds[0])) {
+				slDataSourceIds = FrameworkUtil.split(strDataSourceIds[0], QICConstants.COMMA);
+			}
+			else if (!Helper.isNullOrEmpty(strParentDataSourceId) && !Helper.isNullOrEmpty(strParentDataSourceId[0])) {
+				slDataSourceIds.add(strParentDataSourceId[0]);
+			}
+			String[] arrDataSourceIds = (String[]) slDataSourceIds.toArray(new String[slDataSourceIds.size()]);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(arrDataSourceIds) && !Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strDomainObjectId = rowId.getObjectId();
+					if (!Helper.isNullOrEmpty(strDomainObjectId)) {
+						DATA_SOURCE_SERVICE.addDataSources(context, DomainObject.newInstance(context, strDomainObjectId), arrDataSourceIds);
+					}
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, QICConstants.REFRESH_DATA_SOURCE_FRAME_CLOSE_TOP_WINDOW,
+					"detailsDisplay");
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Puts Edit Access on Create CAPA Request form field "CAPA Type".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map to display or hide edit form.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void preProcessCAPATypeEditCheckForCreateCAPARequestForm(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(QICConstants.REQUEST_MAP);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(QICConstants.FORMMAP);
+			MapList formFieldList = (MapList) formMap.get(QICConstants.FIELDS);
+			String strCAPARequestId = (String) requestMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+						Helper.stringList(DomainConstants.SELECT_OWNER, DomainConstants.SELECT_CURRENT));
+				String strOwner = DomainObject.EMPTY_STRING;
+				String strState = DomainObject.EMPTY_STRING;
+				for (Object obj : returnMap) {
+					Map requestInfoMap = (Map) obj;
+					strOwner = (String) requestInfoMap.get(DomainConstants.SELECT_OWNER);
+					strState = (String) requestInfoMap.get(DomainConstants.SELECT_CURRENT);
+				}
+				for (Object object : formFieldList) {
+					Map<?, ?> fieldMap = (Map<?, ?>) object;
+					String fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+					if (QICConstants.FIELD_CAPA_TYPE.equalsIgnoreCase(fieldName) && !(context.getUser().equalsIgnoreCase(strOwner)
+							&& !Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_PRELIMINARY))) {
+						Map<String, String> settingsMap = (Map<String, String>) fieldMap.get(QICConstants.SETTINGS);
+						settingsMap.put(QICConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the list of Task Id's which are already associated(and hence needs
+	 * to be excluded from Full search list) to the Defect Cause.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of ObjectIDs to exclude.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedCAPAOIDDataSource(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_CAPA_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_TYPE);
+		final String TYPE_CAPA = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA);
+		final String TYPE_CAPA_REQUEST = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+		try {
+			StringList exclusionStringList = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strDataSourceId = (String) programMap.get(QICConstants.OBJECT_ID);
+
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+			sbTypePattern.append(QICConstants.COMMA);
+			sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_CAPA);
+
+			if (!Helper.isNullOrEmpty(strDataSourceId)) {
+				DomainObject dmoDataSource = DomainObject.newInstance(context, strDataSourceId);
+				List<Map<?, ?>> lsMapCAPA = QueryUtil.getRelatedObjects(context, dmoDataSource, QICConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+						sbTypePattern.toString(), Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true,
+						false, (short) 1, null, null);
+				for (Map<?, ?> mapCAPA : lsMapCAPA) {
+					String strObjectId = (String) mapCAPA.get(DomainConstants.SELECT_ID);
+					exclusionStringList.add(strObjectId);
+				}
+			}
+			// TODO need to check search form it should work properly based on
+			// selected criteria
+			StringBuilder sbWhereExpression = new StringBuilder();
+			sbWhereExpression.append(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE));
+			sbWhereExpression.append("!=");
+			sbWhereExpression.append("Corrective");
+			List<Map<?, ?>> returnMapList = QueryUtil.findObjects(context, sbTypePattern.toString(), null,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE)));
+			for (Map<?, ?> returnMap : returnMapList) {
+				String strObjectType = (String) returnMap.get(DomainConstants.SELECT_TYPE);
+				String strObjectId = (String) returnMap.get(DomainConstants.SELECT_ID);
+				String strCAPAType = (String) returnMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE));
+				if (!Helper.isNullOrEmpty(strObjectType) && strObjectType.equalsIgnoreCase(TYPE_CAPA)
+						&& (Helper.countConnectionsOnObject(context, DomainObject.newInstance(context, strObjectId),
+								QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, "from", sbWhereExpression.toString()) > 0)) {
+					exclusionStringList.add(strObjectId);
+				}
+				else if (!Helper.isNullOrEmpty(strObjectType) && strObjectType.equalsIgnoreCase(TYPE_CAPA_REQUEST)
+						&& !(!Helper.isNullOrEmpty(strCAPAType) && strCAPAType.equalsIgnoreCase(QICConstants.RANGE_CORRECTIVE))) {
+					exclusionStringList.add(strObjectId);
+				}
+			}
+			return exclusionStringList;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Originator of the Object and opening Originator's properties page on
+	 * click of that Originator Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICRelatedCAPASummaryColumnOriginator(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOriginator = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strOriginatorHyperLink = QICUtil.getOriginatorHyperlink(context, strObjectId);
+					if (!Helper.isNullOrEmpty(strOriginatorHyperLink)) {
+						vcOriginator.add(strOriginatorHyperLink);
+					}
+					else {
+						vcOriginator.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOriginator;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Organization of the Object and opening Organization's properties
+	 * page on click of that Organization Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICRelatedCAPASummaryColumnOrganization(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOrganization = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strOrganizationHyperLink = QICUtil.getOrganizationHyperlink(context, strObjectId);
+					if (!Helper.isNullOrEmpty(strOrganizationHyperLink)) {
+						vcOrganization.add(strOrganizationHyperLink);
+					}
+					else {
+						vcOrganization.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOrganization;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Owner of the Object and opening Owner's properties page on click of
+	 * that Owner Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICRelatedCAPASummaryColumnOwner(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOwner = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strOwnerHyperLink = QICUtil.getOwnerHyperlink(context, strObjectId);
+					if (!Helper.isNullOrEmpty(strOwnerHyperLink)) {
+						vcOwner.add(strOwnerHyperLink);
+					}
+					else {
+						vcOwner.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOwner;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets all the CAPA Requests and CAPA to which Data Source is associated.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Maps containing CAPA Requests and CAPA details.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getRelatedCAPA(Context context, String[] args) throws QICException {
+		final DataSourceService DATA_SOURCE_SERVICE = getDataSourceService(context);
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strDataSourceId = (String) programMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strDataSourceId)) {
+				returnMap = DATA_SOURCE_SERVICE.getCAPA(context, DomainObject.newInstance(context, strDataSourceId));
+			}
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	// private static boolean hasAccessForECM(Context context, Map objectMap)
+	// throws QICException {
+	// final String TYPE_CHANGE_REQUEST =
+	// PropertyUtil.getSchemaProperty(context,
+	// QICConstants.SYMBOLIC_TYPE_CHANGE_REQUEST);
+	// final String TYPE_CHANGE_ORDER = PropertyUtil.getSchemaProperty(context,
+	// QICConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+	// try {
+	// boolean hasAccess = false;
+	// String strCurrentState = (String)
+	// objectMap.get(DomainConstants.SELECT_CURRENT);
+	// String strOwner = (String) objectMap.get(DomainConstants.SELECT_OWNER);
+	// String strType = (String) objectMap.get(DomainConstants.SELECT_TYPE);
+	// String strPolicy = (String) objectMap.get(DomainConstants.SELECT_POLICY);
+	// if (!Helper.isNullOrEmpty(strType) &&
+	// !Helper.isNullOrEmpty(strCurrentState) &&
+	// !Helper.isNullOrEmpty(strPolicy)
+	// && (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+	// || context.getUser().equalsIgnoreCase(strOwner))) {
+	// if (strType.equalsIgnoreCase(TYPE_CHANGE_REQUEST)) {
+	// String strStateInProcessCO = QICUtil.getActualStateName(context,
+	// strPolicy, QICConstants.SYMBOLIC_STATE_IN_PROCESS_CO);
+	// String strStateComplete = QICUtil.getActualStateName(context, strPolicy,
+	// QICConstants.SYMBOLIC_STATE_COMPLETE);
+	// if ((!Helper.isNullOrEmpty(strStateInProcessCO) &&
+	// strCurrentState.equalsIgnoreCase(strStateInProcessCO))
+	// || (!Helper.isNullOrEmpty(strStateInProcessCO) &&
+	// strCurrentState.equalsIgnoreCase(strStateComplete))) {
+	// hasAccess = true;
+	// }
+	// }
+	// else if (strType.equalsIgnoreCase(TYPE_CHANGE_ORDER)) {
+	// String strStateOnHold = QICUtil.getActualStateName(context, strPolicy,
+	// QICConstants.SYMBOLIC_STATE_ON_HOLD);
+	// String strStateCancelled = QICUtil.getActualStateName(context, strPolicy,
+	// QICConstants.SYMBOLIC_STATE_CANCELLED);
+	// if (!Helper.isNullOrEmpty(strStateOnHold) &&
+	// !strCurrentState.equalsIgnoreCase(strStateOnHold)
+	// && !Helper.isNullOrEmpty(strStateCancelled) &&
+	// !strCurrentState.equalsIgnoreCase(strStateCancelled)) {
+	// hasAccess = true;
+	// }
+	// }
+	// }
+	// return hasAccess;
+	// }
+	// catch (Exception e) {
+	// throw new QICException(e);
+	// }
+	// }
+
+}
+

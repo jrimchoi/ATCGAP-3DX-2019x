@@ -1,0 +1,637 @@
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.documentcommon.DCDocument;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME}
+{
+
+	/**
+	 * Method to get Document Templates
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param strState original state name or null
+	 * @param strOrgId organization id for responsible organization or null
+	 * @return List of Document Templates
+	 * @throws DCLException if operation fails
+	 */
+	private List<Map> getTemplates(Context context, String strState, String[] saOrgIds) throws DCLException{
+		try {
+			StringBuilder sbWhere = new StringBuilder(256);
+			sbWhere.append(DCConstants.POLICY);
+			sbWhere.append("==\"");
+			sbWhere.append(PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE));
+			sbWhere.append("\"");
+			if(!UIUtil.isNullOrEmpty(strState))
+			{
+				sbWhere.append(" && current==const\"");
+				sbWhere.append(strState);
+				sbWhere.append("\"");
+			}
+			if(saOrgIds != null)
+			{
+				sbWhere.append(" && (");
+				for (int i = 0; i < saOrgIds.length; i++) {
+					String strName = DomainObject.newInstance(context, saOrgIds[i]).getInfo(context, DomainObject.SELECT_NAME);
+					if(i > 0)
+						sbWhere.append(" || ");
+					sbWhere.append(DomainConstants.SELECT_ORGANIZATION);
+					sbWhere.append("==\"");
+					sbWhere.append(strName);
+					sbWhere.append("\"");
+				}
+				sbWhere.append(")");
+			}
+			StringList slSelects = DCDocument.getDocumentSelectables(context);
+			slSelects.add(DomainConstants.SELECT_ORGANIZATION);
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			return documentService.getDocuments(context, null, slSelects, sbWhere.toString());
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+	 * Method to get Document Templates for user's organization
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds program map
+	 * @return Document Templates for user's organization
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getMyOrganizationTemplates(Context context, String[] args) throws DCLException{
+		try {
+			Map mProgram = (Map)JPO.unpackArgs(args);
+			String strState = (String)mProgram.get(DCLConstants.DCLTemplatesStatesFilter);
+			String strPolicy = PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			strState =  DCLConstants.ACTIVE.equals(strState)? 
+					FrameworkUtil.lookupStateName(context, strPolicy, DCLConstants.SYMBOLIC_STATE_ACTIVE) : 
+						FrameworkUtil.lookupStateName(context, strPolicy, DCLConstants.SYMBOLIC_STATE_INACTIVE);
+			String[] saOrgIds =	PersonUtil.getMemberOrganizations(context);
+			return getTemplates(context, strState,saOrgIds);
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	
+	/**
+	 * Method to get Document Templates for all organization
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds program map
+	 * @return Document Templates
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getAllOrganizationTemplates(Context context, String[] args) throws DCLException{
+		try {
+			Map mProgram = (Map)JPO.unpackArgs(args);
+			String strState = (String)mProgram.get(DCLConstants.DCLTemplatesStatesFilter);
+			String strPolicy = PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			strState =  DCLConstants.ACTIVE.equals(strState)? 
+					FrameworkUtil.lookupStateName(context, strPolicy, DCLConstants.SYMBOLIC_STATE_ACTIVE) : 
+						FrameworkUtil.lookupStateName(context, strPolicy, DCLConstants.SYMBOLIC_STATE_INACTIVE);
+			return getTemplates(context, strState, null);
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	
+	/**
+	 * Method to get filter values map for Template List table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds nothing
+	 * @return filter values map for Template List table
+	 * @throws DCLException if operation fails
+	 */
+	public Map getfilterValues(Context context, String[] args)	throws DCLException {
+		try {
+			StringList slChoice = new StringList(2);
+			slChoice.add(DCLConstants.ACTIVE);
+			slChoice.add(DCLConstants.INACTIVE);
+			
+			StringList slDisplay = new StringList(2);
+			slDisplay.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),"enoDocumentControl.Label.Active"));
+			slDisplay.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),"enoDocumentControl.Label.Inactive"));
+			
+			Map rangeMap = new HashMap();
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slChoice);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, slDisplay);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+		
+	}
+	/**
+	 * Post process JPO method to post process for Document Template 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds pack arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> createDocumentTemplatePostProcess(Context context,String[] args) throws DCLException
+	{
+			try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String[] saObjectId = (String[]) programMap.get(DCLConstants.NEW_OBJECTID);
+			String[] saRespOrgId = (String[]) programMap.get(DCLConstants.ResponsibleOrganizationOID);
+			String[] saSubMatterExpId = (String[]) programMap.get(DCLConstants.SubjectMatterExpertOID);
+			String[] strDocCategory=(String[]) programMap.get("Category");
+			String[] strDocAutoNaming=(String[]) programMap.get("DocumentAutoNaming");
+			String[] strDocTrainingEnabled=(String[]) programMap.get("TrainingEnabled");
+			
+			DomainObject doDocObject = DomainObject.newInstance(context, saObjectId[0]);
+			Map<String,String> mpReturn = new HashMap();
+			StringList slSelect = new StringList(3);
+			slSelect.add(DomainConstants.SELECT_TYPE);
+			slSelect.add(DomainConstants.SELECT_NAME);
+			slSelect.add(DomainConstants.SELECT_REVISION);
+			slSelect.add(DomainConstants.SELECT_OWNER);
+			slSelect.add(DomainConstants.SELECT_DESCRIPTION);
+			slSelect.add(DomainConstants.SELECT_VAULT);
+			slSelect.add("attribute["+DomainConstants.ATTRIBUTE_TITLE+"]");
+			slSelect.add("attribute["+PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_ENABLED)+"]");
+			slSelect.add("attribute["+PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_INTERVAL)+"]");
+			Map map = doDocObject.getInfo(context, slSelect);
+			map.put(DCLConstants.ResponsibleOrganizationOID, saRespOrgId);
+			map.put(DCLConstants.SubjectMatterExpertOID, saSubMatterExpId);
+			map.put(DCLConstants.NEW_OBJECTID, saObjectId);
+			if(!DCLUtil.isNullOrEmpty(strDocCategory))
+		         	map.put("DocumentCategory", strDocCategory[0]);
+			map.put(DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING, strDocAutoNaming[0]);
+			if(null!=strDocTrainingEnabled && strDocTrainingEnabled.length>0)
+				map.put(DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_ENABLED, strDocTrainingEnabled[0]);
+			documentService.deleteDocument(context, saObjectId, false);
+			String strNewDocId = documentService.createDocumentTemplatePostProcess(context,map);
+			StringBuilder sb = new StringBuilder(256);
+			String[] saFileCheckin = (String[]) programMap.get(DCLConstants.FileCheckin);
+			if(saFileCheckin != null && DCLConstants.YES.equalsIgnoreCase(saFileCheckin[0])){
+			String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.TemplateSuccessfullCreate",
+					new String[] {(String)map.get(DomainConstants.SELECT_TYPE),(String)map.get(DomainConstants.SELECT_NAME),(String)map.get(DomainConstants.SELECT_REVISION)},
+					null, context.getLocale(),
+					DCLConstants.DCL_STRING_RESOURCE);
+			
+			String categories=documentService.getCategories(context, strNewDocId);
+			String showFileCategory;
+			try {
+				showFileCategory = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.Files.EnableFileCategories");
+			} catch (Exception e) {
+				showFileCategory="false";
+				categories="";
+			}
+			
+			mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "checkInFile",""+strMessage+"", strNewDocId, "false",showFileCategory,categories));	//quotes have been used with strMessage to show next line
+			
+						//mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "checkInFile", ""+strMessage+"", strNewDocId, "false")); //quotes have been used with strMessage to show next line
+			}else{			
+								mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "setContentFrameLocation", strNewDocId));
+			}
+					return mpReturn;
+		}catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	/**
+	 * Post process JPO to create document from selected template
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> createDocumentFromTemplatePostProcess(Context context,String[] args) throws DCLException
+	{
+		Map<String,String> mpAttributes = new HashMap(10);
+		Map<String,String> mpReturn = new HashMap();
+		try{
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map mpProgram = (HashMap) JPO.unpackArgs(args);
+			String[] sEnabled = (String[]) mpProgram.get("PeriodicReviewEnabled");
+			String[] sInterval = (String[]) mpProgram.get("PeriodicReviewInterval");
+			String[] sTitle = (String[]) mpProgram.get("TitleDisplay");
+			String[] sSubjectMatterId = (String[]) mpProgram.get("SubjectMatterExpertOID");
+			String[] sDescription = (String[]) mpProgram.get("DescriptionDisplay");
+			String[] sTempId = (String[]) mpProgram.get("selTemplateId");
+			String[] sNewDocId = (String[]) mpProgram.get("newObjectId");
+			// create document template to document
+			StringList slObjSelect = new StringList();
+			slObjSelect.add(DomainConstants.SELECT_ORGANIZATION);
+			
+			Map mpRespOrg = DCLUtil.getInfo(context, sTempId[0], slObjSelect);
+			
+			mpAttributes.put("PeriodicReviewEnabled", sEnabled[0]);
+			if(DCLConstants.NO.equals(sEnabled[0]))
+			{
+				mpAttributes.put("PeriodicReviewInterval", String.valueOf(0));
+				mpAttributes.put("SubjectMatterExpertOID", DomainConstants.EMPTY_STRING);
+			}
+			else
+			{
+				mpAttributes.put("PeriodicReviewInterval", sInterval[0]);
+				mpAttributes.put("SubjectMatterExpertOID", sSubjectMatterId[0]);
+			}
+			mpAttributes.put("DescriptionDisplay", sDescription[0]);
+			mpAttributes.put("TitleDisplay", sTitle[0]);			
+			mpAttributes.put("ResponsibleOrganization", DCLUtil.getOrganizationId(context, (String) mpRespOrg.get(DomainConstants.SELECT_ORGANIZATION)));
+			StringList slSelects =  new StringList(2);
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			slSelects.add(DomainConstants.SELECT_POLICY);
+			
+			Map<String,String> mpDoc = DCLUtil.getInfo(context, sNewDocId[0], slSelects);
+			mpAttributes.put(DomainConstants.SELECT_NAME, (String)mpDoc.get(DomainConstants.SELECT_NAME));
+			mpAttributes.put(DomainConstants.SELECT_REVISION,(String)mpDoc.get(DomainConstants.SELECT_REVISION));
+			mpAttributes.put(DomainConstants.SELECT_POLICY,(String)mpDoc.get(DomainConstants.SELECT_POLICY));
+			documentService.deleteDocument(context, sNewDocId, false);
+			String strDocIdFromTemplate = documentService.createDocumentFromTemplate(context,sTempId[0],mpAttributes);
+			String strJAVAScript = "getTopWindow().getWindowOpener().location.href=\"../common/emxTree.jsp?objectId="+XSSUtil.encodeForJavaScript(context,strDocIdFromTemplate)+"\";";
+			mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, strJAVAScript);
+			
+			return mpReturn;
+		}catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	
+	/**
+	 * Delete or simulate deletion of Controlled Document Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param saTemplateIds list of template ids
+	 * @param bDryRun true if only simulation to be done 
+	 * @return Error Message
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	private String deleteDocumentTemplates(Context context, String[] saTemplateIds, boolean bDryRun) throws DCLException{
+		try {
+			${CLASS:ENODCLDocumentUI} dclUI = new ${CLASS:ENODCLDocumentUI}();
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			String strNoAccessMessage =DomainConstants.EMPTY_STRING;
+			String strStateMessage=DomainConstants.EMPTY_STRING;
+			String strTemplateMessage=DomainConstants.EMPTY_STRING;
+			String strInvalidDocumentMessage = DomainConstants.EMPTY_STRING;
+			
+			Map mreturnInavalidDocId=documentService.deleteDocumentTemplate(context, saTemplateIds, bDryRun);			
+			MapList mListofWrongStateId=(MapList) mreturnInavalidDocId.get(DCLConstants.STATE);
+			MapList mListofTemplateConnectedDocuments =(MapList) mreturnInavalidDocId.get(DCLConstants.TEMPLATE_CONNECTED);
+			MapList mListOfInvalidDocuments = (MapList)mreturnInavalidDocId.get(DCLConstants.INVALIDDOCUMENT);
+		
+			StringList slInvalidDocument=dclUI.getErrorMessage(context, mListOfInvalidDocuments);
+			if(slInvalidDocument.size()>0)
+				strInvalidDocumentMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.InvalidDocument",
+					new String[] {slInvalidDocument.toString()}, null, context.getLocale(),
+					 DCLConstants.DCL_STRING_RESOURCE);
+
+			StringList slStateNameList=dclUI.getErrorMessage(context,mListofWrongStateId);
+			if(slStateNameList.size()>0)
+				strStateMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.TemplateWrongState",
+					new String[] {slStateNameList.toString()}, null, context.getLocale(),
+			        DCLConstants.DCL_STRING_RESOURCE);
+			
+			StringList slTemplateConnectedNameList=dclUI.getErrorMessage(context,mListofTemplateConnectedDocuments);
+			if(slTemplateConnectedNameList.size()>0)
+				strTemplateMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.TemplateConnected",
+					new String[] {slTemplateConnectedNameList.toString()}, null, context.getLocale(),
+					 DCLConstants.DCL_STRING_RESOURCE);
+			StringBuilder sBuff=new StringBuilder(256);
+			if(!(UIUtil.isNullOrEmpty(strNoAccessMessage)&&UIUtil.isNullOrEmpty(strStateMessage)&&UIUtil.isNullOrEmpty(strTemplateMessage)&&UIUtil.isNullOrEmpty(strInvalidDocumentMessage)))
+			{
+				if(!UIUtil.isNullOrEmpty(strNoAccessMessage))
+				{
+					sBuff.append(strNoAccessMessage);
+					sBuff.append("\n");
+				}
+				if(!UIUtil.isNullOrEmpty(strStateMessage))
+				{
+					sBuff.append(strStateMessage);
+					sBuff.append("\n");
+				}
+				if(!UIUtil.isNullOrEmpty(strTemplateMessage))
+				{
+					sBuff.append(strTemplateMessage);
+					sBuff.append("\n");
+				}
+				if(!UIUtil.isNullOrEmpty(strInvalidDocumentMessage))
+				{
+					sBuff.append(strInvalidDocumentMessage);
+					sBuff.append("\n");
+				}
+			}
+			return sBuff.toString();
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	
+	 /**
+     * Method to check if templates can be deleted
+     * @param context the ENOVIA <code>Context</code> object.
+     * @param list of template ids to be deleted
+     * @return Error message if templates(s) cannot be deleted
+     * @throws DCLException if operation fails
+     * @exclude
+     */
+    public String checkDeleteTempates(Context context, String[] args) throws DCLException{
+        try {
+           return deleteDocumentTemplates(context, args, true);
+        } catch (Exception e) {
+            throw new DCLException(e);
+        }
+    } 
+	
+	/**
+	 * Method to delete Controlled Document Template
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT to refresh Template list table
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map deleteDocumentTemplate(Context context, String args[]) throws DCLException
+	{	
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList sListDocId=new StringList();
+			Map returnMap=new HashMap();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strDocObjectId=tr.getObjectId();
+				sListDocId.add(strDocObjectId);
+			}
+			String strArrDocIds[]=new String[sListDocId.size()];
+			sListDocId.copyInto(strArrDocIds);
+
+			String strMessage = deleteDocumentTemplates(context, strArrDocIds, false);
+					
+			returnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "deleteEFormTemplates", strMessage, "true"));
+			return returnMap;
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	/**
+	 * Access Program to show Active command when filter is Inactive
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return boolean return true if filter is Inactive
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean isInActiveMode(Context context,String[] args) throws DCLException
+	{
+		boolean bShow = false;
+		try {
+			
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strPolicy = PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			String strState=FrameworkUtil.lookupStateName(context, strPolicy, DCLConstants.SYMBOLIC_STATE_INACTIVE) ; 
+			String strFilterValue = (String) programMap.get(DCLConstants.DCLTemplatesStatesFilter);
+			String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+			if(UIUtil.isNotNullAndNotEmpty(strFilterValue) && DCLConstants.INACTIVE.equalsIgnoreCase(strFilterValue))
+			{
+				bShow = true;
+			}
+			else if(UIUtil.isNotNullAndNotEmpty(strObjectId))
+			{
+				StringList slSelects=new StringList();
+				slSelects.add(DomainConstants.SELECT_POLICY);
+				slSelects.add(DomainConstants.SELECT_CURRENT);
+				Map<String,String> mDocInfo=DCLUtil.getInfo(context, strObjectId, slSelects);
+				String strDocPolicy=mDocInfo.get(DomainConstants.SELECT_POLICY);
+				String strDocCurrent=mDocInfo.get(DomainConstants.SELECT_CURRENT);
+				if(strDocPolicy.equals(strPolicy)&&strDocCurrent.equals(strState))
+				bShow = true;
+			}
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+		return bShow;
+	}
+	
+	/**
+	 * Access Program to show Inactive command when filter is Active
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return boolean return true if filter is Active
+	 * @throws DCLException if operation fails
+	 */
+	public boolean isActiveMode(Context context,String[] args) throws DCLException
+	{
+		boolean bShow = false;
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(DCLConstants.DCLTemplatesStatesFilter);
+			if(UIUtil.isNullOrEmpty(strFilterValue) || DCLConstants.ACTIVE.equalsIgnoreCase(strFilterValue) )
+			{
+				bShow = true;
+			}
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+		return bShow;
+	}
+	/**
+	 * Method to Promote or Demote the state of Controlled Document Template
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT to refresh Template list table
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> promoteTemplateToActiveInactiveState(Context context,String[] args) throws DCLException
+	{
+		try {
+			Map<String,String> mpReturn = new HashMap();
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strEmxTableRowIds[] =  (String[])programMap.get(DCLConstants.TABLEROWID);
+			StringList slTemplate = new StringList();
+			
+			String [] strTempId = (String[]) programMap.get(DCConstants.OBJECTID);
+			if(strTempId!=null&&UIUtil.isNotNullAndNotEmpty(strTempId[0]))
+			{
+				slTemplate.add(strTempId[0]);
+				documentService.changeTemplateState(context,slTemplate);
+								mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "contentFrameDCLTemplatesTab"));
+			}
+			else if(strEmxTableRowIds!=null)
+			{
+				for(String strRowIds:strEmxTableRowIds)
+				{
+					String strRowId=strRowIds;
+					TableRowId tableRowId=new TableRowId(strRowId);
+					String strSelectedDocId=tableRowId.getObjectId();
+					slTemplate.add(strSelectedDocId);
+				}
+				documentService.changeTemplateState(context,slTemplate);
+							mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "contentFrameDCLTemplatesTab"));
+			}
+			return mpReturn;
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map preProcessCreateDocumentFromTemplate(Context context,String[] args) throws DCLException
+	{
+		try{
+			String policyName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			String strStateActive = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, policyName,
+					DCLConstants.SYMBOLIC_STATE_ACTIVE);
+				
+			String strTemplateType = new String();
+			String strTemplateName = new String();
+			Map programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowIdActual");
+			TableRowId tr = new TableRowId(emxTableRowId[0]);
+			String objectId = tr.getObjectId();
+			Map mpReturn =new HashMap();
+			StringList sldata = new StringList();
+			sldata.add(DomainConstants.SELECT_TYPE);
+			sldata.add(DomainConstants.SELECT_CURRENT);
+			sldata.add(DomainConstants.SELECT_NAME);
+			Map mpInfo = (Map) DCLUtil.getInfo(context,objectId,sldata);
+			String strTemplateCurrent = (String) mpInfo.get(DomainConstants.SELECT_CURRENT);
+			strTemplateName = (String) mpInfo.get(DomainConstants.SELECT_NAME);
+			if(null!=mpInfo && !mpInfo.isEmpty() && strTemplateCurrent.equalsIgnoreCase(strStateActive))
+			{
+				strTemplateType = (String) mpInfo.get(DomainConstants.SELECT_TYPE);
+				strTemplateType = strTemplateType.replaceAll(" ","");
+				mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "preProcessCreateDocumentFromTemplate", DCLConstants.SYMBOLIC_TYPE_QUALITY_SYSTEM_DOCUMENT, objectId));
+			}
+				else
+				{
+					String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.TemplateInvalid",
+							new String[] {strTemplateName},
+							null, context.getLocale(),
+							DCLConstants.DCL_STRING_RESOURCE);
+									mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertwithParentLocationRefresh", strMessage)); 
+				}
+			return mpReturn;
+		}catch(Exception e)
+		{
+			throw new DCLException(e);
+		}
+	}
+	public Map<String, List<String>> getDocumentAutoNamingRangeType(Context context, String args[]) throws Exception {
+		try {
+			return (Map<String, List<String>>) DCUtil.getAttributeRanges(context, DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING);
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	public boolean checkIfNameChangeAllowedForMandatory(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId=(String) programMap.get(DCLConstants.OBJECTID);
+			DomainObject dobjDoc=DomainObject.newInstance(context,strObjectId);
+			
+			String strRelTemplateToDocument =PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_RELATIONSHIP_TEMPLATE_TO_DOCUMENT);
+			String strTypeControlledDocument = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			
+			StringBuilder strRelDocumentTemplate = new StringBuilder(64).append("from[").append(strRelTemplateToDocument).append("].to.id");
+			
+			List<String> slSelects=new StringList();
+			slSelects.add("type.kindof["+strTypeControlledDocument+"]");
+			slSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING)));
+			slSelects.add(strRelDocumentTemplate.toString());
+			Map mDocInfo=dobjDoc.getInfo(context,(StringList) slSelects);
+			String strType=(String) mDocInfo.get("type.kindof["+strTypeControlledDocument+"]");
+			String strTemplate=(String) mDocInfo.get(strRelDocumentTemplate.toString());
+			if(Boolean.valueOf(strType)&&UIUtil.isNotNullAndNotEmpty(strTemplate))
+			{
+				DomainObject dobj=DomainObject.newInstance(context,strTemplate);
+				
+				String strAutoNaming= dobj.getInfo(context,DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING)));
+				if(strAutoNaming.equals(DCLConstants.MANDATORY)){
+					return false;
+				}
+			}
+			return true;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	public boolean checkIfNameChangeAllowed(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId=(String) programMap.get(DCLConstants.OBJECTID);
+			DomainObject dobjDoc=DomainObject.newInstance(context,strObjectId);
+			
+			String strRelTemplateToDocument =PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_RELATIONSHIP_TEMPLATE_TO_DOCUMENT);
+			String strTypeControlledDocument = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			
+			StringBuilder strRelDocumentTemplate = new StringBuilder(64).append("from[").append(strRelTemplateToDocument).append("].to.id");
+			
+			List<String> slSelects=new StringList();
+			slSelects.add("type.kindof["+strTypeControlledDocument+"]");
+			slSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING)));
+			slSelects.add(strRelDocumentTemplate.toString());
+			Map mDocInfo=dobjDoc.getInfo(context,(StringList) slSelects);
+			String strType=(String) mDocInfo.get("type.kindof["+strTypeControlledDocument+"]");
+			String strTemplate=(String) mDocInfo.get(strRelDocumentTemplate.toString());
+			if(Boolean.valueOf(strType)&&UIUtil.isNotNullAndNotEmpty(strTemplate))
+			{
+				DomainObject dobj=DomainObject.newInstance(context,strTemplate);
+				
+				String strAutoNaming= dobj.getInfo(context,DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_DOCUMENT_AUTONAMING)));
+				
+				if(strAutoNaming.equals(DCLConstants.MANDATORY)){
+					return true;
+				}
+				
+			}
+			String strIsVersionObject= dobjDoc.getInfo(context,DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_IsVersionObject)));
+			if(!dobjDoc.checkAccess(context, (short) AccessConstants.cChangeName)&&"false".equalsIgnoreCase(strIsVersionObject))
+				return true;
+			return false;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	
+}
+
+
+
+
+

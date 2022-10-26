@@ -1,0 +1,1820 @@
+
+/**
+ * 
+ * ${CLASSNAME}.java
+ * 
+ * Class to hold the business logic related to My Complaints Work Queue
+ * functionality
+ */
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.esrinquiry.ESRInquiryException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.MyComplaintWorkQueueService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+
+	}
+
+	/**
+	 * Gets MyComplaintWorkQueueService implementation reference
+	 * 
+	 * @param context
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	private MyComplaintWorkQueueService getMyComplaintWorkQueueService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = (MyComplaintWorkQueueService) component
+					.getService(MyComplaintWorkQueueService.class);
+			return myComplaintWorkQueueService;
+
+		} catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component
+					.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		} catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	/**
+	 * This method will be called to List all active Equipment Service Requests
+	 * created by login person will be listed in the My Equipment Service Requests
+	 * work queue
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @return MapList containing Equipment Service Request details
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	// TODO
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMyInquiries(Context context, String[] args) throws TicketException {
+		MapList mlInquiries = new MapList();
+		String strCreateState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+				TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+		String strInProcessState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+				TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS);
+		MapList mlResult = new MapList();
+
+		try {
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String strActiveFilterValue = (String) mapProgram.get(TicketConstants.INQ_ACTIVE_FILTER_COMMAND);
+
+			if (!Helper.isNullOrEmpty(strActiveFilterValue)) {
+				switch (strActiveFilterValue) {
+				case TicketConstants.FILTER_ACTIVE:
+					mlInquiries = myComplaintWorkQueueService.getActiveClosedComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, true);
+					break;
+				case TicketConstants.FILTER_CLOSED:
+					mlInquiries = myComplaintWorkQueueService.getActiveClosedComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, false);
+					break;
+				case TicketConstants.FILTER_ASSIGNED:
+					mlInquiries = myComplaintWorkQueueService.getAssignedUnassignedComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, true);
+					break;
+				case TicketConstants.FILTER_UNASSIGNED:
+					mlInquiries = myComplaintWorkQueueService.getAssignedUnassignedComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, false);
+					break;
+				case TicketConstants.FILTER_CREATE:
+					mlInquiries = myComplaintWorkQueueService.getCreateFilterComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, strCreateState);
+					break;
+				case TicketConstants.FILTER_INPROCESS:
+					mlInquiries = myComplaintWorkQueueService.getCreateFilterComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, strInProcessState);
+					break;
+				default:
+					mlInquiries = myComplaintWorkQueueService.getActiveClosedComplaintTickets(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, true);
+					break;
+				}
+			}
+		} catch (Exception e) {
+			throw new ESRInquiryException(e.getLocalizedMessage());
+		}
+		if (mlResult.size() > 0)
+			return mlResult;
+		else
+			return mlInquiries;
+	}
+
+	/**
+	 * Shows Number of Days the complaint object is in Create State on My Complaints
+	 * table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return List
+	 * @throws ESRInquiryException
+	 * @exclude
+	 */
+	public List<String> getDaysInCreate(Context context, String[] args) throws ESRInquiryException {
+
+		String strCreationDate = new String();
+		String strCurrent = new String();
+		List<String> valVector = null;
+
+		try {
+			String strCreateState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			valVector = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strCreationDate = (String) objectMap.get(DomainConstants.SELECT_ORIGINATED);
+				strCurrent = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+
+				if (!Helper.isNullOrEmpty(strCurrent) && !Helper.isNullOrEmpty(strCreationDate)) {
+					SimpleDateFormat dateFormat = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(),
+							context.getLocale());
+					String strTodayDate = dateFormat.format(new Date());
+
+					if (strCurrent.equals(strCreateState)) {
+						String strNumberOfDays = TicketUtil.daysBetween(context, strCreationDate, strTodayDate);
+						valVector.add(strNumberOfDays);
+					} else
+						valVector.add(DomainConstants.EMPTY_STRING);
+				} else
+					valVector.add(DomainConstants.EMPTY_STRING);
+			}
+		} catch (Exception e) {
+			throw new ESRInquiryException(e.getLocalizedMessage());
+		}
+		return valVector;
+	}
+
+	/**
+	 * Shows Number of Days the complaint object is in In Process State on My
+	 * Complaints table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return List
+	 * @throws ESRInquiryException
+	 * @exclude
+	 */
+	public List<String> getDaysInProcess(Context context, String[] args) throws ESRInquiryException {
+
+		String strComplaintId = new String();
+		String strCurrent = new String();
+		String strCreationDate = new String();
+		List<String> valVector = null;
+		try {
+
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			valVector = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strComplaintId = (String) objectMap.get(DomainConstants.SELECT_ID);
+				strCreationDate = (String) objectMap.get(DomainConstants.SELECT_ORIGINATED);
+				strCurrent = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+
+				if (!Helper.isNullOrEmpty(strCurrent) && !Helper.isNullOrEmpty(strCreationDate)) {
+					String strNumberOfDays = myComplaintWorkQueueService.getNumberOfDaysInProcessState(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY, strComplaintId, strCreationDate, strCurrent);
+					valVector.add(strNumberOfDays);
+				} else
+					valVector.add("");
+			}
+		} catch (Exception e) {
+			throw new ESRInquiryException(e.getLocalizedMessage());
+		}
+		return valVector;
+	}
+
+	/**
+	 * Shows Number of Days the complaint object is in In Process State on My
+	 * Complaints table.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return List
+	 * @throws ESRInquiryException
+	 * @exclude
+	 */
+	public List<String> getAgeColumn(Context context, String[] args) throws ESRInquiryException {
+
+		List<String> valVector = null;
+		String strOriginated = new String();
+		String strDate = new String();
+		String strState = new String();
+		String strNumberOfDays = new String();
+		try {
+			String strClosedState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+
+			String strInvalidState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_INVALID);
+
+			SimpleDateFormat dateFormat = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(),
+					context.getLocale());
+			String strTodayDate = dateFormat.format(new Date());
+
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			valVector = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strState = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+				strOriginated = (String) objectMap.get(DomainConstants.SELECT_ORIGINATED);
+
+				if (strState.equalsIgnoreCase(strClosedState) || strState.equalsIgnoreCase(strInvalidState)) {
+					strDate = (String) objectMap.get(DomainObject.getAttributeSelect(
+							PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_CLOSED_DATE)));
+					if (Helper.isNullOrEmpty(strDate))
+						strDate = (String) objectMap
+								.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+										TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVALIDATED_DATE)));
+
+					if (!Helper.isNullOrEmpty(strDate)) {
+						strNumberOfDays = TicketUtil.daysBetween(context, strOriginated, strDate);
+						valVector.add(strNumberOfDays);
+					} else
+						valVector.add(DomainConstants.EMPTY_STRING);
+				} else {
+
+					if (!Helper.isNullOrEmpty(strOriginated)) {
+						strNumberOfDays = TicketUtil.daysBetween(context, strOriginated, strTodayDate);
+						valVector.add(strNumberOfDays);
+					} else
+						valVector.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+		} catch (Exception ex) {
+			throw new ESRInquiryException(ex.getLocalizedMessage());
+		}
+
+		return valVector;
+
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTablePQCINQMyInquiriesColumnInvestigation(Context context, String[] args)
+			throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			Vector<String> vcInvestigationSeverity = new Vector<String>();
+			StringList slAttrSeverity = null;
+			String strAttrSeverity = new String();
+
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Iterator<Map<?, ?>> iterator = ObjList.iterator(); iterator.hasNext();) {
+					Map<?, ?> object = iterator.next();
+					String strType = (String) object.get(DomainConstants.SELECT_TYPE);
+					String strComplaint = PropertyUtil.getSchemaProperty(context,
+							TicketConstants.SYMBOLIC_TYPE_INQUIRY);
+					slAttrSeverity = (StringList) object.get("from["
+							+ PropertyUtil.getSchemaProperty(context,
+									TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+							+ "].to.attribute["
+							+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY)
+							+ "]");
+
+					if (strComplaint.equalsIgnoreCase(strType) && !Helper.isNullOrEmpty(slAttrSeverity)) {
+						strAttrSeverity = getInvestigationSeverity(context, object);
+
+						if (strAttrSeverity.equals("Low")) {
+							StringBuffer sbSeverityGif = new StringBuffer();
+							sbSeverityGif.append(
+									"<img src=\"../common/images/iconStatusComplaintLow.png\" border=\"0\" alt=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\" title=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\"/>");
+							vcInvestigationSeverity.add(sbSeverityGif.toString());
+						} else if (strAttrSeverity.equals("Medium")) {
+							StringBuffer sbSeverityGif = new StringBuffer();
+
+							sbSeverityGif.append(
+									"<img src=\"../common/images/iconStatusComplaintMedium.png\" border=\"0\" alt=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\" title=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\"/>");
+							vcInvestigationSeverity.add(sbSeverityGif.toString());
+						} else if (strAttrSeverity.equals("High")) {
+							StringBuffer sbSeverityGif = new StringBuffer();
+
+							sbSeverityGif.append(
+									"<img src=\"../common/images/iconStatusComplaintHigh.png\" border=\"0\" alt=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\" title=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\"/>");
+							vcInvestigationSeverity.add(sbSeverityGif.toString());
+						} else if (strAttrSeverity.equals("Urgent")) {
+							StringBuffer sbSeverityGif = new StringBuffer();
+
+							sbSeverityGif.append(
+									"<img src=\"../common/images/iconStatusComplaintUrgent.png\" border=\"0\" alt=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\" title=\"");
+							sbSeverityGif.append(XSSUtil.encodeForHTML(context, strAttrSeverity));
+							sbSeverityGif.append("\"/>");
+							vcInvestigationSeverity.add(sbSeverityGif.toString());
+						} else {
+							vcInvestigationSeverity.add(DomainConstants.EMPTY_STRING);
+						}
+					} else {
+						vcInvestigationSeverity.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+
+			}
+			return vcInvestigationSeverity;
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTablePQCINQMyInquiriesColumnProduct(Context context, String[] args)
+			throws ESRInquiryException {
+		Vector<String> vcProduct = null;
+		StringList slProductId = new StringList();
+		StringList slProduct = new StringList();
+		String strObjectIcon = new String();
+		String strLevel = new String();
+		StringList slPrimaryEvent = null;
+		String strSelectableProductIdFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.id";
+		String strSelectableProductNameFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.name";
+
+		String strSelectableProductIdFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.id";
+		String strSelectableProductNameFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.name";
+
+		/*
+		 * String strSelectableProductIdFromComplaint = "from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT) + "].to.from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT) + "].to[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT) + "].from.id"; String
+		 * strSelectableProductNameFromComplaint = "from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT) + "].to.from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT) + "].to[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT) + "].from.name";
+		 * 
+		 * String strSelectableProductIdFromEvent = "from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT) + "].to[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT) + "].from.id"; String
+		 * strSelectableProductNameFromEvent = "from[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT) + "].to[" +
+		 * PropertyUtil.getSchemaProperty(context,
+		 * TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT) + "].from.name";
+		 */
+		try {
+			StringBuffer sbProductIcon = new StringBuffer();
+			strObjectIcon = UINavigatorUtil.getTypeIconProperty(context,
+					PropertyUtil.getSchemaProperty(context, "type_Model"));
+			sbProductIcon.append("<img src=\"../common/images/");
+			sbProductIcon.append(XSSUtil.encodeForURL(context, strObjectIcon));
+			sbProductIcon.append("\" border=\"0\"/>");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			vcProduct = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strLevel = (String) objectMap.get(TicketConstants.LEVEL);
+				if (null == slProductId || null == slProduct) {
+					slProductId = new StringList();
+					slProduct = new StringList();
+				}
+				if (!Helper.isNullOrEmpty(strLevel) && Integer.valueOf(strLevel) > 0) {
+					Object obj = objectMap.get(strSelectableProductIdFromEvent);
+					if (null != obj && obj instanceof String) {
+						String strProductId = (String) objectMap.get(strSelectableProductIdFromEvent);
+						slProductId.addElement(strProductId);
+						String strProduct = (String) objectMap.get(strSelectableProductNameFromEvent);
+						slProduct.addElement(strProduct);
+					} // end of 2nd if
+					else {
+						slProductId = (StringList) objectMap.get(strSelectableProductIdFromEvent);
+						slProduct = (StringList) objectMap.get(strSelectableProductNameFromEvent);
+					}
+
+					if (!Helper.isNullOrEmpty(slProductId) && slProductId.size() > 0 && !Helper.isNullOrEmpty(slProduct)
+							&& slProduct.size() > 0) {
+						slProductId = TicketUtil.removeDuplicates(slProductId);
+						slProduct = TicketUtil.removeDuplicates(slProduct);
+
+						StringBuffer sbHref = new StringBuffer();
+						for (int j = 0; j < slProductId.size(); j++) {
+
+							sbHref.append(sbProductIcon.toString());
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForJavaScript(context, (String) slProductId.get(j)));
+							sbHref.append("'");
+							sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+							sbHref.append(XSSUtil.encodeForHTML(context, (String) slProduct.get(j)));
+							sbHref.append("</a>");
+
+						}
+						vcProduct.add(sbHref.toString());
+					} else
+						vcProduct.add(DomainConstants.EMPTY_STRING);
+				} // end of 1st if
+				else {
+					slProductId = (StringList) objectMap.get(strSelectableProductIdFromComplaint);
+					slProduct = (StringList) objectMap.get(strSelectableProductNameFromComplaint);
+
+					if (!Helper.isNullOrEmpty(slProductId) && slProductId.size() > 0 && !Helper.isNullOrEmpty(slProduct)
+							&& slProduct.size() > 0) {
+						slProductId = TicketUtil.removeDuplicates(slProductId);
+						slProduct = TicketUtil.removeDuplicates(slProduct);
+
+						slPrimaryEvent = (StringList) objectMap.get("from["
+								+ PropertyUtil.getSchemaProperty(context,
+										TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+								+ "].to.attribute[" + PropertyUtil.getSchemaProperty(context,
+										TicketConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_EVENT)
+								+ "]");
+
+						if (!Helper.isNullOrEmpty(slPrimaryEvent) && slPrimaryEvent.contains("TRUE")) {
+							for (int i = 0; i < slPrimaryEvent.size(); i++) {
+								if ("TRUE".equalsIgnoreCase((String) slPrimaryEvent.get(i))) {
+
+									StringBuffer sbHref = new StringBuffer();
+									for (int j = 0; j < slProductId.size(); j++) {
+										if ((Helper.getTypeKindOf(context,
+												DomainObject.newInstance(context, (String) slProductId.get(j)),
+												TicketConstants.SYMBOLIC_type_Products)).containsValue(Boolean.TRUE)) {
+											sbHref.append(sbProductIcon.toString());
+											sbHref.append(
+													"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+											sbHref.append("&amp;objectId=");
+											sbHref.append(
+													XSSUtil.encodeForJavaScript(context, (String) slProductId.get(j)));
+											sbHref.append("'");
+											sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+											sbHref.append(XSSUtil.encodeForHTML(context,
+													DomainObject.newInstance(context, (String) slProductId.get(j))
+															.getName(context)));
+											sbHref.append("</a>");
+										}
+
+									}
+									vcProduct.add(sbHref.toString());
+								}
+							}
+						} else
+							vcProduct.add(DomainConstants.EMPTY_STRING);
+					} else
+						vcProduct.add(DomainConstants.EMPTY_STRING);
+				}
+
+			}
+
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+
+		return vcProduct;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTablePQCINQMyInquiriesColumnProductLine(Context context, String[] args)
+			throws ESRInquiryException { // XSSOK
+
+		Vector<String> vcProductLine = new Vector<String>();
+		StringList slProductLineId = new StringList();
+		StringList slProductLine = new StringList();
+		String strObjectIcon = new String();
+		String strLevel = new String();
+		StringList slPrimaryEvent = null;
+
+		String strSelectableProductLineIdFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT)
+				+ "].from.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS)
+				+ "].from.id";
+		String strSelectableProductLineNameFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT)
+				+ "].from.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS)
+				+ "].from.name";
+
+		String strSelectableProductLineIdFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT)
+				+ "].from.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS)
+				+ "].from.id";
+		String strSelectableProductLineNameFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT)
+				+ "].from.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS)
+				+ "].from.name";
+
+		try {
+			StringBuffer sbProductLineIcon = new StringBuffer();
+			strObjectIcon = UINavigatorUtil.getTypeIconProperty(context, DomainConstants.TYPE_PRODUCTLINE);
+			sbProductLineIcon.append("<img src=\"../common/images/");
+			sbProductLineIcon.append(XSSUtil.encodeForURL(context, strObjectIcon));
+			sbProductLineIcon.append("\" border=\"0\"/>");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			vcProductLine = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strLevel = (String) objectMap.get(TicketConstants.LEVEL);
+				if (null == slProductLineId || null == slProductLine) {
+					slProductLineId = new StringList();
+					slProductLine = new StringList();
+				}
+				if (!Helper.isNullOrEmpty(strLevel) && Integer.valueOf(strLevel) > 0) {
+					Object obj = objectMap.get(strSelectableProductLineIdFromEvent);
+					if (null != obj && obj instanceof String) {
+						String strProductLineId = (String) objectMap.get(strSelectableProductLineIdFromEvent);
+						slProductLineId.addElement(strProductLineId);
+						String strProductLine = (String) objectMap.get(strSelectableProductLineNameFromEvent);
+						slProductLine.addElement(strProductLine);
+					} else {
+						slProductLineId = (StringList) objectMap.get(strSelectableProductLineIdFromEvent);
+						slProductLine = (StringList) objectMap.get(strSelectableProductLineNameFromEvent);
+					}
+
+					if (!Helper.isNullOrEmpty(slProductLineId) && slProductLineId.size() > 0
+							&& !Helper.isNullOrEmpty(slProductLine) && slProductLine.size() > 0) {
+						slProductLineId = TicketUtil.removeDuplicates(slProductLineId);
+						slProductLine = TicketUtil.removeDuplicates(slProductLine);
+
+						StringBuffer sbHref = new StringBuffer();
+						for (int j = 0; j < slProductLineId.size(); j++) {
+
+							sbHref.append(sbProductLineIcon.toString());
+							sbHref.append(
+									"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForJavaScript(context, (String) slProductLineId.get(j)));
+							sbHref.append("'");
+							sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+							sbHref.append(XSSUtil.encodeForHTML(context, (String) slProductLine.get(j)));
+							sbHref.append("</a>");
+
+						}
+						vcProductLine.add(sbHref.toString());
+
+					} else
+						vcProductLine.add(DomainConstants.EMPTY_STRING);
+				} // end of 1st if
+				else {
+					slProductLineId = (StringList) objectMap.get(strSelectableProductLineIdFromComplaint);
+					slProductLine = (StringList) objectMap.get(strSelectableProductLineNameFromComplaint);
+
+					if (!Helper.isNullOrEmpty(slProductLineId) && slProductLineId.size() > 0
+							&& !Helper.isNullOrEmpty(slProductLine) && slProductLine.size() > 0) {
+						slProductLineId = TicketUtil.removeDuplicates(slProductLineId);
+						slProductLine = TicketUtil.removeDuplicates(slProductLine);
+
+						slPrimaryEvent = (StringList) objectMap.get("from["
+								+ PropertyUtil.getSchemaProperty(context,
+										TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+								+ "].to.attribute[" + PropertyUtil.getSchemaProperty(context,
+										TicketConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_EVENT)
+								+ "]");
+
+						if (!Helper.isNullOrEmpty(slPrimaryEvent) && slPrimaryEvent.contains("TRUE")) {
+							for (int i = 0; i < slPrimaryEvent.size(); i++) {
+								if ("TRUE".equalsIgnoreCase((String) slPrimaryEvent.get(i))) {
+
+									StringBuffer sbHref = new StringBuffer();
+									for (int j = 0; j < slProductLineId.size(); j++) {
+
+										sbHref.append(sbProductLineIcon.toString());
+										sbHref.append(
+												"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+										sbHref.append("&amp;objectId=");
+										sbHref.append(
+												XSSUtil.encodeForJavaScript(context, (String) slProductLineId.get(j)));
+										sbHref.append("'");
+										sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+										sbHref.append(XSSUtil.encodeForHTML(context, (String) slProductLine.get(j)));
+										sbHref.append("</a>");
+
+									}
+									vcProductLine.add(sbHref.toString());
+								}
+							}
+						} else
+							vcProductLine.add(DomainConstants.EMPTY_STRING);
+					} else
+						vcProductLine.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+		return vcProductLine;
+	}
+
+	/**
+	 * Deprecated in R418. function: getOrganizationForTable program:
+	 * com.dassault_systemes.enovia.lsa.ticket.services.ui.ComplaintTicket being
+	 * used now.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+
+	@Deprecated
+	public Vector<String> getTablePQCINQMyInquiriesColumnOrg(Context context, String[] args)
+			throws ESRInquiryException { // XSSOK
+		Vector<String> vcOrganization = null;
+		StringList slOrgId = new StringList();
+		StringList slOrg = new StringList();
+		String strObjectIcon = new String();
+		String strLevel = new String();
+
+		String strSelectableOrgIdFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPANY_PRODUCT)
+				+ "].from.id";
+		String strSelectableOrgNameFromComplaint = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+				+ "].to.from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPANY_PRODUCT)
+				+ "].from.name";
+
+		String strSelectableOrgIdFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPANY_PRODUCT)
+				+ "].from.id";
+		String strSelectableOrgNameFromEvent = "from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT)
+				+ "].to.to["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPANY_PRODUCT)
+				+ "].from.name";
+
+		try {
+			StringBuffer sbProductIcon = new StringBuffer();
+			strObjectIcon = UINavigatorUtil.getTypeIconProperty(context, DomainConstants.TYPE_COMPANY);
+			sbProductIcon.append("<img src=\"../common/images/");
+			sbProductIcon.append(XSSUtil.encodeForURL(context, strObjectIcon));
+			sbProductIcon.append("\" border=\"0\"/>");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			vcOrganization = new Vector<String>(mlObject.size());
+
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				strLevel = (String) objectMap.get(TicketConstants.LEVEL);
+				if (null == slOrgId || null == slOrg) {
+					slOrgId = new StringList();
+					slOrg = new StringList();
+				}
+				if (!Helper.isNullOrEmpty(strLevel) && Integer.valueOf(strLevel) > 0) {
+					Object obj = objectMap.get(strSelectableOrgIdFromEvent);
+					if (null != obj && obj instanceof String) {
+						String strOrgId = (String) objectMap.get(strSelectableOrgIdFromEvent);
+						slOrgId.addElement(strOrgId);
+						String strOrg = (String) objectMap.get(strSelectableOrgNameFromEvent);
+						slOrg.addElement(strOrg);
+					} // end of 2nd if
+					else {
+						slOrgId = (StringList) objectMap.get(strSelectableOrgIdFromEvent);
+						slOrg = (StringList) objectMap.get(strSelectableOrgNameFromEvent);
+					}
+				} // end of 1st if
+				else {
+					slOrgId = (StringList) objectMap.get(strSelectableOrgIdFromComplaint);
+					slOrg = (StringList) objectMap.get(strSelectableOrgNameFromComplaint);
+					if (Helper.isNullOrEmpty(slOrgId) && Helper.isNullOrEmpty(slOrg)) {
+						String parentId = (String) objectMap.get("id[parent]");
+						if (Helper.isNullOrEmpty(parentId)) {
+							parentId = (String) objectMap.get(DomainConstants.SELECT_ID);
+						}
+						List<Map<?, ?>> mlComplaint = QueryUtil.getInfo(context, new String[] { parentId },
+								Helper.stringList(strSelectableOrgIdFromComplaint, strSelectableOrgNameFromComplaint));
+						slOrgId = (StringList) mlComplaint.get(0).get(strSelectableOrgIdFromComplaint);
+						slOrg = (StringList) mlComplaint.get(0).get(strSelectableOrgNameFromComplaint);
+
+					}
+				}
+
+				if (!Helper.isNullOrEmpty(slOrgId) && slOrgId.size() > 0 && !Helper.isNullOrEmpty(slOrg)
+						&& slOrg.size() > 0) {
+					slOrgId = TicketUtil.removeDuplicates(slOrgId);
+					slOrg = TicketUtil.removeDuplicates(slOrg);
+
+					StringBuffer sbHref = new StringBuffer();
+					for (int i = 0; i < slOrgId.size(); i++) {
+
+						sbHref.append(sbProductIcon.toString());
+						sbHref.append(
+								"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+						sbHref.append("&amp;objectId=");
+						sbHref.append(XSSUtil.encodeForJavaScript(context, (String) slOrgId.get(i)));
+						sbHref.append("'");
+						sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+						sbHref.append(XSSUtil.encodeForHTML(context, (String) slOrg.get(i)));
+						sbHref.append("</a>");
+					}
+					vcOrganization.add(sbHref.toString());
+				} else
+					vcOrganization.add(DomainConstants.EMPTY_STRING);
+			}
+
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+
+		return vcOrganization;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTablePQCINQMyInquiriesColumnInvestigationIcon(Context context, String[] args)
+			throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			Vector<String> vcInvestigation = new Vector<String>();
+			Map<?, ?> mapObject = null;
+			StringList slComplaintInvestigationState = null;
+			String strComplaintInvestigationType = new String();
+			String strObjectIcon = new String();
+			String strComplaintId = new String();
+			String strComplaintInvestigationState = new String();
+
+			String strCompleteState = TicketUtil.getStateName(context,
+					TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+					TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE);
+
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Iterator<Map<?, ?>> iterator = ObjList.iterator(); iterator.hasNext();) {
+					mapObject = iterator.next();
+					strComplaintInvestigationType = PropertyUtil.getSchemaProperty(context,
+							TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+					strObjectIcon = UINavigatorUtil.getTypeIconProperty(context, strComplaintInvestigationType);
+					strComplaintId = (String) mapObject.get(DomainConstants.SELECT_ID);
+					slComplaintInvestigationState = (StringList) mapObject
+							.get("from["
+									+ PropertyUtil.getSchemaProperty(context,
+											TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+									+ "].to.current");
+
+					if (!Helper.isNullOrEmpty(strComplaintId) && !Helper.isNullOrEmpty(slComplaintInvestigationState)) {
+
+						strComplaintInvestigationState = getInvestigationState(context, mapObject);
+						String investigationId = new String();
+						List<Map<?, ?>> mlInvestigation = QueryUtil.getRelatedObjects(context,
+								DomainObject.newInstance(context, strComplaintId),
+								TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION,
+								TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION,
+								Helper.stringList(DomainObject.SELECT_ID), Helper.stringList(), false, true, (short) 0,
+								null, null);
+						if (mlInvestigation.size() > 0) {
+							Map mContact = mlInvestigation.get(0);
+							investigationId = (String) mContact.get(DomainObject.SELECT_ID);
+						}
+
+						StringBuffer sbSeverityGif = new StringBuffer();
+						StringBuffer sbHref = new StringBuffer();
+
+						sbSeverityGif.append("<img src=\"../common/images/");
+						if (strComplaintInvestigationState.equalsIgnoreCase(strCompleteState)) {
+							sbSeverityGif.append("iconStatusInvestigationComplete.png");
+						} else {
+							sbSeverityGif.append(XSSUtil.encodeForURL(context, strObjectIcon));
+						}
+						sbSeverityGif.append("\" border=\"0\"");
+						sbSeverityGif.append(" alt=\"");
+						sbSeverityGif.append(XSSUtil.encodeForHTML(context, strComplaintInvestigationState));
+						sbSeverityGif.append("\" title=\"");
+						sbSeverityGif.append(XSSUtil.encodeForHTML(context, strComplaintInvestigationState));
+						sbSeverityGif.append("\"/>");
+
+						sbHref.append(
+								"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+						sbHref.append("&amp;objectId=");
+						sbHref.append(XSSUtil.encodeForJavaScript(context, investigationId));
+						sbHref.append("&amp;DefaultCategory=PQCCPTInvestigation");
+						sbHref.append("'");
+						sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+						sbHref.append(sbSeverityGif);
+						sbHref.append("</a>");
+
+						vcInvestigation.add(sbHref.toString());
+
+					} else
+						vcInvestigation.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return vcInvestigation;
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	private String getInvestigationState(Context context, Map mapObject) throws ESRInquiryException {
+		String strComplaintInvestigationState = new String();
+		StringList slToType = null;
+		StringList slComplaintInvestigationState = (StringList) mapObject.get("from["
+				+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+				+ "].to.current");
+		for (int i = 0; slComplaintInvestigationState.size() > i; i++) {
+			slToType = (StringList) mapObject.get("from[" + PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION) + "].to.type");
+			String strToType = (String) slToType.get(i);
+
+			if (strToType.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION))) {
+				strComplaintInvestigationState = (String) slComplaintInvestigationState.get(i);
+			}
+		}
+		return strComplaintInvestigationState;
+	}
+
+	private String getInvestigationSeverity(Context context, Map<?, ?> mapObject) throws ESRInquiryException {
+		String strAttrSeverity = new String();
+		// StringList slToType = null;
+		StringList slAttrSeverity = (StringList) mapObject
+				.get("from["
+						+ PropertyUtil.getSchemaProperty(context,
+								TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+						+ "].to.attribute["
+						+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY) + "]");
+		for (int i = 0; slAttrSeverity.size() > i; i++) {
+			// slToType = (StringList) mapObject.get("from["
+			// + PropertyUtil.getSchemaProperty(context,
+			// TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION) +
+			// "].to.type");
+			// String strToType = (String) slToType.get(i);
+			// if
+			// (strToType.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context,
+			// TicketConstants.SYMBOLIC_TYPE_COMPLAINT_INVESTIGATION))) {
+			strAttrSeverity = (String) slAttrSeverity.get(i);
+			// }
+		}
+		return strAttrSeverity;
+	}
+
+	/**
+	 * This method is used to get choices for Severity attribute
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - objectList MapList
+	 * @returns HashMap containing Severity
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since PMC 10.Next
+	 */
+	public Map<?, ?> getTablePQCINQMyInquiriesColumnSeverityRange(Context context, String[] args) throws Exception {
+		try {
+			return Helper.getAttributeRanges(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTablePQCINQMyInquiriesColumnContact(Context context, String[] args)
+			throws ESRInquiryException { // XSSOK
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			Vector<String> vcContact = new Vector<String>();
+			Map<?, ?> mapObject = null;
+			String strPersonIcon = new String();
+			String strComplaintId = new String();
+			StringList slContactFirstNames = null;
+			StringList slContactLastNames = null;
+			String strType = new String();
+			String strComplaintType = new String();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Iterator<Map<?, ?>> iterator = ObjList.iterator(); iterator.hasNext();) {
+					mapObject = iterator.next();
+					strType = (String) mapObject.get(DomainConstants.SELECT_TYPE);
+					strComplaintType = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_INQUIRY);
+					strPersonIcon = UINavigatorUtil.getTypeIconProperty(context, DomainConstants.TYPE_PERSON);
+					strComplaintId = (String) mapObject.get(DomainConstants.SELECT_ID);
+					slContactFirstNames = (StringList) mapObject.get("from["
+							+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_CONTACT)
+							+ "].to.attribute["
+							+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_FIRST_NAME)
+							+ "]");
+					slContactLastNames = (StringList) mapObject.get("from["
+							+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_CONTACT)
+							+ "].to.attribute["
+							+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_LAST_NAME)
+							+ "]");
+
+					if (strComplaintType.equalsIgnoreCase(strType) && !Helper.isNullOrEmpty(strComplaintId)
+							&& !Helper.isNullOrEmpty(slContactFirstNames) && slContactFirstNames.size() > 0
+							&& !Helper.isNullOrEmpty(slContactLastNames) && slContactLastNames.size() > 0) {
+
+						StringBuffer sbSeverityGif = new StringBuffer();
+						StringBuffer sbHref = new StringBuffer();
+						StringBuffer sbPersons = new StringBuffer();
+
+						sbSeverityGif.append("<img src=\"../common/images/");
+						if (strPersonIcon == null || strPersonIcon.length() == 0) {
+							sbSeverityGif.append("iconSmallDefault.gif");
+						} else {
+							sbSeverityGif.append(XSSUtil.encodeForURL(context, strPersonIcon));
+						}
+
+						for (int i = 0; i < slContactFirstNames.size(); i++) {
+							sbPersons.append((String) slContactLastNames.get(i));
+							sbPersons.append(",");
+							sbPersons.append((String) slContactFirstNames.get(i));
+							sbPersons.append("\n");
+						}
+
+						sbSeverityGif.append("\" border=\"0\"");
+						sbSeverityGif.append(" alt=\"");
+						sbSeverityGif.append(XSSUtil.encodeForHTML(context, sbPersons.toString()));
+						sbSeverityGif.append("\" title=\"");
+						sbSeverityGif.append(XSSUtil.encodeForHTML(context, sbPersons.toString()));
+						sbSeverityGif.append("\"/>");
+
+						sbHref.append(
+								"<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+						sbHref.append("&amp;objectId=");
+						sbHref.append(XSSUtil.encodeForJavaScript(context, strComplaintId));
+						sbHref.append("&amp;DefaultCategory=PQCCPTContacts");
+						sbHref.append("'");
+						sbHref.append(", '800', '700', 'true', 'popup')\">");
+
+						sbHref.append(sbSeverityGif);
+						sbHref.append("</a>");
+
+						vcContact.add(sbHref.toString());
+
+					} else
+						vcContact.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return vcContact;
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ESRInquiryException
+	 */
+	public Vector<String> getTruncatedDescription(Context context, String[] args) throws ESRInquiryException {
+		Map<?, ?> mapObject = null;
+		Vector<String> vcTruncList = new Vector<String>();
+		StringList slOrigDesc = null;
+		StringList slPrimaryEvent = null;
+		Iterator<?> itr = null;
+		try {
+			String maxSize = Helper.getProperty(context, "LQIComplaints.MyComplaints.Description.MaxTruncationSize");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			itr = ObjList.iterator();
+			while (itr.hasNext()) {
+				mapObject = (Map<?, ?>) itr.next();
+				String strLevel = (String) mapObject.get(TicketConstants.LEVEL);
+				slOrigDesc = (StringList) mapObject.get("from["
+						+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+						+ "].to.attribute[" + PropertyUtil.getSchemaProperty(context,
+								TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL)
+						+ "]");
+				slPrimaryEvent = (StringList) mapObject.get("from["
+						+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT)
+						+ "].to.attribute["
+						+ PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_EVENT)
+						+ "]");
+
+				if (!Helper.isNullOrEmpty(slOrigDesc) && !Helper.isNullOrEmpty(slPrimaryEvent)
+						&& slPrimaryEvent.contains("TRUE")) {
+					StringBuffer sbTrunDesc = new StringBuffer();
+
+					if (slPrimaryEvent.size() > 1) {
+						for (int i = 0; i < slPrimaryEvent.size(); i++) {
+							if ("TRUE".equalsIgnoreCase((String) slPrimaryEvent.get(i))) {
+
+								sbTrunDesc.append(((String) slOrigDesc.get(i)).length() > Integer.parseInt(maxSize)
+										? ((String) slOrigDesc.get(i)).substring(0, Integer.parseInt(maxSize))
+										: ((String) slOrigDesc.get(i)));
+								if (((String) slOrigDesc.get(i)).length() > Integer.parseInt(maxSize))
+									sbTrunDesc.append("...");
+								vcTruncList.add(sbTrunDesc.toString());
+							}
+
+						}
+					} else {
+						sbTrunDesc.append(((String) slOrigDesc.get(0)).length() > Integer.parseInt(maxSize)
+								? ((String) slOrigDesc.get(0)).substring(0, Integer.parseInt(maxSize))
+								: ((String) slOrigDesc.get(0)));
+						if (((String) slOrigDesc.get(0)).length() > Integer.parseInt(maxSize))
+							sbTrunDesc.append("...");
+						vcTruncList.add(sbTrunDesc.toString());
+					}
+				} else if (Integer.valueOf(strLevel) > 0) {
+					StringBuffer sbTrunDesc = new StringBuffer();
+					String strTrunDesc = (String) mapObject.get("attribute[" + PropertyUtil.getSchemaProperty(context,
+							TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL) + "]");
+					sbTrunDesc.append(strTrunDesc.length() > Integer.parseInt(maxSize)
+							? strTrunDesc.substring(0, Integer.parseInt(maxSize))
+							: strTrunDesc);
+					if (strTrunDesc.length() > Integer.parseInt(maxSize))
+						sbTrunDesc.append("...");
+					vcTruncList.add(sbTrunDesc.toString());
+				} else
+					vcTruncList.add(DomainConstants.EMPTY_STRING);
+			}
+		} catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+
+		return vcTruncList;
+	}
+
+	/**
+	 * Access Function on showAcceptComplaints command Method to display the show
+	 * Accept Complaints command in My Complaints table depending upon filter value
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	public Boolean showAcceptInquiries(Context context, String[] args) throws ESRInquiryException {
+		Boolean showFilter = new Boolean(false);
+		try {
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String strAssignedFilterValue = (String) mapProgram.get(TicketConstants.INQ_ASSIGNED_FILTER_COMMAND);
+			if (Helper.isNullOrEmpty(strAssignedFilterValue)
+					|| strAssignedFilterValue.equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED))
+				showFilter = true;
+			return showFilter;
+		} catch (Exception e) {
+			throw new ESRInquiryException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on Table Column Method to display the columns in My
+	 * Complaints table when Filtered by Active
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	// TODO
+	// public Boolean showColumns(Context context, String[] args) throws
+	// ESRInquiryException {
+	// Boolean showColumn = new Boolean(false);
+	// try {
+	// Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+	// String strPQCCPTActiveFilter = (String)
+	// programMap.get(TicketConstants.INQ_ACTIVE_FILTER_COMMAND);
+	// String strPQCCPTCreateFilter = (String)
+	// programMap.get(TicketConstants.INQ_CREATE_FILTER_COMMAND);
+	//
+	// if (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)
+	// && (!Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+	// || !Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR))) {
+	// showColumn = false;
+	// }
+	//
+	// else if ((Helper.isNullOrEmpty(strPQCCPTActiveFilter) &&
+	// Helper.isNullOrEmpty(strPQCCPTCreateFilter))
+	// || (!Helper.isNullOrEmpty(strPQCCPTActiveFilter) &&
+	// strPQCCPTActiveFilter.equalsIgnoreCase(TicketConstants.FILTER_ACTIVE))
+	// || (!Helper.isNullOrEmpty(strPQCCPTCreateFilter) &&
+	// strPQCCPTCreateFilter.equalsIgnoreCase(TicketConstants.FILTER_ACTIVE)))
+	// showColumn = true;
+	//
+	// else
+	// showColumn = false;
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// return showColumn;
+	//
+	// }
+
+	/**
+	 * Accept Equipment Service Requests.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 * @exclude
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionAcceptInquiries(Context context, String[] args) throws
+	// ESRInquiryException {
+	// DomainObject dmoNewOwner = null;
+	// StringBuffer sbTransferReason = new StringBuffer();
+	// ArrayList<Object> arrComplaintIds = new ArrayList<Object>();
+	// try {
+	//
+	// Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+	// String[] strOrgTableRowIds = (String[])
+	// mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+	//
+	// if (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// dmoNewOwner = PersonUtil.getPersonObject(context);
+	// }
+	//
+	// sbTransferReason.append(Helper.getI18NString(context,
+	// Helper.StringResource.COLS, "PQC.Complaint.Message.AcceptComplaint1"));
+	// sbTransferReason.append(" ");
+	// sbTransferReason.append(dmoNewOwner.getName());
+	// sbTransferReason.append(" ");
+	// sbTransferReason.append(Helper.getI18NString(context,
+	// Helper.StringResource.COLS, "PQC.Inquiry.Message.Accept"));
+	//
+	// for (String strRowId : strOrgTableRowIds) {
+	// EmxTableRowId tr = new EmxTableRowId(strRowId);
+	// arrComplaintIds.add(tr.getObjectId());
+	// }
+	//
+	// ComplaintTicketService complaintTicketService =
+	// getComplaintTicketService(context);
+	// complaintTicketService.transferOwnership(context, dmoNewOwner,
+	// sbTransferReason.toString(),
+	// arrComplaintIds.toArray(new String[arrComplaintIds.size()]));
+	//
+	// if (TicketUtil.checkUserRoles(context, dmoNewOwner,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// MyComplaintWorkQueueService myComplaintWorkQueueService =
+	// getMyComplaintWorkQueueService(context);
+	// myComplaintWorkQueueService.setComplaintsAsAssigned(context,
+	// arrComplaintIds.toArray(new String[arrComplaintIds.size()]));
+	// }
+	//
+	// // return "top.refreshTablePage();";
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry");
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// }
+
+	/**
+	 * Delete Equipment Service Requests
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 * @exclude
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionDeleteInquiries(Context context, String[] args) throws
+	// ESRInquiryException {
+	// StringBuffer sbReturn = new StringBuffer();
+	// ArrayList<Object> arrSuccessComplaintIds = new ArrayList<Object>();
+	// ArrayList<Object> arrFailedComplaints = new ArrayList<Object>();
+	//
+	// Map<?, ?> hmComplaints = new HashMap<Object, Object>();
+	// DomainObject doComplaint = null;
+	// String strComplaintState = new String();
+	//
+	// String strCreateState = new String();
+	// try {
+	// strCreateState = TicketUtil.getStateName(context,
+	// TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+	// TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+	// }
+	// catch (Exception e1) {
+	// throw new ESRInquiryException(e1);
+	// }
+	//
+	// try {
+	// Helper.isLicenseAssigned(context, LSALicense.COLS);
+	//
+	// Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+	// String[] strOrgTableRowIds = (String[])
+	// mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+	// String strComplaintId = new String();
+	// for (String strRowId : strOrgTableRowIds) {
+	// EmxTableRowId tr = new EmxTableRowId(strRowId);
+	// strComplaintId = tr.getObjectId();
+	// List<Map<?, ?>> mlComplaint = QueryUtil.getInfo(context, new String[] {
+	// strComplaintId },
+	// Helper.stringList(DomainConstants.SELECT_CURRENT));
+	// for (Iterator<Map<?, ?>> iterator = mlComplaint.iterator();
+	// iterator.hasNext();) {
+	// Map<?, ?> mapComplaint = iterator.next();
+	// strComplaintState = (String)
+	// mapComplaint.get(DomainConstants.SELECT_CURRENT);
+	// }
+	//
+	// doComplaint = DomainObject.newInstance(context, strComplaintId);
+	//
+	// if (!Helper.getTypeKindOf(context, doComplaint,
+	// TicketConstants.SYMBOLIC_TYPE_INQUIRY).containsValue(Boolean.TRUE)) {
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "alertForWrongTypeSelection");
+	// }
+	//
+	// if (strComplaintState.equalsIgnoreCase(strCreateState) ||
+	// TicketUtil.isOwnerOrAssignee(context, strComplaintId)
+	// || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER))
+	//
+	// arrSuccessComplaintIds.add(strComplaintId);
+	// else
+	// arrFailedComplaints.add(hmComplaints.get(DomainConstants.SELECT_NAME));
+	// }
+	//
+	// if (arrFailedComplaints.size() > 0) {
+	// sbReturn.append(Helper.getI18NString(context, Helper.StringResource.COLS,
+	// "PQC.Inquiry.Message.Error.CanNotDeleted"));
+	// sbReturn.append("\n");
+	// sbReturn.append(arrFailedComplaints.toString());
+	//
+	// MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+	// }
+	// else if (arrSuccessComplaintIds.size() > 0)
+	// TicketUtil.deleteObjects(context, arrSuccessComplaintIds.toArray(new
+	// String[arrSuccessComplaintIds.size()]));
+	// sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry"));
+	//
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// return sbReturn.toString();
+	// }
+
+	/**
+	 * Access Function on Table Assigned Filter Method to display the Assigned
+	 * Filter in My Complaints table depending upon user's role
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	// TODO
+	// public Boolean showAssignedFilter(Context context, String[] args) throws
+	// ESRInquiryException {
+	// Boolean showFilter = new Boolean(false);
+	//
+	// try {
+	// if ((Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+	// && Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) ||
+	// Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_REGULATORY_USER)) {
+	// showFilter = false;
+	// }
+	// else if (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// showFilter = true;
+	// }
+	// return showFilter;
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// }
+
+	/**
+	 * Access Function on Table Create Filter Method to display the Create Filter in
+	 * My Complaints table depending upon user's role
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	// TODO
+	// public Boolean showCreateFilter(Context context, String[] args) throws
+	// ESRInquiryException {
+	// Boolean showFilter = new Boolean(false);
+	// try {
+	// if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+	// && Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// showFilter = true;
+	// }
+	// else if (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+	// showFilter = true;
+	// }
+	// else if (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_REGULATORY_USER)) {
+	// showFilter = false;
+	// }
+	// return showFilter;
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// }
+
+	/**
+	 * Sets the new owner for the complaint and for all its associated events and
+	 * investigation objects as well.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionTransferOwnership(Context context, String[] args) throws
+	// ESRInquiryException {
+	// String strComplaintId = new String();
+	// StringList slComplaintIds = null;
+	// DomainObject dmoNewOwner = null;
+	// String strReturn = new String();
+	// try {
+	// Map<?, ?> programMap = JPO.unpackArgs(args);
+	//
+	// String[] strAssignedFilterValue = (String[])
+	// programMap.get(TicketConstants.INQ_ASSIGNED_FILTER_COMMAND);
+	//
+	// if (!Helper.isNullOrEmpty(strAssignedFilterValue) &&
+	// strAssignedFilterValue[0].equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED))
+	// {
+	//
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "alertForTransferComplaintOwnership");
+	// }
+	// else if (!Helper.isNullOrEmpty(strAssignedFilterValue) &&
+	// strAssignedFilterValue[0].equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED)
+	// && (Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR))) {
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "alertForTransferOwnershipUnassignedFilter");
+	// }
+	// else {
+	// String[] arrComplaintIds = (String[]) programMap.get(TicketConstants.ROWIDS);
+	// strComplaintId = arrComplaintIds[0];
+	//
+	// String[] arrNewOwnerOID = (String[])
+	// programMap.get(TicketConstants.FIELD_NEW_OWNER_OID);
+	// String[] arrTransferReason = (String[])
+	// programMap.get(TicketConstants.FIELD_TRANSFER_REASON);
+	// String strTransferReason = arrTransferReason[0];
+	//
+	// ComplaintTicketService complaintTicketService =
+	// getComplaintTicketService(context);
+	//
+	// if (!Helper.isNullOrEmpty(strComplaintId)) {
+	// if (strComplaintId.contains(TicketConstants.COMMA)) {
+	// slComplaintIds = FrameworkUtil.split(strComplaintId, TicketConstants.COMMA);
+	// for (int i = 0; i < slComplaintIds.size(); i++) {
+	// strComplaintId = (String) slComplaintIds.get(i);
+	//
+	// if (TicketUtil.isOwnerOrAssignee(context, strComplaintId)
+	// || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+	// dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+	// complaintTicketService.transferOwnership(context, dmoNewOwner,
+	// strTransferReason, strComplaintId);
+	// }
+	// else {
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "alertForTransferOwnershipNotOwner");
+	// }
+	// }
+	// }
+	// else {
+	// if (TicketUtil.isOwnerOrAssignee(context, strComplaintId)
+	// || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+	// dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+	// complaintTicketService.transferOwnership(context, dmoNewOwner,
+	// strTransferReason, strComplaintId);
+	// strReturn = Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry");
+	// }
+	// else {
+	// return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "alertForTransferOwnershipNotOwner");
+	// }
+	// }
+	// }
+	// slComplaintIds = FrameworkUtil.split(strComplaintId, TicketConstants.COMMA);
+	// slComplaintIds.toArray(new String[slComplaintIds.size()]);
+	// MyComplaintWorkQueueService myComplaintWorkQueueService =
+	// getMyComplaintWorkQueueService(context);
+	// if (TicketUtil.checkUserRoles(context, dmoNewOwner,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// myComplaintWorkQueueService
+	// .setComplaintsAsAssigned(context, (String[]) slComplaintIds.toArray(new
+	// String[slComplaintIds.size()]));
+	// }
+	// else {
+	// myComplaintWorkQueueService.removeComplaintAsAssigned(context,
+	// (String[]) slComplaintIds.toArray(new String[slComplaintIds.size()]));
+	// }
+	// }
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e);
+	// }
+	// return strReturn;
+	// }
+
+	/**
+	 * Submit To Review / In Process for selected complaints.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionInquirySubmitToReview(Context context, String[] args)
+	// throws ESRInquiryException {
+	//
+	// StringBuffer sbReturn = new StringBuffer();
+	// ArrayList<Object> arrSuccessComplaintIds = new ArrayList<Object>();
+	// ArrayList<Object> arrFailedComplaints = new ArrayList<Object>();
+	// DomainObject doComplaint = null;
+	// String strComplaintName = new String();
+	// String strComplaintId = new String();
+	//
+	// try {
+	//
+	// Map<?, ?> mapProgram = JPO.unpackArgs(args);
+	// String[] strComplaintIds = (String[])
+	// mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+	// ComplaintTicketService complaintTicketService =
+	// getComplaintTicketService(context);
+	//
+	// for (String strRowId : strComplaintIds) {
+	// EmxTableRowId tr = new EmxTableRowId(strRowId);
+	// strComplaintId = tr.getObjectId();
+	// doComplaint = DomainObject.newInstance(context, strComplaintId);
+	// strComplaintName = doComplaint.getInfo(context, DomainConstants.SELECT_NAME);
+	//
+	// if (TicketUtil.isOriginator(context, strComplaintId) ||
+	// TicketUtil.isOwnerOrAssignee(context, strComplaintId)
+	// || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+	// arrSuccessComplaintIds.add(strComplaintId);
+	// }
+	// else
+	// arrFailedComplaints.add(strComplaintName);
+	// }
+	// if (arrFailedComplaints.size() > 0) {
+	// sbReturn.append(Helper.getI18NString(context, Helper.StringResource.COLS,
+	// "PQC.Inquiry.Message.Error.CanNotSubmitForProcessing"));
+	// sbReturn.append("\n");
+	// sbReturn.append(arrFailedComplaints.toString());
+	//
+	// MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+	// }
+	// else if (arrSuccessComplaintIds.size() > 0)
+	// complaintTicketService.promoteComplaintTicket(context,
+	// ChangePolicyState.INPROCESS,
+	// Helper.getI18NString(context, Helper.StringResource.COLS,
+	// "PQC.Inquiry.Message.TrnsfReason.InProcess"),
+	// arrSuccessComplaintIds.toArray(new String[arrSuccessComplaintIds.size()]));
+	// sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry"));
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// return sbReturn.toString();
+	//
+	// }
+
+	/**
+	 * Action for Closing selected Complaint(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionCloseInquiry(Context context, String[] args) throws
+	// ESRInquiryException {
+	//
+	// StringBuffer sbReturn = new StringBuffer();
+	// ArrayList<Object> arrSuccessComplaintIds = new ArrayList<Object>();
+	// ArrayList<Object> arrFailedComplaints = new ArrayList<Object>();
+	// DomainObject doComplaint = null;
+	// String strComplaintName = new String();
+	//
+	// try {
+	// ComplaintTicketService complaintTicketService =
+	// getComplaintTicketService(context);
+	// Map<?, ?> mapProgram = JPO.unpackArgs(args);
+	// String strReasonForClosure = ((String[])
+	// mapProgram.get(TicketConstants.COMMENTS))[0];
+	// String strComplaintIds = ((String[])
+	// mapProgram.get(TicketConstants.ROWIDS))[0];
+	//
+	// if (!Helper.isNullOrEmpty(strComplaintIds)) {
+	// StringList slComplaintIds = FrameworkUtil.split(strComplaintIds,
+	// TicketConstants.COMMA);
+	// for (Object obj : slComplaintIds) {
+	// String strComplaintId = (String) obj;
+	// doComplaint = DomainObject.newInstance(context, strComplaintId);
+	// strComplaintName = doComplaint.getInfo(context, DomainConstants.SELECT_NAME);
+	//
+	// if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+	// || Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// arrSuccessComplaintIds.add(strComplaintId);
+	// }
+	// else
+	// arrFailedComplaints.add(strComplaintName);
+	// }
+	// }
+	// if (arrFailedComplaints.size() > 0) {
+	// sbReturn.append(Helper.getI18NString(context, Helper.StringResource.COLS,
+	// "PQC.Inquiry.Message.Error.CanNotClosed"));
+	// sbReturn.append("\n");
+	// sbReturn.append(arrFailedComplaints.toString());
+	//
+	// MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+	// }
+	// else if (arrSuccessComplaintIds.size() > 0)
+	// complaintTicketService.promoteComplaintTicket(context,
+	// ChangePolicyState.CLOSED, strReasonForClosure,
+	// arrSuccessComplaintIds.toArray(new String[arrSuccessComplaintIds.size()]));
+	// sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry"));
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// return sbReturn.toString();
+	//
+	// }
+
+	/**
+	 * Action for Invalidating selected Complaint(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	// TODO
+	// @com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	// public String actionInvalidateInquiry(Context context, String[] args) throws
+	// ESRInquiryException {
+	// StringBuffer sbReturn = new StringBuffer();
+	// ArrayList<Object> arrSuccessComplaintIds = new ArrayList<Object>();
+	// ArrayList<Object> arrFailedComplaints = new ArrayList<Object>();
+	// DomainObject doComplaint = null;
+	// String strComplaintName = new String();
+	// try {
+	// ComplaintTicketService complaintTicketService =
+	// getComplaintTicketService(context);
+	// Map<?, ?> mapProgram = JPO.unpackArgs(args);
+	// String strInvalidateRationale = ((String[])
+	// mapProgram.get(TicketConstants.COMMENTS))[0];
+	// String strComplaintIds = ((String[])
+	// mapProgram.get(TicketConstants.ROWIDS))[0];
+	// if (!Helper.isNullOrEmpty(strComplaintIds)) {
+	// StringList slComplaintIds = FrameworkUtil.split(strComplaintIds,
+	// TicketConstants.COMMA);
+	// for (Object obj : slComplaintIds) {
+	// String strComplaintId = (String) obj;
+	// doComplaint = DomainObject.newInstance(context, strComplaintId);
+	// strComplaintName = doComplaint.getInfo(context, DomainConstants.SELECT_NAME);
+	//
+	// if (TicketUtil.isOwnerOrAssignee(context, strComplaintId)
+	// || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+	// || Helper.hasRoles(context,
+	// TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+	// arrSuccessComplaintIds.add(strComplaintId);
+	// }
+	// else
+	// arrFailedComplaints.add(strComplaintName);
+	// }
+	// }
+	// if (arrFailedComplaints.size() > 0) {
+	// sbReturn.append(Helper.getI18NString(context, Helper.StringResource.COLS,
+	// "PQC.Inquiry.Message.Error.CanNotInvalidate"));
+	// sbReturn.append("\n");
+	// sbReturn.append(arrFailedComplaints.toString());
+	//
+	// MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+	// }
+	// else if (arrSuccessComplaintIds.size() > 0)
+	// complaintTicketService.promoteComplaintTicket(context,
+	// ChangePolicyState.INVALID, strInvalidateRationale,
+	// arrSuccessComplaintIds.toArray(new String[arrSuccessComplaintIds.size()]));
+	// sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE,
+	// "actionRefreshMyInquiry"));
+	//
+	// }
+	// catch (Exception e) {
+	// throw new ESRInquiryException(e.getLocalizedMessage());
+	// }
+	// return sbReturn.toString();
+	//
+	// }
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String refreshInquiryWorkQueueAfterCreate(Context context, String args[]) throws ESRInquiryException {
+		String frameName = "PQCINQMyInquiries";
+		String commandName = TicketConstants.INQ_ACTIVE_FILTER_COMMAND;
+		String filterValue = DomainConstants.EMPTY_STRING;
+		try {
+			if (Helper.isLoggedInWithRole(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+				filterValue = TicketConstants.FILTER_CREATE;
+			}else if (Helper.isLoggedInWithRole(context, TicketConstants.SYMBOLIC_ROLE_VPLMProjectLeader)) {
+				filterValue = TicketConstants.FILTER_CREATE;
+			}
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyTicketsWorkQueueAfterCreate", frameName, commandName,
+				filterValue);
+	}
+	
+}
+

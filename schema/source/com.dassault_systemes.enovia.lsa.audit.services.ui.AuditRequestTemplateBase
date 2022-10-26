@@ -1,0 +1,282 @@
+/************************************************************************************************************
+ * /* AuditAuditRequestTemplateBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 11-APR-2008 AuditAuditRequestTemplateBase program to handle Audit Request
+ * Template type
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.TreeMap;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.services.AuditRequestTemplateService;
+import com.dassault_systemes.enovia.lsa.audit.services.AuditedItemsService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+import matrix.util.StringUtils;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Gets AuditRequestTemplateService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return AuditRequestTemplateService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private static AuditRequestTemplateService getAuditRequestTemplateService(Context context) throws AuditException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAAUDCoreComponent");
+			AuditRequestTemplateService service = (AuditRequestTemplateService) LSAQICCore.getService(AuditRequestTemplateService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Gets AuditedItemsService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return AuditedItemsService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private static AuditedItemsService getAuditedItemsService(Context context) throws AuditException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAAUDCoreComponent");
+			AuditedItemsService service = (AuditedItemsService) LSAQICCore.getService(AuditedItemsService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAuditRequestTemplate(Context context, String[] args) throws AuditException {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+		try {
+			final String ATTRIBUTE_AUDIT_SUB_SYSTEM = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM);
+			final String ATTRIBUTE_AUDIT_FUNCTIONAL_AREA = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITFUNCTIONALAREA);
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strName = (String) programMap.get("Request Template Name");
+			String strAuditedItemsId = (String) programMap.get("Audited ItemsOID");
+			String strDescription = (String) programMap.get(DomainConstants.SELECT_DESCRIPTION);
+			String strScope = (String) programMap.get(ATTRIBUTE_AUDIT_SUB_SYSTEM);
+			String strAuditFunctionArea = (String) programMap.get(ATTRIBUTE_AUDIT_FUNCTIONAL_AREA);
+			AuditedItemsService auditedItemsService = getAuditedItemsService(context);
+			boolean isAuditRequestTemplateNameUnique = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}
+					.checkDuplicateTNR(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUESTTEMPLATE), strName);
+			if (isAuditRequestTemplateNameUnique) {
+				// create new Audit Template object
+				DomainObject doAuditReqTemplate = DomainObject.newInstance(context);
+				// Getting Default Revision to create Object
+				String strDefaultRevision = doAuditReqTemplate.getDefaultRevision(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUESTTEMPLATE));
+				doAuditReqTemplate.createObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUESTTEMPLATE),
+						strName, strDefaultRevision, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUESTTEMPLATE),
+						context.getVault().getName());
+				String strAuditReqTemplateId = doAuditReqTemplate.getId(context);
+				doAuditReqTemplate.setDescription(context, strDescription);
+				doAuditReqTemplate.setAttributeValue(context, ATTRIBUTE_AUDIT_SUB_SYSTEM, strScope);
+				doAuditReqTemplate.setAttributeValue(context, ATTRIBUTE_AUDIT_FUNCTIONAL_AREA, strAuditFunctionArea);
+				if (!Helper.isNullOrEmpty(strAuditedItemsId)) {
+					String[] arrAuditedItemsIds = StringUtils.split(strAuditedItemsId, "\\|");
+					for (String string : arrAuditedItemsIds) {
+						DomainObject domAuditedItem = DomainObject.newInstance(context, string);
+						auditedItemsService.addAuditedItem(context, doAuditReqTemplate, domAuditedItem, DomainObject.EMPTY_STRING);
+					}
+				}
+				returnMap.put("id", strAuditReqTemplateId);
+			}
+			else {
+				String strMessage = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUESTTEMPLATE) + " Name '" + strName + "' "
+						+ i18nNow.getI18nString("LQIAudit.Message.NameNotUnique", "LQIAuditStringResource", context.getLocale().toString());
+				throw new Exception(strMessage);
+			}
+		}
+		catch (Exception ex) {
+			throw new AuditException(ex);
+		}
+
+		return returnMap;
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String deleteAuditRequestTemplates(Context context, String[] args) throws AuditException {
+		try {
+			List<String> slARTObjectIds = new StringList();
+			HashMap<?, ?> mapArgs = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) mapArgs.get(AuditConstants.EMX_TABLE_ROW_ID);
+			String auditRequestTemplateObjectId;
+
+			for (int i = 0; i < emxTableRowId.length; i++) {
+				// Parse the emxTableRowId and get the bus object id
+				if (emxTableRowId[i].indexOf("|") == -1) {
+					auditRequestTemplateObjectId = emxTableRowId[i];
+				}
+				else {
+					StringTokenizer sTableRowId = new StringTokenizer(emxTableRowId[i], "|");
+					auditRequestTemplateObjectId = sTableRowId.nextToken();
+				}
+				slARTObjectIds.add(auditRequestTemplateObjectId);
+			}
+			String[] strArrayObjectIds = slARTObjectIds.toArray(new String[0]);
+
+			AuditRequestTemplateService auditRequestService = getAuditRequestTemplateService(context);
+			String returnString = auditRequestService.deleteAuditRequestTemplates(context, strArrayObjectIds);
+			return returnString;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditRequestTemplates(Context context, String[] args) throws AuditException {
+		try {
+			final String POLICY_PROJECT_TEMPLATE = PropertyUtil.getSchemaProperty(context, AuditConstants.SYMBOLIC_policy_ProjectTemplate);
+			final String STATE_PROJECT_TEMPLATE_ACTIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_TEMPLATE, "state_Active");
+			final String STATE_PROJECT_TEMPLATE_INACTIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_TEMPLATE,
+					"state_Inactive");
+			try {
+				Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+				String strFilterValue = (String) programMap.get(AuditConstants.FILTER_AUDIT_REQUEST_TEMPLATE);
+				StringBuilder sbBusWhere = new StringBuilder();
+				List<Map<?, ?>> auditRequestTemplateSummary = new ArrayList<Map<?, ?>>();
+
+				if (strFilterValue == null) {
+					// do nothing here
+				}
+				else if ((STATE_PROJECT_TEMPLATE_INACTIVE).equals(strFilterValue)) {
+					sbBusWhere.append("current=='");
+					sbBusWhere.append(STATE_PROJECT_TEMPLATE_INACTIVE);
+					sbBusWhere.append('\'');
+				}
+				else if ((STATE_PROJECT_TEMPLATE_ACTIVE).equals(strFilterValue)) {
+
+					sbBusWhere.append("current=='");
+					sbBusWhere.append(STATE_PROJECT_TEMPLATE_ACTIVE);
+					sbBusWhere.append('\'');
+				}
+				AuditRequestTemplateService auditRequestTemplateService = getAuditRequestTemplateService(context);
+				auditRequestTemplateSummary = auditRequestTemplateService.getAuditRequestTemplates(context, sbBusWhere.toString());
+
+				return new MapList(auditRequestTemplateSummary);
+			}
+			catch (Exception e) {
+				throw new AuditException(e);
+			}
+
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * It generates HTML text to display the Audit subsystem in form
+	 * 
+	 * @param context
+	 * @param args
+	 * @return String
+	 * @throws Exception
+	 */
+	public Object getFieldAuditRequestTemplateSubSystem(Context context, String[] args) throws AuditException {
+		try {
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+			HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) mapProgram.get("requestMap");
+			String strObjectId = (String) mapRequest.get("objectId");
+			// mode
+
+			if (strObjectId == null) {
+				strObjectId = "";
+			}
+
+			// Getting the attribute Ranges
+			StringList strRangesList = (StringList) ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}
+					.getAttributeChoices(context, args);
+			StringList strRangeListI18 = (StringList) ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}
+					.getI18AttributeChoices(context, args);
+
+			// Adding the code for drop down box
+			for (String strOptionRange : strRangesList) {
+				fieldRangeValues.add(strOptionRange);
+
+			}
+			for (String strOptionRangeI18 : strRangeListI18) {
+				fieldDisplayRangeValues.add(strOptionRangeI18);
+
+			}
+			HashMap tempMap = new HashMap();
+			tempMap.put("field_choices", fieldRangeValues);
+			tempMap.put("field_display_choices", fieldDisplayRangeValues);
+			return tempMap;
+		}
+		catch (Exception objException) {
+			throw new AuditException(objException);
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public Map<?, ?> getAuditRequestsTemplateInformationAjax(Context context, String[] args) throws AuditException {
+		try {
+			TreeMap<String, String> returnMap = new TreeMap<String, String>();
+			HashMap<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRequestTemplateId = (String[]) programMap.get("auditRequestTemplateId");
+			String auditRequestTemplateId = arrRequestTemplateId[0];
+
+			DomainObject doAuditTRequestTemplate = DomainObject.newInstance(context, auditRequestTemplateId);
+
+			String description = doAuditTRequestTemplate.getInfo(context, DomainConstants.SELECT_DESCRIPTION);
+			description = description.replace("\n", "\\n");
+			returnMap.put("description", description);
+
+			String scope = doAuditTRequestTemplate.getAttributeValue(context, "Audit Sub-System");
+			returnMap.put("scope", scope);
+
+			String auditFunctionArea = doAuditTRequestTemplate.getAttributeValue(context, "Audit Functional Area");
+			returnMap.put("Audit Functional Area", auditFunctionArea);
+
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+}
+

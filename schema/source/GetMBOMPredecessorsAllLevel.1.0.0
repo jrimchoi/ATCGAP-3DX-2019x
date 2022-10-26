@@ -1,0 +1,33 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"}, {name:"SEL_PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                    [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var navSets = [PRCS];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+
+	///////////////////////////////////////
+	// 1- PRCS = GetMBOMPredecessorsAllLevel(SEL_PRCS)
+	///////////////////////////////////////
+	var GetMBOMPredecessorsTimer = new DebugTimer(context, 0, "PRCS = GetMBOMPredecessorsAllLevel(SEL_PRCS)", true);
+	PRCS = PRCS.merge(NavigationPrimitives.getMBOMPredecessors(context, SEL_PRCS, 0));
+	GetMBOMPredecessorsTimer.complete();
+
+	///////////////////////////////////////
+	// 2- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

@@ -1,0 +1,540 @@
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+
+import com.designrule.drv6tools.drlToolsEnoviaObject;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static String USER_ENGMIG = "ENGMIG";
+	public static String MSG_OPERATION_SCUSSESSFUL = "Operation successful. To update SAP links please contact you administrator!";
+	public static String MSG_DESC_PREFIX_1 = "Coverted to ";
+	public static String MSG_DESC_PREFIX_2 = " by: ";
+	public static String MSG_SELECT_GAP_SPEC_OR_DOCUMENT = "Please select GAP Spec or Document!!";
+	public static String TYPE_GAP_SPECIFICATION = PropertyUtil.getSchemaProperty("type_gapGAPSpecification");
+	public static String TYPE_DOCUMENT = PropertyUtil.getSchemaProperty("type_Document");
+	public static String TYPE_GAP_AUTO_CAD = PropertyUtil.getSchemaProperty("type_gapAutoCAD");
+	public static String SAP_OPERATION_ADD_LINK = "RelationshipPartSpecificationCreateActionSyncToSAP";
+	public static String SAP_OPERATION_REMOVE_LINK = "RelationshipPartSpecificationDeleteActionSyncToSAP";
+	public static String DRLKEY_PROMOTE_GAP_SPEC_FROZEN = "Promote_gapGAPSpecification_Part Specification_Premliminary";
+	public static String DRLKEY_PROMOTE_GAP_SPEC_APPROVED = "Promote_gapGAPSpecification_Part Specification_Approved";
+	public static String DRLKEY_PROMOTE_GAP_SPEC_RELEASE = "Promote_gapGAPSpecification_Part Specification_Approved";
+	public static String DRLKEY_PROMOTE_GAP_SPEC_OBSOLETE = "Promote_gapGAPSpecification_Part Specification_Release";
+	public static String DEFAULT_DRLKEY = DRLKEY_PROMOTE_GAP_SPEC_RELEASE;
+	/**
+	 * this method converts Document to Spec and vice versa for Parts
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String convertTypeTo(Context context, String args[]) throws Exception
+	{
+		String strRes = MSG_OPERATION_SCUSSESSFUL;
+		
+		boolean bContextPushed = false;
+		try
+		{
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			//${CLASS:emxContextUtil}.mqlNotice(context, programMap.toString());
+		    String strPartId = (String)programMap.get("objectId");
+		    String sConvertTo = (String)programMap.get("typeToChange");
+		    String sPolicy = (String)programMap.get("policy");
+		    String sConnectRel = (String) programMap.get("connectRelName");
+		    String sDisonnectRel = (String) programMap.get("disconnectRelName");
+		   
+		    String[] strSelection = (String[]) programMap.get("emxTableRowId");
+		    StringList strSelectionList = null;
+		    DomainObject doObj = DomainObject.newInstance(context);
+		    String strType = null;
+		    String strDocId = null;
+		   // first check if GAP Spec or Documents are selected
+		    for(int i=0;i<strSelection.length;i++)
+            {         
+		    	strSelectionList = FrameworkUtil.split(strSelection[i], "|");
+                strDocId = (String)strSelectionList.elementAt(1);                
+                // check type
+                doObj.setId(strDocId);
+                strType = doObj.getInfo(context, DomainObject.SELECT_TYPE);
+                if (!strType.equals(TYPE_DOCUMENT) && !strType.equals(TYPE_GAP_SPECIFICATION) && !strType.equals(TYPE_GAP_AUTO_CAD))
+                	return MSG_SELECT_GAP_SPEC_OR_DOCUMENT;
+            }
+		    String strLoggedINPerson = PersonUtil.getFullName(context);
+		    String strDesc = DomainObject.EMPTY_STRING;
+		    //String strUserDetails = context.getUser();
+		    StringBuffer sbChangeRequestFrom = new StringBuffer("");// new StringBuffer(MSG_DESC_PREFIX).append(PersonUtil.getFullName(context));
+		    ContextUtil.pushContext(context, USER_ENGMIG, null, null);
+		    bContextPushed = true;
+		   
+		    for(int y=0;y<strSelection.length;y++)
+            {         
+		    	strSelectionList = FrameworkUtil.split(strSelection[y], "|");
+                strDocId = (String)strSelectionList.elementAt(1);   
+                // read description
+                doObj.setId(strDocId);
+                // read type
+                strType = doObj.getInfo(context, DomainObject.SELECT_TYPE);
+                // if gap Auto CAD then do not change type
+                if (strType.equals(TYPE_GAP_AUTO_CAD))
+                {	
+                		connectGAPAutoCAD(context, strDocId, sConnectRel, sDisonnectRel, strPartId);   
+                		// read latest id
+                		strDocId = doObj.getInfo(context, DomainObject.SELECT_LAST_ID);
+                		
+                		String strOperation = "";
+                		if (sConnectRel.equals("relationship_PartSpecification"))
+                			strOperation = SAP_OPERATION_ADD_LINK;
+		                else
+		                	strOperation = SAP_OPERATION_REMOVE_LINK;
+                		// update link SAP
+                		addOrDeleteLinkFromSAP(context, strDocId, strPartId, strOperation);
+                }
+                else
+                {
+	                strDesc = doObj.getDescription(context);
+	                sbChangeRequestFrom.setLength(0);
+	                if (UIUtil.isNotNullAndNotEmpty(strDesc))
+	                {
+	                	sbChangeRequestFrom.append(strDesc)
+	                					   .append(System.lineSeparator());
+	                }
+	                String strType1 = PropertyUtil.getSchemaProperty(context, sConvertTo);
+	                if (strType1.equals(TYPE_GAP_SPECIFICATION))
+	                	strType1 = "GAP Specification";
+	                else if (strType1.equals(TYPE_DOCUMENT))
+	                	strType1 = "Document";
+	                sbChangeRequestFrom.append(MSG_DESC_PREFIX_1).append(strType1).append(MSG_DESC_PREFIX_2).append(strLoggedINPerson);
+	                // change type
+	                changeTypeAndConnectPart(context, strDocId,sConvertTo, sPolicy, sConnectRel, sDisonnectRel, strPartId, sbChangeRequestFrom.toString());
+                }
+            }
+		}
+		catch (Exception e) {
+			// TODO: handle exception
+			strRes = "Operation failed: "+e.getMessage();
+		}
+		finally 
+		{
+			if (bContextPushed)
+				ContextUtil.popContext(context);
+		}
+		return strRes;
+	}
+	/**
+	 * this method connects GAP Auto CAD Drawing
+	 * @author ENGMASA
+	 * @param context
+	 * @param strDocId
+	 * @param sConnectRel
+	 * @param sDisonnectRel
+	 * @param strPartId
+	 * @throws Exception
+	 */
+	public static void connectGAPAutoCAD(Context context, String strDocId, String sConnectRel, String sDisonnectRel, String strPartId) throws Exception
+	{
+		sConnectRel     = PropertyUtil.getSchemaProperty(context, sConnectRel);
+		sDisonnectRel   = PropertyUtil.getSchemaProperty(context, sDisonnectRel);
+		
+		DomainObject doDocObj = DomainObject.newInstance(context);
+		doDocObj.setId(strDocId);
+		// select connect and disconnect list from Spec
+				StringBuffer sbDisconnectRelIdSelect = new StringBuffer();
+				sbDisconnectRelIdSelect.append("to[").append(sDisonnectRel).append("].id");
+				StringList slDisConnectList = null;
+								
+				StringBuffer sbConnectRelIdSelect = new StringBuffer();
+				sbConnectRelIdSelect.append("to[").append(sDisonnectRel).append("].from.id");
+				StringList slConnectList = null;
+				
+				// get all revision list 
+				StringList singleSelects = new StringList();
+				StringList multiSelects = new StringList();
+				
+				singleSelects.addElement(DomainConstants.SELECT_LAST_ID);
+				singleSelects.addElement(DomainConstants.SELECT_CURRENT);
+				
+				multiSelects.addElement(DomainConstants.SELECT_REVISION);		
+				multiSelects.addElement(sbDisconnectRelIdSelect.toString());
+				multiSelects.addElement(sbConnectRelIdSelect.toString());
+				
+				
+				MapList revisions = doDocObj.getRevisionsInfo(context, singleSelects, multiSelects);
+				//${CLASS:emxContextUtil}.mqlNotice(context, revisions.toString());
+				Iterator itrrevList = revisions.iterator();
+				Map mp = null;
+				String strCurrentDocId = null;
+				String strLatestId = null;
+				String strCurrent = null;
+				while (itrrevList.hasNext())
+				{
+					mp = (Map) itrrevList.next();
+					strCurrentDocId = (String) mp.get(DomainObject.SELECT_ID);
+					
+					try
+					{
+						slDisConnectList = (StringList) mp.get(sbDisconnectRelIdSelect.toString());
+						slConnectList = (StringList) mp.get(sbConnectRelIdSelect.toString());
+						strLatestId = (String) mp.get(DomainConstants.SELECT_LAST_ID);
+						strCurrent = (String) mp.get(DomainConstants.SELECT_CURRENT);
+						
+						if (strLatestId.equals(strCurrentDocId))
+						{
+							disconnectPreviouseRelations(context, strCurrentDocId, slDisConnectList, sConnectRel);							
+						}
+					}
+					catch (Exception e) {
+						
+						// TODO: handle exception
+						 ContextUtil.abortTransaction(context);
+						 throw e;
+					}
+				}
+	}
+	/**
+	 * this method changes type and Policy of object
+	 * @author ENGMASA
+	 * @param context
+	 * @param strDocId
+	 * @param sType
+	 * @param sPolicy
+	 * @param sRel
+	 * @param strPartId
+	 * @param sbChangeRequestFrom
+	 * @throws strDescAppend
+	 */
+	public static void changeTypeAndConnectPart(Context context, String strDocId, String sType, String sPolicy, String sConnectRel, String sDisonnectRel, String strPartId, String strDescAppend) throws Exception
+	{
+		 // get real schema names
+		sType           = PropertyUtil.getSchemaProperty(context, sType);
+		sConnectRel     = PropertyUtil.getSchemaProperty(context, sConnectRel);
+		sDisonnectRel   = PropertyUtil.getSchemaProperty(context, sDisonnectRel);
+	    sPolicy         = PropertyUtil.getSchemaProperty(context, sPolicy);
+
+		DomainObject doDocObj = DomainObject.newInstance(context);
+		doDocObj.setId(strDocId);
+		
+		// preapre State mappings
+		HashMap mpStateMap = new HashMap();
+		mpStateMap.put("PRIVATE", "Preliminary");
+		mpStateMap.put("IN_WORK", "Preliminary");
+		mpStateMap.put("FROZEN", "Review");
+		mpStateMap.put("RELEASED", "Release");
+		mpStateMap.put("OBSOLETE", "Obsolete");
+		mpStateMap.put("Preliminary","IN_WORK");
+		mpStateMap.put("Review", "FROZEN");
+		mpStateMap.put("Approved", "FROZEN");
+		mpStateMap.put("Release", "RELEASED");
+		mpStateMap.put("Obsolete", "OBSOLETE");
+		
+		// select connect and disconnect list from Spec
+		StringBuffer sbDisconnectRelIdSelect = new StringBuffer();
+		sbDisconnectRelIdSelect.append("to[").append(sDisonnectRel).append("].id");
+		StringList slDisConnectList = null;
+						
+		StringBuffer sbConnectRelIdSelect = new StringBuffer();
+		sbConnectRelIdSelect.append("to[").append(sDisonnectRel).append("].from.id");
+		StringList slConnectList = null;
+		
+		// get all revision list 
+		StringList singleSelects = new StringList();
+		StringList multiSelects = new StringList();
+		
+		singleSelects.addElement(DomainConstants.SELECT_LAST_ID);
+		singleSelects.addElement(DomainConstants.SELECT_CURRENT);
+		
+		multiSelects.addElement(DomainConstants.SELECT_REVISION);		
+		multiSelects.addElement(sbDisconnectRelIdSelect.toString());
+		multiSelects.addElement(sbConnectRelIdSelect.toString());
+		
+		
+		MapList revisions = doDocObj.getRevisionsInfo(context, singleSelects, multiSelects);
+		//${CLASS:emxContextUtil}.mqlNotice(context, revisions.toString());
+		Iterator itrrevList = revisions.iterator();
+		Map mp = null;
+		String strCurrentDocId = null;
+		String strLatestId = null;
+		String strCurrent = null;
+		while (itrrevList.hasNext())
+		{
+			mp = (Map) itrrevList.next();
+			strCurrentDocId = (String) mp.get(DomainObject.SELECT_ID);
+			
+			try
+			{
+				slDisConnectList = (StringList) mp.get(sbDisconnectRelIdSelect.toString());
+				slConnectList = (StringList) mp.get(sbConnectRelIdSelect.toString());
+				strLatestId = (String) mp.get(DomainConstants.SELECT_LAST_ID);
+				strCurrent = (String) mp.get(DomainConstants.SELECT_CURRENT);
+				
+				//${CLASS:emxContextUtil}.mqlNotice(context, mp.toString());
+				//ContextUtil.startTransaction(context, true);				
+				// disconnect relations first
+				//disconnectPreviouseRelations(context, strCurrentDocId, slDisConnectList, sConnectRel);
+				// change type first except 
+				changeType(context, strCurrentDocId, sType, sPolicy, strDescAppend);
+				//doDocObj.setId(strCurrentDocId);
+			//	 ${CLASS:emxContextUtil}.mqlNotice(context, doDocObj.getInfo(context,"policy"));
+				// connect with new relationship
+				//connectFromPart(context, strCurrentDocId, sConnectRel, slConnectList);
+				// connect only latest
+				if (strLatestId.equals(strCurrentDocId))
+				disconnectPreviouseRelations(context, strCurrentDocId, slDisConnectList, sConnectRel);
+				//ContextUtil.commitTransaction(context);
+				// mod current state based on mapping
+				doDocObj.setId(strCurrentDocId);
+			//	${CLASS:emxContextUtil}.mqlNotice(context,strCurrent + " : " + doDocObj.getInfo(context,"policy"));
+				// read current from map
+				strCurrent = (String) mpStateMap.get(strCurrent);
+				//${CLASS:emxContextUtil}.mqlNotice(context, strCurrent);
+				 MqlUtil.mqlCommand(context, "trigger $1", true, "off");
+				doDocObj.setState(context, strCurrent);
+				 MqlUtil.mqlCommand(context, "trigger $1", true, "on");
+				 // if Part specification relation then generate PDF queue object
+				 if (sConnectRel.equals(DomainObject.RELATIONSHIP_PART_SPECIFICATION))
+				 {
+					 String strDrlKey = getDRLToolsKeyBasedOnState(strCurrent);
+					 if (UIUtil.isNotNullAndNotEmpty(strDrlKey))
+						 runDRLToolsKey(context, strCurrentDocId, strDrlKey);
+				 }
+			}
+			catch (Exception e) {
+				// TODO: handle exception
+				 ContextUtil.abortTransaction(context);
+				 throw e;
+			}
+			finally
+			{
+				MqlUtil.mqlCommand(context, "trigger $1", true, "on");
+			}
+		}
+	}
+	/**
+	 * this method return appropriate drl key/drl trigger to generate pdf
+	 * @param strCurrentState
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getDRLToolsKeyBasedOnState(String strCurrentState) throws Exception
+	{
+		if (strCurrentState.equals(DomainObject.STATE_PART_PRELIMINARY))
+			return null;
+		else if (strCurrentState.equals(DomainObject.STATE_PART_REVIEW))
+			return DRLKEY_PROMOTE_GAP_SPEC_FROZEN;
+		else if (strCurrentState.equals(DomainObject.STATE_PART_APPROVED))
+			return DRLKEY_PROMOTE_GAP_SPEC_APPROVED;
+		else if (strCurrentState.equals(DomainObject.STATE_PART_RELEASE))
+			return DRLKEY_PROMOTE_GAP_SPEC_RELEASE;
+		else if (strCurrentState.equals(DomainObject.STATE_PART_OBSOLETE))
+			return DRLKEY_PROMOTE_GAP_SPEC_OBSOLETE;
+		return DRLKEY_PROMOTE_GAP_SPEC_RELEASE;
+	}
+	/**
+	 * this method generated drl queue object
+	 * @author ENGMASA
+	 * @param context
+	 * @param objectID
+	 * @param drltoolskey
+	 */
+	public static void runDRLToolsKey(Context context, String objectID, String drltoolskey) {
+		drlToolsEnoviaObject drToolsEnoviaObject = new drlToolsEnoviaObject(context);
+		try {
+			drToolsEnoviaObject.RunServerCommandActionTrigger(objectID, drltoolskey, null);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * this method generated drl queue object
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 */
+	public static void runDRLToolsKey(Context context, String[] args) {
+		try {
+			//changeTypeAndConnectPart(context, "65080.62902.43335.36044", "type_gapGAPSpecification", "policy_PartSpecification", "relationship_PartSpecification", "relationship_ReferenceDocument", "65080.62902.3235.49811" ,"Changed by ENGMASA");
+			runDRLToolsKey(context, args[0], args[1]);
+			
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * this method disconnects old relations from spec
+	 * @author ENGMASA
+	 * @param context
+	 * @param strObjectId
+	 * @param slRelIds
+	 * @throws Exception
+	 */
+	public static void disconnectPreviouseRelations(Context context, String strObjectId, StringList slRelIds, String sConnectRel) throws Exception
+	{
+		if (slRelIds!=null && slRelIds.size()>0)
+		{
+			String strRelId = null;
+			StringBuffer sbMQLCommand = new StringBuffer();
+			for (int i=0; i<slRelIds.size(); i++)
+			{
+				strRelId = (String) slRelIds.get(i);
+				// disconnect relationship
+				DomainRelationship doRel = DomainRelationship.newInstance(context, strRelId);
+				doRel.setType(context, strRelId, sConnectRel);
+			}
+		}
+	}
+	/**
+	 * this method disconnects older connections and later connects with new relationship
+	 * @author ENGMASA
+	 * @param context
+	 * @param strSpecId
+	 * @param sConnectRel
+	 * @param slFromConnectIds
+	 * @throws Exception
+	 */
+	public static void connectFromPart(Context context, String strSpecId,  String sConnectRel, StringList slFromConnectIds) throws Exception
+	{		
+		if (slFromConnectIds!=null && slFromConnectIds.size()>1)
+		{
+			DomainObject doPart = DomainObject.newInstance(context);
+			DomainObject doSpec = DomainObject.newInstance(context, strSpecId);
+			String strFromId = null;
+			for (int i=0; i<slFromConnectIds.size(); i++)
+			{
+				strFromId = (String) slFromConnectIds.get(i);
+				doPart.setId(strFromId);
+				DomainRelationship.connect(context, strFromId, sConnectRel, strSpecId, false);
+			}
+		}
+	}
+	/**
+	 * this method changes type and Policy of object
+	 * @author ENGMASA
+	 * @param context
+	 * @param strDocId
+	 * @param sType
+	 * @param sPolicy
+	 * @param strDescAppend
+	 * @throws Exception
+	 */
+	public static void changeType(Context context, String strDocId, String sType, String sPolicy, String strDescAppend) throws Exception
+	{
+		
+		DomainObject doDocObj = DomainObject.newInstance(context);
+		doDocObj.setId(strDocId);
+		String strDesc = doDocObj.getInfo(context, DomainObject.SELECT_DESCRIPTION);
+		if (strDesc==null)
+			strDesc = strDescAppend;
+		else
+		{
+			strDesc =strDesc + "\n" +strDescAppend;
+		}
+		
+		StringBuffer sbMQLCommand = new StringBuffer();
+		sbMQLCommand.append("modify bus ")
+					.append(strDocId)
+					.append(" type \"")
+					.append(sType)
+					.append("\" policy \"")
+					.append(sPolicy)
+					.append("\" description \"")
+					.append(strDescAppend)
+					.append("\"");
+
+		String strVal =  MqlUtil.mqlCommand(context, sbMQLCommand.toString());
+		
+	}
+	public static void mxMain(Context context, String[] args) {
+		try {
+			//changeTypeAndConnectPart(context, "65080.62902.43335.36044", "type_gapGAPSpecification", "policy_PartSpecification", "relationship_PartSpecification", "relationship_ReferenceDocument", "65080.62902.3235.49811" ,"Changed by ENGMASA");
+			
+			
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * this method updates SPEC link SAP
+	 * @author ENGMASA
+	 * @param context
+	 * @param strDocId
+	 * @param strPartId
+	 * @param strOperation
+	 * @throws Exception
+	 */
+	public static void addOrDeleteLinkFromSAP(Context context, String strDocId,String strPartId, String strOperation) throws Exception
+	{
+		${CLASS:cenitEV6SAPJPO} cenitEV6SAPJPO = new ${CLASS:cenitEV6SAPJPO}();
+		String[] Args = new String[10];
+		
+       /*  String BusID ="0";
+           String strDialogMode = "0";
+           String strMode = "Online";*/
+
+           Args[0] = strDocId;
+           Args[1] = strOperation;
+           Args[2] = "0";
+           Args[3] = "online";
+           Args[4] = strPartId;
+           
+		cenitEV6SAPJPO.mxMain(context, Args);
+	}
+	
+	/**
+	 * this method updates SPEC link SAP
+	 * @author ENGMASA
+	 * @param context
+	 * @param strDocId
+	 * @param strPartId
+	 * @param strOperation
+	 * @throws Exception
+	 */
+	public static void addOrDeleteLinkFromSAP(Context context, String[] args) throws Exception
+	{
+		addOrDeleteLinkFromSAP(context, args[0], args[1], args[2]);
+	}
+	
+	/**
+	 * this method updates links for a Part in SAP
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static int updateLinksOnPartInSAP(Context context, String args[]) throws Exception
+	{
+		int iRes = 0;
+		try
+		{
+			${CLASS:cenitEV6SAPJPO} cenitEV6SAPJPO = new ${CLASS:cenitEV6SAPJPO}();
+			String strPartId = args[0];
+			String strOperationId = args[1];
+			String strDialogMode = args[2];
+			String strMode = args[3];
+			
+			iRes = cenitEV6SAPJPO.mxMain(context, args);
+		}
+		catch (Exception e) 
+		{
+			iRes=1;
+			throw e;
+		}
+		return iRes;
+	}
+}
+

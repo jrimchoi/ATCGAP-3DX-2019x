@@ -1,0 +1,318 @@
+import java.util.Iterator;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.ChangeRequestAddonsConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Method to connect Change Template to Change Request via
+	 * "Change Order Template" relationship
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param dobjChangeTemplate
+	 *            Change Template DomainObject.
+	 * @return strApprovalRouteTemplateId Approval Route Template ID.
+	 * @throws Exception
+	 *             if operation fails
+	 * @exclude
+	 */
+	public void connectChangeTemplateToChangeRequest(Context context,String args[]) throws FrameworkException{
+		try{
+			String strChangeOrderTemplate = PropertyUtil.getSchemaProperty(context,
+					ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(ChangeRequestAddonsConstants.REQUESTMAP);
+			Map paramMap = (Map) programMap.get(ChangeRequestAddonsConstants.PARAMMAP);
+
+			String[] strChangeTemplateId = (String[]) requestMap.get("CO TemplateOID");
+			String[] strChangeRequestID = (String[]) requestMap.get(ChangeRequestAddonsConstants.OBJECTID);
+
+			String strOldTemplateValue = (String) paramMap.get("Old value");
+			String strNewTemplateValue = (String) paramMap.get(ChangeRequestAddonsConstants.NEW_VALUE);
+			if(!UIUtil.isNullOrEmpty(strChangeTemplateId[0]) && !strNewTemplateValue.equals(strOldTemplateValue)){
+				// Check if already CT is connected then first remove that CT
+				// then connect another
+				//and old template and new template should not be same
+				if(UIUtil.isNotNullAndNotEmpty(strOldTemplateValue)){
+					DomainObject dobjChangeRequest = DomainObject.newInstance(context, strChangeRequestID[0]);
+					String strChangeOrederTemplateRelId = dobjChangeRequest.getInfo(context, "from[" + strChangeOrderTemplate + "].id");
+					DomainRelationship.disconnect(context, strChangeOrederTemplateRelId);
+				}
+				DomainObject dobjChangeRequest = DomainObject.newInstance(context, strChangeRequestID[0]);
+				DomainObject dobjChangeTemplate = DomainObject.newInstance(context, strChangeTemplateId[0]);
+				DomainRelationship dr = DomainRelationship.connect(context, dobjChangeRequest, new RelationshipType(strChangeOrderTemplate),
+						dobjChangeTemplate);
+			}
+			// for clear button
+			if (UIUtil.isNullOrEmpty(strChangeTemplateId[0])) {
+				if (UIUtil.isNotNullAndNotEmpty(strOldTemplateValue)) {
+					DomainObject dobjChangeRequest = DomainObject.newInstance(context, strChangeRequestID[0]);
+					String strChangeOrederTemplateRelId = dobjChangeRequest.getInfo(context, "from[" + strChangeOrderTemplate + "].id");
+					DomainRelationship.disconnect(context, strChangeOrederTemplateRelId);
+				}
+
+			}
+		}
+		catch(Exception e){
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+}
+	
+	
+	/**
+	 * Method to connect Change Template to Change Order to use Questionnaire
+	 * and copy Approval route Template on CO
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param dobjChangeTemplate
+	 *            Change Template DomainObject.
+	 * @return strApprovalRouteTemplateId Approval Route Template ID.
+	 * @throws Exception
+	 *             if operation fails
+	 * @exclude
+	 */
+	public int connectChangeTemplateToChangeOrder(Context context,String args[]) throws FrameworkException{
+		try {
+			if (args == null || args.length < 1) {
+				throw new IllegalArgumentException();
+			}
+			String strChangeOrderRel = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER);
+			String strChangeInstanceRel = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE);
+			String strChangeOrderTemplate = PropertyUtil.getSchemaProperty(context,
+					ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			String strChangeRequestId = args[0];
+			DomainObject dobjChangeRequest = DomainObject.newInstance(context, strChangeRequestId);
+
+			String strChangeTemplateID = dobjChangeRequest.getInfo(context, "from[" + strChangeOrderTemplate + "].to.id");
+			String strChangeOrderId = dobjChangeRequest.getInfo(context, "from[" + strChangeOrderRel + "].to.id");
+			if(UIUtil.isNotNullAndNotEmpty(strChangeTemplateID)){
+				DomainObject dobjChangeTemplate = DomainObject.newInstance(context, strChangeTemplateID);
+				Map attributeMap = getChangeTemplateAttributesToCopyOnChangeOrder(context, dobjChangeTemplate);
+				DomainObject dobjChangeOrder = DomainObject.newInstance(context, strChangeOrderId);
+				if(!dobjChangeOrder.hasRelatedObjects(context, strChangeInstanceRel, false))
+				{
+					DomainRelationship drChangeInstance = DomainRelationship.connect(context, dobjChangeTemplate, strChangeInstanceRel, dobjChangeOrder);
+					
+					if(!attributeMap.isEmpty() && attributeMap!=null){
+						setChangeTemplateAttributesToCopyOnChangeOrder(context, attributeMap, dobjChangeOrder);
+					}
+					//Logic to apply Interface of Template to CO
+					String sInterfaceName = MqlUtil.mqlCommand(context, "print bus $1 select $2 dump $3",strChangeTemplateID,"interface","|");
+					if(!UIUtil.isNullOrEmpty(sInterfaceName)){
+						Iterator intrItr  = FrameworkUtil.split(sInterfaceName, "|").iterator();
+						//Add all Change Template Interfaces to CO
+						while(intrItr.hasNext()){
+							MqlUtil.mqlCommand(context, "modify bus $1 add interface $2",strChangeOrderId,(String)intrItr.next());
+						}
+					}
+				}
+			}
+			return 0;
+
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+	 * Method to get Approval Route Template if present on Change Template to be
+	 * copied on Change Request
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param dobjChangeTemplate
+	 *            Change Template DomainObject.
+	 * @return strApprovalRouteTemplateId Approval Route Template ID.
+	 * @throws Exception
+	 *             if operation fails
+	 * @exclude
+	 */
+	private Map<String, String> getChangeTemplateAttributesToCopyOnChangeOrder(Context context, DomainObject dobjChangeTemplate)
+			throws FrameworkException {
+		try {
+			StringList attributeList = new StringList();
+			attributeList.add(DomainConstants.SELECT_ORGANIZATION);
+			attributeList.add("from[Change Coordinator].to.id");
+			attributeList.add("from[" + DomainConstants.RELATIONSHIP_EC_DISTRIBUTION_LIST + "].to.id");
+			
+			String strObjectRouteRel = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_ObjectRoute);
+			String strRouteBasePurpose = DomainConstants.EMPTY_STRING;
+			String strApprovalRouteTemplateId = DomainConstants.EMPTY_STRING;
+			String strApprovalRouteTemplate = "from[" + strObjectRouteRel + "].to.id";
+			StringList approvalRouteTemplateIdList = dobjChangeTemplate.getInfoList(context, strApprovalRouteTemplate);
+			Map attributeMap = dobjChangeTemplate.getInfo(context, attributeList);
+
+			if(!approvalRouteTemplateIdList.isEmpty() && approvalRouteTemplateIdList != null){
+				for(int i=0; i<approvalRouteTemplateIdList.size() ; i++){
+					strRouteBasePurpose = DomainObject.newInstance(context, approvalRouteTemplateIdList.get(i).toString()).getAttributeValue(context,
+							DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE);
+					//if(strRouteBasePurpose.equals("Approval"))
+					// return strApprovalRouteTemplateId =
+					// approvalRouteTemplateIdList.get(i).toString();
+					attributeMap.put(strRouteBasePurpose, approvalRouteTemplateIdList.get(i).toString());
+				}
+			}
+			return attributeMap;
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+	
+	private void setChangeTemplateAttributesToCopyOnChangeOrder(Context context, Map attributeMap, DomainObject dobjChangeOrder)
+			throws FrameworkException {
+		try {
+			for(Iterator itr = attributeMap.keySet().iterator(); itr.hasNext();){
+				String strAttributeValue = (String) itr.next();
+				if(strAttributeValue.equals(DomainConstants.SELECT_ORGANIZATION)){
+					MqlUtil.mqlCommand(context, "mod bus $1 organization $2", true, dobjChangeOrder.getObjectId(context),
+							(String) attributeMap.get(strAttributeValue));
+				}
+				else if(strAttributeValue.equals("from[Change Coordinator].to.id")){
+					String strCCOId = dobjChangeOrder.getInfo(context, "from[Change Coordinator].id");
+					if(UIUtil.isNotNullAndNotEmpty(strCCOId)){
+						DomainRelationship.disconnect(context, strCCOId);
+					}
+					DomainRelationship changeCoordinatorRel = DomainRelationship.connect(context, dobjChangeOrder, "Change Coordinator",
+							DomainObject.newInstance(context, (String) attributeMap.get(strAttributeValue)));
+				}
+				else if (strAttributeValue.equals("from[" + DomainConstants.RELATIONSHIP_EC_DISTRIBUTION_LIST + "].to.id")) {
+					DomainRelationship ECDistributionListRel = DomainRelationship.connect(context, dobjChangeOrder,
+							DomainConstants.RELATIONSHIP_EC_DISTRIBUTION_LIST,
+							DomainObject.newInstance(context, (String) attributeMap.get(strAttributeValue)));
+				}
+				else if (strAttributeValue.equals("Approval")) {
+					DomainRelationship ApprovalRouteRel = DomainRelationship.connect(context, dobjChangeOrder,
+							DomainRelationship.RELATIONSHIP_OBJECT_ROUTE,
+							DomainObject.newInstance(context, (String) attributeMap.get(strAttributeValue)));
+					ApprovalRouteRel.setAttributeValue(context, DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE, strAttributeValue);
+				}
+				else if (strAttributeValue.equals("Review")){
+					DomainRelationship ReviewRouteRel = DomainRelationship.connect(context, dobjChangeOrder,
+							DomainRelationship.RELATIONSHIP_OBJECT_ROUTE,
+							DomainObject.newInstance(context, (String) attributeMap.get(strAttributeValue)));
+					ReviewRouteRel.setAttributeValue(context, DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE, strAttributeValue);
+				}
+			}		
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+	
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getUsageTemplates(Context context,String args[]) throws FrameworkException{
+		try{
+			StringList objectSelects = new StringList();
+			objectSelects.add(DomainConstants.SELECT_ID);
+			objectSelects.add(DomainConstants.SELECT_NAME);
+
+			StringList includeOIDList = new StringList();
+			MapList ml = DomainObject.findObjects(context, "Change Template", null, "attribute[Default Policy]=='Fast track Change'", objectSelects);
+			for(Object obj : ml){
+				Map map = (Map) obj;
+				String strTemplateId = (String) map.get(DomainConstants.SELECT_ID);
+				includeOIDList.add(strTemplateId);
+			}
+			return includeOIDList;
+		}
+		catch(Exception e){
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void checkEditAccessOnName(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get("formMap");
+			MapList formFieldList = (MapList) formMap.get("fields");
+			String strObjectId = (String) requestMap.get("parentOID");
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strOwner = dObj.getInfo(context, DomainObject.SELECT_OWNER);
+			String strCurrent = dObj.getInfo(context, DomainObject.SELECT_CURRENT);
+			if (strOwner.equals(context.getUser()) && strCurrent.equals("Inactive")) {
+				for (Object map : formFieldList) {
+					Map fieldMap = (Map) map;
+					String strFieldName = (String) fieldMap.get(DomainObject.SELECT_NAME);
+					if (strFieldName.equals("Name")) {
+						Map settingMap = (Map) fieldMap.get("settings");
+						settingMap.put("Editable", "true");
+					}
+				}
+}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void checkEditAccessOnField(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get("formMap");
+			MapList formFieldList = (MapList) formMap.get("fields");
+			String strObjectId = (String) requestMap.get("parentOID");
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strCurrent = dObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			String strPolicyChangeRequest = PropertyUtil.getSchemaProperty(context, "policy_ChangeRequest");
+			String strStateCreate = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyChangeRequest, "state_Create");
+			if (!strCurrent.equals(strStateCreate)) {
+				for (Object map : formFieldList) {
+					Map fieldMap = (Map) map;
+					String strFieldName = (String) fieldMap.get(DomainObject.SELECT_NAME);
+					if (strFieldName.equals("COTemplate")) {
+						Map settingMap = (Map) fieldMap.get("settings");
+						settingMap.put("Editable", "false");
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public boolean checkIfChangeTemplateIsConnected(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strRel = PropertyUtil.getSchemaProperty(context, ChangeRequestAddonsConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			boolean hasRelatedObject = dObj.hasRelatedObjects(context, strRel, true);
+			return hasRelatedObject;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+}
+

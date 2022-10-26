@@ -1,0 +1,120 @@
+/**
+ * @quickreview X32 19:06:20 Old Reporter removal Modification
+ *  @quickreview VKY  19:02:22 Return a new Hashtable with the inner maps also as Hashtable and list as Vector; method createReturnHashTable()
+ *  @quickreview KRT3 19:02:02 Modification to return result with only in form of Hashtable from API_JPO methods. 
+ *  @quickreview KRT3 17:10:13 New Reporter modifications with variable COLLAB_REPORTER.
+ */
+
+/**
+ *  VPLMIntegBOMVPLMSynchronizeBase
+ *  JPO for publishing and synchronizing VPLM data with Matrix and Matrix data with VPLM.
+ */
+
+import java.util.ArrayList;
+import java.util.Hashtable;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+
+import com.dassault_systemes.vplmintegration.sdk.VPLMIntegException;
+import com.matrixone.vplmintegration.util.VPLMIntegTraceUtil;
+import com.matrixone.vplmintegrationitf.util.VPLMIntegrationConstants;
+import com.matrixone.vplmintegrationitf.util.VPLMIntegrationReporter;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * JPO to invoke synchronization using Java code or MQL / TCL script.<br/>
+	 * While packing the input string array provide the following data using the mentioned keys:<ul/>
+	 * <li>"ROOTID": the root business object of the BOM structure.</li>
+	 * <li>"IDLIST": the list of business object ids of the root part of the structures.</li>
+	 * <li>"SYNC_DEPTH": depth up to which to synchronize. It should be a string specifying the depth in numerals.<br/>
+	 *     Specify "0" if only the root is to be synchronized; "ALL" if full depth is to be synchronized;</li>
+	 * <li>"SYNC_AND_TRANSFER" : "give" to give control to other side. Default is "no". Specifying any other value means "no". It is not possible to take control.</li></ul>
+	 * @param Context object for the Enovia MatrixOne session. The context must be connected to a server and VPLM role should be specified in it.
+	 * @param argument string array.
+	 * @throws VPLMIntegException in case of severe error.
+	 * @return Success - 0 or failure non zero number.
+	 */
+	public static Map synchronizeFromMatrixToVPM(final Context context, String[] args) {
+		Map results = new Hashtable(0);
+		Map syncArgs=new Hashtable(0);
+		try{
+			syncArgs = (Hashtable)JPO.unpackArgs(args);
+			syncArgs.put(VPLMIntegrationConstants.ENGINE_MATRIX_API,"true");
+			args=JPO.packArgs(syncArgs);
+			Map resultMap = JPO.invoke(context,"VPLMIntegSyncWithVPLM", null, "execute", args,	Map.class);
+			results = createReturnHashTable(resultMap, results);
+		}catch(Exception e){
+			VPLMIntegTraceUtil.trace(context,e.getMessage());
+		}
+		return results;
+	}
+
+	/**
+	 * JPO to invoke synchronization using Java code or MQL / TCL script
+	 * While packing the input string array provide the following data using the mentioned keys:
+	 * While packing the input string array provide the following data using the mentioned keys:<ul/>
+	 * <li>"ROOTID": the root business object of the VPM structure.</li>
+	 * <li>"IDLIST": the list of business object ids of the root of the structures.</li>
+	 * <li>"SYNC_DEPTH": depth up to which to synchronize. It should be a string specifying the depth in numerals.<br/>
+	 *     Specify "0" if only the root is to be synchronized; "ALL" if full depth is to be synchronized;</li>
+	 * <li>"SYNC_AND_TRANSFER" : "give" to give control to other side. Default is "no". Specifying any other value means "no". It is not possible to take control.</li></ul>
+	 * @param Context object for the Enovia MatrixOne session. The context must be connected to a server and VPLM role should be specified in it.
+	 * @param argument string array.
+	 * @throws VPLMIntegException in case of severe error.
+	 * @return Success - 0 or failure non zero number.
+	 */
+	public static Map synchronizeFromVPMToMatrix(final Context context, String[] args) {
+		Map results = new Hashtable(0);
+		Map syncArgs=new Hashtable(0);
+		try {
+			syncArgs = (Hashtable)JPO.unpackArgs(args);
+			syncArgs.put(VPLMIntegrationConstants.ENGINE_VPLM_API, "true");
+			args=JPO.packArgs(syncArgs);
+			Map resultMap = (Map)JPO.invoke(context,"VPLMIntegSyncWithMatrix", null, "execute", args,Map.class);
+			results = createReturnHashTable(resultMap, results);
+		} catch (Exception e) {
+			VPLMIntegTraceUtil.trace(context,e.getMessage());
+		}
+		return results;
+	}
+	
+	private static Map createReturnHashTable( final Map resultMap, final Map results ) {
+		for(Map.Entry<String, Map<String, ArrayList<String>>> rootResultMap : (Set<Map.Entry<String, Map<String, ArrayList<String>>>>)resultMap.entrySet()) {
+			String rootId = rootResultMap.getKey();
+			Map<String, ArrayList<String>> messagesMap = rootResultMap.getValue();
+			Map<String, Vector<String>> messagesTable = new Hashtable<>(messagesMap.size());
+
+			ArrayList<String> detailedReportList = messagesMap.get(VPLMIntegrationReporter.DETAILED_REPORT);
+			ArrayList<String> shortReportList = messagesMap.get(VPLMIntegrationReporter.SHORT_REPORT);
+			ArrayList<String> errorMsgList = messagesMap.get(VPLMIntegrationReporter.ERROR_MESSAGES);
+
+			Vector<String> detailedReportVec = new Vector(detailedReportList.size());
+			Vector<String> shortReportVec = new Vector(shortReportList.size());
+			Vector<String> errorMsgVec = new Vector(errorMsgList.size());
+
+			detailedReportVec.addAll(detailedReportList);
+			shortReportVec.addAll(shortReportList);
+			errorMsgVec.addAll(errorMsgList);
+
+			messagesTable.put(VPLMIntegrationReporter.DETAILED_REPORT, detailedReportVec);
+			messagesTable.put(VPLMIntegrationReporter.SHORT_REPORT, shortReportVec);
+			messagesTable.put(VPLMIntegrationReporter.ERROR_MESSAGES, errorMsgVec);
+
+			/*for(Map.Entry<String, ArrayList<String>> messageEntry : messagesMap.entrySet()) {
+				String msgType = messageEntry.getKey();
+				ArrayList<String> msgList = messageEntry.getValue();
+				Vector<String> msgVec = new Vector<>(msgList.size());
+				msgVec.addAll(msgList);
+				messagesTable.put(msgType, msgVec);
+			}*/
+			results.put(rootId, messagesTable);
+		}
+		return results;
+	}
+}
+

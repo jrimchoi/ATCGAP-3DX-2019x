@@ -1,0 +1,317 @@
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRisk;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskContext;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtUICommon} {
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getCAPATasks(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String riskId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			ManagedRiskContext riskContext = null;
+			if (!RiskMgmtUtil.isNullOrEmpty(riskId)) {
+				ManagedRisk risk = new ManagedRisk(riskId);
+				riskContext = risk.getRiskContext(context);
+			}
+			getWBSWithCustomSelection(context, returnMap, riskContext.getId(context));
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getDesignProjects(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map requestValueMap = (Map) programMap.get(REQUEST_VALUES_MAP);
+			String[] objIdArr = (String[]) requestValueMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(objIdArr) && !RiskMgmtUtil.isNullOrEmpty(objIdArr[0])) {
+				String hazardId = objIdArr[0];
+				Hazard hazard = new Hazard(hazardId);
+				HazardContext hazardContext = hazard.getProductContext(context);
+				returnMap = HazardMgmtUtil.getDesignProjects(context, hazardContext);
+				if (!RiskMgmtUtil.isNullOrEmpty(returnMap)) {
+					for (Map mpDesignProjects : returnMap) {
+						mpDesignProjects.put(RiskMgmtConstants.DISABLE_SELECTION, RiskMgmtConstants.TRUE);
+					}
+
+				}
+			}
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTasks(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String riskId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			ManagedRisk risk = new ManagedRisk(riskId);
+			returnMap = risk.getTasks(context, RiskMgmtUtil.stringList(DomainConstants.SELECT_ID),
+					RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID), null);
+
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean hasAddTaskAccess(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean isKindOfProjectSpace = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String riskId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			ManagedRisk risk = new ManagedRisk(riskId);
+			ManagedRiskContext riskContext = risk.getRiskContext(context);
+			if (riskContext.isKindOf(context, SYM_TYPE_PROJECT_SPACE.get(context))) {
+				isKindOfProjectSpace = true;
+			}
+			return isKindOfProjectSpace;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String addTasks(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrRiskId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+
+			String[] tableRowIds = (String[]) programMap.get(RiskMgmtConstants.EMX_TABLE_ROW_ID);
+
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				List<String> listTaskIds = new ArrayList<String>(tableRowIds.length);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					listTaskIds.add(rowId.getObjectId());
+				}
+				String[] selectedTaskIds = listTaskIds.toArray(new String[listTaskIds.size()]);
+				if (!RiskMgmtUtil.isNullOrEmpty(arrRiskId) && !RiskMgmtUtil.isNullOrEmpty(arrRiskId[0])
+						&& !RiskMgmtUtil.isAnyNullOrEmpty(selectedTaskIds)) {
+					ManagedRisk risk = new ManagedRisk(arrRiskId[0]);
+					risk.addTasks(context, selectedTaskIds);
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, RiskMgmtConstants.REFRESH_OPENER);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String removeTasks(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRiskId = (String[]) programMap.get(RiskMgmtConstants.PARENT_OID);
+			String[] tableRowIds = (String[]) programMap.get(RiskMgmtConstants.EMX_TABLE_ROW_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				List<String> listTaskRelIds = new ArrayList<String>(tableRowIds.length);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					listTaskRelIds.add(rowId.getRelationshipId());
+				}
+				String[] taskRelIds = listTaskRelIds.toArray(new String[listTaskRelIds.size()]);
+				if (!RiskMgmtUtil.isNullOrEmpty(arrRiskId) && !RiskMgmtUtil.isNullOrEmpty(arrRiskId[0]) && !RiskMgmtUtil.isNullOrEmpty(taskRelIds)) {
+					ManagedRisk risk = new ManagedRisk(arrRiskId[0]);
+					risk.removeTasks(context, taskRelIds);
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, RiskMgmtConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method checks if user can view risks category on task power view. It
+	 * returns true if task is related to some CAPA project
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * 
+	 * @param args
+	 *            contains the parameter map
+	 * 
+	 * @return boolean
+	 * 
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public boolean canViewRiskCategoryOnTaskPowerView(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean showRiskCategory = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String taskId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			DomainObject task = new DomainObject(taskId);
+			String taskType = task.getInfo(context, "type");
+			if (taskType.equals(SYM_TYPE_TASK.get(context)) && !taskType.equals(SYM_TYPE_MOE.get(context))
+					&& RiskMgmtUtil.isRelatedToCAPA(context, task)) {
+				showRiskCategory = true;
+			}
+			return showRiskCategory;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method checks if user can view related tasks in Risks table. It
+	 * returns true if risks table is in CAPA power view.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * 
+	 * @param args
+	 *            contains the parameter map
+	 * 
+	 * @return boolean
+	 * 
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public boolean canViewTasksRelatedToRisk(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean showRelatedTask = true;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String taskId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			DomainObject task = new DomainObject(taskId);
+			String taskType = task.getInfo(context, "type");
+			if (taskType.equals(SYM_TYPE_TASK.get(context)) && RiskMgmtUtil.isRelatedToCAPA(context, task)) {
+				showRelatedTask = false;
+			}
+			return showRelatedTask;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method is used as expand program while attaching tasks to a risk
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTablePMCWBSViewTableExpansion(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			getWBSWithCustomSelection(context, returnMap, objectId);
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns objects related to the given object with relationship
+	 * Subtask. It sets disableSelection to true if related object is not of
+	 * type 'Task'
+	 * 
+	 * @param context
+	 * @param returnMap
+	 * @param objectId
+	 * @throws RiskMgmtException
+	 */
+	private void getWBSWithCustomSelection(Context context, List<Map<?, ?>> returnMap, String objectId) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> taskMapList;
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				ManagedRiskContext riskContext = new ManagedRiskContext(objectId);
+				taskMapList = riskContext.getWBSTasks(context, RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE),
+						RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID), "Complete");
+				if (!RiskMgmtUtil.isNullOrEmpty(taskMapList)) {
+					for (Map map : taskMapList) {
+						String objectType = (String) map.get(DomainConstants.SELECT_TYPE);
+						if (!RiskMgmtUtil.isNullOrEmpty(objectType) && !(SYM_TYPE_TASK.get(context).equals(objectType)))
+							map.put(RiskMgmtConstants.DISABLE_SELECTION, RiskMgmtConstants.TRUE);
+						returnMap.add(map);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method checks if user can view Hazards category on task power view.
+	 * It returns true if task is related to some design project
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * 
+	 * @param args
+	 *            contains the parameter map
+	 * 
+	 * @return boolean
+	 * 
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public boolean canViewHazardCategoryOnTaskPowerView(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean showRiskCategory = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String taskId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(taskId)) {
+				DomainObject task = DomainObject.newInstance(context, taskId);
+				String taskType = task.getInfo(context, DomainConstants.SELECT_TYPE);
+				if (taskType.equals(SYM_TYPE_TASK.get(context)) && HazardMgmtUtil.isTaskRelatedToDesignProject(context, task)) {
+					showRiskCategory = true;
+				}
+			}
+			return showRiskCategory;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+}
+

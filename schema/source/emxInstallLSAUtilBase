@@ -1,0 +1,217 @@
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+import com.matrixone.apps.domain.util.MqlUtil;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructor.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            [0] holds schema definition file name with full path
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	public static void addStateSupersededInDeviceIdentificationPolicy(Context context, String[] args) throws Exception {
+		try {
+			String symbolicPolicyName = args[0];
+			String policy = ${CLASS:emxAdminCache}.getName(context, symbolicPolicyName);
+			if (policy == null || "".equals(policy.trim())) {
+				policy = "Device Identification";
+			}
+			String strStateNames = MqlUtil.mqlCommand(context, "print policy $1 select state dump $2", true, policy, "\\|");
+
+			if (!strStateNames.contains("Superseded")) {
+				MqlUtil.mqlCommand(context, "modify policy $1 add state $2 ", true, policy, "Superseded");
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addStateAllState(Context context, String[] args) throws Exception {
+		try {
+			String symbolicPolicyName = args[0];
+			String policy = ${CLASS:emxAdminCache}.getName(context, symbolicPolicyName);
+			String strStateNames = MqlUtil.mqlCommand(context, "print policy $1 select state allstate dump $2", true, policy, "\\|");
+			if (!strStateNames.contains("TRUE")) {
+				MqlUtil.mqlCommand(context, "modify policy $1 add  $2  public none owner none ", true, policy, "allstate");
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addStateReviewStateBeforeGivenState(Context context, String[] args) throws Exception {
+		try {
+			String symbolicPolicyName = args[0];
+			String followerState = args[1];
+			String policy = ${CLASS:emxAdminCache}.getName(context, symbolicPolicyName);
+			String strStateNames = MqlUtil.mqlCommand(context, "print policy $1 select state dump $2", true, policy, "\\|");
+			if (!strStateNames.contains("Review")) {
+				MqlUtil.mqlCommand(context, "modify policy $1 add state $2 before $3 ", true, policy, "Review", followerState);
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addAttributeofNCClosureType(Context context, String[] args) throws Exception {
+		String attribute = "";
+		try {
+			String symbolicAttributeName = args[0];
+			attribute = ${CLASS:emxAdminCache}.getName(context, symbolicAttributeName);
+			if (attribute == null || "".equals(attribute.trim())) {
+				attribute = "NC Closure Type";
+			}
+			String strattributeNames = MqlUtil.mqlCommand(context, "list attribute $1 select name dump $2", true, attribute, "\\|");
+			if (!strattributeNames.contains(attribute)) {
+				MqlUtil.mqlCommand(context,
+						"add attribute $1 type $2 !multiline !hidden range = $3 range = $4 range = $5 trigger Modify check $6 input $7", true,
+						attribute, "String", "", "CAPA", "Change", "emxTriggerManager", "AttributeNCClosureTypeModifyCheck");
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addNCRInResolvedToRel(Context context, String[] args) throws Exception {
+		try {
+			String symbolicRelName = args[0];
+			String rel = ${CLASS:emxAdminCache}.getName(context, symbolicRelName);
+
+			if (rel == null || "".equals(rel.trim())) {
+				rel = "Resolved To";
+			}
+			String strRelNames = MqlUtil.mqlCommand(context, "print rel $1 select $2 dump $3", true, rel, "totype[NCR]", "\\|");
+
+			if (!strRelNames.contains("TRUE")) {
+				MqlUtil.mqlCommand(context, "modify relationship $1 to add type $2", true, rel, "NCR");
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addStateAllStateToDMRBaseline(Context context, String[] args) throws Exception {
+		try {
+			String symbolicPolicyName = args[0];
+			String policy = ${CLASS:emxAdminCache}.getName(context, symbolicPolicyName);
+			if (policy == null || "".equals(policy.trim())) {
+				policy = "DMR Baseline";
+			}
+			String strStateNames = MqlUtil.mqlCommand(context, "print policy $1 select state allstate dump $2", true, policy, "\\|");
+			if (!strStateNames.contains("TRUE")) {
+				MqlUtil.mqlCommand(context, "modify policy $1 add  $2  public none owner none ", true, policy, "allstate");
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addTypesOnContactRelationship(Context context, String[] args) throws Exception {
+		try {
+			String symbolicRelName = args[0];
+			String rel = ${CLASS:emxAdminCache}.getName(context, symbolicRelName);
+
+			if (rel == null || "".equals(rel.trim())) {
+				rel = "Contact";
+			}
+
+			StringList listType = new StringList();
+			listType.add("Submission");
+			listType.add("Correspondence");
+			listType.add("COMPLAINT TICKETS");
+			listType.add("Complaint Product Fulfillment");
+			listType.add("Adverse Event Report");
+			listType.add("Device Identification");
+			listType.add("NCR");
+
+
+			String strRelNames = MqlUtil.mqlCommand(context, "print rel $1 select $2 dump $3", true, rel, "fromtype", "\\|");
+			
+			
+			Set<String> setType = new HashSet<String>();
+			for (String type : listType) {
+				if (!strRelNames.contains(type)) {
+					setType.add(type);
+				}
+			}
+
+			StringBuilder mqlQuery = new StringBuilder();
+			mqlQuery.append("modify relationship $1 from");
+			List<String> listArg = new ArrayList<String>();
+			listArg.add(rel);
+
+			int count = 2;
+			for (String typeName : setType) {
+				listArg.add(typeName);
+				mqlQuery.append(" add type $" + count);
+				count++;
+			}
+			
+			if (setType.size() > 0) {
+				MqlUtil.mqlCommand(context, mqlQuery.toString(), true, listArg.toArray(new String[listArg.size()]));
+			}
+			String strRelAttr = MqlUtil.mqlCommand(context, "print rel $1 select $2 dump $3", true, rel, "attribute[Primary Complaint Contact]",
+					"\\|");
+
+			if (!strRelAttr.contains("TRUE")) {
+				MqlUtil.mqlCommand(context, "modify relationship $1 add attribute $2", true, rel, "Primary Complaint Contact");
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	public static void addDerivedTypeContactInTypeReviewer(Context context, String[] args) throws Exception {
+		String type = "";
+		try {
+			String symbolicAttributeName = args[0];
+			type = ${CLASS:emxAdminCache}.getName(context, symbolicAttributeName);
+			if (type == null || "".equals(type.trim())) {
+				type = "Reviewer";
+			}
+
+			String strDerivedType = MqlUtil.mqlCommand(context, "print type $1 select $2 dump $3", true, type, "derived", "\\|");
+			String strContactType = MqlUtil.mqlCommand(context, "list type $1", true, "Contact");
+
+			if ((strDerivedType == null || strDerivedType.isEmpty() || "".equals(strDerivedType.trim()))
+					&& (strContactType != null && strContactType.contains("Contact"))) {
+				MqlUtil.mqlCommand(context, "modify type $1 derived $2", true, type, "Contact");
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+}
+

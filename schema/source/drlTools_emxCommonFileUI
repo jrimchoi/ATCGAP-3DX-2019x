@@ -1,0 +1,794 @@
+/*
+ *  emxCommonFileUI.java
+ *
+ * Copyright (c) 1992-2010 Dassault Systemes.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+
+import com.designrule.drToolsEnoviaObject;
+import com.designrule.drv6tools.jpointeraction.drDocumentActions;
+
+import java.text.DecimalFormat;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FormatUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIComponent;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+/**
+ * @version AEF Rossini - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxCommonFileUIBase}
+{
+
+	private static final String OBJECT_MAP_IS_LATEST_REVISION = "isLatestRevision";
+	private static final String OBJECT_MAP_ID = "id";
+	private static final String OBJECT_MAP_FILE_ID = "fileId";
+	private static final String EMX_COMPONENTS_STRING_RESOURCE = "emxComponentsStringResource";
+	private static final String PARAM_LIST_LANGUAGE_STR = "languageStr";
+	private static final String PARAM_LIST_REPORT_FORMAT = "reportFormat";
+	private static final String PARAM_LIST_FROM_ID = "from.id";
+	private static final String PARAM_LIST_TRACK_USAGE_PART_ID = "trackUsagePartId";
+	private static final String PARAM_LIST_REL_ID = "relId";
+	private static final String PROGRAM_MAP_PARAM_LIST = "paramList";
+	private static final String PROGRAM_MAP_OBJECT_LIST = "objectList";
+	
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since AEF Rossini
+     * @grade 0
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+      super(context, args);
+    }
+
+    public static String getViewerURL(Context context, String objectId, String format, String fileName) throws Exception
+    {
+      return getViewerURL(context, objectId, format, fileName, null, false);
+    }
+
+    public static String getViewerURL(Context context, String objectId, String format, String fileName,boolean bUIType) throws Exception
+    {
+      return getViewerURL(context, objectId, format, fileName, null, bUIType);
+    }
+
+    public static String getViewerURL(Context context, String objectId, String format, String fileName, String partId) throws Exception
+    {
+        return getViewerURL(context,objectId,format,fileName,partId,false);
+    }
+ 
+    public static String getViewerURL(Context context, String objectId, String format, String fileName, String partId,boolean bUIType) throws Exception
+    {
+    	HashMap<String, String> map = new HashMap<String, String>();
+    	//add current passed into variables into a hashmap for checking
+    	map.put("objectId", objectId);
+    	map.put("format", format);
+    	map.put("fileName", fileName);
+    	//run the drTools Enovia Function getViewerURLPreprocessor to test to see if the object is linked
+    	//to either a waiting queue object or is linked to a neutral derived output object which should be used
+    	//as the view file for readonly users
+    	map = drToolsEnoviaObject.getViewerURLPreprocessor(context,map);
+    	if(map != null){
+    		if(map.containsKey("returnURL") == true){
+    			//the drTools has calculated the URL to uses
+    			//typically this will be done if the object is linked to a waiting queue object
+    			//and the user should not be allowed to view the file until this has completed
+    			return map.get("returnURL");
+    		}
+    		//the drTools has calculated the ID, file name and format to use
+    		//this will be of the linked matching neutral derived output object
+    		//the local variables are set to these modified values which will then be sent through the 
+    		//standard getViewerURL function.
+    		objectId = map.get("objectId");
+    		format = map.get("format");
+    		fileName = map.get("fileName");
+    	}
+    	return ${CLASS:emxCommonFileUIBase}.getViewerURL(context, objectId, format, fileName, partId, bUIType);
+    }
+	
+	/**
+    *  Get Vector of Strings for Action Icons
+    *  @param context the eMatrix <code>Context</code> object
+    *  @param args an array of String arguments for this method
+    *  @return Vector object that contains a vector of html code to
+    *        construct the Actions Column.
+    *  @throws Exception if the operation fails
+    *
+    *  @since Common 10.5
+    *  @grade 0
+    */
+    public static Vector getFileActions(Context context, String[] args)
+        throws Exception
+	{
+		Vector fileActionsVector = new Vector();
+		try {
+
+
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			
+			//3dxtool - Document Actions providing greater control on the UI actions to be displayed//
+            drDocumentActions drDocActions = new drDocumentActions(context, programMap);
+			
+			MapList objectList = (MapList) programMap.get(PROGRAM_MAP_OBJECT_LIST);
+			if (objectList.isEmpty())
+				return fileActionsVector;
+			Map paramList = (Map) programMap.get(PROGRAM_MAP_PARAM_LIST);
+
+			String strDocumentPartRel = (String) paramList.get(PARAM_LIST_REL_ID);
+			String strPartId = (String) paramList.get(PARAM_LIST_TRACK_USAGE_PART_ID);
+			try {
+
+
+
+				if (strPartId == null && strDocumentPartRel != null) {
+
+
+					String[] relIds = { strDocumentPartRel };
+					StringList slRelSelect = new StringList(PARAM_LIST_FROM_ID);
+					MapList mlPart = DomainRelationship.getInfo(context, relIds, slRelSelect);
+
+					if (mlPart.size() > 0) {
+
+						strPartId = (String) ((Map) mlPart.get(0)).get(PARAM_LIST_FROM_ID);
+					}
+				}
+			} catch (Exception e) {// do nothing...
+
+
+			}
+			boolean isprinterFriendly = false;
+			if (paramList.get(PARAM_LIST_REPORT_FORMAT) != null) {
+
+
+				isprinterFriendly = true;
+			}
+
+			StringList lockinfo = new StringList(2);
+			lockinfo.add(CommonDocument.SELECT_LOCKED);
+			lockinfo.add(CommonDocument.SELECT_LOCKER);
+			lockinfo.add(CommonDocument.SELECT_ID);
+			MapList lockInfo = getUpdatedColumnValues(context, objectList, lockinfo);
+			Map fileLockInfoGroypById = new HashMap();
+			for (Iterator iter = lockInfo.iterator(); iter.hasNext();) {
+				Map element = (Map) iter.next();
+				String[] lock = new String[2];
+				lock[0] = (String) element.get(CommonDocument.SELECT_LOCKED);
+				lock[1] = (String) element.get(CommonDocument.SELECT_LOCKER);
+				fileLockInfoGroypById.put(element.get(CommonDocument.SELECT_ID), lock);
+			}
+
+
+
+			Iterator objectListItr = objectList.iterator();
+			String languageStr = (String) paramList.get(PARAM_LIST_LANGUAGE_STR);
+			Locale strLocale = context.getLocale();
+
+			String masterId = null;
+			String versionId = null;
+			String revision = null;
+			String fileActions = null;
+			String fileName = null;
+			String encodedFileName = null;
+			String encodedFormat = null;
+			String fileFormat = null;
+
+			String strViewerURL = null;
+			String downloadURL = null;
+			String checkoutURL = null;
+			String checkinURL = null;
+			String unlockURL = null;
+			String s3DViaURL = null;
+			String sFileExt = null;
+
+			String sTipDownload = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTipDownload");
+			String sTipCheckout = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTipCheckout");
+			String sTipCheckin = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTipCheckin");
+			String sTipUnlock = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTipUnlock");
+			String sTipLock = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTipLock");
+			String sTip3DVIAViewer = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,
+					"emxComponents.DocumentSummary.ToolTip3DLiveExamine");
+
+			String suspendVersioning = "False";
+			String viewerTip = "Default";
+			String i18nViewerTip = i18nNow.getViewerI18NString(viewerTip, context.getSession().getLanguage());
+			// Start MSF
+			String msfRequestData = "";
+			// End MSF
+
+			while (objectListItr.hasNext()) {
+
+
+
+
+				// Start MSF
+				msfRequestData = "";
+				// End MSF
+				fileName = "";
+				fileActions = "";
+
+				StringBuffer fileActionsStrBuff = new StringBuffer();
+
+				Map objectMap = (Map) objectListItr.next();
+
+				drDocActions.setupForObject(objectMap);
+
+				suspendVersioning = (String) objectMap.get(CommonDocument.SELECT_SUSPEND_VERSIONING);
+				masterId = (String) objectMap.get(OBJECT_MAP_FILE_ID);
+
+				versionId = (String) objectMap.get(OBJECT_MAP_ID);
+				revision = (String) objectMap.get(CommonDocument.SELECT_REVISION);// seeta
+
+				String[] fileLockInfo = (String[]) fileLockInfoGroypById.get(versionId);
+				String fileLocked = fileLockInfo != null ? fileLockInfo[0]
+						: (String) objectMap.get(CommonDocument.SELECT_LOCKED);
+				String fileLockedBy = fileLockInfo != null ? fileLockInfo[1]
+						: (String) objectMap.get(CommonDocument.SELECT_LOCKER);
+
+
+
+				fileName = (String) objectMap.get(CommonDocument.SELECT_TITLE);
+				encodedFileName = FrameworkUtil.findAndReplace(fileName, "+", "%252b"); // Added
+																						// to
+																						// support
+																						// +
+																						// character
+																						// in
+																						// file
+																						// names
+				encodedFileName = FrameworkUtil.findAndReplace(encodedFileName, "&", "%26");
+				fileFormat = (String) objectMap.get(CommonDocument.SELECT_FILE_FORMAT);
+				if ("".equals(fileFormat)) {
+
+
+					fileFormat = CommonDocument.FORMAT_GENERIC;
+				}
+
+                Map lockCheckinStatusMap = CommonDocument.getLockAndCheckinIconStatus(context, objectMap);
+                boolean isAnyFileLockedByContext = (boolean)lockCheckinStatusMap.get("isAnyFileLockedByContext");
+                boolean isContextDocumentOwner= (boolean)lockCheckinStatusMap.get("isContextDocumentOwner");
+
+				encodedFormat = fileFormat;
+
+				int fileCount = 0;
+				String vcInterface = null;
+				boolean vcDocument = false;
+				boolean sOwnerWorkspace = false;
+				fileCount = CommonDocument.getFileCount(context, objectMap);
+				vcInterface = (String) objectMap.get(CommonDocument.SELECT_IS_KIND_OF_VC_DOCUMENT);
+				vcDocument = "TRUE".equalsIgnoreCase(vcInterface) ? true : false;
+				objectMap.put(CommonDocument.SELECT_LOCKED, fileLocked);
+				objectMap.put(CommonDocument.SELECT_LOCKER, fileLockedBy);
+				boolean isLatestRevision = (Boolean) objectMap.get(OBJECT_MAP_IS_LATEST_REVISION);
+				
+				//3dxtools - Document Actions
+				if(drDocActions.isShowActivity()) {
+					StringBuffer activityBuf = new StringBuffer();
+					drDocActions.addActivityHTML(objectMap, activityBuf);
+					fileActionsStrBuff.append(activityBuf.toString());
+				}
+				
+				if (drDocActions.isShowViewer() && CommonDocument.canView(context, objectMap)) {
+
+
+					if (is3DViaSupported(context, encodedFileName)) {
+
+
+						if (!isprinterFriendly) {
+
+							s3DViaURL = "../components/emxLaunch3DLiveExamine.jsp?objectId=" + masterId
+									+ "&amp;mode=fileBased&amp;fileName=" + encodedFileName + "&amp;fileFormat="
+									+ encodedFormat;
+							fileActionsStrBuff
+									.append("<a href='javascript:showModalDialog(\"" + s3DViaURL + "\",600,600)'>");
+
+							fileActionsStrBuff
+									.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""
+											+ sTipDownload + "\" title=\"" + sTip3DVIAViewer + "\"></img></a>&#160;");
+						} else {
+
+
+
+							fileActionsStrBuff
+									.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""
+											+ sTipDownload + "\" title=\"" + sTip3DVIAViewer + "\"></img></a>&#160;");
+						}
+					}
+
+
+					if (!isprinterFriendly) {						
+
+
+
+					 if (drDocActions.isShowViewer()) {
+				      // Modified for drlTools:05/01/2017 - 	To enable viewer URL redirection if object is linked to either a waiting queue object or derived output viewfile (i.e. pdf)
+					  //										The modification makes the getViewerURL call invoke the static method in the emxCommonFileUI not the one in emxCommonFileUIBase
+					  //										Original Code = 
+					  //										String viewerURL = getViewerURL(context, masterId, fileFormat, fileName, strPartId);
+                      String viewerURL = ${CLASSNAME}.getViewerURL(context, masterId, fileFormat, fileName, strPartId);
+					  fileActionsStrBuff.append(viewerURL);
+					 }
+						
+
+
+
+
+					} else {
+
+						fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionView.gif' alt=\""
+								+ i18nViewerTip + "\" title=\"" + i18nViewerTip + "\"></img></a>&#160;");						
+					}
+
+
+				}
+				if (drDocActions.isShowDownload() && CommonDocument.canDownload(context, objectMap)) {
+					if (!isprinterFriendly) {
+						downloadURL = "javascript:getTopWindow().callCheckout('"
+								+ XSSUtil.encodeForJavaScript(context, masterId) + "','download', '"
+								+ XSSUtil.encodeForJavaScript(context, fileName) + "', '"
+								+ XSSUtil.encodeForJavaScript(context, fileFormat) + "', null, null, null, null, '"
+								+ XSSUtil.encodeForJavaScript(context, strPartId) + "', '" + revision
+								+ "',null,null, null,null, null,null ,null,null, null, '" + versionId + "');";
+						fileActionsStrBuff.append("<a href=\"" + downloadURL + "\">");
+						fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionDownload.gif' alt=\""
+								+ sTipDownload + "\" title=\"" + sTipDownload + "\"></img></a>&#160;");
+					} else {
+						fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionDownload.gif' alt=\""
+								+ sTipDownload + "\" title=\"" + sTipDownload + "\"></img></a>&#160;");
+					}
+				}
+
+				if (drDocActions.isShowCheckOut() && CommonDocument.canCheckout(context, objectMap) && isLatestRevision) {
+
+					if (!isprinterFriendly) {
+
+						checkoutURL = "javascript:getTopWindow().callCheckout('"
+								+ XSSUtil.encodeForJavaScript(context, masterId) + "','checkout', '"
+								+ XSSUtil.encodeForJavaScript(context, fileName) + "', '"
+								+ XSSUtil.encodeForJavaScript(context, fileFormat) + "', null, null, null, null, '"
+								+ XSSUtil.encodeForJavaScript(context, strPartId) + "', '" + revision
+								+ "',null,null, null,null, null,null ,null,null, null, '" + versionId + "');";
+						fileActionsStrBuff.append("<a href=\"" + checkoutURL + "\">");
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\""
+										+ sTipCheckout + "\" title=\"" + sTipCheckout + "\"></img></a>&#160;");
+
+						unlockURL = "../components/emxCommonDocumentLock.jsp?objectId="
+								+ XSSUtil.encodeForJavaScript(context, versionId);
+						fileActionsStrBuff.append("<a href=\"javascript:submitWithCSRF('" + unlockURL
+								+ "', findFrame(getTopWindow(),'listHidden'))\">");
+						fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionLock.gif\" alt=\""
+								+ sTipLock + "\" title=\"" + sTipLock + "\"></img></a>&#160;");
+					} else {
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\""
+										+ sTipCheckout + "\" title=\"" + sTipCheckout + "\"></img></a>&#160;");
+
+						fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionLock.gif\" alt=\""
+								+ sTipLock + "\" title=\"" + sTipLock + "\"></img></a>&#160;");
+					}
+
+				} else if (drDocActions.isShowCheckIn() && CommonDocument.canCheckin(context, objectMap) && isLatestRevision) {
+					if (!isprinterFriendly) {
+						if (isAnyFileLockedByContext) {
+
+
+
+
+
+						checkinURL = "../components/emxCommonDocumentPreCheckin.jsp?showComments=required&amp;refreshTable=true&amp;deleteFromTree="
+								+ XSSUtil.encodeForJavaScript(context, versionId) + "&amp;objectId="
+								+ XSSUtil.encodeForURL(context, masterId)
+								+ "&amp;showFormat=readonly&amp;append=true&amp;objectAction="
+								+ CommonDocument.OBJECT_ACTION_UPDATE_MASTER + "&amp;format=" + encodedFormat
+								+ "&amp;oldFileName=" + XSSUtil.encodeForURL(context, encodedFileName); 
+						// Start MSF
+						msfRequestData = "{RequestType: 'CheckIn', DocumentID: '"
+								+ XSSUtil.encodeForJavaScript(context, masterId) + "', PartId: '"
+								+ XSSUtil.encodeForJavaScript(context, strPartId)
+								+ "', MSFFileFormatDetails:[{FileName: '"
+								+ XSSUtil.encodeForJavaScript(context, fileName) + "', Format: '"
+								+ XSSUtil.encodeForJavaScript(context, fileFormat) + "', VersionId: '"
+								+ XSSUtil.encodeForJavaScript(context, versionId) + "'}]}";
+						fileActionsStrBuff.append("<a onclick=\"javascript:processModalDialog(" + msfRequestData + ", '"
+								+ checkinURL + "',730,450)\">");
+						// End MSF
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""
+										+ sTipCheckin + "\" title=\"" + sTipCheckin + "\"></img></a>");
+
+
+						}
+						if (isAnyFileLockedByContext || isContextDocumentOwner) {
+						unlockURL = "../components/emxCommonDocumentUnlock.jsp?objectId="
+								+ XSSUtil.encodeForJavaScript(context, versionId);
+						fileActionsStrBuff.append("<a href=\"javascript:submitWithCSRF('" + unlockURL
+								+ "',findFrame(getTopWindow(),'listHidden'))\">");
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\""
+										+ sTipUnlock + "\" title=\"" + sTipUnlock + "\"></img></a>");
+					}} else {
+						if (isAnyFileLockedByContext) { 
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""
+										+ sTipCheckin + "\" title=\"" + sTipCheckin + "\"></img></a>&#160;");
+ }
+                        if (isAnyFileLockedByContext || isContextDocumentOwner) {
+
+
+
+
+
+
+
+
+						fileActionsStrBuff
+								.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\""
+										+ sTipUnlock + "\" title=\"" + sTipUnlock + "\"></img></a>&#160;");
+					}}
+
+				}
+
+				fileActions = fileActionsStrBuff.toString();
+
+				fileActionsVector.add(fileActions);
+			}
+		} catch (Exception ex) {
+
+
+
+			//ex.printStackTrace();
+		} finally {
+
+
+
+			return fileActionsVector;
+		}
+	}
+
+    /**
+    *  Get Vector of Strings for Action Icons for file version
+    *  @param context the eMatrix <code>Context</code> object
+    *  @param args an array of String arguments for this method
+    *  @return Vector object that contains a vector of html code to
+    *        construct the Actions Column.
+    *  @throws Exception if the operation fails
+    *
+    *  @since Common 10.5
+    *  @grade 0
+    */
+    public static Vector getVersionFileActions(Context context, String[] args)
+                            throws Exception
+    {
+        Vector fileActionsVector = new Vector();
+        try
+        {
+            HashMap programMap = (HashMap) JPO.unpackArgs(args);
+            MapList objectList = (MapList)programMap.get(PROGRAM_MAP_OBJECT_LIST);
+            Map paramList      = (Map)programMap.get(PROGRAM_MAP_PARAM_LIST);
+            boolean isprinterFriendly = false;
+            if(paramList.get(PARAM_LIST_REPORT_FORMAT) != null)
+            {
+                isprinterFriendly = true;
+            }
+      String strDocumentPartRel = (String)paramList.get(PARAM_LIST_REL_ID);
+      String strPartId = (String)paramList.get(PARAM_LIST_TRACK_USAGE_PART_ID);
+      try
+      {
+        if(strPartId == null && strDocumentPartRel != null)
+        {
+          String[] relIds = {strDocumentPartRel};
+          StringList slRelSelect = new StringList(PARAM_LIST_FROM_ID);
+          MapList mlPart = DomainRelationship.getInfo(context, relIds, slRelSelect);
+
+          if(mlPart.size()>0)
+          {
+            strPartId = (String) ((Map)mlPart.get(0)).get(PARAM_LIST_FROM_ID);
+          }
+        }
+      }catch(Exception e)
+      {
+      }
+      
+		    StringList lockinfo = new StringList(2);
+		    lockinfo.add(CommonDocument.SELECT_LOCKED);
+		    lockinfo.add(CommonDocument.SELECT_LOCKER);
+		    lockinfo.add(CommonDocument.SELECT_ID);
+		    MapList lockInfo = getUpdatedColumnValues(context, objectList, lockinfo);
+		    Map fileLockInfoGroypById = new HashMap();
+		    for (Iterator iter = lockInfo.iterator(); iter.hasNext();) {
+		          Map element = (Map) iter.next();
+		          String[] lock = new String[2];
+		          lock[0] = (String) element.get(CommonDocument.SELECT_LOCKED);
+		          lock[1] = (String) element.get(CommonDocument.SELECT_LOCKER);
+		          fileLockInfoGroypById.put(element.get(CommonDocument.SELECT_ID), lock);
+		    }
+            Iterator objectListItr = objectList.iterator();
+            String languageStr = (String)paramList.get(PARAM_LIST_LANGUAGE_STR);
+            Locale strLocale = context.getLocale();
+
+            String revision        = null;
+            String masterId        = null;
+            String versionId       = null;
+            String fileActions     = null;
+            String fileName        = null;
+            String encodedFileName = null;
+            String encodedFormat   = null;
+            String fileFormat      = null;
+            String docObjId = "";
+			String strViewerURL = null;
+            String checkoutURL  = null;
+            String checkinURL   = null;
+            String unlockURL = null;
+            boolean canViewAndDownload = false;
+            boolean docHasFiles = false;
+            
+
+            String viewerURL    = null;
+            String downloadURL  = null;
+            String s3DViaURL    = null;
+            String sFileExt     = null;
+            Map objectMap = new HashMap();
+            String moveFile = "";
+
+            String sTipDownload = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTipDownload");
+            String sTip3DVIAViewer = EnoviaResourceBundle.getProperty(context,  EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTip3DLiveExamine");
+			String sTipCheckout = EnoviaResourceBundle.getProperty(context, EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTipCheckout");
+            String sTipCheckin  = EnoviaResourceBundle.getProperty(context,  EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTipCheckin");
+            String sTipUnlock  = EnoviaResourceBundle.getProperty(context,  EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTipUnlock");
+            String sTipLock  = EnoviaResourceBundle.getProperty(context,  EMX_COMPONENTS_STRING_RESOURCE, strLocale,"emxComponents.DocumentSummary.ToolTipLock");
+			
+			//drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+            drDocumentActions drDocActions = new drDocumentActions(context, programMap);
+            //drV6Tools//
+
+
+            String viewerTip = "Default";
+            String i18nViewerTip = i18nNow.getViewerI18NString(viewerTip, context.getSession().getLanguage());
+            while(objectListItr.hasNext())
+            {
+                fileName    = "";
+                fileActions = "";
+                StringBuffer fileActionsStrBuff = new StringBuffer();
+
+                objectMap = (Map) objectListItr.next();
+
+                moveFile  = (String) objectMap.get(CommonDocument.SELECT_MOVE_FILES_TO_VERSION);
+                masterId  = (String) objectMap.get(CommonDocument.SELECT_MASTER_ID);
+                versionId = (String) objectMap.get(OBJECT_MAP_ID);
+                if (masterId == null || "".equals(masterId) || "null".equals(masterId) || "true".equalsIgnoreCase(moveFile))
+                {
+                    masterId = versionId;
+                }
+
+                fileName = (String) objectMap.get(CommonDocument.SELECT_TITLE);
+                encodedFileName = fileName;
+				revision = (String) objectMap.get("revision");
+                fileFormat = (String) objectMap.get(CommonDocument.SELECT_FILE_FORMAT);
+                encodedFormat = fileFormat;
+
+				String[] fileLockInfo = (String[]) fileLockInfoGroypById.get(versionId);
+                String fileLocked = fileLockInfo != null ? fileLockInfo[0] : (String)objectMap.get(CommonDocument.SELECT_LOCKED);
+                String fileLockedBy = fileLockInfo != null ? fileLockInfo[1] : (String)objectMap.get(CommonDocument.SELECT_LOCKER);
+				objectMap.put(CommonDocument.SELECT_LOCKER, fileLockedBy);
+                objectMap.put(CommonDocument.SELECT_LOCKED,fileLocked);
+                
+                Map lockCheckinStatusMap = CommonDocument.getLockAndCheckinIconStatus(context, objectMap);
+                boolean isAnyFileLockedByContext = (boolean)lockCheckinStatusMap.get("isAnyFileLockedByContext");
+                boolean isContextDocumentOwner= (boolean)lockCheckinStatusMap.get("isContextDocumentOwner");
+
+
+                canViewAndDownload = "true".equalsIgnoreCase((String)objectMap.get(CommonDocument.SELECT_HAS_CHECKOUT_ACCESS));
+                docObjId = (String) objectMap.get(CommonDocument.SELECT_MASTER_ID);
+                
+                if(UIUtil.isNullOrEmpty(docObjId)){
+                	docObjId = (String) objectMap.get(OBJECT_MAP_ID);
+                }
+                DomainObject docObject = new DomainObject(docObjId);
+                docObject.open(context);             
+                MapList fileList = docObject.getAllFiles(context);
+                if(fileList.size()>0)docHasFiles=true;
+          
+                if (drDocActions.isShowActivity()) {
+                    drDocActions.addActivityHTML(objectMap, fileActionsStrBuff);
+                }
+				
+          		boolean isLatestVersion = false;
+                String isLast = (String)objectMap.get("islast");
+                if("true".equalsIgnoreCase(isLast)){
+                	isLatestVersion = true;
+                }
+                if (drDocActions.isShowViewer() && CommonDocument.canView(context, objectMap)&& docHasFiles )
+                {
+
+                    if (is3DViaSupported(context, encodedFileName))
+                    {
+                        if ( !isprinterFriendly )
+                        {
+                            s3DViaURL       = "../components/emxLaunch3DLiveExamine.jsp?objectId="+ masterId +"&amp;mode=fileBased&amp;fileName="+encodedFileName+"&amp;fileFormat="+encodedFormat;
+                            fileActionsStrBuff.append("<a href='javascript:showModalDialog(\"" + s3DViaURL + "\",600,600)'>");
+                            fileActionsStrBuff.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""+sTipDownload+"\" title=\""+sTip3DVIAViewer+"\"></img></a>&#160;");
+                        }
+                        else
+                        {
+                            fileActionsStrBuff.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""+sTipDownload+"\" title=\""+sTip3DVIAViewer+"\"></img></a>&#160;");
+                        }
+                    }
+                    if ( !isprinterFriendly )
+                    {
+                      viewerURL = ${CLASSNAME}.getViewerURL(context, masterId, fileFormat, fileName, strPartId);
+
+                      fileActionsStrBuff.append(viewerURL);
+                    } else {
+                      fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionView.gif' alt=\""+i18nViewerTip+"\" title=\""+i18nViewerTip+"\"></img></a>&#160;");
+                    }											 
+                }
+                if (drDocActions.isShowDownload() && canViewAndDownload && !UINavigatorUtil.isMobile(context) && docHasFiles)
+                {
+                    if (is3DViaSupported(context, encodedFileName))
+                    {
+                        if ( !isprinterFriendly )
+                        {
+                            s3DViaURL   = "../components/emxLaunch3DLiveExamine.jsp?objectId="+ XSSUtil.encodeForJavaScript(context, masterId) +"&amp;mode=fileBased&amp;fileName="+encodedFileName+"&amp;fileFormat="+encodedFormat;
+                            fileActionsStrBuff.append("<a href='javascript:showModalDialog(\"" + s3DViaURL + "\",600,600)'>");
+                            fileActionsStrBuff.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""+sTipDownload+"\" title=\""+sTip3DVIAViewer+"\"></img></a>&#160;");
+                        }
+                        else
+                        {
+                            fileActionsStrBuff.append("<img border='0' src='../common/images/iconSmallShowHide3D.gif' alt=\""+sTipDownload+"\" title=\""+sTip3DVIAViewer+"\"></img></a>&#160;");
+                        }
+                    }
+                    if ( !isprinterFriendly )
+                    {
+                      downloadURL = "javascript:callCheckout('"+ masterId +"','download', '"+ fileName+ "', '" + fileFormat +"', null, null, null, null, '"+strPartId+"');";
+
+
+
+
+                      fileActionsStrBuff.append("<a href=\"" + downloadURL +"\">");
+                      fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionDownload.gif' alt=\""+sTipDownload+"\" title=\""+sTipDownload+"\"></img></a>&#160;");
+                    } else {
+ 
+
+                      fileActionsStrBuff.append("<img border='0' src='../common/images/iconActionDownload.gif' alt=\""+sTipDownload+"\" title=\""+sTipDownload+"\"></img></a>&#160;");
+                    }
+                }
+                if (drDocActions.isShowCheckOut() && isLatestVersion && CommonDocument.canCheckout(context, objectMap))
+                {
+                  if ( !isprinterFriendly )
+                  {
+                	checkoutURL = "javascript:getTopWindow().callCheckout('"+ XSSUtil.encodeForJavaScript(context, masterId) +"','checkout', '"+ XSSUtil.encodeForJavaScript(context, fileName)+ "', '" + XSSUtil.encodeForJavaScript(context, fileFormat) +"', null, null, null, null, '"+XSSUtil.encodeForJavaScript(context, strPartId)+"', '"+ revision +"',null,null, null,null, null,null ,null,null, null, '"+ versionId + "');";
+                    fileActionsStrBuff.append("<a href=\"" + checkoutURL+"\">");
+                    fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\""+sTipCheckout+"\" title=\""+sTipCheckout+"\"></img></a>&#160;");
+
+                    unlockURL = "../components/emxCommonDocumentLock.jsp?objectId="+ XSSUtil.encodeForJavaScript(context, versionId);
+                    fileActionsStrBuff.append("<a href=\"javascript:submitWithCSRF('"+unlockURL+"', findFrame(getTopWindow(),'listHidden'))\">");
+                    fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionLock.gif\" alt=\""+sTipLock+"\" title=\""+sTipLock+"\"></img></a>&#160;");
+                  } else {
+                    fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\""+sTipCheckout+"\" title=\""+sTipCheckout+"\"></img></a>&#160;");
+
+                    fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionLock.gif\" alt=\""+sTipLock+"\" title=\""+sTipLock+"\"></img></a>&#160;");
+                  }
+                }
+                else if (drDocActions.isShowCheckIn() && isLatestVersion && CommonDocument.canCheckin(context, objectMap))
+                {
+
+                  if ( !isprinterFriendly )
+                  {
+
+                  	if (isAnyFileLockedByContext) { 
+                  		checkinURL = "../components/emxCommonDocumentPreCheckin.jsp?showComments=required&amp;refreshTable=true&amp;deleteFromTree="+XSSUtil.encodeForJavaScript(context, versionId)+"&amp;objectId="+ XSSUtil.encodeForURL(context, masterId) +"&amp;showFormat=readonly&amp;append=true&amp;objectAction="+CommonDocument.OBJECT_ACTION_UPDATE_MASTER +"&amp;format="+ encodedFormat+"&amp;oldFileName="+XSSUtil.encodeForJavaScript(context, encodedFileName);
+
+                 	 	fileActionsStrBuff.append("<a href=\"javascript:showModalDialog('" + checkinURL + "',730,450)\">");
+                  		fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""+sTipCheckin+"\" title=\""+sTipCheckin+"\"></img></a>");
+                  	}
+                  	if (isAnyFileLockedByContext || isContextDocumentOwner) {
+                  		unlockURL = "../components/emxCommonDocumentUnlock.jsp?objectId="+ XSSUtil.encodeForJavaScript(context, versionId);
+                  		fileActionsStrBuff.append("<a href=\"javascript:submitWithCSRF('"+unlockURL+"',findFrame(getTopWindow(),'listHidden'))\">");
+                  		fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\""+sTipUnlock+"\" title=\""+sTipUnlock+"\"></img></a>");
+                  	}
+                } else {
+                    if (isAnyFileLockedByContext) { 
+                		fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""+sTipCheckin+"\" title=\""+sTipCheckin+"\"></img></a>&#160;");
+                    }
+                    if (isAnyFileLockedByContext || isContextDocumentOwner) {
+                  		fileActionsStrBuff.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\""+sTipUnlock+"\" title=\""+sTipUnlock+"\"></img></a>&#160;");
+                    }
+                }
+            }
+
+
+                fileActions = fileActionsStrBuff.toString();
+                fileActionsVector.add(fileActions);
+            }
+        }
+        catch(Exception ex)
+        {
+            ex.printStackTrace();
+        }
+        finally
+        {
+            return fileActionsVector;
+        }
+    }
+
+    private static MapList getUpdatedColumnValues(Context context, MapList objectList, StringList selectables) throws Exception {
+        String oidsArray[] = new String[objectList.size()];
+        for (int i = 0; i < objectList.size(); i++)
+        {
+            String objId = (String)((Map)objectList.get(i)).get(OBJECT_MAP_ID);
+            oidsArray[i] = (String)(FrameworkUtil.split(objId, "~").get(0));
+
+        }
+        selectables.add(CommonDocument.SELECT_ID);
+        return DomainObject.getInfo(context, oidsArray, selectables);
+    }
+
+    /**
+     * Checks whether 3DVIA icon should be displayed for a given file or not
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param sFileName the file Name
+     * @return true if the file extension is available in properties file
+     * @throws Exception
+     */
+    private static boolean is3DViaSupported(Context context, String sFileName)
+    throws Exception
+    {
+        boolean is3DViaSupported        = false;
+        String sFileExtn                = getFileExtension(sFileName);
+        String s3DVIASuppFileExtns      = EnoviaResourceBundle.getProperty(context,"emxComponents.3DVIAViewer.SupportedFileExtensions");
+
+        if (s3DVIASuppFileExtns != null && !"".equals(s3DVIASuppFileExtns))
+        {
+            StringList sl3DVIASuppExtns = FrameworkUtil.split(s3DVIASuppFileExtns.toLowerCase(), ",");
+            if (sFileExtn != null && !"".equals(sFileExtn) && sl3DVIASuppExtns.contains(sFileExtn.toLowerCase()))
+            {
+                is3DViaSupported        = true;
+
+            }
+        }
+        return is3DViaSupported;
+
+    }
+	
+}
+
+
+
+

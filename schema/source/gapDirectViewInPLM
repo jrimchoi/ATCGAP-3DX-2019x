@@ -1,0 +1,1207 @@
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import com.designrule.drv6tools.jpointeraction.drDocumentActions;
+import com.matrixone.apps.common.Workspace;
+import com.matrixone.apps.common.WorkspaceVault;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.engineering.EngineeringUtil;
+import com.matrixone.apps.framework.ui.UIComponent;
+import com.matrixone.apps.framework.ui.UISearchUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static final String TYPE_GAP_SPECIFICATION = PropertyUtil.getSchemaProperty("type_gapGAPSpecification");
+	public static final String STRING_HIGHER_REV_NOT_RELEASED =  "Higher Revision not yet released : HIGHER_REV";
+	public static final String CONST_COMMA = ",";
+	public static final String CONST_PIPE = "|";
+	/**
+	 * this method return linked Workspaces
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static Vector getLinkedProjects(Context context, String[] args)
+	        throws Exception
+	    {
+	        Vector vProjects = new Vector();
+	        try
+	        {
+				String msfRequestData = DomainConstants.EMPTY_STRING;
+				String msfFileFormatDetails = DomainConstants.EMPTY_STRING;
+				boolean isAdded = false;
+				// End MSF
+	            HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+	            MapList objectList = (MapList)programMap.get("objectList");
+	            
+	            Map objectMap = null;
+			    Iterator objectListItr = null;
+			    String strObjId = null;
+			    String strWrkId = null;
+			    String strWrkName = null;
+			    DomainObject doWrk = DomainObject.newInstance(context);
+			    objectListItr = objectList.iterator();
+			    Map paramList      = (Map)programMap.get("paramList");
+			    boolean isprinterFriendly = false;
+	            if(paramList.get("reportFormat") != null)
+	            {
+	            	isprinterFriendly = true;
+	            }
+	            if(objectList == null || objectList.size() <= 0)
+	            {
+	               return vProjects;
+	            }
+
+	           String strWrkUrl = null;
+			    while(objectListItr.hasNext())
+	            {
+			    	objectMap = (Map) objectListItr.next();
+			    	strObjId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			    	strWrkUrl = getWorkspaceURL(context, strObjId, isprinterFriendly);
+			    	if (UIUtil.isNullOrEmpty(strWrkUrl))
+			    		strWrkUrl = DomainConstants.EMPTY_STRING;
+			    	vProjects.add(strWrkUrl.toString());
+	            }
+	            
+	        }
+	        catch (Exception e) {
+				// TODO: handle exception
+	        	throw e;
+			}
+	        return vProjects;
+	    } 
+	/**
+	 * this method return linked parts
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static Vector getLinkedParts(Context context, String[] args)
+	        throws Exception
+	    {
+	        Vector vParts = new Vector();
+	        try
+	        {
+				String msfRequestData = DomainConstants.EMPTY_STRING;
+				String msfFileFormatDetails = DomainConstants.EMPTY_STRING;
+				boolean isAdded = false;
+				// End MSF
+	            HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+	            MapList objectList = (MapList)programMap.get("objectList");
+	            Map objectMap = null;
+			    Iterator objectListItr = null;
+			    String strObjId = null;
+
+			    objectListItr = objectList.iterator();
+			    Map paramList      = (Map)programMap.get("paramList");
+			    boolean isprinterFriendly = false;
+	            if(paramList.get("reportFormat") != null)
+	            {
+	            	isprinterFriendly = true;
+	            }
+	            if(objectList == null || objectList.size() <= 0)
+	            {
+	               return vParts;
+	            }
+
+	           String strPartURL = null;
+			    while(objectListItr.hasNext())
+	            {
+			    	objectMap = (Map) objectListItr.next();
+			    	strObjId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			    	strPartURL = getPartsURL(context, strObjId, isprinterFriendly);
+			    	vParts.add(strPartURL);
+	            }
+	            
+	        }
+	        catch (Exception e) {
+				// TODO: handle exception
+	        	throw e;
+			}
+	        return vParts;
+	    } 
+	/**
+	 * this method return connected workspace urls for object
+	 * @author ENGMASA
+	 * @param context
+	 * @param strObjId
+	 * @param isprinterFriendly
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getPartsURL(Context context, String strObjId, boolean isprinterFriendly) throws Exception
+	{
+		DomainObject doObj = DomainObject.newInstance(context,strObjId);
+		StringList slPartsId = doObj.getInfoList(context, "to[Part Specification].from.id");
+		String strPartId = null;
+		String strPartName = null;
+		String strURL = null;
+		StringBuffer sbLink = new StringBuffer("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=OBJECT_ID', '930', '650', 'true')\" >DISP_NAME</a>");
+		 
+        StringBuffer sbLinks = new StringBuffer("");
+		for (int i=0; i<slPartsId.size(); i++)
+		{
+			strPartId = (String) slPartsId.get(i);
+			if (UIUtil.isNotNullAndNotEmpty(strPartId))
+			{
+				doObj.setId(strPartId);
+				strPartName = doObj.getInfo(context, DomainConstants.SELECT_NAME);
+				if (i>0)
+				{
+					if(!isprinterFriendly)
+						sbLinks.append("<br/>");
+					else
+						sbLinks.append(CONST_COMMA);
+				}
+				if(!isprinterFriendly)
+		        {
+					strURL= sbLink.toString();
+					strURL = strURL.replaceAll("OBJECT_ID", strPartId);
+					strURL = strURL.replaceAll("DISP_NAME", strPartName);
+		        }
+				else
+					strURL = strPartName;
+				sbLinks.append(strURL);
+			}
+		}
+		return sbLinks.toString();
+	}
+	/**
+	 * this method return spec list for part
+	 * @author ENGMASA
+	 * @param context
+	 * @param strPartId
+	 * @param strDocName
+	 * @param strDocTitle
+	 * @param strDocCode
+	 * @param strDocDesc
+	 * @param strFileName
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList getConnectedSpecifications(Context context, String strPartId, String strDocName, String strDocTitle, String strDocCode, String strDocDesc, String strFileName, Map programMap)throws Exception
+	{
+		MapList mlSpecList = new MapList();
+		DomainObject doPart =  DomainObject.newInstance(context, strPartId);
+		String strWhereCondition = getWhereCondition(strDocName, strDocTitle, strDocCode, strDocDesc, strFileName);
+		//${CLASS:emxContextUtil}.mqlNotice(context, strWhereCondition);
+		StringList busSelList=new StringList();
+        busSelList.add(DomainConstants.SELECT_NAME);
+        busSelList.add(DomainConstants.SELECT_ID);
+
+        Pattern relPattern  = new Pattern(DomainConstants.RELATIONSHIP_PART_SPECIFICATION);
+        mlSpecList = (MapList) doPart.getRelatedObjects(context,
+                DomainConstants.RELATIONSHIP_PART_SPECIFICATION,               // relationship pattern
+                DomainConstants.QUERY_WILDCARD,              // object pattern //Changed from "*"
+                busSelList,                 // object selects
+                null,            			 // relationship selects
+                false,                       // to direction, i.e. get Parents
+                true,                        // from direction, i.e. get Children
+                (short) 0,                   // recursion level
+                strWhereCondition,                        // object where clause
+                null);                       // relationship where clause
+		//sbWhere.append(")");
+     // ENGMASA :: Added below code to include last release approved drw : START
+        // add In work Frozen Specs latest ids
+        mlSpecList = getLastApprovedReleasedDrw(context, strPartId, DomainConstants.RELATIONSHIP_PART_SPECIFICATION, mlSpecList, busSelList, programMap);
+     // ENGMASA :: Added below code to include last release approved drw : END
+		return mlSpecList;
+	}
+	/**
+	 * this method return where condition
+	 * @param strDocName
+	 * @param strDocTitle
+	 * @param strDocCode
+	 * @param strDocDesc
+	 * @param strFileName
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getWhereCondition(String strDocName, String strDocTitle, String strDocCode, String strDocDesc, String strFileName) throws Exception
+	{
+		StringBuffer sbWhere = new StringBuffer();
+		strDocTitle = strDocTitle.trim();
+		strDocName = strDocName.trim();
+		strDocCode = strDocCode.trim();
+		strDocDesc = strDocDesc.trim();
+		sbWhere.append("((current==Approved || current==Release || current==RELEASED) && latest ~~ true)");	
+		
+		if (UIUtil.isNotNullAndNotEmpty(strDocName))
+		{
+			sbWhere.append(" && (");
+			// if title contains comma then append where
+			StringList slName = FrameworkUtil.split(strDocName, CONST_COMMA);
+			String strTemp = null;
+			String strAttributeNameSelect = DomainConstants.SELECT_NAME+" smatchlong \"";
+			for (int i=0; i<slName.size(); i++)
+			{
+				if (i>0)
+					sbWhere.append(" || ");
+				strTemp = (String) slName.get(i);
+				strTemp = strTemp.trim();
+				sbWhere.append(strAttributeNameSelect).append(strTemp).append("\"");
+			}
+			sbWhere.append(")");
+		}
+		if (UIUtil.isNotNullAndNotEmpty(strDocTitle))
+		{
+			sbWhere.append(" && (");
+			// if title contains comma then append where
+			StringList slTitle = FrameworkUtil.split(strDocTitle, ",");
+			String strTemp = null;
+			String strAttributeTitleSelect = DomainConstants.SELECT_ATTRIBUTE_TITLE+" smatchlong \"";
+			for (int i=0; i<slTitle.size(); i++)
+			{
+				if (i>0)
+					sbWhere.append(" || ");
+				strTemp = (String) slTitle.get(i);
+				strTemp = strTemp.trim();
+				sbWhere.append(strAttributeTitleSelect).append(strTemp).append("\"");
+			}
+			sbWhere.append(")");
+		}
+		
+		if (UIUtil.isNotNullAndNotEmpty(strDocDesc))
+		{
+			sbWhere.append(" && (");
+			// if title contains comma then append where
+			StringList slDesc = FrameworkUtil.split(strDocDesc, ",");
+			String strTemp = null;
+			String strDescSelect = DomainConstants.SELECT_DESCRIPTION+" smatchlong \"";
+			for (int i=0; i<slDesc.size(); i++)
+			{
+				if (i>0)
+					sbWhere.append(" || ");
+				strTemp = (String) slDesc.get(i);
+				strTemp = strTemp.trim();
+				sbWhere.append(strDescSelect).append(strTemp).append("\"");
+			}
+			sbWhere.append(")");
+		}
+		
+		if (UIUtil.isNotNullAndNotEmpty(strDocCode))
+		{
+			// ENGMASA : Added to enble multiselection on document code : START
+			String strDocCodeOrginal = strDocCode;
+			String strCond = "&&";
+			StringList slDocCodeList = FrameworkUtil.split(strDocCodeOrginal, CONST_PIPE)	;	
+			for (int y=0;y<slDocCodeList.size();y++)
+			{
+				strDocCode = (String) slDocCodeList.get(y);
+				if (y>0)
+					strCond = CONST_PIPE + CONST_PIPE;
+				// handle C01 as it contains brackets
+				if (strDocCode.contains("("))
+				{
+					// split by hyphen
+					StringList slList = FrameworkUtil.split(strDocCode, "-");
+					strDocCode = (String) slList.get(0);
+					strDocCode = strDocCode.trim();
+					sbWhere.append(" ").append(strCond)
+						   .append(" (attribute[gapDocumentCode] smatchlong \"")
+						   .append(strDocCode)
+						   .append("*\" )");
+				}
+				else
+				{
+					sbWhere.append(" ").append(strCond)
+						   .append(" (attribute[gapDocumentCode] smatchlong \"")
+						   .append(strDocCode)
+						   .append("\" )");
+				}
+			}
+			// ENGMASA : Added to enble multiselection on document code : END
+		}
+		
+		return sbWhere.toString();
+	}
+	/**
+	 * @author ENGMASA
+	 * description : this method finds and returns specifications linked to Part
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList getSpecificationsLinkedToProject(Context context, String args[]) throws Exception
+	{
+		Map programMap = (Map)JPO.unpackArgs(args);
+		
+		String strProject = (String) programMap.get("project");
+		String strDocName = (String) programMap.get("DocName");
+		String strDocTitle = (String) programMap.get("DocTitle");
+		String strDocCode = (String) programMap.get("docCode");
+
+		String strDocDesc = (String) programMap.get("DocDesc");
+		String strFileName = (String) programMap.get("gapFileName");
+		if (UIUtil.isNullOrEmpty(strFileName))
+			strFileName = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocName))
+			strDocName = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocTitle))
+			strDocTitle = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocCode))
+			strDocCode = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocDesc))
+			strDocDesc = DomainConstants.EMPTY_STRING;
+		// ENGMASA :: Added below code to enable loading ePart specifications : START
+		boolean bLoadePartSpecs = UIUtil.isNotNullAndNotEmpty((String) programMap.get("loadPartSpecs")) ? true : false;
+		boolean bLoadRefDocs = UIUtil.isNotNullAndNotEmpty((String) programMap.get("loadReferenceDocs")) ? true : false;		
+		// ENGMASA :: Added below code to enable loading ePart specifications : END
+		String strWhereCondition = getWhereCondition(strDocName, strDocTitle, strDocCode, strDocDesc, strFileName);
+		//${CLASS:emxContextUtil}.mqlNotice(context, strWhereCondition);
+		MapList mlList = new MapList();
+		if (UIUtil.isNotNullAndNotEmpty(strProject))
+		{
+			// split parts by comma
+			StringList slProjectList = FrameworkUtil.split(strProject, CONST_PIPE);
+			StringList slObjectSelects = new StringList();
+			slObjectSelects.add(DomainObject.SELECT_ID);
+			
+			MapList mlDrwLinksList = new MapList();
+			String strFoldId = null;
+			//String strProjectNumber = null;
+			MapList mlFoldList = null;
+			
+			//strProject =  (String) slProjectList.get(u);
+			// ENGMASA :: Added below code to enable loading ePart specifications : START
+			if (!bLoadePartSpecs)
+			{
+			// ENGMASA :: Added below code to enable loading ePart specifications : END
+			Workspace wrkObj = (Workspace) DomainObject.newInstance(context, strProject, DomainConstants.TEAM);
+			mlFoldList = wrkObj.getWorkspaceFolders(context, slObjectSelects);
+			
+			// load data from sub vaults
+			Iterator itrFold = mlFoldList.iterator();
+			Map mpFold = null;
+
+			while (itrFold.hasNext())
+			{
+				mpFold = (Map) itrFold.next();
+				strFoldId = (String) mpFold.get(DomainConstants.SELECT_ID);
+				// load data from fold
+				mlDrwLinksList = new MapList();
+				mlDrwLinksList = loadDataFromFolder(context, strFoldId, mlDrwLinksList, slObjectSelects, strWhereCondition, programMap);
+				mlList.addAll(mlDrwLinksList);
+			}
+			// ENGMASA :: Added below code to enable loading ePart specifications : START
+			}
+			else
+			{
+				// get ePart fold Id
+				Workspace wrkObj = (Workspace) DomainObject.newInstance(context, strProject, DomainConstants.TEAM);
+				slObjectSelects.add(DomainConstants.SELECT_NAME);
+				mlFoldList = wrkObj.getWorkspaceFolders(context, slObjectSelects);
+				// load data from sub vaults
+				Iterator itrFold = mlFoldList.iterator();
+				Map mpFold = null;
+				String strFoldName = null;
+				while (itrFold.hasNext())
+				{
+					mpFold = (Map) itrFold.next();
+					strFoldId = (String) mpFold.get(DomainConstants.SELECT_ID);
+					strFoldName = (String) mpFold.get(DomainConstants.SELECT_NAME);
+					
+					MapList mleParts = new MapList();
+					// only if e Part folder
+					if (UIUtil.isNotNullAndNotEmpty(strFoldName) && "04 - eParts".equals(strFoldName))
+					{
+						// get all the Parts connected
+						mleParts = loadePartsFromFolder(context, strFoldId, mleParts, slObjectSelects, DomainConstants.EMPTY_STRING);
+						if (mleParts!=null && mleParts.size()>0)
+						{
+							Iterator itrPartFold = mleParts.iterator();
+							Map mpeFold = null;
+							String strPartId = null;
+							MapList mlSpecList = null;
+							while (itrPartFold.hasNext())
+							{
+								mpeFold = (Map) itrPartFold.next();
+								strPartId = (String) mpeFold.get(DomainConstants.SELECT_ID);
+								mlSpecList = new MapList();
+								if (bLoadRefDocs)									
+									mlSpecList = getConnectedRefDocument(context, strPartId, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+								else									
+									mlSpecList = getConnectedSpecifications(context, strPartId, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+								mlList.addAll(mlSpecList);
+							}
+							
+						}
+					}
+					
+					// if aftermarket folder then expand engineering solutions and find subfolder eParts
+					else if (UIUtil.isNotNullAndNotEmpty(strFoldName) && "14 - Aftermarket".equals(strFoldName))
+					{
+						WorkspaceVault wrkFold = (WorkspaceVault) DomainObject.newInstance(context, strFoldId, DomainConstants.TEAM);
+						// list all subfolders
+						MapList mlFoldListAM = wrkFold.getSubVaults(context, slObjectSelects, 0);
+						Iterator itrFoldAM = mlFoldListAM.iterator();
+						Map mpFoldAM = null;
+						String strFoldNameAM = null;
+						String strFoldIdAM = null;
+						// re-run for 04 - eParts
+						while (itrFoldAM.hasNext())
+						{
+							mpFoldAM = (Map) itrFoldAM.next();
+							strFoldIdAM = (String) mpFoldAM.get(DomainConstants.SELECT_ID);
+							strFoldNameAM = (String) mpFoldAM.get(DomainConstants.SELECT_NAME);
+							
+							MapList mlePartsAM = new MapList();
+							// only if e Part folder
+							if (UIUtil.isNotNullAndNotEmpty(strFoldNameAM) && "04 - eParts".equals(strFoldNameAM))
+							{
+								// get all the Parts connected
+								mlePartsAM = loadePartsFromFolder(context, strFoldIdAM, mlePartsAM, slObjectSelects, DomainConstants.EMPTY_STRING);
+								if (mlePartsAM!=null && mlePartsAM.size()>0)
+								{
+									Iterator itrPartFoldAM = mlePartsAM.iterator();
+									Map mpeFoldAM = null;
+									String strPartIdAM = null;
+									MapList mlSpecListAM = null;
+									while (itrPartFoldAM.hasNext())
+									{
+										mpeFoldAM = (Map) itrPartFoldAM.next();
+										strPartIdAM = (String) mpeFoldAM.get(DomainConstants.SELECT_ID);
+										mlSpecListAM = new MapList();
+										if (bLoadRefDocs)									
+											mlSpecListAM = getConnectedRefDocument(context, strPartIdAM, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+										else									
+											mlSpecListAM = getConnectedSpecifications(context, strPartIdAM, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+										mlList.addAll(mlSpecListAM);
+									}
+									
+								}
+							}
+					}
+				}
+				}
+			}
+			// ENGMASA :: Added below code to enable loading ePart specifications : END
+		}
+		
+		// remove duplicates
+		mlList = removeDuplcatesFromList(mlList);
+
+		return mlList;
+	}
+	/**
+	 * this method removes duplicates from the list
+	 * @author ENGMASA
+	 * @param mlList
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList removeDuplcatesFromList(MapList mlList) throws Exception
+	{
+		MapList mlFormattedList = new MapList(
+			      new HashSet(mlList));
+		return mlFormattedList;
+	}
+	/**
+	 * @author ENGMASA
+	 * description : this method finds and returns specifications linked to Part
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList getSpecificationsForOtherFields(Context context, String args[]) throws Exception
+	{
+		Map programMap = (Map)JPO.unpackArgs(args);
+		Map requestMap          = new HashMap();
+		Map fieldMap			= new HashMap();
+		MapList results 	    = new MapList();
+		String strTimeStamp = (String)programMap.get("timeStamp");
+		String strProject = (String) programMap.get("projectName");
+		String strDocName = (String) programMap.get("DocName");
+		String strDocTitle = (String) programMap.get("DocTitle");
+		String strDocCode = (String) programMap.get("docCode");
+
+		String strDocDesc = (String) programMap.get("DocDesc");
+		String strFileName = (String) programMap.get("gapFileName");
+		StringBuffer sbFields = new StringBuffer();
+		sbFields.append("TYPES=")
+				.append(getDrawingTypePattern())
+				.append(":LATESTREVISION=TRUE:CURRENT!=Preliminary,Review,Obsolete,OBSOLETE,IN_WORK,FROZEN");
+		if (UIUtil.isNotNullAndNotEmpty(strFileName))
+		{
+			sbFields.append(":gapFileName=")
+					.append(strFileName);
+		}
+	/*	if (UIUtil.isNotNullAndNotEmpty(strProject))
+		{ 
+			sbFields.append(":GAP_WORKSPACE_DESCRIPTION=")
+					.append(strProject);
+		}*/
+		if (UIUtil.isNotNullAndNotEmpty(strDocName))
+		{
+			sbFields.append(":NAME=")
+			.append(strDocName);
+		}
+		if (UIUtil.isNotNullAndNotEmpty(strDocTitle))
+		{
+			sbFields.append(":GAP_TITLE=")
+			.append(strDocTitle);
+		}
+		if (UIUtil.isNotNullAndNotEmpty(strDocCode))
+		{
+			sbFields.append(":gapDocumentCode=")
+			.append(strDocCode);
+		}
+		if (UIUtil.isNotNullAndNotEmpty(strDocDesc))
+		{
+			sbFields.append(":Description=")
+			.append(strDocDesc);
+		}
+		
+		MapList mlList = new MapList();
+		
+		javax.json.JsonObject filters      = UISearchUtil.getFilters(context, sbFields.toString(), new HashMap());
+		programMap.put("ftsFilters", filters.toString());
+
+        Map xRequest = new HashMap(programMap);
+     
+        xRequest.put("requestMap", requestMap);
+        xRequest.put("fieldMap", fieldMap);
+
+
+       mlList = (MapList) JPO.invoke(context, "emxAEFFullSearch", null, "search", JPO.packArgs(xRequest), MapList.class);
+       if(mlList.size() > 0){
+    	   mlList.remove(0);
+	    	if(mlList.size() > 0 && mlList.get(0) instanceof Integer){
+	    		mlList.remove(0);
+	    	}
+	    }
+        
+        return mlList;
+	}
+	/**
+	 * this method return directview type pattern to search
+	 * @author ENGMASA
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getDrawingTypePattern() throws Exception
+	{
+		StringBuffer sbTypePattern = new StringBuffer();
+		sbTypePattern.append(TYPE_GAP_SPECIFICATION)
+					 .append(CONST_COMMA)
+					 .append(DomainConstants.TYPE_CAD_DRAWING);
+		return sbTypePattern.toString();
+	}
+	/**
+	 * this method expands and returns all connections to folder
+	 * @author ENGMASA
+	 * @param context
+	 * @param strFoldId
+	 * @param mlConnections
+	 * @param slObjectSelects
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList loadDataFromFolder(Context context, String strFoldId, MapList mlConnections, StringList slObjectSelects, String strWhere, Map programMap) throws Exception	
+	{
+		WorkspaceVault workspaceVault = (WorkspaceVault)DomainObject.newInstance(context, strFoldId);
+		// first load all connections from this vault	
+		Pattern relPattern  = new Pattern(DomainConstants.RELATIONSHIP_VAULTED_OBJECTS);
+        MapList mlVaultedObjectsList = (MapList) workspaceVault.getRelatedObjects(context,
+        										DomainConstants.RELATIONSHIP_VAULTED_OBJECTS,               // relationship pattern
+								                getDrawingTypePattern(),              // object pattern //Changed from "*"
+								                slObjectSelects,                 // object selects
+								                null,            			 // relationship selects
+								                false,                       // to direction, i.e. get Parents
+								                true,                        // from direction, i.e. get Children
+								                (short) 0,                   // recursion level
+								                strWhere,                        // object where clause
+								                null);                       // relationship where clause
+        // ENGMASA :: Added below code to include last release approved drw : START
+        // add In work Frozen Specs latest ids
+        mlVaultedObjectsList = getLastApprovedReleasedDrw(context, strFoldId, DomainConstants.RELATIONSHIP_VAULTED_OBJECTS, mlVaultedObjectsList, slObjectSelects, programMap);
+       // ENGMASA :: Added below code to include last release approved drw : END 
+       if (mlVaultedObjectsList!=null && mlVaultedObjectsList.size()>0)
+    	   mlConnections.addAll(mlVaultedObjectsList);
+        // load data from sub folder if any
+       MapList mlSubFoldList = workspaceVault.getSubVaults(context, slObjectSelects, 0);
+       Iterator itrmlSubFold = mlSubFoldList.iterator();
+       Map mp = null;
+       String strSubFoldId = null;
+       while (itrmlSubFold.hasNext())
+       {
+    	   mp = (Map) itrmlSubFold.next();
+    	   strSubFoldId = (String)mp.get(DomainConstants.SELECT_ID);
+    	   mlConnections = loadDataFromFolder(context, strSubFoldId, mlConnections, slObjectSelects, strWhere, programMap);
+       }
+		return mlConnections;
+	}
+	/**
+	 * @author ENGMASA
+	 * description : this method finds and returns specifications linked to Part
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static MapList getSpecificationsLinkedToPart(Context context, String args[]) throws Exception
+	{
+		Map programMap = (Map)JPO.unpackArgs(args);
+		
+		String strPart = (String) programMap.get("parts");
+		String strDocName = (String) programMap.get("DocName");
+		String strDocTitle = (String) programMap.get("DocTitle");
+		String strDocCode = (String) programMap.get("docCode");
+		String strFileName = (String) programMap.get("gapFileName");
+		if (UIUtil.isNullOrEmpty(strFileName))
+			strFileName = DomainConstants.EMPTY_STRING;
+		String strDocDesc = (String) programMap.get("DocDesc");
+		if (UIUtil.isNullOrEmpty(strDocName))
+			strDocName = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocTitle))
+			strDocTitle = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocCode))
+			strDocCode = DomainConstants.EMPTY_STRING;
+		if (UIUtil.isNullOrEmpty(strDocDesc))
+			strDocDesc = DomainConstants.EMPTY_STRING;
+		// ENGMASA :: Added below code to enable loading ePart specifications : START
+		boolean bLoadRefDocs = UIUtil.isNotNullAndNotEmpty((String) programMap.get("loadReferenceDocs")) ? true : false;		
+		// ENGMASA :: Added below code to enable loading ePart specifications : END
+		MapList mlList = new MapList();
+		if (UIUtil.isNotNullAndNotEmpty(strPart))
+		{
+			// split parts by comma
+			StringList slPartsList = FrameworkUtil.split(strPart, CONST_COMMA);
+			MapList mlSpecList = new MapList();
+			String strPartId = null;
+			String strPartNumber = null;
+			for (int u=0; u<slPartsList.size(); u++)
+			{
+				strPartNumber =  (String) slPartsList.get(u);
+				strPartNumber = strPartNumber.trim();
+
+				strPartId = getLatestRevObjectId(context, DomainConstants.TYPE_PART, strPartNumber , "0");
+				if (UIUtil.isNullOrEmpty(strPartId))
+				{
+					String langStr = context.getSession().getLanguage();
+			        
+			        String strMessage = EngineeringUtil.i18nStringNow(context,"emxEngineeringCentral.NoObject.Message",langStr);
+					${CLASS:emxContextUtil}.mqlNotice(context, strPartNumber+ " :"+strMessage);
+					return mlList;
+				}
+				else
+				{
+					// ENGMASA :: Added below code to enable loading ePart specifications : START
+					// if load ref doc then find ref documents connected to ePart
+					if (bLoadRefDocs)									
+						mlSpecList = getConnectedRefDocument(context, strPartId, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+					else
+					// ENGMASA :: Added below code to enable loading ePart specifications : END
+						mlSpecList = getConnectedSpecifications(context, strPartId, strDocName, strDocTitle, strDocCode, strDocDesc, strFileName, programMap);
+					mlList.addAll(mlSpecList);
+				}
+			}
+			
+		}
+
+		// remove duplicates
+	    mlList = removeDuplcatesFromList(mlList);
+		return mlList;		
+	}
+	/**
+	 * this method finds and returns object id
+	 * @author ENGMASA
+	 * @param context
+	 * @param strType
+	 * @param strName
+	 * @param strRev
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getLatestRevObjectId(Context context, String strType, String strName, String strRev) throws Exception
+	{
+		String strObjectId = null;
+		boolean bIscontextPushed = false;
+    	//try
+    	//{
+    		//com.matrixone.apps.domain.util.ContextUtil.pushContext(context, ${CLASS:gap_Util}.USER_AGENT, null, null);
+    		//bIscontextPushed = true;
+    		BusinessObject busObj = new BusinessObject(strType, strName, strRev, DomainConstants.EMPTY_STRING);
+    		
+			if (busObj.exists(context))
+			{				
+				DomainObject doObj = DomainObject.newInstance(context, busObj.getObjectId(context));
+				if (doObj.exists(context))
+				{
+					strObjectId = doObj.getInfo(context, DomainObject.SELECT_LAST_ID);
+				}
+				else
+					strObjectId = DomainConstants.EMPTY_STRING;
+			}
+			else
+				strObjectId = DomainConstants.EMPTY_STRING;
+	  //  }
+    	/*finally {
+    		if (bIscontextPushed)
+    			com.matrixone.apps.domain.util.ContextUtil.popContext(context);
+		}*/
+		return strObjectId;
+	}
+	/**
+	 * this method return connected workspace urls for object
+	 * @author ENGMASA
+	 * @param context
+	 * @param strObjId
+	 * @param isprinterFriendly
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getWorkspaceURL(Context context, String strObjId, boolean isprinterFriendly) throws Exception
+	{
+		DomainObject doObj = DomainObject.newInstance(context,strObjId);
+		
+		StringList slFolId = doObj.getInfoList(context, "to[Vaulted Objects].from.id");
+		if (slFolId==null)
+			return DomainConstants.EMPTY_STRING;
+		String strFoldId = null;
+		String strWrkId = null;
+		String strWrkName = null;
+		String strURL = null;
+		Vector vWrkIds = new Vector();
+		StringBuffer sbLink = new StringBuffer("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=OBJECT_ID', '930', '650', 'true')\" >DISP_NAME</a>");
+		 int iCount = 1;
+        StringBuffer sbLinks = new StringBuffer("");
+		for (int i=0; i<slFolId.size(); i++)
+		{
+			strFoldId = (String) slFolId.get(i);
+			strWrkId = getBookmarkId(context, strFoldId);
+			
+			if (UIUtil.isNotNullAndNotEmpty(strWrkId))
+			{
+				// avoid duplicated
+				if (!vWrkIds.contains(strWrkId))
+				{
+					vWrkIds.add(strWrkId);
+					doObj.setId(strWrkId);
+					strWrkName = doObj.getInfo(context, DomainConstants.SELECT_NAME);
+					if (i>0)
+					{
+						if(!isprinterFriendly)
+						{
+							if (iCount>3)
+							{
+								sbLinks.append("<br/>");
+								iCount = 1;
+							}
+							else
+							{
+								sbLinks.append(", ");
+								iCount++;
+							}
+						}
+						else
+							sbLinks.append(CONST_COMMA);
+					}
+					if(!isprinterFriendly)
+			        {
+						strURL= sbLink.toString();
+						strURL = strURL.replaceAll("OBJECT_ID", strWrkId);
+						strURL = strURL.replaceAll("DISP_NAME", strWrkName);
+			        }
+					else
+						strURL = strWrkName;
+					sbLinks.append(strURL);
+				}
+			}
+		}
+		return sbLinks.toString();
+	}
+	/**
+	 * this method recursively looks for Bookmark id
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getBookmarkId(Context context, String strFolderId) throws Exception {
+		
+		String sBookmarkId = DomainConstants.EMPTY_STRING;
+		DomainObject doObject = DomainObject.newInstance(context, strFolderId);
+		sBookmarkId = (String) doObject.getInfo(context, "to["+DomainObject.RELATIONSHIP_WORKSPACE_VAULTS+"].from."+DomainConstants.SELECT_ID);
+		if(UIUtil.isNullOrEmpty(sBookmarkId)) {
+			strFolderId = (String) doObject.getInfo(context, "to["+DomainObject.RELATIONSHIP_SUBVAULTS+"].from."+DomainConstants.SELECT_ID);
+			if (strFolderId!=null)
+				return getBookmarkId(context, strFolderId);
+		}
+		return sBookmarkId;
+	}
+
+	/*
+	 * public static void mxMain(Context context, String[] args) { try {
+	 * getWorkspaceURL(context, "65080.62902.22008.22503", true); } catch (Exception
+	 * e) { // TODO Auto-generated catch block e.printStackTrace(); }
+	 * 
+	 * }
+	 */
+	/**
+	    *  Get Vector of Strings for Document Action Icons
+	    *  @author ENGMASA
+	    *
+	    *  @param context the eMatrix <code>Context</code> object
+	    *  @param args an array of String arguments for this method
+	    *  @return Vector object that contains a vector of html code to
+	    *        construct the Actions Column.
+	    *  @throws Exception if the operation fails
+	    *
+	    *  @since Common 10.5
+	    *  @grade 0
+	    */
+	    public static Vector getFileViewActions(Context context, String[] args)
+	        throws Exception
+	    {
+	        Vector vActions = new Vector();
+	        try
+	        {
+				String msfRequestData = DomainConstants.EMPTY_STRING;
+				String msfFileFormatDetails = DomainConstants.EMPTY_STRING;
+				boolean isAdded = false;
+				// End MSF
+	            HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+	            MapList objectList = (MapList)programMap.get("objectList");
+	            if(objectList.size() <= 0){
+					return vActions;
+				}
+	            Map paramList      = (Map)programMap.get("paramList");
+	            String uiType = (String)paramList.get("uiType");
+	            String parentOID = (String)paramList.get("parentOID");
+	            String customSortColumns = (String)paramList.get("customSortColumns");
+	            String customSortDirections = (String)paramList.get("customSortDirections");
+	            String table = (String)paramList.get("table");
+	            if(objectList == null || objectList.size() <= 0)
+	            {
+	               return vActions;
+	            }
+
+	            boolean isprinterFriendly = false;
+	            if(paramList.get("reportFormat") != null)
+	            {
+	            	isprinterFriendly = true;
+	            }
+				Map objectMap = null;
+			    Iterator objectListItr = null;
+			    String strObjId = null;
+			    String strLastId = null;
+			    boolean bIsLastRevision = true;
+			    String strLastRev = null;
+			    DomainObject doObj = DomainObject.newInstance(context);
+			    objectListItr = objectList.iterator();
+			    StringBuffer sbIcons = new StringBuffer();
+			    StringBuffer sbLastRev = new StringBuffer("<img style=\"vertical-align:middle;height:16px;cursor:pointer;\" src=\"../common/images/iconSmallStatusAlert.gif\" onclick=\"showNonModalDialog('../common/emxTree.jsp?mode=insert&amp;objectId=OBJECT_ID', '950', '680', true, 'Large');\" title=\"Higher Revision not yet released : HIGHER_REV\"></img>");
+			    // drV6Tools - Document Actions providing greater control on the UI actions to be displayed
+	            drDocumentActions drDocActions = new drDocumentActions(context, programMap);
+			    while(objectListItr.hasNext())
+	            {
+			    	objectMap = (Map) objectListItr.next();
+			    	strObjId = (String) objectMap.get(DomainConstants.SELECT_ID);
+			    	
+			    	doObj.setId(strObjId);
+			    	sbIcons.setLength(0);
+			    	strLastId = doObj.getInfo(context, DomainConstants.SELECT_LAST_ID);
+			    	strLastRev = doObj.getInfo(context, DomainConstants.SELECT_LATEST_REVISION);
+			    	if (!strLastId.equals(strObjId))
+			    		bIsLastRevision = false;
+			    	else
+			    	{
+			    		bIsLastRevision = true;
+			    		//vActions.add(DomainConstants.EMPTY_STRING);
+			    	}
+			    	// if last rev is false then append highest revision available icon
+			    	if (!bIsLastRevision)
+			    	{
+			    		if (!isprinterFriendly)
+			    		{
+				    		String strURL = sbLastRev.toString();
+				    		strURL = strURL.replaceAll("OBJECT_ID", strLastId);
+				    		strURL = strURL.replaceAll("HIGHER_REV", strLastRev);
+				    		sbIcons.append(strURL);	
+			    		}
+			    		else {
+			    			String strURL = STRING_HIGHER_REV_NOT_RELEASED;
+				    		strURL = strURL.replaceAll("HIGHER_REV", strLastRev);
+			    			sbIcons.append(strURL);	
+			    		}
+			    	}
+			    	// get pdf view file icon
+			    	if (drDocActions.isShowActivity() && !isprinterFriendly) {
+	                    drDocActions.addActivityHTML(objectMap, sbIcons);
+	                }
+			    	 vActions.add(sbIcons.toString());
+			    	
+	            }
+	        } 
+	        catch(Exception ex){
+	            ex.printStackTrace();
+	            throw ex;
+	        }
+	        finally
+	        {
+	            return vActions;
+	        }
+	    }
+	 // ENGMASA :: Added below code to enable loading ePart specifications : START
+		/**
+		 * this method expands and returns all connections to folder
+		 * @author ENGMASA
+		 * @param context
+		 * @param strFoldId
+		 * @param mlConnections
+		 * @param slObjectSelects
+		 * @return
+		 * @throws Exception
+		 */
+		public static MapList loadePartsFromFolder(Context context, String strFoldId, MapList mlConnections, StringList slObjectSelects, String strWhere) throws Exception	
+		{
+			WorkspaceVault workspaceVault = (WorkspaceVault)DomainObject.newInstance(context, strFoldId);
+			// first load all connections from this vault	
+	        MapList mlVaultedObjectsList = (MapList) workspaceVault.getRelatedObjects(context,
+	        										DomainConstants.RELATIONSHIP_VAULTED_OBJECTS,               // relationship pattern
+									                DomainConstants.TYPE_PART,              // object pattern //Changed from "*"
+									                slObjectSelects,                 // object selects
+									                null,            			 // relationship selects
+									                false,                       // to direction, i.e. get Parents
+									                true,                        // from direction, i.e. get Children
+									                (short) 0,                   // recursion level
+									                strWhere,                        // object where clause
+									                null);                       // relationship where clause
+	        
+	       if (mlVaultedObjectsList!=null && mlVaultedObjectsList.size()>0)
+	    	   mlConnections.addAll(mlVaultedObjectsList);
+			return mlConnections;
+		}
+		/**
+		 * this method return ref document list for part
+		 * @author ENGMASA
+		 * @param context
+		 * @param strPartId
+		 * @param strDocName
+		 * @param strDocTitle
+		 * @param strDocCode
+		 * @param strDocDesc
+		 * @param strFileName
+		 * @return
+		 * @throws Exception
+		 */
+		public static MapList getConnectedRefDocument(Context context, String strPartId, String strDocName, String strDocTitle, String strDocCode, String strDocDesc, String strFileName, Map programMap)throws Exception
+		{
+			MapList mlSpecList = new MapList();
+			DomainObject doPart =  DomainObject.newInstance(context, strPartId);
+			String strWhereCondition = getWhereCondition(strDocName, strDocTitle, strDocCode, strDocDesc, strFileName);
+			//${CLASS:emxContextUtil}.mqlNotice(context, strWhereCondition);
+			StringList busSelList=new StringList();
+	        busSelList.add(DomainConstants.SELECT_NAME);
+	        busSelList.add(DomainConstants.SELECT_ID);
+
+	        Pattern relPattern  = new Pattern(DomainConstants.RELATIONSHIP_PART_SPECIFICATION);
+	        mlSpecList = (MapList) doPart.getRelatedObjects(context,
+	                DomainConstants.RELATIONSHIP_REFERENCE_DOCUMENT,               // relationship pattern
+	                getDrawingTypePattern(),              // object pattern //Changed from "*"
+	                busSelList,                 // object selects
+	                null,            			 // relationship selects
+	                false,                       // to direction, i.e. get Parents
+	                true,                        // from direction, i.e. get Children
+	                (short) 0,                   // recursion level
+	                strWhereCondition,                        // object where clause
+	                null);                       // relationship where clause
+			return mlSpecList;
+		}
+		// ENGMASA :: Added below code to enable loading ePart specifications : END
+		// ENGMASA :: Added below code to include last release approved drw : START
+		/**
+		 * @author ENGMASA
+		 * @param context
+		 * @param strObjectId
+		 * @param strRel
+		 * @param mlExistingList
+		 * @param busSelList
+		 * @return
+		 * @throws Exception
+		 */
+		public static MapList getLastApprovedReleasedDrw(Context context, String strObjectId, String strRel, MapList mlExistingList, StringList busSelList, Map programMap) throws Exception
+		{
+			MapList mlList = new MapList();
+			DomainObject doObject =  DomainObject.newInstance(context, strObjectId);
+			busSelList.add("previous.id");
+			String sbWhere = getWhereConditionForPrevRev(programMap);
+			String strType = DomainConstants.QUERY_WILDCARD;
+			// if FromWorkspace folder then consider only drawing pattern
+			if (strRel.equals(DomainConstants.RELATIONSHIP_VAULTED_OBJECTS))
+			{
+				strType = getDrawingTypePattern();
+			}
+			mlList = (MapList) doObject.getRelatedObjects(context,
+						strRel,               // relationship pattern
+						strType,              // object pattern //Changed from "*"
+		                busSelList,                 // object selects
+		                null,            			 // relationship selects
+		                false,                       // to direction, i.e. get Parents
+		                true,                        // from direction, i.e. get Children
+		                (short) 0,                   // recursion level
+		                sbWhere.trim(),                        // object where clause
+		                null);                       // relationship where clause
+			// update id by previous id
+			Iterator mlListItr = mlList.iterator();
+			MapList mlNewFormattedList = new MapList();
+			while(mlListItr.hasNext())
+            {
+		    	Map objectMap = (Map) mlListItr.next();
+		    	String strObjId = (String) objectMap.get(DomainConstants.SELECT_ID);
+		    	String strPrevObjId = (String) objectMap.get("previous.id");
+		    	objectMap.put(DomainConstants.SELECT_ID, strPrevObjId);
+		    	mlNewFormattedList.add(objectMap);
+            }
+			mlExistingList.addAll(mlNewFormattedList);
+			
+			return mlExistingList;
+		}
+		/**
+		 * this method return where condition for prev released apprved drw
+		 * @param strDocName
+		 * @return
+		 * @throws Exception
+		 */
+		public static String getWhereConditionForPrevRev(Map programMap) throws Exception
+		{
+			StringBuffer sbWhere = new StringBuffer();
+			String strProject = (String) programMap.get("project");
+			String strDocName = (String) programMap.get("DocName");
+			String strDocTitle = (String) programMap.get("DocTitle");
+			String strDocCode = (String) programMap.get("docCode");
+
+			String strDocDesc = (String) programMap.get("DocDesc");
+			String strFileName = (String) programMap.get("gapFileName");
+			if (UIUtil.isNullOrEmpty(strFileName))
+				strFileName = DomainConstants.EMPTY_STRING;
+			if (UIUtil.isNullOrEmpty(strDocName))
+				strDocName = DomainConstants.EMPTY_STRING;
+			if (UIUtil.isNullOrEmpty(strDocTitle))
+				strDocTitle = DomainConstants.EMPTY_STRING;
+			if (UIUtil.isNullOrEmpty(strDocCode))
+				strDocCode = DomainConstants.EMPTY_STRING;
+			if (UIUtil.isNullOrEmpty(strDocDesc))
+				strDocDesc = DomainConstants.EMPTY_STRING;
+			strDocTitle = strDocTitle.trim();
+			strDocName = strDocName.trim();
+			strDocCode = strDocCode.trim();
+			strDocDesc = strDocDesc.trim();
+			sbWhere.append("((current==Preliminary || current==IN_WORK || current==Review || current==FROZEN) && (previous.current==Approved || previous.current==Release || previous.current==RELEASED))");
+			
+			if (UIUtil.isNotNullAndNotEmpty(strDocName))
+			{
+				sbWhere.append(" && (");
+				// if title contains comma then append where
+				StringList slName = FrameworkUtil.split(strDocName, CONST_COMMA);
+				String strTemp = null;
+				String strAttributeNameSelect = DomainConstants.SELECT_NAME+" smatchlong \"";
+				for (int i=0; i<slName.size(); i++)
+				{
+					if (i>0)
+						sbWhere.append(" || ");
+					strTemp = (String) slName.get(i);
+					strTemp = strTemp.trim();
+					sbWhere.append(strAttributeNameSelect).append(strTemp).append("\"");
+				}
+				sbWhere.append(")");
+			}
+			if (UIUtil.isNotNullAndNotEmpty(strDocTitle))
+			{
+				sbWhere.append(" && (");
+				// if title contains comma then append where
+				StringList slTitle = FrameworkUtil.split(strDocTitle, ",");
+				String strTemp = null;
+				String strAttributeTitleSelect = DomainConstants.SELECT_ATTRIBUTE_TITLE+" smatchlong \"";
+				for (int i=0; i<slTitle.size(); i++)
+				{
+					if (i>0)
+						sbWhere.append(" || ");
+					strTemp = (String) slTitle.get(i);
+					strTemp = strTemp.trim();
+					sbWhere.append(strAttributeTitleSelect).append(strTemp).append("\"");
+				}
+				sbWhere.append(")");
+			}
+			
+			if (UIUtil.isNotNullAndNotEmpty(strDocDesc))
+			{
+				sbWhere.append(" && (");
+				// if title contains comma then append where
+				StringList slDesc = FrameworkUtil.split(strDocDesc, ",");
+				String strTemp = null;
+				String strDescSelect = DomainConstants.SELECT_DESCRIPTION+" smatchlong \"";
+				for (int i=0; i<slDesc.size(); i++)
+				{
+					if (i>0)
+						sbWhere.append(" || ");
+					strTemp = (String) slDesc.get(i);
+					strTemp = strTemp.trim();
+					sbWhere.append(strDescSelect).append(strTemp).append("\"");
+				}
+				sbWhere.append(")");
+			}
+			
+			if (UIUtil.isNotNullAndNotEmpty(strDocCode))
+			{
+				// ENGMASA : Added to enble multiselection on document code : START
+				String strDocCodeOrginal = strDocCode;
+				String strCond = "&&";
+				StringList slDocCodeList = FrameworkUtil.split(strDocCodeOrginal, CONST_PIPE)	;	
+				for (int y=0;y<slDocCodeList.size();y++)
+				{
+					strDocCode = (String) slDocCodeList.get(y);
+					if (y>0)
+						strCond = CONST_PIPE + CONST_PIPE;
+					// handle C01 as it contains brackets
+					if (strDocCode.contains("("))
+					{
+						// split by hyphen
+						StringList slList = FrameworkUtil.split(strDocCode, "-");
+						strDocCode = (String) slList.get(0);
+						strDocCode = strDocCode.trim();
+						sbWhere.append(" ").append(strCond)
+							   .append(" (attribute[gapDocumentCode] smatchlong \"")
+							   .append(strDocCode)
+							   .append("*\" )");
+					}
+					else
+					{
+						sbWhere.append(" ").append(strCond)
+							   .append(" (attribute[gapDocumentCode] smatchlong \"")
+							   .append(strDocCode)
+							   .append("\" )");
+					}
+				}
+				// ENGMASA : Added to enble multiselection on document code : END
+			}
+			
+			return sbWhere.toString();
+		}
+		// ENGMASA :: Added below code to include last release approved drw : END
+}
+

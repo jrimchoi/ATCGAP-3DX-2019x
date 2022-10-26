@@ -1,0 +1,115 @@
+/************************************************************************************************************************
+*  ${CLASSNAME}.java																								*
+* 	Copyright (C) 2013 Strategic Business Solutions, Inc. All Rights Reserved.                                          *
+* 	This program contains proprietary and trade secret information of Strategic Business Solutions, Inc.				*
+* 	Copyright notice is precautionary only and does not evidence any actual or intended publication of such program		*
+* 	Copyright (c) 1992-2013 Dassault Systemes.																			*
+* 	All Rights Reserved.																								*
+* 	This program contains proprietary and trade secret information of MatrixOne, Inc.									*
+* 	Copyright notice is precautionary only and does not evidence any actual or intended publication of such program		*
+* 	                                     																				*
+************************************************************************************************************************/
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import matrix.db.Context;
+import matrix.db.MQLCommand;
+import matrix.db.MatrixWriter;
+import matrix.util.StringList;
+
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.PrintWriter;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Scanner;
+import java.util.StringTokenizer;
+
+public class ${CLASSNAME}
+ {
+	BufferedWriter writer = null;
+
+    /**
+    * 	This method is executed if a specific method is not specified.
+    * 	@param context the eMatrix <code>Context</code> object
+    * 	@param args    holds no arguments
+    * 	@throws Exception if the operation fails
+    **/
+    public int mxMain(Context context, String[] args)
+    throws Exception {
+        if (!context.isConnected()) {
+            throw new Exception("not supported on desktop client");
+        }
+        writer = new BufferedWriter(new MatrixWriter(context));
+
+        String strInputFileName = DomainConstants.EMPTY_STRING;
+        String strOutputFileName = DomainConstants.EMPTY_STRING;
+
+        try {
+            strInputFileName = args[0];
+            strOutputFileName = args[1];
+        } catch (Exception e) {
+            mqlLogWriter("Incorrect Arguments");
+        }
+
+        File inputFile = new File(strInputFileName);
+        //File outputFile = new File(strOutputFileName);
+
+        PrintWriter writer = new PrintWriter(strOutputFileName, "UTF-8");
+
+		// Count the number of lines in this file:
+		Scanner fileLineScanner = new Scanner(inputFile);
+		long lLinesInFile = 0;
+		while(fileLineScanner.hasNextLine())
+        {
+			fileLineScanner.nextLine();
+			lLinesInFile++;
+		}
+		System.out.println("Input file has " + lLinesInFile + " lines.");
+		
+        // Read the file and process its mql statements
+        Scanner fileScanner = new Scanner(inputFile);
+        String nextMQLCommand = "";
+		long lLinesProcessing = 1;
+
+        while(fileScanner.hasNextLine())
+        {
+            nextMQLCommand = fileScanner.nextLine();
+			
+			if (lLinesProcessing % 100 == 0)
+			{
+				System.out.println("Now processing line " + lLinesProcessing + " out of " + lLinesInFile);
+			}
+
+            MQLCommand mqlCommand = new MQLCommand();
+            mqlCommand.executeCommand(context, nextMQLCommand);
+
+            writer.println("Executing MQL command: " + nextMQLCommand);
+			String strError = mqlCommand.getError();
+			String strResult = mqlCommand.getResult();
+			
+			if (!"".equals(strError))
+			{
+				writer.println(mqlCommand.getError());
+			}
+			
+			if (!"".equals(strResult))
+			{
+				writer.println(mqlCommand.getResult());
+			}
+			lLinesProcessing++;
+        }
+
+        writer.close();
+
+        return 0;
+    }
+
+     public void mqlLogWriter(String command) throws Exception
+     {
+           writer.write(command + "\n");
+           writer.flush();
+     }
+}

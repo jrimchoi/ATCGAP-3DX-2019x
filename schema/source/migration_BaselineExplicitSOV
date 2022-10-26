@@ -1,0 +1,162 @@
+tcl;
+proc checkMarkerStatus {sImplementationName bPrint} {
+# return code = 0 => migration already executed
+	set sReturnCode 0
+	set sResult [mql temp query bus VPLMDataMigration $sImplementationName ---]
+	if {$sResult == ""} {
+		set sReturnCode 1
+	} else {
+		set sStatus [mql print bus VPLMDataMigration $sImplementationName --- select attribute\[VPLMsys/MigrationStatus\] dump;];
+		if {$sStatus == "FINISHED"} {
+			set sReturnCode 0
+		} else {
+			set sReturnCode 2
+		}
+	}
+	return $sReturnCode
+}
+
+proc addMarker {sImplementationName state} {
+
+	puts "Adding marker $sImplementationName with state $state"
+	
+	set status [checkMarkerStatus $sImplementationName "true"]
+	
+	# 0 BO exists and in FINISHED state
+	# 1 BO doesn't exist
+	# 2 BO exists but not in FINISHED state
+	if {$status == "1"} {
+		set sStatus [mql add bus VPLMDataMigration $sImplementationName --- policy VPLMDataMigration_Policy vault vplm VPLMsys/MigrationStatus $state ;];
+	}
+	
+	if {$status == "2" && $state == "FINISHED"} {
+		set sStatus [mql mod bus VPLMDataMigration $sImplementationName --- VPLMsys/MigrationStatus $state ;];
+	}
+	
+	return 0
+}
+
+#----------------------
+# compare list A with B
+#----------------------
+proc CompList {A B} {
+  set diff {}
+  foreach i ${A} {
+    if {[lsearch -exact ${B} ${i}] == -1} {
+      lappend diff ${i}
+    }
+  }
+  return ${diff}
+}
+
+eval {
+set t0 [clock clicks -millisec]
+  set lBasic     {read show}
+  set lRead      {checkout read show}
+  set lReadWrite {checkin checkout lock modify read reserve revise show unlock unreserve}
+  set lAdd       {checkin checkout fromconnect lock modify read reserve revise show toconnect unlock unreserve}
+  set lRemove    {checkin checkout delete fromdisconnect lock modify read reserve revise show todisconnect unlock unreserve}
+  set lAddRemove {checkin checkout delete fromconnect fromdisconnect lock modify read reserve revise show toconnect todisconnect unlock unreserve}
+  set lFull      {changeowner changesov checkin checkout delete demote fromconnect fromdisconnect lock modify promote read reserve revise show toconnect todisconnect unlock unreserve}
+  set CanRead    "read,show,checkout,toconnect,todisconnect"
+  set CanEdit    "read,show,checkout,toconnect,todisconnect,modify,changetype,checkin,fromconnect,fromdisconnect,lock,unlock,reserve,unreserve,revise,majorrevise"
+
+  set EVAL [mql eval expr "count true" on temp query bus * * * where "policy matchlist 'VPLM_SMB_Definition,VPLM_SMB_Definition_Document,VPLM_SMB_Evaluation,VPLM_SMB_Resource' ',' && (ownership.projectcount != 0 || ownership.organizationcount != 0)";];
+  puts "Number of potential objects to migrate: ${EVAL}"
+  puts "----------------------------------------------------------------------------";
+
+  set ret [addMarker "BaselineExplicitSOVMigration" "ON_GOING"]
+
+  # Keep explicit SOV
+  if {${EVAL} != 0} {
+    set BOs [mql temp query bus * * * where "policy matchlist 'VPLM_SMB_Definition,VPLM_SMB_Definition_Document,VPLM_SMB_Evaluation,VPLM_SMB_Resource' ',' && \
+                    (ownership.projectcount != 0 || ownership.organizationcount != 0)" \
+                    select ownership.project ownership.organization ownership.comment ownership.access dump |;];
+    set lBOs [split ${BOs} "\n"]
+    foreach sBO ${lBOs} {
+      set lBO [split ${sBO} "|"]
+      set sType [lindex ${lBO} 0]
+      set sName [lindex ${lBO} 1]
+      set sRev  [lindex ${lBO} 2]
+
+      set iItr [expr ([expr [llength ${lBO}]]-3)/4];
+
+      for {set i 0} {${i} < ${iItr}} {incr i} {
+        set iPrj [expr 3+${i}];
+        set iOrg [expr ${iPrj}+${iItr}];
+        set iFor [expr ${iOrg}+${iItr}];
+        set iAcc [expr ${iFor}+${iItr}];
+
+        set sPrj [lindex ${lBO} ${iPrj}]
+        set sOrg [lindex ${lBO} ${iOrg}]
+        set sFor [lindex ${lBO} ${iFor}]
+        set sAcc [lindex ${lBO} ${iAcc}]
+
+        if {${sPrj} == ""} {set sPrj "-"}
+        if {${sOrg} == ""} {set sOrg "-"}
+
+        set lAcc [lsort -unique [split ${sAcc} ","]]
+        set AccLevel 0
+
+        set rCmp1 [CompList ${lAcc} ${lBasic}]
+        set rCmp2 [CompList ${lBasic} ${lAcc}]
+        if {${rCmp1} == "" && ${rCmp2} == ""} {
+          set AccLevel 1
+        } else {
+          set rCmp1 [CompList ${lAcc} ${lRead}]
+          set rCmp2 [CompList ${lRead} ${lAcc}]
+          if {${rCmp1} == "" && ${rCmp2} == ""} {
+            set AccLevel 1
+          } else {
+            set rCmp1 [CompList ${lAcc} ${lReadWrite}]
+            set rCmp2 [CompList ${lReadWrite} ${lAcc}]
+            if {${rCmp1} == "" && ${rCmp2} == ""} {
+              set AccLevel 2
+            } else {
+              set rCmp1 [CompList ${lAcc} ${lAdd}]
+              set rCmp2 [CompList ${lAdd} ${lAcc}]
+              if {${rCmp1} == "" && ${rCmp2} == ""} {
+                set AccLevel 2
+              } else {
+                set rCmp1 [CompList ${lAcc} ${lRemove}]
+                set rCmp2 [CompList ${lRemove} ${lAcc}]
+                if {${rCmp1} == "" && ${rCmp2} == ""} {
+                  set AccLevel 2
+                } else {
+                  set rCmp1 [CompList ${lAcc} ${lAddRemove}]
+                  set rCmp2 [CompList ${lAddRemove} ${lAcc}]
+                  if {${rCmp1} == "" && ${rCmp2} == ""} {
+                    set AccLevel 2
+                  } else {
+                    set rCmp1 [CompList ${lAcc} ${lFull}]
+                    set rCmp2 [CompList ${lFull} ${lAcc}]
+                    if {${rCmp1} == "" && ${rCmp2} == ""} {
+                      set AccLevel 2
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        if {${AccLevel} == 1} {
+#          puts "- Updating SOV \"${sOrg}\" \"${sPrj}\" for \"${sFor}\" on object ${sType} ${sName} ${sRev}\n  Previous accesses: ${sAcc}\n  New accesses: ${CanRead}"
+          mql modify bus ${sType} ${sName} ${sRev} remove ownership \"${sOrg}\" \"${sPrj}\" for \"${sFor}\";
+          mql modify bus ${sType} ${sName} ${sRev} add ownership \"${sOrg}\" \"${sPrj}\" for \"${sFor}\" as ${CanRead};
+        } else {
+          if {${AccLevel} == 2} {
+#            puts "- Updating SOV \"${sOrg}\" \"${sPrj}\" for \"${sFor}\" on object ${sType} ${sName} ${sRev}\n  Previous accesses: ${sAcc}\n  New accesses: ${CanEdit}"
+            mql modify bus ${sType} ${sName} ${sRev} remove ownership \"${sOrg}\" \"${sPrj}\" for \"${sFor}\";
+            mql modify bus ${sType} ${sName} ${sRev} add ownership \"${sOrg}\" \"${sPrj}\" for \"${sFor}\" as ${CanEdit};
+          }
+        }
+
+      }
+    }
+  }
+puts "[expr {([clock clicks -millisec]-$t0)/1000.}] sec" ;
+set ret [addMarker "BaselineExplicitSOVMigration" "FINISHED"]
+}
+exit
+

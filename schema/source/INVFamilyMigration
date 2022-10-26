@@ -1,0 +1,815 @@
+/*
+ * INVFamilyMigration.java program to get all document type Object Ids.
+ *
+ * Copyright (c) 1992-2002 MatrixOne, Inc.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+
+import matrix.db.*;
+import matrix.util.*;
+import java.io.*;
+import java.util.*;
+
+public class ${CLASSNAME}
+{
+	///////////////////////////////////////////////////////////////////////////////////////////
+	//////////     TO BE CONFIGURED
+	///////////////////////////////////////////////////////////////////////////////////////////
+	private String[] usedPolicyFinalizedStateList = {"Design Policy|Approved" };
+	//////////////////////////////////////////////////////////////////////////////////////////
+	
+    private BufferedWriter writer		= null;
+	private FileWriter iefLog			= null;
+	private FileWriter iefIDsFile		= null;
+    private String documentDirectory	= "";
+	
+    private Hashtable policyStateMap	= null;
+	private Vector processedRelIds		= null;
+
+	private final String IPART_MINOR_TYPE			= "INV Versioned iPart";
+	private final String IPART_MAJOR_TYPE			= "INV iPart";
+	private final String PART_FACTORY_MINOR_TYPE	= "INV Versioned Part Factory";
+	private final String PART_FACTORY_MAJOR_TYPE	= "INV Part Factory";
+
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @grade 0
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+		writer = new BufferedWriter(new MatrixWriter(context));
+    }
+
+    /**
+     * This method is executed if a specific method is not specified.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @returns nothing
+     * @throws Exception if the operation fails
+     */
+    public int mxMain(Context context, String[] args)
+        throws Exception
+    {
+		if(!context.isConnected())
+		{
+			throw new Exception("not supported on desktop client");
+		}
+
+		try
+		{
+			validateInputArguments(args);
+		}
+		catch (IllegalArgumentException iExp)
+		{
+			writeErrorToConsole(iExp.getMessage());
+			writer.close();
+			return 0;
+		}
+
+		try
+		{
+			startIEFLog();
+			if(args[0].equalsIgnoreCase("writeId"))
+				writeIdFile(context);
+			else if(args[0].equalsIgnoreCase("migrate"))
+				migrateRelationship(context, args[2]);
+		}
+		catch (FileNotFoundException fEx)
+		{
+			writeErrorToConsole("Directory does not exist or does not have access to the directory");
+		}
+		catch (Exception ex)
+		{
+			writeErrorToConsole("Migration failed - " + ex.getMessage());
+			ex.printStackTrace();
+			context.abort();
+		}
+
+		closeIDsFile();
+		endIEFLog();
+		writer.flush();
+		writer.close();
+        return 0;
+    }
+	
+	private void migrateRelationship(Context context, String fileName) throws Exception
+	{
+		long startTime = System.currentTimeMillis();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Updating relationships...");
+		writeMessageToConsole("                Writing log files to: " + documentDirectory);
+		writeLineToConsole();
+		writer.write("Reading ID file: " + fileName + "\n");
+		
+		context.start(true);
+
+		String fileNameWithPath		= documentDirectory + fileName;
+		BufferedReader iefIDsReader = new BufferedReader(new FileReader(fileNameWithPath));
+
+        boolean gotErrors = false;
+		String line = "";
+		while((line = iefIDsReader.readLine()) != null)
+		{
+			try
+			{
+				if(line.length() <3 || line.startsWith("#"))
+					continue;
+				log("Executing: " + line);
+				runModifyMQL(context, line);
+			}
+			catch(Exception e)
+			{
+				gotErrors = true;
+				log("ERROR : " + e.getMessage());
+			}
+		}
+		
+		if(gotErrors)
+			throw new Exception("Error in Migration. Review log file for details.");
+		
+		context.commit();
+
+		writeLineToConsole();
+		writeMessageToConsole("                Relationship migration  COMPLETE");
+		writeMessageToConsole("                Time:"+ (System.currentTimeMillis() - startTime) + "ms ");
+		writeMessageToConsole("                Step 2 of Migration         :  SUCCESS");
+		writeMessageToConsole(" ");
+		writeLineToConsole();
+    }
+	
+	private void runModifyMQL(Context context, String command) throws Exception
+	{
+		MQLCommand mqlCommand = new MQLCommand();
+		boolean success = mqlCommand.executeCommand(context, command);
+		if(!success)
+			throw new Exception(mqlCommand.getError());
+	}
+	
+	private void populatePolicyDetails(Context context) throws Exception
+	{
+		for(int i=0; i<usedPolicyFinalizedStateList.length; i++)
+		{
+			int index = usedPolicyFinalizedStateList[i].indexOf("|");
+			if(index<=0)
+				throw new Exception("Invalid settings for Policy and Finalized state names.");
+				
+			String policyName 		= usedPolicyFinalizedStateList[i].substring(0, index).trim();
+			String finalizedState 	= usedPolicyFinalizedStateList[i].substring(index+1).trim();
+			log("Policy: " + policyName);			
+			log("Finalized State: " + finalizedState);			
+			
+			String command = "print policy '" + policyName + "' select state dump |";
+			MQLCommand mqlCommand = new MQLCommand();
+			mqlCommand.executeCommand(context, command);
+			String result = mqlCommand.getResult();
+			
+			int count = 0;
+			Hashtable stateIndexMap = new Hashtable();
+			StringTokenizer stateToken = new StringTokenizer(result.trim(), "|");
+			while(stateToken.hasMoreElements())
+			{
+				String stateName = (String)stateToken.nextElement();
+				log("State " + count + ": " + stateName);
+				stateIndexMap.put(stateName, new Integer(count));
+				
+				if(finalizedState.equalsIgnoreCase(stateName))
+				{
+					log("Finalized State.");
+					stateIndexMap.put("DSCFinalizedState", new Integer(count));
+				}
+				count++;
+			}
+			
+			policyStateMap.put(policyName, stateIndexMap);
+			log("Policy '" + policyName + "' has " + count + "state.");
+		}
+	}
+	
+	private boolean isFinalized(String policy, String state)
+	{
+		Hashtable stateIndexMap = (Hashtable)policyStateMap.get(policy);
+		int stateIndex = ((Integer)stateIndexMap.get(state)).intValue();
+		int finalIndex = ((Integer)stateIndexMap.get("DSCFinalizedState")).intValue();
+		
+		log("Current State - " + stateIndex + "; Finalized State - " + finalIndex);
+		
+		if(finalIndex<=stateIndex)
+			return true;
+		else
+			return false;
+	}
+	
+	private int getDemoteCount(String policy, String state)
+	{
+		Hashtable stateIndexMap = (Hashtable)policyStateMap.get(policy);
+		int stateIndex = ((Integer)stateIndexMap.get(state)).intValue();
+		return stateIndex;
+	}
+	
+	private void writeIdFile(Context context) throws Exception
+	{
+		long startTime = System.currentTimeMillis();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Querying for Factory Objects...");
+		writeMessageToConsole("                Writing files to: " + documentDirectory);
+		writeLineToConsole();
+		
+		context.start(false);
+
+		processedRelIds 		= new Vector();
+		policyStateMap 			= new Hashtable();
+		
+		populatePolicyDetails(context);		
+		
+		createNewIDsFile();
+
+		setRelIdsToIgnore(context);		
+	
+		getIdsCase1(context);
+		log("Query Case1 complete...");
+		
+		getIdsCase2(context);
+		log("Query Case2 complete...");
+		
+		getIdsCase3A(context);
+		log("Query Case3A complete...");
+		
+		getIdsCase3B(context);
+		log("Query Case3B complete...");
+		
+		getIdsCase4(context);
+		log("Query Case4 complete...");
+		
+		getIdsCase5(context);
+		log("Query Case5 complete...");
+
+		closeIDsFile();
+		
+		context.commit();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Querying for Factory Objects  COMPLETE");
+		writeMessageToConsole("                Time:"+ (System.currentTimeMillis() - startTime) + "ms ");
+		writeMessageToConsole("                Step 1 of Migration         :  SUCCESS");
+		writeLineToConsole();
+	}
+
+	private void setRelIdsToIgnore(Context context) throws Exception
+	{
+		String command = "temp query bus \"INV Component,INV Versioned Component\" * * where \" relationship[Derived Component]  == True && (type == const'INV Versioned Component' || type == const'INV Component') \" select relationship[Derived Component].id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult().trim();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine = (String)token.nextElement();
+			
+			StringTokenizer relIdToken	= new StringTokenizer(objLine, "|");
+			
+			while(relIdToken.hasMoreElements())
+			{
+				String type = (String)relIdToken.nextElement();
+				String name = (String)relIdToken.nextElement();
+				String rev	= (String)relIdToken.nextElement();
+				
+				while(relIdToken.hasMoreElements())
+					processedRelIds.addElement(relIdToken.nextElement());
+			}
+		}
+	}
+
+	private void validateInputArguments(String[] args) throws IllegalArgumentException
+	{
+		if (args.length < 2 || (args[0].startsWith("migrate") && args.length < 3))
+			throw new IllegalArgumentException("Wrong number of arguments");
+			
+		documentDirectory = args[1];
+		// documentDirectory does not ends with "/" add it
+		String fileSeparator = java.io.File.separator;
+		if(documentDirectory != null && !documentDirectory.endsWith(fileSeparator))
+		{
+			documentDirectory = documentDirectory + fileSeparator;
+		}
+	}
+
+    /**
+     * Evalutes a temp query to get all the Family objects in the system
+     * @param context the eMatrix <code>Context</code> object
+     * @param chunksize has the no. of objects to be stored in file.
+     * @return void
+     * @exception Exception if the operation fails.
+     */
+	
+	private void getIdsCase5(Context context) throws Exception
+    {
+		Vector busTypeList			= new Vector();
+		writeMessageToConsole("Searching types for bus ids : " + busTypeList);
+		
+		String command = "temp query bus '" + IPART_MAJOR_TYPE + "," + IPART_MINOR_TYPE + "' '*' '*' select id dump |";
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult().trim();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine = (String)token.nextElement();
+			StringTokenizer busIdToken = new StringTokenizer(objLine, "|");
+
+			log(objLine);
+
+			int count = 0;
+			String factoryName = "";
+			String busId		= "";
+			while(busIdToken.hasMoreElements())
+			{
+				busId = (String)busIdToken.nextElement();
+				if(count == 1)
+					factoryName = busId;
+				else if(count == 3)
+				{
+					try
+					{
+						command = "modify bus " + busId + " 'CAD Type' 'componentInstance';";
+						writeToIDsFile(command);
+					}
+					catch (Exception e)
+					{
+						log("Exception occured in getIdsCase5 : " + e.getMessage());
+					}
+				}
+				count++;
+			}
+			log("[getBusIDs] Bus ID '" + busId + "' has found.");
+		}
+    }
+
+
+	private void getIdsCase4(Context context) throws Exception
+    {
+		String busTypeList = PART_FACTORY_MAJOR_TYPE;
+		writeMessageToConsole("Searching types: " + busTypeList);
+        String command = "temp query bus '" + busTypeList + "' '*' '*' select id policy current from[Active Version].to.id to[VersionOf].from.id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine = (String)token.nextElement();
+			log(objLine);
+			StringTokenizer relIdToken = new StringTokenizer(objLine, "|");
+			String objType 			= null;
+			String objname 			= null;
+			String objRev 			= null;
+			String familyMajorId 	= null;
+			String policy 			= null;
+			String state 			= null;
+			String activeVersionId 	= null;
+			Vector minorList 		= new Vector();
+			
+			if(relIdToken.hasMoreElements())
+				objType = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objname = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objRev = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				familyMajorId = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				policy = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				state = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				activeVersionId = (String)relIdToken.nextElement();
+				
+			while(relIdToken.hasMoreElements())
+				minorList.addElement(relIdToken.nextElement());
+				
+			if(familyMajorId != null && policy != null && state != null && activeVersionId != null)
+			{
+				int count = getDemoteCount(policy, state);
+				boolean isFinalized = isFinalized(policy, state);
+				
+				for(int i=0; i<count; i++)
+				{
+					command = "demote bus " + familyMajorId + ";";
+					writeToIDsFile(command);
+				}
+				
+				if(isFinalized)
+				{
+					command = "disconnect bus " + familyMajorId + " relationship Finalized from " + activeVersionId + ";";
+					writeToIDsFile(command);
+					
+					command = "modify bus " + activeVersionId + " move from " + familyMajorId + " all;";
+					writeToIDsFile(command);
+				}
+
+				command = "modify bus " + familyMajorId + " 'Move Files To Version' True IEF-ObjectBasedConfigurationRevisionMode individual 'CAD Type' componentFamily;";
+				writeToIDsFile(command);
+				
+				for(int i=0; i<minorList.size(); i++)
+				{
+					String minorId = (String) minorList.elementAt(i);
+					command = "modify bus " + minorId + " IEF-ObjectBasedConfigurationRevisionMode individual 'CAD Type' componentFamily;";
+					writeToIDsFile(command);
+				}
+			}
+			else
+			{
+				log("Error in data: 4|" + result);
+			}
+		}
+    }
+	
+	private void getIdsCase3B(Context context) throws Exception
+    {
+		String busTypeList = IPART_MAJOR_TYPE;
+		writeMessageToConsole("Searching types: " + busTypeList);
+        String command = "temp query bus '" + busTypeList + "' '*' '*' select id from[Derived Component].id from[Derived Component].to.from[Active Version] from[Derived Component].to.from[Active Version].to.id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine = (String)token.nextElement();
+			String objType = null;
+			String objName = null;
+			String objRev = null;
+			String iPartId = null;
+			
+log(objLine);
+			StringTokenizer relIdToken = new StringTokenizer(objLine, "|");			
+			if(relIdToken.hasMoreElements())
+				objType = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objName = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objRev = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				iPartId = (String)relIdToken.nextElement();
+
+			Vector idList = new Vector();
+			while(relIdToken.hasMoreElements())
+				idList.addElement(relIdToken.nextElement());
+				
+			Vector relIdList  = new Vector();
+			Vector existsList = new Vector();
+			Vector famIdList  = new Vector();
+			
+			boolean addToRelIdList = true;
+			
+			for(int i=0; i<idList.size(); i++)
+			{
+				String elem = (String)idList.elementAt(i);
+				if(addToRelIdList && !elem.equalsIgnoreCase("True") && !elem.equalsIgnoreCase("False"))
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					relIdList.add(elem);
+				}
+				else if(elem.equalsIgnoreCase("True") || elem.equalsIgnoreCase("False"))
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					addToRelIdList = false;
+					existsList.add(elem);
+				}
+				else 
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					famIdList.add(elem);
+				}
+			}
+				
+			for(int i=0; i<relIdList.size(); i++)
+			{
+				String relId  = (String)relIdList.elementAt(i);
+				if(relId.equalsIgnoreCase("dummy"))
+				{
+					continue;
+				}
+				String exists = (String)existsList.elementAt(i);
+				if(!exists.equalsIgnoreCase("dummy") && exists.equalsIgnoreCase("True") && relIdList.size()>i)
+				{
+					String famId = (String)famIdList.elementAt(i);
+					if(!processedRelIds.contains(relId))
+					{
+						processedRelIds.add(relId);
+						command = "modify connection " + relId + " to " + iPartId + " from " + famId + " type 'Instance Of';";
+						writeToIDsFile(command);
+					}
+				}
+			}
+
+			log("Factory '" + objName + "' found");
+		}
+    }
+	
+    private void getIdsCase3A(Context context) throws Exception
+    {
+		//Non-finalized minor instance - 
+		String busTypeList = IPART_MINOR_TYPE;
+		writeMessageToConsole("Searching types: " + busTypeList);
+        //String command = "temp query bus '" + busTypeList + "' '*' '*' select id from[VersionOf].to.policy from[VersionOf].to.current from[Derived Component].id from[Derived Component].to.from[Active Version] from[Derived Component].to.from[Active Version].to.id dump |";
+        String command = "temp query bus '" + busTypeList + "' '*' '*' select id from[Derived Component].id from[Derived Component].to.from[Active Version] from[Derived Component].to.from[Active Version].to.id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine 	= (String)token.nextElement();
+			String objType 	= null;
+			String objName 	= null;
+			String objRev 	= null;
+			String iPartId 	= null;
+			
+log(objLine);
+			StringTokenizer relIdToken = new StringTokenizer(objLine, "|");			
+			if(relIdToken.hasMoreElements())
+				objType = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objName = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objRev 	= (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				iPartId = (String)relIdToken.nextElement();
+
+			Vector idList = new Vector();
+			while(relIdToken.hasMoreElements())
+				idList.addElement(relIdToken.nextElement());
+
+			Vector relIdList  = new Vector();
+			Vector existsList = new Vector();
+			Vector famIdList  = new Vector();
+			
+			boolean addToRelIdList = true;
+			
+			for(int i=0; i<idList.size(); i++)
+			{
+				String elem = (String)idList.elementAt(i);
+				if(addToRelIdList && !elem.equalsIgnoreCase("True") && !elem.equalsIgnoreCase("False"))
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					relIdList.add(elem);
+				}
+				else if(elem.equalsIgnoreCase("True") || elem.equalsIgnoreCase("False"))
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					addToRelIdList = false;
+					existsList.add(elem);
+				}
+				else 
+				{
+					if(null == elem || "".equals(elem))
+					{
+						elem = "dummy";
+					}
+					famIdList.add(elem);
+				}
+			}
+				
+			for(int i=0; i<relIdList.size(); i++)
+			{
+				String relId  = (String)relIdList.elementAt(i);
+				if(relId.equalsIgnoreCase("dummy"))
+				{
+					continue;
+				}
+				String exists = (String)existsList.elementAt(i);
+				if(!exists.equalsIgnoreCase("dummy") && exists.equalsIgnoreCase("True") && relIdList.size()>i)
+				{
+					String famId = (String)famIdList.elementAt(i);
+					if(!processedRelIds.contains(relId))
+					{
+						processedRelIds.add(relId);
+						command = "modify connection " + relId + " to " + iPartId + " from " + famId + " type 'Instance Of';";
+						writeToIDsFile(command);
+					}
+				}
+			}
+
+			log("Factory '" + objName + "' found");
+		}
+    }
+
+	 private void getIdsCase2(Context context) throws Exception
+    {
+		// All finalized minor instance - disconnect relationship
+		String busTypeList = IPART_MINOR_TYPE;
+		writeMessageToConsole("Searching types: " + busTypeList);
+        String command = "temp query bus '" + busTypeList + "' '*' '*' where \" to[Active Version] == True \" select to[Active Version].from.policy to[Active Version].from.current from[Derived Component].id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine 	= (String)token.nextElement();
+log(objLine);
+			String objType 	= null;
+			String objName 	= null;
+			String objRev 	= null;
+			String policy 	= null;
+			String state 	= null;
+			
+			StringTokenizer relIdToken = new StringTokenizer(objLine, "|");			
+			if(relIdToken.hasMoreElements())
+				objType = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objName = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objRev 	= (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				policy 	= (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				state 	= (String)relIdToken.nextElement();
+
+			if(policy != null && state != null && isFinalized(policy, state))
+			{
+				while(relIdToken.hasMoreElements())
+				{
+					String relId = (String)relIdToken.nextElement();
+					if(!processedRelIds.contains(relId))
+					{
+						processedRelIds.add(relId);
+						writeToIDsFile("disconnect connection " + relId + ";");
+					}
+				}
+			}
+		}
+    }
+	
+    private void getIdsCase1(Context context) throws Exception
+    {
+		// All minor family - change name and direction of relationship
+		String busTypeList = PART_FACTORY_MINOR_TYPE;
+		writeMessageToConsole("Searching types: " + busTypeList);
+        String command = "temp query bus '" + busTypeList + "' '*' '*' select id to[Derived Component].id  to[Derived Component].from.id dump |";
+
+		MQLCommand mqlCommand = new MQLCommand();
+		mqlCommand.executeCommand(context, command);
+		String result = mqlCommand.getResult();
+		
+		StringTokenizer token = new StringTokenizer(result, "\n");
+		while(token.hasMoreElements())
+		{
+			String objLine = (String)token.nextElement();
+			String objType = null;
+			String objName = null;
+			String objRev = null;
+			String famId = null;
+			
+log(objLine);
+			StringTokenizer relIdToken = new StringTokenizer(objLine, "|");			
+			if(relIdToken.hasMoreElements())
+				objType = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objName = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				objRev = (String)relIdToken.nextElement();
+			if(relIdToken.hasMoreElements())
+				famId = (String)relIdToken.nextElement();
+
+			Vector idList = new Vector();
+			while(relIdToken.hasMoreElements())
+				idList.addElement(relIdToken.nextElement());
+				
+			for(int i=0; i<idList.size()/2; i++)
+			{
+				String relId = (String)idList.elementAt(i);
+				String iPartId = (String)idList.elementAt(i+idList.size()/2);
+
+				processedRelIds.add(relId);
+				command = "modify connection " + relId + " to " + iPartId + " from " + famId + " type 'Instance Of' ;";
+				writeToIDsFile(command);
+			}
+
+			log("Factory '" + objName + "' found");
+		}
+    }
+
+	private void startIEFLog() throws Exception
+	{
+		try
+		{
+			iefLog		= new FileWriter(documentDirectory + "invMigration.log");
+		}
+		catch(Exception e)
+		{
+			writeMessageToConsole("ERROR: Can not create log file. " + e.getMessage());
+		}
+	}
+
+	private void endIEFLog()
+	{
+		try
+		{
+			iefLog.write("\n\n");
+			iefLog.flush();
+			iefLog.close();
+		}
+		catch(Exception e)
+		{
+		}
+	}
+
+	private void log(String message)
+	{
+		try
+		{
+			iefLog.write(message + "\n");
+		}
+		catch(Exception e)
+		{
+		}
+	}
+
+	private void closeIDsFile() throws Exception
+	{
+		if(iefIDsFile != null)
+		{
+			iefIDsFile.flush();
+			iefIDsFile.close();
+			iefIDsFile = null;
+		}
+    }
+
+	private void createNewIDsFile() throws Exception
+	{
+		String fileNameWithPath = documentDirectory + "INV_MigrationIDs_Family.txt";
+		iefIDsFile				= new FileWriter(fileNameWithPath);
+		writer.write("Created file " + fileNameWithPath + "\n");
+	}
+
+	private void writeToIDsFile(String id) throws Exception
+	{
+		try
+		{
+			iefIDsFile.write(id + "\n");
+		}
+		catch(Exception e)
+		{
+			writer.write("ERROR in writeing ID " + id + "   -   " + e.getMessage() + "\n");
+		}
+	}
+
+	private void writeLineToConsole() throws Exception
+	{
+		writeMessageToConsole("=======================================================");
+	}
+
+	private void writeMessageToConsole(String message) throws Exception
+	{
+		writer.write(message + "\n");
+	}
+
+	private void writeErrorToConsole(String message) throws Exception
+	{
+		writeLineToConsole();
+		writeMessageToConsole(message);
+		writeMessageToConsole("Step 1 of Migration     : FAILED");
+		writeLineToConsole();
+		writer.flush();
+	}
+}
+

@@ -1,0 +1,475 @@
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalService;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+
+public class ${CLASSNAME} {
+	public int deleteQuestion(Context context,String args[]) throws Exception
+	{
+		String strObjectId=args[0];
+		QuestionService questionService = new QuestionServiceImpl();
+		return questionService.deleteQuestion(context, strObjectId);
+	}
+
+	public int promoteQuestion(Context context, String args[]) throws Exception {
+		String strTypeChnageTemplate=PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_TEMPLATE);
+		String strTypeImpactQuesTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_EFORM);
+		String strObjectId = args[0];
+		StringList slType = new StringList();
+		slType.add(strTypeImpactQuesTemplate);
+		slType.add(strTypeChnageTemplate);
+		QuestionService questionService = new QuestionServiceImpl();
+		Map mParentObject = questionService.getTempatesForQuestion(context, strObjectId, slType);
+		String strType=(String) mParentObject.get(DomainConstants.SELECT_TYPE);
+		String strCurrentState = (String) mParentObject.get(DomainConstants.SELECT_CURRENT);
+		if (strTypeChnageTemplate.equals(strType) || strTypeImpactQuesTemplate.equals(strType)) {
+			String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+					"enoQuestionnaire.Alert.Msg.QuestionCannotBeDemoted");
+			if (strCurrentState.equals("Active"))
+				throw new Exception(strMessage);
+		}
+		return 0;
+	}
+
+	public void checkAllQuestionSubmitted(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = args[0];
+			String strAction = args[1];
+			String typeChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String relChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String typeChangeRequest = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_REQUEST);
+
+			// String strAction = "Approval";
+			if (UIUtil.isNullOrEmpty(strAction))
+				strAction = "Approval";
+			QuestionService questionService = new QuestionServiceImpl();
+			StringList slObjectSelect = new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_CURRENT);
+			slObjectSelect.add("to[" + relChangeOrder + "].from[" + typeChangeRequest + "].id");
+DomainObject dobj=DomainObject.newInstance(context,strObjectId);
+String changeRequest="";
+			if(dobj.isKindOf(context, typeChangeOrder))
+			{
+				MapList mlCOInfo = DomainObject.getInfo(context, new String[] { strObjectId }, slObjectSelect);
+				if(mlCOInfo!=null && mlCOInfo.size()>0)
+				{
+					Map mCOInfo = (Map) mlCOInfo.get(0);
+					changeRequest = (String) mCOInfo.get("to[" + relChangeOrder + "].from[" + typeChangeRequest + "].id");
+				}
+			}
+			if(UIUtil.isNotNullAndNotEmpty(changeRequest))
+				strObjectId=changeRequest;
+			
+			boolean flag = questionService.checkAllQuestionSubmitted(context, strObjectId, strAction);
+				if (!flag) {
+					String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+							"enoQuestionnaire.Alert.Msg.AllQuestionsNotSubmitted");
+					throw new Exception(strMessage);
+				}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public void submitQuestions(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get("objectId");
+			ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+			configureApprovalService.createCOEForms(context, strObjectId[0], "Approval", QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+			configureApprovalService.createRouteOnQuestionSubmit(context, strObjectId[0],
+					QuestionnaireConstants.ROUTE_TEMPLATE_ROUTE_BASE_POURPOSE_APPROVAL, "Approval",
+					QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void submitConditionalQuestions(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			String strAction = (String) programMap.get("Action");
+
+			ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+			QuestionService questionService = new QuestionServiceImpl();
+
+			questionService.updateConditionalQuestions(context, strObjectId, strAction);
+			configureApprovalService.createRouteOnQuestionSubmit(context, strObjectId,
+						QuestionnaireConstants.ROUTE_TEMPLATE_ROUTE_BASE_POURPOSE_APPROVAL, strAction,
+						QuestionnaireConstants.MODE_CONFIGURE_CONDITIONAL_QUESTIONNAIRE);
+			configureApprovalService.createCOEForms(context, strObjectId, strAction, QuestionnaireConstants.MODE_CONFIGURE_CONDITIONAL_QUESTIONNAIRE);
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void connectRouteTemplateCRToCO(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = (String) args[0];
+			String strRelationRelatedPackege = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_RELATED_CHANGE_PACKAGE_ITEM);
+			String strTypeRouteTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_ROUTE_TEMPLATE);
+			String strTypeChangeRequest = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_REQUEST);
+			String strRelChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER);
+			DomainObject domainObject = DomainObject.newInstance(context, strObjectId);
+
+			StringList slObjectSelect = new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_TYPE);
+			slObjectSelect.add("to[" + strRelChangeOrder + "].from[" + strTypeChangeRequest + "].id");
+			List<Map> mlCOInfo = DomainObject.getInfo(context, new String[] { strObjectId }, slObjectSelect);
+
+			Map<String, String> mCOInfo = mlCOInfo.get(0);
+			String strType = mCOInfo.get(DomainConstants.SELECT_TYPE);
+			String strCRId = mCOInfo.get("to[" + strRelChangeOrder + "].from[" + strTypeChangeRequest + "].id");
+
+			ConfigureApprovalService configureService = new ConfigureApprovalServiceImpl();
+			List<Map> mlRouteTemplate = configureService.getCORouteActionTasks(context, strObjectId);
+			String routetemplate = DomainConstants.EMPTY_STRING;
+			if (mlRouteTemplate != null && mlRouteTemplate.size() > 0) {
+				Map mRT = mlRouteTemplate.get(0);
+				routetemplate = (String) mRT.get(DomainConstants.SELECT_ID);
+			}
+
+			if (UIUtil.isNotNullAndNotEmpty(strCRId) && UIUtil.isNullOrEmpty(routetemplate)) {
+				 DomainObject dObjCR = DomainObject.newInstance(context,
+				 strCRId);
+				List<Map> sObjectList = dObjCR.getRelatedObjects(context, // context
+				 strRelationRelatedPackege, // relationship
+				 // pattern
+				 strTypeRouteTemplate, // object
+				 // pattern
+				 new StringList(DomainConstants.SELECT_ID), // object
+				 // selects
+				 DomainConstants.EMPTY_STRINGLIST, // relationship
+				 // selects
+				 false, // to direction
+				 true, // from direction
+				 (short) 1, // recursion level
+				 DomainConstants.EMPTY_STRING, // object where clause
+				 DomainConstants.EMPTY_STRING, // relationship where
+				 // clause
+				 0);
+				
+				 for (Map map : sObjectList) {
+				 String strId = (String) map.get(DomainObject.SELECT_ID);
+				 DomainRelationship.connect(context, domainObject, new
+				 RelationshipType(strRelationRelatedPackege),
+				 DomainObject.newInstance(context, strId));
+				 }
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void canNotDemoteObsoleteTemplate(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strPolicyChangeTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_CHANGE_TEMPLATE);
+			String strStateObsolete = PropertyUtil.getSchemaProperty(context, "policy", strPolicyChangeTemplate,
+					QuestionnaireConstants.SYMBOLIC_STATE_OBSOLETE);
+
+			String strMessage = DomainObject.EMPTY_STRING;
+			String strState = dObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (strStateObsolete.equals(strState)) {
+				strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.ChangeTemplateDemoteErrorObsolete");
+				throw new Exception(strMessage);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void checkIfConnectedToCO(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+
+			MapList sObjectList = dObj.getRelatedObjects(context, // matrix
+																	// context
+					PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE) + ","
+							+ PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE), // relationship
+					// pattern
+					"*", // object
+							// pattern
+					new StringList(DomainConstants.SELECT_ID), // object selects
+					DomainConstants.EMPTY_STRINGLIST, // relationship selects
+					true, // to direction
+					true, // from direction
+					(short) 1, // recursion level
+					DomainConstants.EMPTY_STRING, // object where clause
+					DomainConstants.EMPTY_STRING, // relationship where clause
+					0);
+			if (!sObjectList.isEmpty()) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+ context.getLocale(),
+						"enoQuestionnaire.Label.ChangeTemplateDemoteError");
+				throw new Exception(strMsg);
+
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void checkIfChangeTemplateisInactive(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = (String) args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strCurrent = dObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (!strCurrent.equals("Inactive")) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+ context.getLocale(),
+						"enoQuestionnaire.Label.ChangeTemplateDeleteError");
+				throw new Exception(strMsg);
+
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void connectChangeTemplateToChangeRequest(Context context, String args[]) throws Exception {
+		try {
+			String strObjectId = (String) args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strRel = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			String strTypeChangeTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_TEMPLATE);
+			String strPolicyChangeTemplate = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_CHANGE_TEMPLATE);
+			String strPolciyFasttrack = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_POLICY_FASTTRACK);
+			String strState = PropertyUtil.getSchemaProperty(context, "policy", strPolicyChangeTemplate,
+ QuestionnaireConstants.SYMBOLIC_STATE_ACTIVE);
+			String strOrg = dObj.getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+			StringList slBusSelects = new StringList(DomainObject.SELECT_ID);
+			slBusSelects.add(DomainObject.SELECT_NAME);
+			slBusSelects.add(DomainObject.SELECT_ORGANIZATION);
+
+			StringBuilder sbWhere = new StringBuilder(); // "organization==const'Responsible Org'";
+			sbWhere.append("attribute[Default Policy]==");
+			sbWhere.append("\'").append(strPolciyFasttrack).append("\'&&");
+			sbWhere.append(DomainObject.SELECT_ORGANIZATION);
+			sbWhere.append("==");
+			sbWhere.append("\'");
+			sbWhere.append(strOrg).append("\'&&");
+			sbWhere.append(DomainObject.SELECT_CURRENT);
+			sbWhere.append("==");
+			sbWhere.append(strState);
+
+			MapList ml = DomainObject.findObjects(context, strTypeChangeTemplate, null, sbWhere.toString(), slBusSelects);
+			if (ml.size() == 1) {
+				Map map = (Map) ml.get(0);
+				String strChangeTempId = (String) map.get(DomainObject.SELECT_ID);
+				DomainObject dobjChangeTemplate = DomainObject.newInstance(context, strChangeTempId);
+				DomainRelationship dr = DomainRelationship.connect(context, dObj, new RelationshipType(strRel), dobjChangeTemplate);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void checkIfChangeTemplateIsConnected(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strRel = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER_TEMPLATE);
+			boolean hasRelatedObject = dObj.hasRelatedObjects(context, strRel, true);
+			if (!hasRelatedObject) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+ context.getLocale(),
+						"enoQuestionnaire.Label.ChangeTemplateNotConnected");
+				throw new Exception(strMsg);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void checkIfQuestionsAreConfigured(Context context, String args[]) throws Exception {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			QuestionService questionServie = new QuestionServiceImpl();
+			Map mpConfiguredQues = questionServie.getConfigureConnectedQuestions(context, strObjectId);
+
+			if (!(mpConfiguredQues == null || mpConfiguredQues.isEmpty())) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+ context.getLocale(),
+						"enoQuestionnaire.Label.cannotDemoteCR");
+				throw new Exception(strMsg);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public void executeMQLConditions(Context context, String args[]) throws Exception {
+		String strObjectId = args[0];
+
+		DomainObject domObj = DomainObject.newInstance(context, strObjectId);
+		String strTypeBusinessRole = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_BusinessRole);
+		String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+		String strAttributeRouteAction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+		
+		String type = domObj.getInfo(context, DomainConstants.SELECT_TYPE);
+		String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type", type, true);
+		String strKeyProperty = "enoQuestionnaire." + strTypeSymName + ".";
+
+		List<String> slRoleName = new StringList();
+		List<String> slRoleId = new StringList();
+		List<String> slGroupName = new StringList();
+		List<String> slPersonName = new StringList();
+		List<String> slConditions = new StringList();
+		
+		Map<String,String> mSequence=new HashMap<String,String>();
+		Map<String,String> mRouteAction=new HashMap<String,String>();
+
+
+		int i = 1;
+		while (true) {
+			try {
+				String strCondition = EnoviaResourceBundle.getProperty(context, strKeyProperty + "Condition" + i);
+				slConditions.add(strCondition);
+			}
+			catch (Exception e) {
+				break;
+			}
+			i++;
+		}
+
+		for (String strCondition : slConditions) {
+			List<String> slExpression = FrameworkUtil.split(strCondition, ":");
+			StringBuilder sbObjectWhere = new StringBuilder();
+			sbObjectWhere.append(slExpression.get(0));
+
+			String result = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 where $4 select $5 dump", type, "*", "*",
+					sbObjectWhere.toString(), "id");
+
+			if (UIUtil.isNotNullAndNotEmpty(result)) {
+				List<String> slApprovals = FrameworkUtil.split(slExpression.get(1), ",");
+
+				for (String approvers : slApprovals) {
+
+					List<String> slApproversAndSequence = FrameworkUtil.split(approvers, "#");
+					String approversName = slApproversAndSequence.get(0);
+					List<String> slSequenceAndAction = FrameworkUtil.split(slApproversAndSequence.get(1), "@");
+					String sequence = slSequenceAndAction.get(0);
+					String action = slSequenceAndAction.get(1);
+
+					String strId =DomainConstants.EMPTY_STRING;
+					String strName = PropertyUtil.getSchemaProperty(context, approversName);
+
+					if (approversName.contains("role")) {
+						if (!slRoleName.contains(strName)) {
+							slRoleName.add(strName);
+							strId = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", strTypeBusinessRole, strName, "-", "id");
+							slRoleId.add(strId);
+						}
+					}
+					else if (approversName.contains("group")) {
+						if (!slGroupName.contains(strName))
+							slGroupName.add(strName);
+					}
+					else {
+						strId = PersonUtil.getPersonObjectID(context, approversName);
+						if (!slPersonName.contains(strId))
+							slPersonName.add(strId);
+					}
+					if(UIUtil.isNullOrEmpty(strId))
+						strId=strName;
+					if (!mSequence.containsKey(strId)) {
+						mSequence.put(strId, sequence);
+						mRouteAction.put(strId, action);
+					}
+
+				}
+			}
+		}
+
+		if (slPersonName.size() > 0 || slRoleName.size() > 0 || slGroupName.size() > 0) {
+			ConfigureApprovalService configureService = new ConfigureApprovalServiceImpl();
+			List<Map> mlRelatedRouteTemplate = configureService.getCORouteTemplate(context, strObjectId);
+			String strRouteTemplateId = DomainConstants.EMPTY_STRING;
+			if (mlRelatedRouteTemplate.size() > 0) {
+				Map mRT = mlRelatedRouteTemplate.get(0);
+				strRouteTemplateId = (String) mRT.get(DomainConstants.SELECT_ID);
+			}
+			else
+				strRouteTemplateId = configureService.createAndConnectRouteTemplate(context, strObjectId);
+			Map mRelId = new HashMap();
+			mRelId.putAll(configureService.assignPersonActionTask(context, strRouteTemplateId, (StringList) slPersonName));
+			mRelId.putAll(configureService.assignBusinessRoleActionTask(context, strRouteTemplateId, (StringList) slRoleId, (StringList) slRoleName));
+			mRelId.putAll(configureService.assignGroupActionTask(context, strRouteTemplateId, (StringList) slGroupName));
+
+			for (Iterator iterator = mRelId.keySet().iterator(); iterator.hasNext();) {
+				String strKeyid = (String) iterator.next();
+				Map mAttribute = new HashMap();
+				mAttribute.put(strAttributeRouteSequence, mSequence.get(strKeyid));
+				mAttribute.put(strAttributeRouteAction, mRouteAction.get(strKeyid));
+				configureService.assigneeAttributeValues(context, mRelId.get(strKeyid).toString(), mAttribute);
+			}
+		}
+	}
+
+	public int actionRemoveQuestionnaireRouteTemplate(Context context,String args[]) throws Exception
+	{
+		String strCRObjectId=args[0];
+		ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+		List<Map<?,?>> questionRouteTemplateList = configureApprovalService.getCORouteTemplate(context, strCRObjectId);
+		for (Map<?,?> mrouteTemplate : questionRouteTemplateList) {
+			String strId = (String) mrouteTemplate.get(DomainConstants.SELECT_ID);
+			DomainObject dobj = DomainObject.newInstance(context, strId);
+			dobj.deleteObject(context);
+		}
+		return 0;
+	}
+}
+

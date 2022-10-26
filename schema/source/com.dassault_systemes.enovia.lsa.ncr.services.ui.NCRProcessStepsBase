@@ -1,0 +1,1427 @@
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Predicate;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants;
+import com.dassault_systemes.enovia.lsa.ncr.NCRException;
+import com.dassault_systemes.enovia.lsa.ncr.NCRUtil;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCRProductControlService;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCRService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIMenu;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	private static final String PROCESS_STEP_DELIMETER = "@";
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * Gets ComplaintProductEvaluationService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintProductEvaluationService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private ComplaintProductEvaluationService getComplaintProductEvaluationService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			return (ComplaintProductEvaluationService) component.getService(ComplaintProductEvaluationService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintProductEvaluationService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintProductEvaluationService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private NCRProductControlService getNCRProductControlService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSANCRCoreComponent");
+			return (NCRProductControlService) component.getService(NCRProductControlService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets NCRService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintProductEvaluationService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private NCRService getNCRService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSANCRCoreComponent");
+			return (NCRService) component.getService(NCRService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	public Map<String, String> showTaskIfUserHasModifyFromConnectAccess(Context context, String[] args) throws Exception {
+		Map<String, String> showTask = new HashMap<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+
+			for (String objectId : objectIds) {
+				if (DomainObject.newInstance(context, objectId).checkAccess(context, (short) AccessConstants.cModify)
+						&& DomainObject.newInstance(context, objectId).checkAccess(context, (short) AccessConstants.cFromConnect)) {
+					showTask.put(objectId, "true");
+				}
+				else {
+					showTask.put(objectId, "false");
+				}
+			}
+			return showTask;
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new NCRException(e);
+		}
+	}
+	public Map<String, String> showAddImpactedItemsAction(Context context, String[] args) throws Exception {
+
+		Map<String, String> objectIdCheckStatusMap = new HashMap<>();
+		StringList objectSelects = new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_CURRENT);
+		objectSelects.add(DomainObject.SELECT_OWNER);
+
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<?, ?>> mlNCnfo = QueryUtil.getInfo(context, objectIds, objectSelects);
+		String strOwner = context.getUser();
+		for (Map<?, ?> mNCInfo : mlNCnfo) {
+			boolean hasModifyAcces = hasModifyAccess(context, strOwner, (String) mNCInfo.get(DomainObject.SELECT_CURRENT),
+					(String) mNCInfo.get(DomainObject.SELECT_OWNER),(String) mNCInfo.get(DomainObject.SELECT_ID));
+			objectIdCheckStatusMap.put((String) mNCInfo.get(DomainObject.SELECT_ID), String.valueOf(hasModifyAcces));
+		}
+		return objectIdCheckStatusMap;
+	}
+
+	public Map<String, String> showAcceptNCRAction(Context context, String[] args) throws Exception {
+		Map<String, String> objectIdCheckStatusMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		final String REVIEW_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD, NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+		Boolean hasRole = Helper.hasRoles(context, NCRConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR) ? true
+				: Helper.hasRoles(context, NCRConstants.SYMBOLIC_ROLE_VPLMProjLeader);
+		List<Map<?, ?>> infoList = DomainObject.getInfo(context, objectIds,
+				Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_CURRENT));
+		for (Map info : infoList) {
+			Boolean showAction = false;
+			if (REVIEW_STATE.equals(info.get(DomainConstants.SELECT_CURRENT)) && hasRole
+					&& !info.get(DomainConstants.SELECT_OWNER).equals(context.getUser())) {
+				showAction = true;
+			}
+			objectIdCheckStatusMap.put((String) info.get(DomainConstants.SELECT_ID), String.valueOf(showAction));
+		}
+		return objectIdCheckStatusMap;
+	}
+
+	@LSACommonExecuteCallable
+	public Map<String, String> getObjectLinkIcon(Context context, String[] args) throws NCRException {
+		try {
+			Map<String, String> objectIdCheckStatusMap = new HashMap<>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectId = (String[]) programMap.get("objectIds");
+			String[] displayText = (String[]) programMap.get("displayText");
+			LinkedList<String> objectList = new LinkedList<>();
+			LinkedList<String> displayTextList = new LinkedList<>();
+			if (objectId[0].contains(",")) {
+				String[] arrayObjectIDs = objectId[0].split(",");
+				objectList.addAll(Arrays.asList(arrayObjectIDs));
+				String[] arraydisplayText = displayText[0].split(",");
+				displayTextList.addAll(Arrays.asList(arraydisplayText));
+			}
+			else {
+				objectList.add(objectId[0]);
+				displayTextList.add(displayText[0]);
+			}
+			for (int i = objectList.size() - 1; i >= 0; i--) {
+				String link = Helper.getObjectLink(context, objectList.get(i), displayTextList.get(i));
+				objectIdCheckStatusMap.put(objectList.get(i), XSSUtil.encodeForJavaScript(context, link));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+
+	public Map<String, String> showTaskIfUserHasModifyAccess(Context context, String[] args) throws NCRException {
+		Map<String, String> showTask = new HashMap<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+
+			for (String objectId : objectIds) {
+				if (DomainObject.newInstance(context, objectId).checkAccess(context, (short) AccessConstants.cModify)) {
+					showTask.put(objectId, "true");
+				}
+				else {
+					showTask.put(objectId, "false");
+				}
+			}
+			return showTask;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean showStepIfNCNotInvalid(Context context, String[] args) throws NCRException {
+		try {
+			return !isNCInvalid(context, args);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean showStepIfNCInvalid(Context context, String[] args) throws NCRException {
+		try {
+			return isNCInvalid(context, args);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	private boolean isNCInvalid(Context context, String[] args) throws NCRException {
+		Boolean ncInvalid = false;
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			String strInvalidState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+					NCRConstants.SYMBOLIC_POLICY_STATE_INVALID);
+			List<Map<?, ?>> infoList = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainConstants.SELECT_CURRENT));
+			if (!infoList.isEmpty()) {
+				Map<?, ?> info = infoList.get(0);
+				String current = (String) info.get(DomainConstants.SELECT_CURRENT);
+				if (current.equalsIgnoreCase(strInvalidState)) {
+					ncInvalid = true;
+				}
+			}
+			return ncInvalid;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, List<Map<String, String>>> getComplaintInvestigationDecision(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		ComplaintProductEvaluationService service = getComplaintProductEvaluationService(context);
+		Map<?, ?> mapPQCCPTInvestigationEdit = UIMenu.getCommand(context, "PQCCPTInvestigationEdit");
+		StringBuilder actionhref = new StringBuilder((String) mapPQCCPTInvestigationEdit.get("href"));
+		actionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=Complaints&HelpMarker=emxhelpinvestigation&StringResourceFileId=ComplaintsStringResource&SuiteDirectory=Complaints&submitAction=refreshCaller");
+		Map<?, ?> settingsPQCCPTInvestigationEdit = (Map<?, ?>) mapPQCCPTInvestigationEdit.get("settings");
+
+		Map<?, ?> mapPQCCPTInvestigationNotRequired = UIMenu.getCommand(context, "PQCCPTInvestigationNotRequired");
+		actionhref.append(PROCESS_STEP_DELIMETER + (String) mapPQCCPTInvestigationNotRequired.get("href"));
+		actionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=Complaints&StringResourceFileId=ComplaintsStringResource&SuiteDirectory=Complaints&submitAction=refreshCaller");
+		actionhref.append(PROCESS_STEP_DELIMETER);
+		Map<?, ?> settingsPQCCPTInvestigationNotRequired = (Map<?, ?>) mapPQCCPTInvestigationNotRequired.get("settings");
+
+		Map<?, ?> mapPQCNCRInvalidate = UIMenu.getCommand(context, "PQCNCRInvalidate");
+		Map<?, ?> settingsPQCNCRInvalidate = (Map<?, ?>) mapPQCNCRInvalidate.get("settings");
+
+		StringList selectables = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER);
+		List<Map<?, ?>> infoList = QueryUtil.getInfo(context, objectIds, selectables);
+		String strCompleteState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+				NCRConstants.SYMBOLIC_POLICY_STATE_COMPLETE);
+		String strCreateState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD, NCRConstants.SYMBOLIC_POLICY_STATE_CREATE);
+		String strInvalidState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD, NCRConstants.SYMBOLIC_POLICY_STATE_INVALID);
+		final String INVESTIGATION_REQUIRED = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_INVESTIGATION_REQUIRED);
+		final String ATTRIBUTUE_INVESTIGATION_REQUIRED = DomainObject.getAttributeSelect(INVESTIGATION_REQUIRED);
+		StringBuilder sbActionImage = new StringBuilder();
+		sbActionImage.append((String) settingsPQCCPTInvestigationEdit.get("Image"));
+		sbActionImage.append(PROCESS_STEP_DELIMETER).append((String) settingsPQCCPTInvestigationNotRequired.get("Image"));
+		sbActionImage.append(PROCESS_STEP_DELIMETER).append((String) settingsPQCNCRInvalidate.get("Image"));
+		String strOwner = context.getUser();
+		StringBuilder sbActionLabel = new StringBuilder("labelInvestigationEdit");
+		sbActionLabel.append(PROCESS_STEP_DELIMETER).append("labelInvestigationNotRequired");
+		sbActionLabel.append(PROCESS_STEP_DELIMETER).append("labelNCInvalidate");
+		for (String objectId : objectIds) {
+			List<Map<String, String>> mlRelatedData = new ArrayList<>();
+			StringBuilder sbInvalidNC = new StringBuilder((String) mapPQCNCRInvalidate.get("href"));
+			sbInvalidNC.append(
+					"&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller&objectId=")
+					.append(objectId);
+			List<Map<?, ?>> lCIs = service.getComplaintAssociatedProductEvaluations(context, DomainObject.newInstance(context, objectId),
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, ATTRIBUTUE_INVESTIGATION_REQUIRED), null);
+			Map<Object, Object> ncInfo = new HashMap<>();
+
+			infoList.parallelStream().filter(map ->map.containsValue(objectId)).forEach(map->{
+				ncInfo.putAll(map);
+			});
+			String ncCurrent = (String) ncInfo.get(DomainConstants.SELECT_CURRENT);
+			String ncOwner = (String) ncInfo.get(DomainConstants.SELECT_OWNER);
+			Map<String, String> relatedData = new HashMap<>();
+			if (!lCIs.isEmpty()) {
+				Map<?, ?> investigation = lCIs.get(0);
+				relatedData.put("relatedactionid", (String) investigation.get(DomainConstants.SELECT_ID));
+				relatedData.put("validationobjectid", (String) investigation.get(DomainConstants.SELECT_ID));
+				String current = (String) investigation.get(DomainConstants.SELECT_CURRENT);
+				String invReq = (String) investigation.get(ATTRIBUTUE_INVESTIGATION_REQUIRED);
+
+				if ((strOwner.equalsIgnoreCase(ncOwner)) && !(current.equalsIgnoreCase(strCompleteState)
+						|| ncCurrent.equalsIgnoreCase(strInvalidState) || invReq.equalsIgnoreCase("No"))) {
+					relatedData.put("actionhref", actionhref.toString() + sbInvalidNC.toString());
+					relatedData.put("actionLabel", sbActionLabel.toString());
+					relatedData.put("actionImage", sbActionImage.toString());
+				}
+			}
+			else if (ncCurrent.equalsIgnoreCase(strCreateState)) {
+				relatedData.put("relatedactionid", objectId);
+				relatedData.put("actionhref", sbInvalidNC.toString());
+				relatedData.put("actionLabel", "labelNCInvalidate");
+				relatedData.put("actionImage", (String) settingsPQCNCRInvalidate.get("Image"));
+			}
+			else {
+				relatedData.put("relatedactionid", objectId);
+			}
+			mlRelatedData.add(relatedData);
+			objectIdRelatedDataMap.put(objectId, mlRelatedData);
+		}
+		return objectIdRelatedDataMap;
+	}
+
+	public Map<String, List<Map<String, String>>> getComplaintInvestigation(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+		ComplaintProductEvaluationService service = getComplaintProductEvaluationService(context);
+
+		for (String objectId : objectIds) {
+			List<Map<?, ?>> lCIs = service.getProductEvaluations(context, "to[Complaint Investigation].from.id==" + objectId);
+			if (!lCIs.isEmpty()) {
+				Map<?, ?> investigation = lCIs.get(0);
+				Map<String, String> relatedData = new HashMap<>();
+				relatedData.put("relatedactionid", (String) investigation.get(DomainConstants.SELECT_ID));
+				relatedData.put("validationobjectid", (String) investigation.get(DomainConstants.SELECT_ID));
+				mlRelatedData.add(relatedData);
+			}
+
+			objectIdRelatedDataMap.put(objectId, mlRelatedData);
+		}
+
+		return objectIdRelatedDataMap;
+	}
+
+	/**
+	 * Check if investigation results captured - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfInvestigationResultsCaptured(Context context, String args[]) throws NCRException {
+		try {
+			final String INV_REQUIRED = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_REQUIRED);
+			final String ATTRIBUTE_INV_REQUIRED = DomainObject.getAttributeSelect(INV_REQUIRED);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			MapList mlInfo = DomainObject.getInfo(context, new String[] { objectId },
+					Helper.stringList(DomainConstants.SELECT_ID, INV_REQUIRED, ATTRIBUTE_INV_REQUIRED));
+			if ((!mlInfo.isEmpty() && ((String) ((Map<?, ?>) mlInfo.get(0)).get(ATTRIBUTE_INV_REQUIRED)).equalsIgnoreCase("No"))||(checkIfNCRInvalid(context, args) || areMandatoryAttributesFilled(context, args))) {
+				return true;
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	private boolean areMandatoryAttributesFilled(Context context, String[] args) throws NCRException {
+		try {
+			final String TICKET_SEVERITY = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+			final String ATTRIBUTE_TICKET_SEVERITY = DomainObject.getAttributeSelect(TICKET_SEVERITY);
+			final String COMPLAINT_INVESTIGATION_METHODS = PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_METHODS);
+			final String ATTRIBUTE_COMPLAINT_INVESTIGATION_METHODS = DomainObject.getAttributeSelect(COMPLAINT_INVESTIGATION_METHODS);
+			final String RESULTS_CODE = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_RESULTS_CODE);
+			final String ATTRIBUTE_RESULTS_CODE = DomainObject.getAttributeSelect(RESULTS_CODE);
+			final String COMPLAINT_INVESTIGATION_RATIONALE = PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_RATIONALE);
+			final String ATTRIBUTE_COMPLAINT_INVESTIGATION_RATIONALE = DomainObject.getAttributeSelect(COMPLAINT_INVESTIGATION_RATIONALE);
+			final String CONCLUSION_CODE = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_CONCLUSION_CODE);
+			final String ATTRIBUTE_CONCLUSION_CODE = DomainObject.getAttributeSelect(CONCLUSION_CODE);
+
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			Map<String, Map<String, Boolean>> map = Helper.getTypeKindOf(context, new String[] { objectId },
+					TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+			if (!map.get(objectId).containsValue(Boolean.TRUE)) {
+				return false;
+			}
+
+			StringList busSelect = Helper.stringList(ATTRIBUTE_TICKET_SEVERITY, ATTRIBUTE_COMPLAINT_INVESTIGATION_METHODS, ATTRIBUTE_RESULTS_CODE,
+					ATTRIBUTE_COMPLAINT_INVESTIGATION_RATIONALE, ATTRIBUTE_CONCLUSION_CODE);
+			List<Map<?, ?>> mlNCR = QueryUtil.getInfo(context, new String[] { objectId }, busSelect);
+			if (!mlNCR.isEmpty()) {
+				Map<?, ?> ncr = mlNCR.get(0);
+
+				Iterator<?> iter = ncr.keySet().iterator();
+				while (iter.hasNext()) {
+					String key = (String) iter.next();
+					String value = (String) ncr.get(key);
+					if (value.isEmpty()) {
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	private Boolean checkIfNCRInvalid(Context context, String[] args) throws NCRException {
+		try {
+			final String TYPE_COMPLAINT_PRODUCT_EVALUATION = PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+			final String POLICY_NCR_RECORD = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD);
+			final String STATE_INVALID = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_NCR_RECORD,
+					NCRConstants.SYMBOLIC_POLICY_STATE_INVALID);
+
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			StringBuilder sbBusWhere = new StringBuilder();
+			String ncrID = "from[Complaint Investigation].to.id";
+			if (Helper.getTypeKindOf(context, new String[] { objectId }, TYPE_COMPLAINT_PRODUCT_EVALUATION).containsValue(Boolean.TRUE)) {
+				sbBusWhere.append(ncrID);
+			}
+			else {
+				sbBusWhere.append(DomainConstants.SELECT_ID);
+			}
+			sbBusWhere.append("==").append(objectId);
+
+			NCRService service = getNCRService(context);
+			MapList mlNCR = service.getNCRs(context, Helper.stringList(DomainConstants.SELECT_CURRENT), sbBusWhere.toString());
+			if (!mlNCR.isEmpty()) {
+				Map<?, ?> ncr = (Map<?, ?>) mlNCR.get(0);
+				String currentState = (String) ncr.get(DomainConstants.SELECT_CURRENT);
+				if (STATE_INVALID.equalsIgnoreCase(currentState)) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if NC has action tasks assigned - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfInvestigationBeyondInProcess(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			Map<String, Map<String, Boolean>> map = Helper.getTypeKindOf(context, new String[] { objectId },
+					NCRConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+			if (!map.get(objectId).containsValue(Boolean.TRUE)) {
+				return false;
+			}
+			List<Map<?, ?>> mlInfo = QueryUtil.getInfo(context, new String[] { objectId },
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT));
+			if (!mlInfo.isEmpty()) {
+				Map<?, ?> investigation =mlInfo.get(0);
+				String invState = (String) investigation.get(DomainConstants.SELECT_CURRENT);
+				String strInProcessState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+						NCRConstants.SYMBOLIC_POLICY_STATE_INPROCESS);
+				if (!strInProcessState.equalsIgnoreCase(invState)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if NC has action tasks assigned - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfInvestigationComplete(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			MapList mlInfo = DomainObject.getInfo(context, new String[] { objectId },
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT));
+			if (!mlInfo.isEmpty()) {
+				Map<?, ?> investigation = (Map<?, ?>) mlInfo.get(0);
+				String invState = (String) investigation.get(DomainConstants.SELECT_CURRENT);
+				String strCompleteState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+						NCRConstants.SYMBOLIC_POLICY_STATE_COMPLETE);
+				if (strCompleteState.equalsIgnoreCase(invState)) {
+					return true;
+				}
+			}
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public List<String> getInvestigationForRoute(Context context, String args[]) throws NCRException {
+		List<String> invId = new ArrayList<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			ComplaintProductEvaluationService service = getComplaintProductEvaluationService(context);
+			List<Map<?, ?>> lCIs = service.getProductEvaluations(context, "to[Complaint Investigation].from.id==" + objectId);
+			if (!lCIs.isEmpty()) {
+				for (Map<?, ?> investigation : lCIs) {
+					invId.add((String) investigation.get(DomainConstants.SELECT_ID));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return invId;
+	}
+
+	public List<String> getProductControlForRoute(Context context, String args[]) throws NCRException {
+		List<String> prdCtrlId = new ArrayList<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			String NC_INVALID_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+					NCRConstants.SYMBOLIC_POLICY_STATE_INVALID);
+			Map<String, String> mapInvInfo = showTaskIfInvestigationRequired(context, args);
+			String invReq = mapInvInfo.get(objectId);
+			List<Map<?, ?>> listInfo = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainConstants.SELECT_CURRENT));
+			if (NC_INVALID_STATE.equalsIgnoreCase((String) listInfo.get(0).get(DomainConstants.SELECT_CURRENT)) || !Boolean.parseBoolean(invReq)) {
+				return prdCtrlId;
+			}
+			NCRProductControlService service = getNCRProductControlService(context);
+			List<Map<?, ?>> lPCs = service.getNCRProductControl(context, DomainObject.newInstance(context, objectId),
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT), null);
+			if (null != lPCs && !lPCs.isEmpty()) {
+				lPCs.parallelStream().forEach(pc->{
+					prdCtrlId.add((String) pc.get(DomainConstants.SELECT_ID));
+				});
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return prdCtrlId;
+	}
+
+	public Map<String, List<Map<String, String>>> showCloseNCAction(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+		final String REVIEW_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD, NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+
+		Map<String, String> mapNCInfo = showTaskIfInvestigationRequired(context, args);
+		Map<?, ?> mapPQCNCRClose = UIMenu.getCommand(context, "PQCNCRClose");
+		Map<?, ?> settings = (Map<?, ?>) mapPQCNCRClose.get("settings");
+		String href = (String) mapPQCNCRClose.get("href");
+		href += "&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller";
+		for (String objectId : objectIds) {
+			DomainObject domNC = DomainObject.newInstance(context, objectId);
+			String currentNC = domNC.getInfo(context, DomainConstants.SELECT_CURRENT);
+			String invReq = mapNCInfo.get(objectId);
+			Map<String, String> relatedData = new HashMap<>();
+			relatedData.put("relatedactionid", objectId);
+			if (REVIEW_STATE.equalsIgnoreCase(currentNC) && domNC.checkAccess(context, (short) AccessConstants.cPromote)) {
+				if (!Boolean.parseBoolean(invReq)) {
+					relatedData.put("actionhref", href);
+					relatedData.put("actionLabel", "CloseNC");
+					relatedData.put("actionImage", (String) settings.get("Image"));
+				}
+				else {
+					List<Map<?, ?>> listMap = QueryUtil.getRelatedObjects(context, domNC,
+							"relationship_NCRProductControl,relationship_ObjectRoute,relationship_ComplaintInvestigation",
+							"type_NCRProductControl,type_Route,type_ComplaintProductEvaluation",
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT),
+							Helper.stringList(DomainConstants.SELECT_ID), false, true, (short) 1, null, null);
+					Boolean relatedDataComplete = true;
+					Predicate<Map<?,?>> predicateForCompletion=mapObj->"Complete".equalsIgnoreCase((String) mapObj.get(DomainConstants.SELECT_CURRENT));
+					relatedDataComplete=listMap.parallelStream().anyMatch(mapObj ->predicateForCompletion.negate().test(mapObj));
+					
+					if (!relatedDataComplete) {
+						relatedData.put("actionhref", href);
+						relatedData.put("actionLabel", "CloseNC");
+						relatedData.put("actionImage", (String) settings.get("Image"));
+					}
+				}
+			}
+
+			mlRelatedData.add(relatedData);
+
+			objectIdRelatedDataMap.put(objectId, mlRelatedData);
+		}
+		return objectIdRelatedDataMap;
+	}
+
+	public Map<String, List<Map<String, String>>> getNCForEdit(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+		Map<?, ?> mapPQCNCRBasicInfoEdit = UIMenu.getCommand(context, "PQCNCRBasicInfoEdit");
+		String href = (String) mapPQCNCRBasicInfoEdit.get("href");
+		StringBuilder ncActionhref = new StringBuilder(
+				href.replaceFirst("form=PQCNCRBasicInfo", "form=ProcessStepDynamicEditForm").replaceFirst("toolbar=PQCNCRMainToolbar", ""));
+		ncActionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller&formName=PQCNCRBasicInfo&fieldName=Description,attribute_NCRCategory,attribute_NCRNCType,attribute_NCRDefectType,attribute_NCRSiteFound,attribute_NCRFunctionalArea,attribute_NCRProcess,Originated,attribute_NCRSupplier,attribute_NCRSupplierLocation,attribute_NCRSupplierLot,InvestigationRequired,Severity");
+
+		String strOwner = context.getUser();
+		Map<?, ?> settings = (Map<?, ?>) mapPQCNCRBasicInfoEdit.get("settings");
+		StringList selectables = Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT, DomainObject.SELECT_OWNER);
+		List<Map<?, ?>> objectsInfo = QueryUtil.getInfo(context, objectIds, selectables);
+		for (Map<?, ?> objInfo : objectsInfo) {
+			Map<String, String> relatedData = new HashMap<>();
+			String objId = (String) objInfo.get(DomainConstants.SELECT_ID);
+			String objState = (String) objInfo.get(DomainConstants.SELECT_CURRENT);
+			String objOwner = (String) objInfo.get(DomainConstants.SELECT_OWNER);
+			relatedData.put("relatedactionid", objId);
+			relatedData.put("validationobjectid", objId);
+			if (hasModifyAccess(context, strOwner, objState, objOwner,objId)) {
+				relatedData.put("actionhref", ncActionhref.toString());
+				relatedData.put("actionLabel", "EditNC");
+				relatedData.put("actionImage", (String) settings.get("Image"));
+			}
+			mlRelatedData.add(relatedData);
+
+			objectIdRelatedDataMap.put(objId, mlRelatedData);
+		}
+		return objectIdRelatedDataMap;
+	}
+
+	public Map<String, List<Map<String, String>>> getNCClosureTypeForEdit(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+
+		Map<?, ?> mapPQCNCRBasicInfoEdit = UIMenu.getCommand(context, "PQCNCRBasicInfoEdit");
+		String href = (String) mapPQCNCRBasicInfoEdit.get("href");
+		StringBuilder ncActionhref = new StringBuilder(
+				href.replaceFirst("form=PQCNCRBasicInfo", "form=ProcessStepDynamicEditForm").replaceFirst("toolbar=PQCNCRMainToolbar", ""));
+		ncActionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller&formName=PQCNCRBasicInfo&fieldName=SectionHeader3,ClosureType");
+
+		String strOwner = context.getUser();
+		Map<?, ?> settings = (Map<?, ?>) mapPQCNCRBasicInfoEdit.get("settings");
+		StringList selectables = Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT, DomainObject.SELECT_OWNER);
+		List<Map<?, ?>> objectsInfo = QueryUtil.getInfo(context, objectIds, selectables);
+		for (Map<?, ?> objInfo : objectsInfo) {
+			Map<String, String> relatedData = new HashMap<>();
+			String objId = (String) objInfo.get(DomainConstants.SELECT_ID);
+			String objState = (String) objInfo.get(DomainConstants.SELECT_CURRENT);
+			String objOwner = (String) objInfo.get(DomainConstants.SELECT_OWNER);
+			relatedData.put("relatedactionid", objId);
+			relatedData.put("validationobjectid", objId);
+			if (hasModifyAccess(context, strOwner, objState, objOwner,objId)) {
+				relatedData.put("actionhref", ncActionhref.toString());
+				relatedData.put("actionLabel", "EditNC");
+				relatedData.put("actionImage", (String) settings.get("Image"));
+			}
+			mlRelatedData.add(relatedData);
+			
+		}
+		objectIdRelatedDataMap.put(objectIds[0], mlRelatedData);
+		return objectIdRelatedDataMap;
+	}
+
+	private boolean hasModifyAccess(Context context, String strOwner, String objState,
+			String objOwner,String objectId) throws NCRException {
+		try {
+			return DomainObject.newInstance(context, objectId).checkAccess(context, (short) AccessConstants.cModify);
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+
+	public Map<String, List<Map<String, String>>> getProductControlForEdit(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+		NCRProductControlService service = getNCRProductControlService(context);
+		final String TYPE_NCR_PRODUCT_CONTROL = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+		final String TYPE_KIND_OF_PRODUCT_CONTROL = "type.kindof[" + TYPE_NCR_PRODUCT_CONTROL + "]";
+		String strCreateState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD, NCRConstants.SYMBOLIC_POLICY_STATE_CREATE);
+
+		Map<?, ?> mapPQCNCRProductBasicInfoEdit = UIMenu.getCommand(context, "PQCNCRProductBasicInfoEdit");
+		String href = (String) mapPQCNCRProductBasicInfoEdit.get("href");
+		StringBuilder prdActionhref = new StringBuilder(href.replaceFirst("form=PQCNCRProductControlView", "form=ProcessStepDynamicEditForm")
+				.replaceFirst("toolbar=PQCNCRProductMenuToolbar", ""));
+		prdActionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller&formName=PQCNCRProductControlView&fieldName=ProductName,EntryType,LotNumber,TotalQty,TotalQtyUOM,DefectiveQty,DefectiveQtyUOM");
+		Map<?, ?> settings = (Map<?, ?>) mapPQCNCRProductBasicInfoEdit.get("settings");
+		for (String objectId : objectIds) {
+			List<Map<?, ?>> listPrdControls = service.getNCRProductControl(context, DomainObject.newInstance(context, objectId),
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_TYPE,
+							DomainConstants.SELECT_OWNER, TYPE_KIND_OF_PRODUCT_CONTROL),
+					null);
+
+			for (Map<?, ?> prdControl : listPrdControls) {
+				Map<String, String> relatedData = new HashMap<>();
+				// Add tasks only for Product Control type
+				if (Boolean.parseBoolean((String) prdControl.get(TYPE_KIND_OF_PRODUCT_CONTROL))) {
+					String impactedObjectId = (String) prdControl.get(DomainConstants.SELECT_ID);
+					relatedData.put("relatedactionid", impactedObjectId);
+					relatedData.put("validationobjectid", impactedObjectId);
+					DomainObject domII = DomainObject.newInstance(context, impactedObjectId);
+					boolean isNCInCreateState = PolicyUtil.checkState(context, objectId, strCreateState, PolicyUtil.EQ);
+					if (domII.checkAccess(context, (short) AccessConstants.cModify) && isNCInCreateState) {
+						relatedData.put("actionhref", prdActionhref.toString());
+						relatedData.put("actionLabel", "Edit_Containment");
+						relatedData.put("actionImage", (String) settings.get("Image"));
+					}
+
+					mlRelatedData.add(relatedData);
+				}
+			}
+			objectIdRelatedDataMap.put(objectId, mlRelatedData);
+		}
+		return objectIdRelatedDataMap;
+	}
+
+	private String getDynamicFieldsForDisposition(Context context, StringList busSelect, Map<?, ?> prdControl) throws NCRException {
+		try {
+			StringBuilder sbFieldName = new StringBuilder();
+			busSelect.parallelStream().forEach(key -> {
+				String value = (String) prdControl.get(key);
+				switch (key) {
+				case "attribute[NCR PC Defective Qty UOM]":
+					if (null == value || value.isEmpty()) {
+						sbFieldName.append("DefectiveQtyUOM,");
+					}
+					break;
+				case "attribute[NCR PC Defective Qty]":
+					if (null == value || Double.parseDouble(value) == 0.0) {
+						sbFieldName.append("DefectiveQty,");
+					}
+					break;
+				case "attribute[NCR PC Entry Type]":
+					if (null == value || value.isEmpty()) {
+						sbFieldName.append("EntryType,");
+					}
+					break;
+				case "attribute[NCR PC Total Qty UOM]":
+					if (null == value || value.isEmpty()) {
+						sbFieldName.append("TotalQtyUOM,");
+					}
+					break;
+				case "attribute[NCR PC Lot Number]":
+					if (null == value || value.isEmpty()) {
+						sbFieldName.append("LotNumber,");
+					}
+					break;
+				case "attribute[NCR PC Total Qty]":
+					if (null == value || Double.parseDouble(value) == 0.0) {
+						sbFieldName.append("TotalQty,");
+					}
+					break;
+				}
+			});
+			sbFieldName.append("RunNumber,SectionHeader3,ProposedDisposition,ReworkInstructions,DispositionRationale");
+			return sbFieldName.toString();
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map<String, List<Map<String, String>>> getProductControlForDispositionEdit(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map<?, ?> programMap = JPO.unpackArgs(args);
+		String[] objectIds = (String[]) programMap.get("objectIds");
+		List<Map<String, String>> mlRelatedData = new ArrayList<>();
+		NCRProductControlService service = getNCRProductControlService(context);
+		final String TYPE_NCR_PRODUCT_CONTROL = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+		final String TYPE_KIND_OF_PRODUCT_CONTROL = "type.kindof[" + TYPE_NCR_PRODUCT_CONTROL + "]";
+		Map<?, ?> mapPQCNCRProductBasicInfoEdit = UIMenu.getCommand(context, "PQCNCRProductBasicInfoEdit");
+		String href = (String) mapPQCNCRProductBasicInfoEdit.get("href");
+		StringBuilder actionhref = new StringBuilder(href.replaceFirst("form=PQCNCRProductControlView", "form=ProcessStepDynamicEditForm")
+				.replaceFirst("toolbar=PQCNCRProductMenuToolbar", ""));
+		actionhref.append(
+				"&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&StringResourceFileId=LQINCRStringResource&SuiteDirectory=LQINCR&submitAction=refreshCaller&formName=PQCNCRProductControlView");
+		Map<?, ?> settings = (Map<?, ?>) mapPQCNCRProductBasicInfoEdit.get("settings");
+		final String REL_NCR_PRODUCT_CONTROL_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT);
+		final String PRODUCT_NAME = "from[" + REL_NCR_PRODUCT_CONTROL_PRODUCT + "].to.name";
+		final String ENTRY_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_ENTRY_TYPE);
+		final String ATTRIBUTE_ENTRY_TYPE = DomainObject.getAttributeSelect(ENTRY_TYPE);
+		final String LOT_NUMBER = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_LOT_NUMBER);
+		final String ATTRIBUTE_LOT_NUMBER = DomainObject.getAttributeSelect(LOT_NUMBER);
+		final String TOTAL_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY);
+		final String ATTRIBUTE_TOTAL_QTY = DomainObject.getAttributeSelect(TOTAL_QTY);
+		final String TOTAL_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY_UOM);
+		final String ATTRIBUTE_TOTAL_QTY_UOM = DomainObject.getAttributeSelect(TOTAL_QTY_UOM);
+		final String DEFECTIVE_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY);
+		final String ATTRIBUTE_DEFECTIVE_QTY = DomainObject.getAttributeSelect(DEFECTIVE_QTY);
+		final String DEFECTIVE_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY_UOM);
+		final String ATTRIBUTE_DEFECTIVE_QTY_UOM = DomainObject.getAttributeSelect(DEFECTIVE_QTY_UOM);
+
+		StringList busSelect = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_CURRENT,
+				DomainConstants.SELECT_OWNER, TYPE_KIND_OF_PRODUCT_CONTROL, PRODUCT_NAME, ATTRIBUTE_ENTRY_TYPE, ATTRIBUTE_LOT_NUMBER,
+				ATTRIBUTE_TOTAL_QTY, ATTRIBUTE_TOTAL_QTY_UOM, ATTRIBUTE_DEFECTIVE_QTY, ATTRIBUTE_DEFECTIVE_QTY_UOM);
+		for (String objectId : objectIds) {
+			List<Map<?, ?>> listPrdControl = service.getNCRProductControl(context, DomainObject.newInstance(context, objectId), busSelect, null);
+			for (Map<?, ?> prdControl : listPrdControl) {
+				Map<String, String> relatedData = new HashMap<>();
+				// Add tasks only for Product Control type
+				if (Boolean.parseBoolean((String) prdControl.get(TYPE_KIND_OF_PRODUCT_CONTROL))) {
+					String impactedObjectId = (String) prdControl.get(DomainConstants.SELECT_ID);
+					StringBuilder sbEditHref = new StringBuilder(actionhref.toString());
+					sbEditHref.append("&fieldName=" + getDynamicFieldsForDisposition(context, busSelect, prdControl));
+					relatedData.put("relatedactionid", impactedObjectId);
+					relatedData.put("validationobjectid", impactedObjectId);
+					DomainObject domII = DomainObject.newInstance(context, impactedObjectId);
+					if (domII.checkAccess(context, (short) AccessConstants.cModify)) {
+						relatedData.put("actionhref", sbEditHref.toString());
+						relatedData.put("actionLabel", "Edit_Disposition");
+						relatedData.put("actionImage", (String) settings.get("Image"));
+					}
+				}
+				mlRelatedData.add(relatedData);
+			}
+
+			objectIdRelatedDataMap.put(objectId, mlRelatedData);
+		}
+
+		return objectIdRelatedDataMap;
+	}
+
+	// validation method for PC details
+	public boolean checkIfAllProductControlsMandFieldsFilled(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			final String REL_NCR_PRODUCT_CONTROL_PRODUCT = PropertyUtil.getSchemaProperty(context,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT);
+			final String PRODUCT_NAME = "from[" + REL_NCR_PRODUCT_CONTROL_PRODUCT + "].to.name";
+			final String ENTRY_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_ENTRY_TYPE);
+			final String ATTRIBUTE_ENTRY_TYPE = DomainObject.getAttributeSelect(ENTRY_TYPE);
+			final String LOT_NUMBER = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_LOT_NUMBER);
+			final String ATTRIBUTE_LOT_NUMBER = DomainObject.getAttributeSelect(LOT_NUMBER);
+			final String TOTAL_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY);
+			final String ATTRIBUTE_TOTAL_QTY = DomainObject.getAttributeSelect(TOTAL_QTY);
+			final String TOTAL_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY_UOM);
+			final String ATTRIBUTE_TOTAL_QTY_UOM = DomainObject.getAttributeSelect(TOTAL_QTY_UOM);
+			final String DEFECTIVE_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY);
+			final String ATTRIBUTE_DEFECTIVE_QTY = DomainObject.getAttributeSelect(DEFECTIVE_QTY);
+			final String DEFECTIVE_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY_UOM);
+			final String ATTRIBUTE_DEFECTIVE_QTY_UOM = DomainObject.getAttributeSelect(DEFECTIVE_QTY_UOM);
+
+			StringList selectBus = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, PRODUCT_NAME, ATTRIBUTE_ENTRY_TYPE,
+					ATTRIBUTE_LOT_NUMBER, ATTRIBUTE_TOTAL_QTY, ATTRIBUTE_TOTAL_QTY_UOM, ATTRIBUTE_DEFECTIVE_QTY, ATTRIBUTE_DEFECTIVE_QTY_UOM);
+
+			List<Map<?, ?>> prdControls = new ArrayList<>();
+			Map<String, Map<String, Boolean>> kindOf = Helper.getTypeKindOf(context, new String[] { objectId },
+					NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+			if (kindOf.get(objectId).containsValue(Boolean.TRUE)) {
+				prdControls = DomainObject.getInfo(context, new String[] { objectId }, selectBus);
+				if (prdControls.isEmpty()) {
+					return false;
+				}
+				for (Map<?, ?> prdControl : prdControls) {
+					Iterator<?> iter = prdControl.keySet().iterator();
+					while (iter.hasNext()) {
+						String key = (String) iter.next();
+						String value = (String) prdControl.get(key);
+
+						if (value.isEmpty()) {
+							return false;
+						}
+					}
+				}
+				return true;
+			}
+			else {
+				return false;
+			}
+
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean checkIfAllProductControlsMandDispositionFieldsFilled(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			final String REL_NCR_PRODUCT_CONTROL_PRODUCT = PropertyUtil.getSchemaProperty(context,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT);
+			final String PRODUCT_NAME = "from[" + REL_NCR_PRODUCT_CONTROL_PRODUCT + "].to.name";
+			final String ENTRY_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_ENTRY_TYPE);
+			final String ATTRIBUTE_ENTRY_TYPE = DomainObject.getAttributeSelect(ENTRY_TYPE);
+			final String LOT_NUMBER = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_LOT_NUMBER);
+			final String ATTRIBUTE_LOT_NUMBER = DomainObject.getAttributeSelect(LOT_NUMBER);
+			final String RUN_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_NCRPCRunNumber");
+			final String ATTRIBUTE_RUN_NUMBER = DomainObject.getAttributeSelect(RUN_NUMBER);
+			final String TOTAL_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY);
+			final String ATTRIBUTE_TOTAL_QTY = DomainObject.getAttributeSelect(TOTAL_QTY);
+			final String TOTAL_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY_UOM);
+			final String ATTRIBUTE_TOTAL_QTY_UOM = DomainObject.getAttributeSelect(TOTAL_QTY_UOM);
+			final String DEFECTIVE_QTY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY);
+			final String ATTRIBUTE_DEFECTIVE_QTY = DomainObject.getAttributeSelect(DEFECTIVE_QTY);
+			final String DEFECTIVE_QTY_UOM = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY_UOM);
+			final String ATTRIBUTE_DEFECTIVE_QTY_UOM = DomainObject.getAttributeSelect(DEFECTIVE_QTY_UOM);
+			final String PROPOSED_DISPOSITION = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_PROPOSED_DISPOSITION);
+			final String ATTRIBUTE_PROPOSED_DISPOSITION = DomainObject.getAttributeSelect(PROPOSED_DISPOSITION);
+			final String RATIONALE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_AS_IS_RATIONALE);
+			final String ATTRIBUTE_RATIONALE = DomainObject.getAttributeSelect(RATIONALE);
+
+			StringList selectBus = Helper.stringList(DomainConstants.SELECT_ID, PRODUCT_NAME, ATTRIBUTE_ENTRY_TYPE, ATTRIBUTE_LOT_NUMBER,
+					ATTRIBUTE_RUN_NUMBER, ATTRIBUTE_TOTAL_QTY, ATTRIBUTE_TOTAL_QTY_UOM, ATTRIBUTE_DEFECTIVE_QTY, ATTRIBUTE_DEFECTIVE_QTY_UOM,
+					ATTRIBUTE_PROPOSED_DISPOSITION, ATTRIBUTE_RATIONALE);
+
+			List<Map<?, ?>> prdControls = new ArrayList<>();
+			Map<String, Map<String, Boolean>> kindOf = Helper.getTypeKindOf(context, new String[] { objectId },
+					NCRConstants.SYMBOLIC_TYPE_NCR_PRODUCT_CONTROL);
+			if (kindOf.get(objectId).containsValue(Boolean.TRUE)) {
+				prdControls = DomainObject.getInfo(context, new String[] { objectId }, selectBus);
+				if (prdControls.isEmpty()) {
+					return false;
+				}
+				for (Map<?, ?> prdControl : prdControls) {
+					Iterator<?> iter = prdControl.keySet().iterator();
+					while (iter.hasNext()) {
+						String key = (String) iter.next();
+						String value = (String) prdControl.get(key);
+
+						if (value.isEmpty()) {
+							return false;
+						}
+					}
+				}
+				return true;
+			}
+			else {
+				return false;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean checkIfDataSourceComplete(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+
+			final DomainObject dmoNCR = DomainObject.newInstance(context, objectId);
+			ComplaintTicketService service = getComplaintTicketService(context);
+			if (Helper.countConnectionsWithRel(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, "to") > 0) {
+				return service.areAssociatedDataSourceComplete(context, dmoNCR);
+			}
+
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean checkIfAssociatedCAPAComplete(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+
+			final DomainObject dmoNCR = DomainObject.newInstance(context, objectId);
+			if (Helper.countConnectionsWithRel(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, "to") > 0) {
+				return areAssociatedDataSourceComplete(context, dmoNCR, "CAPA");
+				}
+					return false;
+				}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+	
+	public boolean checkIfAssociatedChangeComplete(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+
+			final DomainObject dmoNCR = DomainObject.newInstance(context, objectId);
+			if (Helper.countConnectionsWithRel(context, dmoNCR, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, "to") > 0) {
+				return areAssociatedDataSourceComplete(context, dmoNCR,"Change");
+			}
+
+			return false;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+
+	public boolean areAssociatedDataSourceComplete(Context context, DomainObject domTicket, String associatedDatSourceType) throws NCRException {
+		Helper.ensureNotNull(domTicket, "domTicket is not null");
+		try {
+			StringBuilder busWhere = new StringBuilder();
+			busWhere.append("(current != Complete) && ");
+			busWhere.append("(current != Archive) &&");
+			busWhere.append("(current != Fulfilled) &&");
+			busWhere.append("(current != Duplicate) &&");
+			busWhere.append("(current != Hold) &&");
+			busWhere.append("(current != Cancel) && ");
+			busWhere.append("(current != Implemented) &&");
+			busWhere.append("(current != \"On Hold\") &&");
+			busWhere.append("(current != Cancelled)");
+			StringBuilder sbTypePattern = new StringBuilder();
+			switch (associatedDatSourceType) {
+			case "CAPA":
+				sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CAPA).append(",").append(TicketConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+				break;
+			case "Change":
+				sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CHANGE);
+				break;
+
+			default:
+				break;
+			}
+			List<Map<?, ?>> relatedDataSource = QueryUtil.getRelatedObjects(context, domTicket, TicketConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					sbTypePattern.toString(), Helper.stringList(DomainObject.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+					Boolean.TRUE, Boolean.FALSE, (short) 1, busWhere.toString(), null);	
+			return relatedDataSource.isEmpty();
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> checkIfDataSourceAssociated(Context context, String args[], boolean showAssociated) throws NCRException {
+		Map<String, String> showData = new HashMap<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			String DATA_SOURCE = "to[Data Source]";
+			List<Map<?, ?>> mlInfo = DomainObject.getInfo(context, objectIds, Helper.stringList(DomainConstants.SELECT_ID, DATA_SOURCE));
+			Map<?, ?> info = mlInfo.get(0);
+			if (Boolean.parseBoolean((String) info.get(DATA_SOURCE)) && showAssociated) {
+				showData.put(objectIds[0], "true");
+			}
+			else if (!Boolean.parseBoolean((String) info.get(DATA_SOURCE)) && !showAssociated) {
+				showData.put(objectIds[0], "true");
+			}
+			else {
+				showData.put(objectIds[0], "false");
+			}
+
+			return showData;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public boolean isDataSourceInitiated(Context context, String args[]) throws NCRException{
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			DomainObject ncObj=DomainObject.newInstance(context, objectId);
+			final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+			final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+			Map<?, ?> mlInfo = ncObj.getInfo(context,Helper.stringList(DomainConstants.SELECT_ID, ATTRIBUTE_NC_CLOSURE_TYPE));
+			
+			Object clousreType=mlInfo.get(ATTRIBUTE_NC_CLOSURE_TYPE);
+			StringBuilder sbTypePattern = new StringBuilder();	
+			
+			if(clousreType instanceof String)
+			{
+				String clousreString=clousreType.toString();
+				switch (clousreString) {
+				case "CAPA":
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CAPA).append(",")
+					.append(TicketConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+					break;
+				case "Change":
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CHANGE);
+					break;
+					
+				default:
+					break;
+				}
+			}
+			
+			List<Map<?, ?>> relatedDataSource = QueryUtil.getRelatedObjects(context, ncObj, TicketConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					sbTypePattern.toString(), Helper.stringList(DomainObject.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID),
+					Boolean.TRUE, Boolean.FALSE, (short) 1,"", null);
+			if(!relatedDataSource.isEmpty())
+               return true;
+			
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}	
+		
+		return false;
+	}
+	public Map<String, String> showTaskIfDataSourceAssociated(Context context, String[] args) throws NCRException {
+		try {
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				return checkIfDataSourceAssociated(context, args, true);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> showTaskIfDataSourceNotAssociated(Context context, String[] args) throws NCRException {
+		try {
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				return checkIfDataSourceAssociated(context, args, false);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new NCRException(e);
+		}
+	}
+	private List<Map<?, ?>> getNCData(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+			final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+			return DomainObject.getInfo(context, objectIds, Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER,
+					DomainConstants.SELECT_CURRENT, ATTRIBUTE_NC_CLOSURE_TYPE,"to[Data Source].from.type"));
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> showTaskIfInvestigationRequired(Context context, String[] args) throws NCRException {
+		Map<String, String> mapInvReq = new HashMap<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectId = (String[]) programMap.get("objectIds");
+			if (objectId == null) {
+				objectId = new String[] { (String) programMap.get("objectId") };
+			}
+			String strInvalidState = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+					NCRConstants.SYMBOLIC_POLICY_STATE_INVALID);
+			final String RELATIONSHIP_INVESTIGATION = PropertyUtil.getSchemaProperty(context,
+					TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			final String INVESTIGATION_REQUIRED = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_INVESTIGATION_REQUIRED);
+			final String ATTRIBUTUE_INVESTIGATION_REQUIRED = "from[" + RELATIONSHIP_INVESTIGATION + "].to."
+					+ DomainObject.getAttributeSelect(INVESTIGATION_REQUIRED);
+			List<Map<?, ?>> infoList = QueryUtil.getInfo(context, objectId,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, ATTRIBUTUE_INVESTIGATION_REQUIRED));
+			if (!infoList.isEmpty()) {
+				Map<?, ?> info = infoList.get(0);
+				String current = (String) info.get(DomainConstants.SELECT_CURRENT);
+				String invReq = (String) info.get(ATTRIBUTUE_INVESTIGATION_REQUIRED);
+				if (current.equalsIgnoreCase(strInvalidState) || (!Helper.isNullOrEmpty(invReq) && invReq.equalsIgnoreCase("No"))) {
+					mapInvReq.put(objectId[0], "false");
+				}
+				else {
+					mapInvReq.put(objectId[0], "true");
+				}
+			}
+			return mapInvReq;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> showTaskIfNCClosureTypeNotSet(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				String REVIEW_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+						NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+				final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+				final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+				Map<String, String> showData = new HashMap<String, String>();
+				List<Map<?, ?>> mlNCInfo = getNCData(context, args);
+				String closureType = (String) mlNCInfo.get(0).get(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String objState = (String) mlNCInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+				if (!REVIEW_STATE.equalsIgnoreCase(objState) || !Helper.isNullOrEmpty(closureType)) {
+					showData.put(objectIds[0], "false");
+				}
+				else {
+					showData.put(objectIds[0], "true");
+				}
+
+				return showData;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> showTaskIfNCClosureTypeCAPA(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				String REVIEW_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+						NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+				final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+				final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+				Map<String, String> showData = new HashMap<String, String>();
+				List<Map<?, ?>> mlNCInfo = getNCData(context, args);
+				String closureType = (String) mlNCInfo.get(0).get(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String objState = (String) mlNCInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+				if (REVIEW_STATE.equalsIgnoreCase(objState) && "CAPA".equalsIgnoreCase(closureType)) {
+					showData.put(objectIds[0], "true");
+				}
+				else {
+					showData.put(objectIds[0], "false");
+				}
+
+				return showData;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	public Map<String, String> showTaskIfNCClosureTypeChange(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				String REVIEW_STATE = NCRUtil.getStateName(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD,
+						NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+				final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+				final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+				Map<String, String> showData = new HashMap<String, String>();
+				List<Map<?, ?>> mlNCInfo = getNCData(context, args);
+				String closureType = (String) mlNCInfo.get(0).get(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String objState = (String) mlNCInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+				if (REVIEW_STATE.equalsIgnoreCase(objState) && "Change".equalsIgnoreCase(closureType)) {
+					showData.put(objectIds[0], "true");
+				}
+				else {
+					showData.put(objectIds[0], "false");
+				}
+
+				return showData;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+	
+	
+	public Map<String, String> showTaskIfCAPA(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+				final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+			
+				Map<String, String> showData = new HashMap<String, String>();
+				List<Map<?, ?>> mlNCInfo = getNCData(context, args);
+				String closureType = (String) mlNCInfo.get(0).get(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String dataSource = (String) mlNCInfo.get(0).get("to[Data Source].from.type");
+				if ("CAPA".equalsIgnoreCase(closureType)|| (!Helper.isNullOrEmpty(dataSource)&& dataSource.contains("CAPA"))) {
+					showData.put(objectIds[0], "true");
+				}
+				else {
+					showData.put(objectIds[0], "false");
+				}
+
+				return showData;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+	
+	
+	public Map<String, String> showTaskIfChange(Context context, String[] args) throws NCRException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+			Map<String, String> checkIfINVReq = showTaskIfInvestigationRequired(context, args);
+			if (checkIfINVReq.containsValue("false")) {
+				return checkIfINVReq;
+			}
+			else {
+				final String NC_CLOSURE_TYPE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE);
+				final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(NC_CLOSURE_TYPE);
+			
+				Map<String, String> showData = new HashMap<String, String>();
+				List<Map<?, ?>> mlNCInfo = getNCData(context, args);
+				String closureType = (String) mlNCInfo.get(0).get(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String dataSource = (String) mlNCInfo.get(0).get("to[Data Source].from.type");
+				if ("Change".equalsIgnoreCase(closureType)|| (!Helper.isNullOrEmpty(dataSource)&& dataSource.contains("Change"))) {
+					showData.put(objectIds[0], "true");
+				}
+				else {
+					showData.put(objectIds[0], "false");
+				}
+
+				return showData;
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+	
+	public Map<String, String> showDataSourceAction(Context context, String[] args) throws NCRException {
+		Map<String, String> showAddorCreateDS = new HashMap<>();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectIds");
+
+			for (String objectId : objectIds) {
+				if (DomainObject.newInstance(context, objectId).checkAccess(context, (short) AccessConstants.cModify)) {
+					showAddorCreateDS.put(objectId, "true");
+				}
+				else {
+					showAddorCreateDS.put(objectId, "false");
+				}
+			}
+			return showAddorCreateDS;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+	}
+}
+}
+

@@ -1,0 +1,457 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.ChangeProcessDashboardConstants;
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.ChangeServiceAddons;
+import com.dassault_systemes.enovia.ChangeRequestAddons.services.impl.ChangeServiceImplAddons;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+public class ${CLASSNAME} implements ChangeProcessDashboardConstants {
+
+	/*public MapList implementProposedChanges(Context context, String[] args) throws Exception {
+
+		Map<String, String> programMap  = (Map<String, String>) JPO.unpackArgs(args);
+		String changeActionId           = (String) programMap.get("objectId");
+		ChangeAction changeAction		= new ChangeAction(changeActionId);
+		MapList implementedChanges 		= changeAction.getRealizedChanges(context);
+		MapList outputList				= new MapList();
+		
+		Iterator<?> mLitr = implementedChanges.iterator();
+				
+		if(!mLitr.hasNext()) {
+			
+			System.out.println("implementedChanges empty....");
+			
+			MapList proposedChanges = changeAction.getAffectedItems(context);
+			mLitr					= proposedChanges.iterator();
+		}
+		
+		String affectedItemId 		= null;
+		String owner 				= null;
+		String reladatedDataName	= null;
+		boolean ignoreForPart		= false;
+		
+		while(mLitr.hasNext()) {
+			Map<?,?> map = (Map<?,?>)mLitr.next();
+			
+			affectedItemId = (String)map.get("id");
+			
+			String[] oids 			= new String[]{affectedItemId};
+			StringList selectlist 	= new StringList(5);
+			selectlist.add("owner");
+			selectlist.add("name");
+			selectlist.add("type");
+						
+			BusinessObjectWithSelect busWithSelect = BusinessObject.getSelectBusinessObjectData(context, oids, selectlist).getElement(0);
+
+			reladatedDataName = busWithSelect.getSelectData("name");
+			String proposedChangeType = busWithSelect.getSelectData("type");
+			if(proposedChangeType.equals(PropertyUtil.getSchemaProperty(context, "type_Part"))) {
+				
+				ignoreForPart = true;
+			}
+			
+			break; //TODO: Handle multi controlled documents connected to single CA
+		}
+			
+		Map outputMap1 = new HashMap();
+		outputMap1.put("sequence", "3");
+		outputMap1.put("relatedDataId", affectedItemId);
+		outputMap1.put("actionCommand", "command_ENOLSAProcessDashboardPromote");
+		outputMap1.put("actionLabel", "Promote Document to In Work");
+		outputMap1.put("relatedDataName", reladatedDataName);
+		outputMap1.put("owner", owner);
+		outputMap1.put(ChangeProcessDashboardConstants.IGNORE, String.valueOf(ignoreForPart));			
+		
+		outputList.add(outputMap1);
+		
+		return outputList;
+	}*/	
+	
+	public MapList approveChangeAction(Context context, String[] args) throws Exception 
+	{
+		Map<String, String> programMap  = (Map<String, String>) JPO.unpackArgs(args);
+		String changeActionId           = (String) programMap.get("objectId");
+		//ChangeAction changeAction		= new ChangeAction(changeActionId);
+		MapList outputList				= new MapList();
+		
+		String[] oids 			= new String[]{changeActionId};
+		StringList selectlist 	= new StringList(5);
+		selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.id"); //TODO: Use ECM API
+		selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.current");
+		
+		BusinessObjectWithSelect busWithSelect = BusinessObject.getSelectBusinessObjectData(context, oids, selectlist).getElement(0);
+
+		Map outputMap = new HashMap();
+		outputMap.put("sequence", "8");
+		outputMap.put("referenceId", busWithSelect.getSelectData("to[Change Action].from.id"));
+		outputMap.put("referenceState", busWithSelect.getSelectData("to[Change Action].from.current"));
+		
+		Map outputMap1 = new HashMap();
+		outputMap1.put("sequence", "9");
+		outputMap1.put("referenceId", busWithSelect.getSelectData("to[Change Action].from.id"));
+		outputMap1.put("referenceState", busWithSelect.getSelectData("to[Change Action].from.current"));
+		
+		outputList.add(outputMap);
+		outputList.add(outputMap1);
+		
+		return outputList;
+	}
+	
+	public Map<String, List<Map<String,String>>> getProposedChangeDocuments(Context context, String[] args) throws Exception
+	{	
+		Map programMap  					= JPO.unpackArgs(args);
+		String[] changeActionIds    		= (String[])programMap.get("objectIds");
+	    String selectedProsedItems    		= (String)programMap.get(ChangeProcessDashboardConstants.SELECTED_PROPOSED_ITEMS);
+		
+		if(UIUtil.isNullOrEmpty(selectedProsedItems))
+		{
+    		ChangeServiceAddons changeService=new ChangeServiceImplAddons();
+    		selectedProsedItems=DomainConstants.EMPTY_STRING;
+    	   	for(int i=0;i<changeActionIds.length;i++)
+    		{
+    	   		selectedProsedItems+=changeService.getDefaultProposedItemToBeSelected(context,changeActionIds[i]);
+    		}
+		}
+		List<String> slSelectedProposedId	= FrameworkUtil.split(selectedProsedItems, "|");
+		return getProposedChangeInfo(context, changeActionIds, slSelectedProposedId, PropertyUtil.getSchemaProperty(context, "type_CONTROLLEDDOCUMENTS"));
+	}
+	
+	public Map<String, List<Map<String,String>>> getProposedChangeParts(Context context, String[] args) throws Exception
+	{	
+		Map programMap  					= JPO.unpackArgs(args);
+		String[] changeActionIds    		= (String[])programMap.get("objectIds");
+	    String selectedProposedItems    	= (String)programMap.get(ChangeProcessDashboardConstants.SELECTED_PROPOSED_ITEMS);
+		
+		if(UIUtil.isNullOrEmpty(selectedProposedItems))
+		{
+    		ChangeServiceAddons changeService 	= new ChangeServiceImplAddons();
+    		selectedProposedItems				= DomainConstants.EMPTY_STRING;
+    		
+    	   	for(int i=0;i<changeActionIds.length;i++)
+    		{
+    	   		selectedProposedItems+=changeService.getDefaultProposedItemToBeSelected(context,changeActionIds[i]);
+    		}
+		}
+		
+		List<String> slSelectedProposedId	= FrameworkUtil.split(selectedProposedItems, "|");
+		
+		return getProposedChangeInfo(context, changeActionIds, slSelectedProposedId, PropertyUtil.getSchemaProperty(context, "type_Part"));
+	}
+	
+	public Map<String, List<Map<String,String>>> getProposedChangeItems(Context context, String[] args) throws Exception
+	{
+		Map programMap  					= JPO.unpackArgs(args);
+		String[] changeActionIds    		= (String[])programMap.get("objectIds");
+		String selectedProsedItems    		= (String)programMap.get(ChangeProcessDashboardConstants.SELECTED_PROPOSED_ITEMS);
+		if(UIUtil.isNullOrEmpty(selectedProsedItems))
+		{
+	    		ChangeServiceAddons changeService=new ChangeServiceImplAddons();
+	    		selectedProsedItems=DomainConstants.EMPTY_STRING;
+	    	   	for(int i=0;i<changeActionIds.length;i++)
+	    		{
+	    	   		selectedProsedItems+=changeService.getDefaultProposedItemToBeSelected(context,changeActionIds[i]);
+	    		}
+		}
+		List<String> slSelectedProposedId	= FrameworkUtil.split(selectedProsedItems, "|");
+		
+		return getProposedChangeInfo(context, changeActionIds, slSelectedProposedId, null);
+	}
+	
+	private Map<String, List<Map<String,String>>> getProposedChangeInfo(Context context, String[] changeActionIds, List<String> selectedProsedItems, String typeFilter) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<String, List<Map<String,String>>>();
+		
+		for(int i=0;i<changeActionIds.length;i++)
+		{
+			ChangeAction changeAction				= new ChangeAction(changeActionIds[i]);
+			MapList proposedChangeItems				= changeAction.getAffectedItems(context);
+			
+			List<Map<String,String>> proposedChangeDataList	= new ArrayList<Map<String,String>>();
+			
+			
+			for (Object proposedChangeMap : proposedChangeItems) {
+
+				Map proposedChangeInfo 		= (Map)proposedChangeMap;
+				String proposedChangeId		= (String)proposedChangeInfo.get(DomainConstants.SELECT_ID);
+
+				if(selectedProsedItems.isEmpty() || selectedProsedItems.contains(proposedChangeId))	{
+					
+					DomainObject proposedChgObj = new DomainObject(proposedChangeId);
+					
+					if(typeFilter!= null && !typeFilter.equals("") && !proposedChgObj.isKindOf(context, typeFilter))
+						continue;
+					
+					Map<String,String> proposedChangeData	= new HashMap<String,String>();
+					
+					proposedChangeData.put(ChangeProcessDashboardConstants.OWNER, proposedChgObj.getInfo(context, DomainConstants.SELECT_OWNER));
+					proposedChangeData.put(RELATEDACTIONID, proposedChangeId);
+					proposedChangeData.put(RELATEDDATANAME, proposedChgObj.getInfo(context, DomainConstants.SELECT_NAME));
+					
+					proposedChangeDataList.add(proposedChangeData);
+				}
+				
+				objectIdRelatedDataMap.put(changeActionIds[i], proposedChangeDataList);
+			}
+		}
+		
+		return objectIdRelatedDataMap;
+	}
+	
+	public Map<String,List<Map<String,String>>> getCOForCA(Context context, String[] args) throws Exception
+	{
+		Map programMap  												= (Map<String, String>) JPO.unpackArgs(args);
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap 	= new HashMap<String,List<Map<String,String>>>();
+		
+		String[] changeActionIds    = (String[])programMap.get("objectIds");
+		
+		for(int i=0;i<changeActionIds.length;i++)
+		{		
+			List<Map<String,String>> relatedCOList	= new ArrayList<Map<String,String>>();
+			
+			String[] oids 			= new String[]{changeActionIds[i]};
+			StringList selectlist 	= new StringList(5);
+			selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.id"); //TODO: Use ECM API
+			selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.name");
+			selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.owner");
+			
+			BusinessObjectWithSelect busWithSelect = BusinessObject.getSelectBusinessObjectData(context, oids, selectlist).getElement(0);
+			
+			Map<String,String> CODetails	= new HashMap<String,String>();
+			CODetails.put(RELATEDACTIONID, busWithSelect.getSelectData("to[Change Action].from.id"));
+			CODetails.put(RELATEDDATANAME, busWithSelect.getSelectData("to[Change Action].from.name"));
+			CODetails.put("owner", busWithSelect.getSelectData("to[Change Action].from.owner"));
+			
+			relatedCOList.add(CODetails);
+			
+			objectIdRelatedDataMap.put(changeActionIds[i], relatedCOList);
+		}
+		
+		return objectIdRelatedDataMap;
+	}
+	
+	public Map<String,String> checkForPartOnCA(Context context, String[] args) throws Exception
+	{
+		Map programMap  			= JPO.unpackArgs(args);
+		String[] changeActionIds    = (String[])programMap.get("objectIds");		
+		
+		ChangeServiceAddons service=new ChangeServiceImplAddons();
+		return service.checkForTypeOnCA(context, changeActionIds, "type_Part");
+	}
+	
+	public Map<String,String> checkForDocumentOnCA(Context context, String[] args) throws Exception
+	{
+		Map programMap  			= JPO.unpackArgs(args);
+		String[] changeActionIds    = (String[])programMap.get("objectIds");
+		ChangeServiceAddons service=new ChangeServiceImplAddons();
+
+		return service.checkForTypeOnCA(context, changeActionIds, "type_CONTROLLEDDOCUMENTS");
+	}
+	
+	public Map<String,String> checkIfRouteIsPresentOnState(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<String,String>();
+		Map programMap  								= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    					= (String[])programMap.get("objectIds");
+		ChangeServiceAddons changeServiceAddons 		= new ChangeServiceImplAddons();
+		return 	changeServiceAddons.checkIfRouteIsPresentOnState(context, changeObjectIds);
+	}
+	/*public Map identifyChageOrder(Context context, String[] args) throws Exception
+	{
+
+		Map<String, String> programMap  = (Map<String, String>) JPO.unpackArgs(args);
+		String changeActionId           = (String) programMap.get("objectId");
+		//ChangeAction changeAction		= new ChangeAction(changeActionId);
+		MapList outputList				= new MapList();
+		
+		String[] oids 			= new String[]{changeActionId};
+		StringList selectlist 	= new StringList(5);
+		selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.id"); //TODO: Use ECM API
+		selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.name");
+		selectlist.add("to[Change Action|from.type.kindof[Change Order]].from.owner");
+		
+		BusinessObjectWithSelect busWithSelect = BusinessObject.getSelectBusinessObjectData(context, oids, selectlist).getElement(0);
+
+		Map outputMap = new HashMap();
+		outputMap.put("relatedDataId", busWithSelect.getSelectData("to[Change Action].from.id"));
+		outputMap.put("relatedDataName", busWithSelect.getSelectData("to[Change Action].from.name"));
+		outputMap.put("owner", busWithSelect.getSelectData("to[Change Action].from.owner"));
+
+		
+		return outputMap;
+	}
+	
+	public Map identifyPeerReviewer(Context context, String[] args) throws Exception
+	{
+
+		Map<String, String> programMap  = (Map<String, String>) JPO.unpackArgs(args);
+		String changeActionId           = (String) programMap.get("objectId");
+		ChangeAction changeAction		= new ChangeAction(changeActionId);
+		MapList implementedChanges 		= changeAction.getRealizedChanges(context);
+		
+		Iterator<?> mLitr = implementedChanges.iterator();
+				
+		if(!mLitr.hasNext()) {
+			MapList proposedChanges = changeAction.getAffectedItems(context);
+			mLitr					= proposedChanges.iterator();
+		}
+		
+		String affectedItemId 		= null;
+		String owner 				= null;
+		String reladatedDataName	= null;
+		boolean ignoreForPart		= false;
+		
+		while(mLitr.hasNext()) {
+			Map<?,?> map = (Map<?,?>)mLitr.next();
+			
+			affectedItemId = (String)map.get("id");
+			
+			String[] oids 			= new String[]{affectedItemId};
+			StringList selectlist 	= new StringList(5);
+			selectlist.add("owner");
+			selectlist.add("name");
+			selectlist.add("type");
+						
+			BusinessObjectWithSelect busWithSelect = BusinessObject.getSelectBusinessObjectData(context, oids, selectlist).getElement(0);
+
+			reladatedDataName = busWithSelect.getSelectData("name");
+			String proposedChangeType = busWithSelect.getSelectData("type");
+			if(proposedChangeType.equals(PropertyUtil.getSchemaProperty(context, "type_Part"))) {
+				
+				ignoreForPart = true;
+			}
+			
+			break; //TODO: Handle multi controlled documents connected to single CA
+		}
+			
+		Map outputMap1 = new HashMap();
+		outputMap1.put("relatedDataId", affectedItemId);
+		outputMap1.put("relatedDataName", reladatedDataName);
+		outputMap1.put("owner", owner);
+		outputMap1.put(ChangeProcessDashboardConstants.IGNORE, String.valueOf(ignoreForPart));			
+		
+		return outputMap1;
+	}*/
+	
+	public Map<String,String> checkForFasttrackPolicy(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<String,String>();
+		StringList objectSelects=new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add("to[Change Action|from.type.kindof[Change Order]].from.policy");
+		Map programMap  	= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    =        (String[])programMap.get("objectIds");
+		
+		
+		List<Map> mlChangeInfo=DomainObject.getInfo(context, changeObjectIds, objectSelects);
+		for(Map mChange:mlChangeInfo){
+			String strId	=(String)mChange.get(DomainObject.SELECT_ID);
+			String strPolicy=(String)mChange.get("to[Change Action].from.policy");
+			
+			if(ChangeProcessDashboardConstants.POLICY_FASTTRACKCHANGE.equals(strPolicy))
+				objectIdCheckStatusMap.put(strId, String.valueOf(true));
+			else
+				objectIdCheckStatusMap.put(strId,String.valueOf(false));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+	
+	public Map<String,String> checkForFormalChangePolicy(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap = new HashMap<String,String>();
+		
+		StringList objectSelects=new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add("to[Change Action|from.type.kindof[Change Order]].from.policy");
+		
+		Map programMap  			= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    = (String[])programMap.get("objectIds");		
+		List<Map> mlChangeInfo		= DomainObject.getInfo(context, changeObjectIds, objectSelects);
+		
+		for(Map mChange:mlChangeInfo){
+			
+			String strId			= (String)mChange.get(DomainObject.SELECT_ID);
+			String strPolicy		= (String)mChange.get("to[Change Action].from.policy");
+			
+			if(ChangeProcessDashboardConstants.POLICY_FORMALCHANGE.equals(strPolicy))
+				objectIdCheckStatusMap.put(strId, String.valueOf(true));
+			else
+				objectIdCheckStatusMap.put(strId,String.valueOf(false));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+	
+	public Map<String,String> showDocumentEffectivityCommand(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap	= new HashMap<String,String>();
+		StringList objectSelects=new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_CURRENT);
+
+		Map programMap  			= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    = (String[])programMap.get("objectIds");
+
+		List<Map> mlChangeInfo=DomainObject.getInfo(context, changeObjectIds, objectSelects);
+		
+		for(Map mChange:mlChangeInfo){
+			String strId			=(String)mChange.get(DomainObject.SELECT_ID);
+			String strPolicy		=(String)mChange.get(DomainObject.SELECT_POLICY);
+			String strCurrentState	=(String)mChange.get(DomainObject.SELECT_CURRENT);
+			
+			if(PolicyUtil.checkState(context, strId, "Complete", PolicyUtil.LE))
+				objectIdCheckStatusMap.put(strId, String.valueOf(true));
+			else
+				objectIdCheckStatusMap.put(strId,String.valueOf(false));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+	public Map<String,String> showPeerReviewerCommand(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap	= new HashMap<String,String>();
+		StringList objectSelects=new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_CURRENT);
+
+		Map programMap  			= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    = (String[])programMap.get("objectIds");
+
+		List<Map> mlChangeInfo=DomainObject.getInfo(context, changeObjectIds, objectSelects);
+		
+		for(Map mChange:mlChangeInfo){
+			String strId			=(String)mChange.get(DomainObject.SELECT_ID);
+			String strPolicy		=(String)mChange.get(DomainObject.SELECT_POLICY);
+			String strCurrentState	=(String)mChange.get(DomainObject.SELECT_CURRENT);
+			
+			if(PolicyUtil.checkState(context, strId, "In Work", PolicyUtil.GE))
+				objectIdCheckStatusMap.put(strId, String.valueOf(true));
+			else
+				objectIdCheckStatusMap.put(strId,String.valueOf(false));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+	
+	
+	}
+

@@ -1,0 +1,188 @@
+/*
+ *  emxWorkspace.java
+ *
+ * Copyright (c) 1992-2016 Dassault Systemes.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import javax.servlet.http.HttpSession;
+
+import matrix.db.Access;
+import matrix.db.AccessList;
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectItr;
+import matrix.db.BusinessObjectList;
+import matrix.db.BusinessObjectProxy;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessType;
+import matrix.db.BusinessTypeList;
+import matrix.db.Context;
+import matrix.db.ExpansionIterator;
+import matrix.db.ExpansionWithSelect;
+import matrix.db.FileItr;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.db.RelationshipType;
+import matrix.db.RelationshipWithSelect;
+import matrix.db.RelationshipWithSelectItr;
+import matrix.db.RelationshipWithSelectList;
+import matrix.db.Role;
+import matrix.db.RoleItr;
+import matrix.db.RoleList;
+import matrix.util.MatrixException;
+import matrix.util.Pattern;
+import matrix.util.SelectList;
+import matrix.util.StringItr;
+import matrix.util.StringList;
+
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Company;
+import com.matrixone.apps.common.Document;
+import com.matrixone.apps.common.Meeting;
+import com.matrixone.apps.common.Message;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.common.SubscriptionManager;
+import com.matrixone.apps.common.Workspace;
+import com.matrixone.apps.common.WorkspaceVault;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.common.util.emxGrantAccess;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainAccess;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.AccessUtil;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkProperties;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.RoleUtil;
+import com.matrixone.apps.domain.util.StringUtil;
+import com.matrixone.apps.domain.util.VaultUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.matrixone.apps.team.TeamUtil;
+import com.matrixone.fcs.common.ImageRequestData;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+
+/**
+ * @version Common Rossini - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxWorkspaceBase}
+{
+	private static final HttpSession HttpServletRequestNonBase = null;
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since AEF Rossini
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+      super(context, args);
+    }
+    
+    @com.matrixone.apps.framework.ui.CreateProcessCallable
+    public Map createWorkspaceProcess(Context context,String[] args) throws MatrixException
+    {
+        try{
+            Map programMap = (Map) JPO.unpackArgs(args);
+            String strWSName = (String) programMap.get("Name");
+            String strWSDes = (String) programMap.get("Description");
+            String sTemplateId = (String) programMap.get("TemplateOID");
+            String strBuyerDeskId = (String) programMap.get("txtBuyerDeskId");
+            String strCompanyVault = context.getVault().getName();
+            Workspace WorkspaceObj = (Workspace) DomainObject.newInstance(context,DomainConstants.TYPE_WORKSPACE,DomainConstants.TEAM);
+            String strProjectType  = WorkspaceObj.TYPE_PROJECT;
+            String MAX_LENGTH = FrameworkProperties.getProperty(context,"emxComponents.MAX_FIELD_LENGTH");
+            String objectId  = "";
+            String langStr = context.getLocale().getLanguage();
+            HashMap retMap = new HashMap();
+
+            if(strWSName.length()>(Integer.parseInt(MAX_LENGTH)))
+              {
+                  String strLengthMessage = UINavigatorUtil.getI18nString("emxTeamCentral.NameLength.Message","emxTeamCentralStringResource",langStr);
+                  String strChars = UINavigatorUtil.getI18nString("emxTeamCentral.NameLength.NumChars","emxTeamCentralStringResource",langStr);
+                  retMap.put("ErrorMessage",strLengthMessage + MAX_LENGTH + " " + strChars);
+                  return retMap;
+              }
+
+            ContextUtil.pushContext(context, null, null, null);
+
+            boolean isWorkspaceExists = (boolean) Workspace.isWorkspaceExists(context, FrameworkUtil.getVaultNames(context, false, true).toString(), strWSName);
+
+            ContextUtil.popContext(context);
+            if(!isWorkspaceExists){
+            objectId = TeamUtil.autoRevision(context, HttpServletRequestNonBase , strProjectType, strWSName ,WorkspaceObj.POLICY_PROJECT, strCompanyVault);
+            WorkspaceObj.setId(objectId);
+            WorkspaceObj.open(context);
+            WorkspaceObj.setDescription(context,strWSDes);
+            WorkspaceObj.update(context);
+            //WorkspaceObj.connectWorkspaceMember(context,com.matrixone.apps.common.Person.getPerson(context),"Project Lead","Yes","Yes",strCompanyVault);
+            DomainAccess.createObjectOwnership(context, objectId, com.matrixone.apps.domain.util.PersonUtil.getPersonObjectID(context), "Full", DomainAccess.COMMENT_MULTIPLE_OWNERSHIP);
+            if(!UIUtil.isNullOrEmpty(sTemplateId)) {
+                if(sTemplateId.startsWith("B")){
+                    sTemplateId = sTemplateId.substring(1);
+                }
+                DomainObject workspaceTemplateObj = DomainObject.newInstance(context,sTemplateId,DomainConstants.TEAM);
+                WorkspaceObj.connectWorkspaceTemplate(context,workspaceTemplateObj,true,true,strCompanyVault);
+              }
+            if ( strBuyerDeskId != null && !"".equals(strBuyerDeskId) ) {
+                WorkspaceObj.addBuyerDesk(context, strBuyerDeskId);
+                WorkspaceObj.addBuyerDeskPersons(context,strCompanyVault,strBuyerDeskId);
+              }
+            }else
+            {
+                retMap.put("ErrorMessage", strProjectType + " " + strWSName + " " + i18nNow.getI18nString("emxTeamCentral.Common.AlreadyExists","emxTeamCentralStringResource",langStr));
+                return retMap;
+            }
+            retMap.put("id", objectId);
+            
+            // Razorleaf addition to enable Workspace Attribute copy
+            // needed because the connection of folders turns off triggers when part of a template
+            String strAttributeValue = WorkspaceObj.getAttributeValue(context, "gapFrameModel");
+            if (UIUtil.isNullOrEmpty(strAttributeValue))
+            {
+            	strAttributeValue = "";
+            }
+            System.out.println("Setting the gapFrameModel attribute to: " + strAttributeValue);
+            String argsList[] = {objectId,"gapFrameModel"};
+			JPO.invoke(context, "gap_Util", null,"copyDescriptionToFolders", argsList);
+			JPO.invoke(context, "gap_Util", null,"copyAttributegapFrameModelToFolders", argsList);
+            // Razorleaf end of addition
+            
+            return retMap;
+
+        }
+        catch(Exception e){
+            throw new FrameworkException(e);
+        }
+    }
+
+}
+
+
+

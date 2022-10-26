@@ -1,0 +1,160 @@
+
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.bps.widget.UIFieldValue;
+import com.dassault_systemes.enovia.bps.widget.UIWidget;
+import com.dassault_systemes.enovia.e6w.foundation.jaxb.FieldValue;
+import com.dassault_systemes.enovia.e6w.foundation.jaxb.Status;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.StringResource;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+
+	}
+
+	/**
+	 * Method to display the customer severity icon based on the Complaint
+	 * Ticket Severity attribute value
+	 * 
+	 * @param context
+	 *            - the eMatrix <code>Context</code> object
+	 * @return the same map list provided by the widget - MapList
+	 * @throws ComplaintException
+	 *             if the operation fails
+	 */
+	static public MapList getCustomerSeverityIcon(Context context, String[] args) throws ComplaintException {
+
+		Map programMap;
+		MapList widgetData = new MapList();
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			String fieldkey = (String) programMap.get(UIWidget.JPO_WIDGET_FIELD_KEY);
+			widgetData = (MapList) programMap.get(UIWidget.JPO_WIDGET_DATA);
+			UIFieldValue dataValue = null;
+			String sSeverityValue = "";
+			for (int i = 0; i < widgetData.size(); i++) {
+				Map<String, Object> widgetInfo = (Map<String, Object>) widgetData.get(i);
+				sSeverityValue = (String) widgetInfo.get(fieldkey);
+				// create complex value for the field.
+				dataValue = new UIFieldValue();
+				if ("Medium".equalsIgnoreCase(sSeverityValue)) {
+					dataValue.setImageValue("../common/images/iconStatusComplaintMedium.png");
+				}
+				else if ("High".equalsIgnoreCase(sSeverityValue)) {
+					dataValue.setImageValue("../common/images/iconStatusComplaintHigh.png");
+				}
+				else if ("Urgent".equalsIgnoreCase(sSeverityValue)) {
+					dataValue.setImageValue("../common/images/iconStatusComplaintUrgent.png");
+				}
+				else {
+					dataValue.setImageValue("../common/images/iconStatusComplaintLow.png");
+				}
+				dataValue.setBadgeTitle(sSeverityValue);
+				widgetInfo.put(fieldkey, dataValue);
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return widgetData;
+	}
+
+	/**
+	 * Method to display the truncated data for the Event Details field
+	 * 
+	 * @param context
+	 *            - the eMatrix <code>Context</code> object
+	 * @return the same map list provided by the widget - MapList
+	 * @throws ComplaintException
+	 *             if the operation fails
+	 */
+	static public MapList truncateEventDetails(Context context, String[] args) throws ComplaintException {
+		Map programMap;
+		MapList widgetData = new MapList();
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			String fieldkey = (String) programMap.get(UIWidget.JPO_WIDGET_FIELD_KEY);
+			widgetData = (MapList) programMap.get(UIWidget.JPO_WIDGET_DATA);
+			String maxSize = Helper.getProperty(context, "LQIComplaints.MyComplaints.Description.MaxTruncationSize");
+			UIFieldValue dataValue = null;
+			String sEvtDescValue = "";
+			Object oDescValue = null;
+			StringBuffer sbTrunDesc = new StringBuffer();
+			for (int i = 0; i < widgetData.size(); i++) {
+				Map<String, Object> widgetInfo = (Map<String, Object>) widgetData.get(i);
+				oDescValue = widgetInfo.get(fieldkey);
+				if (oDescValue instanceof StringList)
+					sEvtDescValue = (String) ((StringList) oDescValue).get(0);
+				else
+					sEvtDescValue = (String) oDescValue;
+				// create complex value for the field.
+				dataValue = new UIFieldValue();
+				sbTrunDesc.append(sEvtDescValue.length() > Integer.parseInt(maxSize) ? sEvtDescValue.substring(0, Integer.parseInt(maxSize))
+						: sEvtDescValue);
+				if (sEvtDescValue.length() > Integer.parseInt(maxSize))
+					sbTrunDesc.append("...");
+				dataValue.setValue(sbTrunDesc.toString());
+				widgetInfo.put(fieldkey, dataValue);
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return widgetData;
+	}
+	static public MapList getBadgeStatusForComplaint(Context context, String[] args) throws ComplaintException {
+        final String strAttrReportableStatus = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_REPORTABLE_STATUS);
+        try{
+        String Reportable = Helper.getI18NString(context, StringResource.COLS, "COLS.Widget.Badge.Reportable");
+        String NOTReportable = Helper.getI18NString(context, StringResource.COLS, "COLS.Widget.Badge.NOTReportable");
+        String Pending = Helper.getI18NString(context, StringResource.COLS, "COLS.Widget.Badge.Pending");
+
+        Map programMap = (Map) JPO.unpackArgs(args);
+        String fieldKey = (String) programMap.get(UIWidget.JPO_WIDGET_FIELD_KEY);
+        MapList objectList = (MapList) programMap.get(UIWidget.JPO_WIDGET_DATA);
+
+        FieldValue dataValue = null;
+        String objId = DomainConstants.EMPTY_STRING;
+        for (int i = 0; i < objectList.size(); i++) {
+               Map<String, Object> objInfo = (Map<String, Object>) objectList.get(i);
+               objId = (String) objInfo.get("id");
+               String strAttrReportableStatusInfoValue = DomainObject.newInstance(context, objId).getAttributeValue(context, strAttrReportableStatus);
+
+               if (!Helper.isNullOrEmpty(strAttrReportableStatusInfoValue)) {
+                     dataValue = new FieldValue();
+                     if (strAttrReportableStatusInfoValue.equalsIgnoreCase(TicketConstants.RANGE_REPORTABLE)) {
+                            dataValue.setBadgeTitle(Reportable);
+                            dataValue.setBadgeStatus(Status.WARNING);
+                     }
+                     else if (strAttrReportableStatusInfoValue.equalsIgnoreCase(TicketConstants.RANGE_NOT_REPORTABLE)) {
+                            dataValue.setBadgeTitle(NOTReportable);
+                            dataValue.setBadgeStatus(Status.OKAY);
+                     }
+                     else if (strAttrReportableStatusInfoValue.equalsIgnoreCase(TicketConstants.RANGE_PENDING)) {
+                            dataValue.setBadgeTitle(Pending);
+                            dataValue.setBadgeStatus(Status.INFO);
+                     }
+                     objInfo.put(fieldKey, dataValue);
+               }
+        }
+        return objectList;
+        }
+        catch(Exception e)
+        {
+               throw new ComplaintException(e);
+        }
+ }
+}
+

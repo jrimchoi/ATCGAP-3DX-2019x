@@ -1,0 +1,1206 @@
+/************************************************************************************************************
+ * /* AuditAuditTemplateBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 11-APR-2008 AuditAuditTemplateBase program to handle Audit Template type
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.TreeMap;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.services.AuditedItemsService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.Attribute;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.Person;
+import matrix.db.RelationshipType;
+import matrix.db.Role;
+import matrix.db.RoleList;
+import matrix.db.User;
+import matrix.db.UserList;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+import matrix.util.StringUtils;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+
+	}
+
+	public static final String PREFIX_ACTION_TASK = "ACTTASK";
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * Gets AuditedItemsService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return AuditedItemsService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private static AuditedItemsService getAuditedItemsService(Context context) throws AuditException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAAUDCoreComponent");
+			AuditedItemsService service = (AuditedItemsService) LSAQICCore.getService(AuditedItemsService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method Creates Audit Template Object
+	 * 
+	 * @param context
+	 * @param args
+	 * @return Map which contains Object Id
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAuditTemplate(Context context, String[] args) throws Exception {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+		try {
+			ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strName = (String) programMap.get("name");
+			String strDescription = (String) programMap.get("description");
+			String strAuditType = (String) programMap.get("Audit Type");
+			String strLocationObjId = (String) programMap.get("Audit LocationOID");
+			String strSubSyscount = (String) programMap.get("SUB_Count");
+			String strOwner = (String) programMap.get("owner");
+			String strAuditSubSystem = "";
+			String strSupplierObjId = (String) programMap.get("SuppliersOID");
+			String strVal = "";
+			String strAuditedItemsId = (String) programMap.get("Audited ItemsOID");
+
+			AuditedItemsService auditedItemsService = getAuditedItemsService(context);
+
+			// Getting Deafult Vault for the user
+			String strDefaultVault = PersonUtil.getDefaultVault(context);
+			// To get free text fo sub system
+			String strAuditSubSystemFreeText = (String) programMap
+					.get("Final_" + AuditConstants.STR_SUBSTEMPREFIX + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM));
+			// create new Audit Template object
+			String strAuditExternalInfo = (String) programMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO));
+
+			DomainObject doAuditTemplate = DomainObject.newInstance(context);
+
+			// check name of the audit template whether its unique or not
+			// if its not unique display the proper message
+			boolean isAuditTemplateNameUnique = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.checkDuplicateTNR(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE), strName);
+
+			// if its unique create the object.
+			if (isAuditTemplateNameUnique) {
+				String strDefaultRevision = doAuditTemplate.getDefaultRevision(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITTEMPLATE));
+				doAuditTemplate.createObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE), strName,
+						strDefaultRevision, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITTEMPLATE), strDefaultVault);
+
+				String strAuditTemplateId = doAuditTemplate.getId(context);
+				// set Audit External Infor if its not null
+				if (null != strAuditExternalInfo && !"".equals(strAuditExternalInfo)) {
+					doAuditTemplate.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO),
+							strAuditExternalInfo);
+				}
+				// set Audit SubSystem value starts here
+				String strAuditSubSystemTxt = "";
+				if (null != strSubSyscount && !"".equals(strSubSyscount)) {
+					int iSubSyscount = Integer.parseInt(strSubSyscount);
+					for (int i = 1; i <= iSubSyscount; i++) {
+						strAuditSubSystem = (String) programMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM) + i);
+						if (null != strAuditSubSystem) {
+							if (null != strAuditSubSystemTxt && !"null".equals(strAuditSubSystemTxt) && !"".equals(strAuditSubSystemTxt)) {
+								strAuditSubSystemTxt += "," + strAuditSubSystem;
+							}
+							else {
+								strAuditSubSystemTxt = strAuditSubSystem;
+							}
+						}
+					}
+				}
+
+				// Code to Connect Audit Object with Supplier
+				if (strAuditType != null && strAuditType.equalsIgnoreCase(AuditConstants.STR_SUPPLIER)) {
+					if (strSupplierObjId != null && !strSupplierObjId.equals("")) {
+						// Calling a method to get the supplier Id after finding
+						// with name
+						// strSupplierObjId =
+						// findSupplierID(context,strSupplierName);
+						DomainObject newSupplierObj = DomainObject.newInstance(context, strSupplierObjId);
+
+						// connect Supplier to Audit
+						newSupplierObj.addToObject(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER)),
+								strAuditTemplateId);
+					}
+				}
+
+				// Code to Connect Audit Object with Location
+				if (strLocationObjId != null && !strLocationObjId.equals("")) {
+					DomainObject newLocationObj = DomainObject.newInstance(context, strLocationObjId);
+
+					// connect Supplier to Audit
+					newLocationObj.addToObject(context,
+							new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION)), strAuditTemplateId);
+				}
+
+				if (!Helper.isNullOrEmpty(strAuditedItemsId)) {
+					String[] arrAuditedItemsIds = StringUtils.split(strAuditedItemsId, "\\|");
+					for (String string : arrAuditedItemsIds) {
+						DomainObject domAuditedItem = DomainObject.newInstance(context, string);
+						auditedItemsService.addAuditedItem(context, doAuditTemplate, domAuditedItem, DomainObject.EMPTY_STRING);
+					}
+				}
+
+				// Setting the Scope Values
+				if (null != strAuditSubSystemFreeText && !"".equals(strAuditSubSystemFreeText)) {
+					strAuditSubSystemFreeText = strAuditSubSystemFreeText.replace('~', ',');
+					strVal = strAuditSubSystemTxt + "," + strAuditSubSystemFreeText;
+					doAuditTemplate.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strVal);
+				}
+				else {
+					doAuditTemplate.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM),
+							strAuditSubSystemTxt);
+				}
+				// set Audit SubSystem value ends here
+
+				// set description
+				doAuditTemplate.setDescription(context, strDescription);
+				doAuditTemplate.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE), strAuditType);
+				returnMap.put("id", strAuditTemplateId);
+
+				// set Owner for Audit Template
+				if (null != strOwner && !"".equals(strOwner)) {
+					doAuditTemplate.setOwner(context, strOwner);
+				}
+			}
+			else {
+				String strMessage = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE) + " Name '" + strName + "' "
+						+ i18nNow.getI18nString("LQIAudit.Message.NameNotUnique", "LQIAuditStringResource", context.getLocale().toString());
+				throw new Exception(strMessage);
+			}
+		}
+		catch (Exception ex) {
+			throw new Exception(ex);
+		}
+		return returnMap;
+	}
+
+	/**
+	 * This is called from the javascript in iwAuditFromValidation.jsp to ensure
+	 * the Audit Template name being chosen is unique.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public TreeMap checkDuplicateTemplateNameFieldAjax(Context context, String[] args) throws Exception {
+		HashMap programMap = JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+		String templateName = (String) paramMap.get("templateName");
+		TreeMap returnMap = new TreeMap();
+		returnMap.put("result", "false");
+		boolean auditTemplateUnique = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.checkDuplicateTNR(context,
+				PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE), templateName);
+		if (auditTemplateUnique) { // If the new name is unique then return
+									// true.
+			returnMap.put("result", "true");
+		}
+		else if (objectId != null && !"".equals(objectId)) {
+			// If on edit the name has not changed return true.
+			// This logic handles the case where we are editing an existing
+			// template, but we do not change the name. without this we would
+			// mistakenly think the name is not unique, because we are already
+			// using it.
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			String name = domObj.getInfo(context, DomainConstants.SELECT_NAME);
+			if (templateName.equals(name)) {
+				// this is ok, the name is in use, but by this template.
+				returnMap.put("result", "true");
+			}
+		}
+		return returnMap;
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public Map<?, ?> getTemplateInformationAjax(Context context, String[] args) throws AuditException {
+		try {
+			HashMap<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrTemplateOID = (String[]) programMap.get("templateOID");
+			String templateOID = arrTemplateOID[0];
+			Map<String, String> returnMap = new TreeMap<String, String>();
+
+			DomainObject doAuditTemplate = DomainObject.newInstance(context, templateOID);
+
+			// Description
+			String description = doAuditTemplate.getInfo(context, DomainConstants.SELECT_DESCRIPTION);
+			description = description.replace("\n", "\\n");
+			returnMap.put("description", description);
+
+			// Audit Type
+			String auditType = doAuditTemplate.getAttributeValue(context, "Audit Type");
+			returnMap.put("auditType", auditType);
+
+			// Scope
+			String scope = doAuditTemplate.getAttributeValue(context, "Audit Sub-System");
+			returnMap.put("scope", scope);
+
+			// Audit External Info if Audit Type is Other type
+			String auditExternalInfo = "";
+			if (auditType.equals("Other")) {
+				auditExternalInfo = doAuditTemplate.getAttributeValue(context, "Audit External Info");
+			}
+			returnMap.put("auditExternalInfo", auditExternalInfo);
+
+			// Getting the locations Name value
+			String connectedLocation = "";
+			String connectedLocationID = "";
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+
+			MapList mlRelatedLocations = doAuditTemplate.getRelatedObjects(context, "Audit Location", "Location", true, false, 1, sListSelects, null,
+					null, "", null, null, null);
+			for (Iterator iter = mlRelatedLocations.iterator(); iter.hasNext();) {
+				Map locationMap = (Map) iter.next();
+				// getting the name of connected Supplier
+				connectedLocation = (String) locationMap.get(DomainConstants.SELECT_NAME);
+				connectedLocationID = (String) locationMap.get(DomainConstants.SELECT_ID);
+			}
+			returnMap.put("connectedLocation", connectedLocation);
+			returnMap.put("connectedLocationID", connectedLocationID);
+
+			// Getting the supplier's Name value
+			String connectedSupplier = "";
+			String connectedSupplierID = "";
+			if (auditType.equals("Supplier")) {
+				// getting the connected Suppliers from Audit Template Object
+				MapList mlRealtedSuppliers = doAuditTemplate.getRelatedObjects(context, "Audit Supplier", "Company", true, false, 1, sListSelects,
+						null, null, "", null, null, null);
+				for (Iterator iter = mlRealtedSuppliers.iterator(); iter.hasNext();) {
+					Map SupplierMap = (Map) iter.next();
+					// getting the name of connected Supplier
+					connectedSupplier = (String) SupplierMap.get(DomainConstants.SELECT_NAME);
+					connectedSupplierID = (String) SupplierMap.get(DomainConstants.SELECT_ID);
+				}
+			}
+
+			returnMap.put("connectedSupplier", connectedSupplier);
+			returnMap.put("connectedSupplierID", connectedSupplierID);
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method Seraches Request to add to Audit Template
+	 * 
+	 * @param context
+	 * @param args
+	 * @return MapList which contains search Results
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTemplateRequestsSearchResult(Context context, String[] args) throws Exception {
+		MapList totalresultList = null;
+		try {
+			// Get the parameter Hashmap.
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			String strName = (String) paramMap.get("txtName");
+			String strType = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+			String strQueryLimit = (String) paramMap.get("QueryLimit");
+			String strWhereExp = "";
+			char chDblQuotes = '\"';
+			String strTxtFormat = "*";
+			String strTxtSearch = "";
+
+			String strSubSystem = (String) paramMap.get("txtSubSystem");
+			String strAuditor = (String) paramMap.get("txtAuditor");
+			String strDevice = (String) paramMap.get("txtDevice");
+			String strRegulation = (String) paramMap.get("txtRegulation");
+
+			String sTxtVault = PersonUtil.getDefaultVault(context);
+			if (strQueryLimit == null || strQueryLimit.equals("null") || strQueryLimit.equals("")) {
+				strQueryLimit = "100";
+			}
+
+			if (strName == null || strName.equalsIgnoreCase("null") || strName.length() <= 0) {
+				strName = "*";
+			}
+
+			// If the input is * there is no need to add to where clause
+			strWhereExp = "revision==last";
+			if (!"*".equals(strSubSystem)) {
+				strWhereExp += "&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM) + "] ~~ " + chDblQuotes
+						+ strSubSystem + chDblQuotes + ")";
+			}
+			if (!"*".equals(strAuditor)) {
+				strWhereExp += "&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITORS) + "] ~~ " + chDblQuotes
+						+ strAuditor + chDblQuotes + ")";
+			}
+			if (!"*".equals(strDevice)) {
+				strWhereExp += "&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_DEVICE) + "] ~~ " + chDblQuotes
+						+ strDevice + chDblQuotes + ")";
+			}
+			if (!"*".equals(strRegulation)) {
+				strWhereExp += "&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_REGULATION) + "] ~~ " + chDblQuotes
+						+ strRegulation + chDblQuotes + ")";
+			}
+
+			// Adding the select statements
+			SelectList resultSelects = new SelectList(7);
+			resultSelects.add(DomainConstants.SELECT_ID);
+			resultSelects.add(DomainConstants.SELECT_TYPE);
+			resultSelects.add(DomainConstants.SELECT_NAME);
+			resultSelects.add(DomainConstants.SELECT_REVISION);
+			resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			resultSelects.add(DomainConstants.SELECT_CURRENT);
+			resultSelects.add(DomainConstants.SELECT_POLICY);
+
+			totalresultList = new MapList();
+			// Finding the objects
+			totalresultList = DomainObject.findObjects(context, strType, strName, "*", "*", sTxtVault, strWhereExp, null, true, resultSelects,
+					Short.parseShort(strQueryLimit), strTxtFormat, strTxtSearch);
+			// Returning the results the objects
+			return totalresultList;
+
+		}
+		catch (Exception objException) {
+			objException.printStackTrace();
+			throw objException;
+		}
+	}
+
+	/**
+	 * This method deletes the selected audit template objects if they have no
+	 * dependencies.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the int
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String deleteAuditTemplate(Context context, String[] args) throws Exception {
+		try {
+			// Get Parameters
+			HashMap<?, ?> mapArgs = (HashMap<?, ?>) JPO.unpackArgs(args);
+			DomainObject doObject = null;
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get(AuditConstants.EMX_TABLE_ROW_ID);
+			String objectId;
+
+			StringList canDeleteAuditTemplateObjectIds = new StringList();
+			StringList cannnotDeleteAuditTemplateObjectIds = new StringList();
+			StringList cannnotDeleteAuditTemplateNames = new StringList();
+
+			Boolean canDeleteAuditTemplate = false;
+
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(DomainConstants.SELECT_ID);
+			StringList relSelects = new StringList(1);
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+			for (int i = 0; i < emxTableRowId.length; i++) {
+				// Parse the emxTableRowId and get the bus object id
+				if (emxTableRowId[i].indexOf("|") == -1) {
+					objectId = emxTableRowId[i];
+				}
+				else {
+					StringTokenizer sTableRowId = new StringTokenizer(emxTableRowId[i], "|");
+					objectId = sTableRowId.nextToken();
+				}
+				doObject = DomainObject.newInstance(context, objectId);
+
+				canDeleteAuditTemplate = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.canDeleteAuditTemplate(context,
+						doObject);
+
+				if (canDeleteAuditTemplate) {
+					canDeleteAuditTemplateObjectIds.add(objectId);
+				}
+				else {
+					String name = DomainObject.newInstance(context, objectId).getInfo(context, DomainObject.SELECT_NAME);
+					cannnotDeleteAuditTemplateObjectIds.add(objectId);
+					cannnotDeleteAuditTemplateNames.add(name);
+				}
+			}
+
+			String[] strArrayARTObjectIds = (String[]) canDeleteAuditTemplateObjectIds.toArray(new String[0]);
+			ContextUtil.startTransaction(context, true);
+			try {
+				DomainObject.deleteObjects(context, strArrayARTObjectIds);
+				ContextUtil.commitTransaction(context);
+				if (!Helper.isNullOrEmpty(cannnotDeleteAuditTemplateObjectIds)) {
+					StringBuilder errorMessage = new StringBuilder();
+					errorMessage.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.AuditTemplate.AuditTemplateDeleteRule"));
+					errorMessage.append('\n');
+					for (String name : cannnotDeleteAuditTemplateNames) {
+						errorMessage.append(name);
+						errorMessage.append(',');
+					}
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.SHOW_ERROR_MESSAGE,
+							errorMessage.substring(0, errorMessage.length() - 1).toString());
+				}
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+			}
+			catch (Exception e) {
+				ContextUtil.abortTransaction(context);
+				throw new AuditException(e);
+			}
+
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	/**
+	 * This method displays mql notice message.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param notice
+	 *            String containing notice message
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF Rossini
+	 */
+
+	public static void mqlNotice(Context context, String notice) throws Exception {
+		MqlUtil.mqlCommand(context, "notice $1", notice);
+	}
+
+	/**
+	 * Edits the audit template.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map editAuditTemplate(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+
+			String objectId = (String) paramMap.get("objectId");
+			DomainObject newObj = DomainObject.newInstance(context, objectId);
+			String strAuditType = (String) paramMap.get("Audit Type");
+			String strOwner = (String) paramMap.get("owner");
+			String strAuditExternalInfo = (String) paramMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO));
+			// save audit Sub-System value
+			String strAuditSubSystem = "";
+			// MapList mlRelatedSuppliers = null;
+			// DomainObject connectedSupplierObj;
+			// String strConnectedSupplierId = "";
+			StringList sListSelects = new StringList();
+			// define select attributes list
+			sListSelects.add(DomainConstants.SELECT_ID);
+			String strSubSyscount = (String) paramMap.get("SUB_Count");
+			String strAuditSubSystemFreeText = (String) paramMap
+					.get("Final_" + AuditConstants.STR_SUBSTEMPREFIX + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM));
+			String strSupplierObjId = (String) paramMap.get("SuppliersOID");
+			// set Audit Type value
+			newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE), strAuditType);
+
+			// set Audit External Infor if its not null
+			if (null != strAuditExternalInfo && !"".equals(strAuditExternalInfo)) {
+				newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO),
+						strAuditExternalInfo);
+			}
+			// set Owner for Audit Template
+			if (null != strOwner && !"".equals(strOwner)) {
+				newObj.setOwner(context, strOwner);
+			}
+
+			// set Audit SubSystem value starts here
+			String strAuditSubSystemTxt = "";
+			if (null != strSubSyscount && !"".equals(strSubSyscount)) {
+				int iSubSyscount = Integer.parseInt(strSubSyscount);
+				for (int i = 1; i <= iSubSyscount; i++) {
+					strAuditSubSystem = (String) paramMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM) + i);
+					if (null != strAuditSubSystem) {
+						if (null != strAuditSubSystemTxt && !"null".equals(strAuditSubSystemTxt) && !"".equals(strAuditSubSystemTxt)) {
+							strAuditSubSystemTxt += "," + strAuditSubSystem;
+						}
+						else {
+							strAuditSubSystemTxt = strAuditSubSystem;
+						}
+					}
+				}
+			}
+			// code for free text in Sub System field
+			if (null != strAuditSubSystemFreeText && !"".equals(strAuditSubSystemFreeText)) {
+				strAuditSubSystemFreeText = strAuditSubSystemFreeText.replace('~', ',');
+				String strVal = strAuditSubSystemTxt + "," + strAuditSubSystemFreeText;
+				newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strVal);
+			}
+			else {
+				newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strAuditSubSystemTxt);
+			}
+			// set Audit SubSystem value end here
+
+			// Code to Connect Audit Object with Supplier
+			if (strAuditType != null) {
+				// Disconnect suppliers if Audit type has changed.
+				if (!strAuditType.equalsIgnoreCase(AuditConstants.STR_SUPPLIER)) {
+					disconnectSuppliers(context, newObj);
+				}
+				else {
+					// Calling a method to get the supplier Id after finding
+					// with name
+					if (strSupplierObjId != null && !"".equalsIgnoreCase(strSupplierObjId)) {
+						DomainObject newSupplierObj = DomainObject.newInstance(context, strSupplierObjId);
+						disconnectSuppliers(context, newObj);
+						newSupplierObj.addToObject(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER)), objectId);
+					}
+				}
+				if (!strAuditType.equalsIgnoreCase(AuditConstants.STR_OTHER)) {
+					if(!Helper.isNullOrEmpty(strAuditExternalInfo)){
+						newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO),AuditConstants.STR_EMPTY);
+					}
+				}
+				else
+				{
+					if(Helper.isNullOrEmpty(strAuditExternalInfo)){
+						newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO),AuditConstants.STR_EMPTY);
+					}
+				}
+
+			}
+
+			String strAuditLocation = (String) paramMap.get("Audit LocationDisplay");
+			String strLocationObjId = (String) paramMap.get("Audit LocationOID");
+			if (strAuditLocation == null || "".equalsIgnoreCase(strAuditLocation)) {
+				disconnectLocations(context, newObj);
+			}
+			else {
+				if (strLocationObjId != null && !"".equalsIgnoreCase(strLocationObjId)) {
+
+					DomainObject newLocationObj = DomainObject.newInstance(context, strLocationObjId);
+					disconnectLocations(context, newObj);
+					newLocationObj.addToObject(context,
+							new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION)), objectId);
+				}
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+		return returnMap;
+	}
+
+	private void disconnectSuppliers(Context context, DomainObject auditObj) throws FrameworkException, Exception, MatrixException {
+
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+
+		MapList mlRealtedSuppliers = auditObj.getRelatedObjects(context,
+				PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER), DomainConstants.TYPE_COMPANY, true, false, 1,
+				sListSelects, null, null, "", null, null, null);
+		for (Iterator iter = mlRealtedSuppliers.iterator(); iter.hasNext();) {
+			Map SupplierMap = (Map) iter.next();
+			String strConnectedSupplierId = (String) SupplierMap.get(DomainConstants.SELECT_ID);
+			if (null != strConnectedSupplierId && !" ".equals(strConnectedSupplierId)) {
+				DomainObject connectedSupplierObj = DomainObject.newInstance(context, strConnectedSupplierId);
+				connectedSupplierObj.disconnect(context,
+						new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER)), true, auditObj);
+			}
+		}
+	}
+
+	private void disconnectLocations(Context context, DomainObject auditObj) throws FrameworkException, Exception, MatrixException {
+
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+
+		MapList mlRealtedLocations = auditObj.getRelatedObjects(context,
+				PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION), DomainConstants.TYPE_LOCATION, true, false, 1,
+				sListSelects, null, null, "", null, null, null);
+		for (Iterator iter = mlRealtedLocations.iterator(); iter.hasNext();) {
+			Map locationsMap = (Map) iter.next();
+			String strConnectedLocationsId = (String) locationsMap.get(DomainConstants.SELECT_ID);
+			if (null != strConnectedLocationsId && !" ".equals(strConnectedLocationsId)) {
+				DomainObject connectedLocationsObj = DomainObject.newInstance(context, strConnectedLocationsId);
+				connectedLocationsObj.disconnect(context,
+						new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION)), true, auditObj);
+			}
+		}
+	}
+
+	/**
+	 * This method Gets the Audit object and will retrieve the field value
+	 * Retrieved values are updated in Audit Template Object It will also
+	 * connects the Supplier object with Audit Template
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            contains the object Id
+	 * @return the hash map
+	 * 
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String copyExistingAudit(Context context, String[] args) throws Exception {
+		String hmReturnVal = DomainConstants.EMPTY_STRING;
+		String strURL = "";
+		try {
+			// Getting the arguments
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+
+			// String strParentId = (String) programMap.get("parentOID");
+			String templateId[] = (String[]) programMap.get("objectId");
+			String strTemplateObjId = templateId[0];
+			String[] strObjectId = (String[]) programMap.get("emxTableRowId");
+
+			String strAuditType = "";
+			String strAuditScope = "";
+			String strAuditDevice = "";
+			String strAuditExternalInfo = "";
+			String strDescription = "";
+			MapList mlRelatedSuppliers;
+			DomainObject doTemplateObject = DomainObject.newInstance(context);
+
+			StringList sListSelects = new StringList(2);
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+			sListSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			doTemplateObject = DomainObject.newInstance(context, strTemplateObjId);
+
+			EmxTableRowId emxTableRowId = new EmxTableRowId(strObjectId[0]);
+			String strAuditObjectId = emxTableRowId.getObjectId();
+			DomainObject auditObject = DomainObject.newInstance(context, strAuditObjectId);
+
+			// Reference the document Objects from Audit to Audit Template
+			List<Map<?, ?>> mListDocuments = QueryUtil.getRelatedObjects(context, auditObject, AuditConstants.SYM_REL_REFERENCE_DOCUMENT,
+					AuditConstants.STR_WILD, sListSelects, null, false, true, (short) 0, DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+			List<Map<?, ?>> auditTemplateDocuments = QueryUtil.getRelatedObjects(context, doTemplateObject, AuditConstants.SYM_REL_REFERENCE_DOCUMENT,
+					AuditConstants.STR_WILD, sListSelects, null, false, true, (short) 0, DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+			ArrayList<String> auditTemplateDocumentIds = new ArrayList<String>();
+			for (Object object : auditTemplateDocuments) {
+				Map<?, ?> map = (Map<?, ?>) object;
+				String objectId = (String) map.get(DomainObject.SELECT_ID);
+				auditTemplateDocumentIds.add(objectId);
+			}
+
+			if (!Helper.isNullOrEmpty(mListDocuments)) {
+				for (Object object : mListDocuments) {
+					Map<?, ?> map = (Map<?, ?>) object;
+					String objectId = (String) map.get(DomainObject.SELECT_ID);
+					if (!auditTemplateDocumentIds.contains(objectId)) {
+						DomainObject document = DomainObject.newInstance(context, objectId);
+						QueryUtil.connectObjects(context, doTemplateObject, AuditConstants.SYM_REL_REFERENCE_DOCUMENT, document, null);
+					}
+				}
+			}
+
+			// Getting the field values from Audit Object
+			strAuditType = auditObject.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE));
+			strAuditScope = auditObject.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM));
+			strAuditDevice = auditObject.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_DEVICE));
+			strDescription = auditObject.getInfo(context, DomainConstants.SELECT_DESCRIPTION);
+			strAuditExternalInfo = auditObject.getAttributeValue(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO));
+
+			// Change the Location to the new location
+			disconnectLocations(context, doTemplateObject);
+			MapList mlRelatedLocations = auditObject.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION), DomainConstants.TYPE_LOCATION, true, false, 1,
+					sListSelects, null, null, "", null, null, null);
+
+			if (mlRelatedLocations != null && mlRelatedLocations.size() > 0) {
+				Map relatedLocation = (Map) mlRelatedLocations.get(0);
+				String newLocationId = (String) relatedLocation.get(DomainConstants.SELECT_ID);
+				DomainObject newLocationObj = DomainObject.newInstance(context, newLocationId);
+
+				newLocationObj.addToObject(context,
+						new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITLOCATION)), strTemplateObjId);
+			}
+
+			// Code to connect the Supplier with Audit Template
+			disconnectSuppliers(context, doTemplateObject);
+			if (strAuditType.equalsIgnoreCase(AuditConstants.STR_SUPPLIER)) {
+				// Getting the Suppliers related Audit Template
+				mlRelatedSuppliers = auditObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER), DomainConstants.TYPE_COMPANY, true, false, 1,
+						sListSelects, null, null, "", null, null, null);
+
+				if (mlRelatedSuppliers != null && mlRelatedSuppliers.size() > 0) {
+					Map mRelatedSupplier = (Map) mlRelatedSuppliers.get(0);
+					String strSupplierObjId = (String) mRelatedSupplier.get(DomainConstants.SELECT_ID);
+					DomainObject newSupplierObj = DomainObject.newInstance(context, strSupplierObjId);
+					newSupplierObj.addToObject(context,
+							new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER)), strTemplateObjId);
+				}
+			}
+			Map newValuesMap = new HashMap();
+			newValuesMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE), strAuditType);
+			newValuesMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strAuditScope);
+			newValuesMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_DEVICE), strAuditDevice);
+			if (strAuditType.equals(AuditConstants.STR_OTHER)) {
+				newValuesMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITEXTERNALINFO), strAuditExternalInfo);
+			}
+			// Setting the attribute Values to Audit Template
+			doTemplateObject.setAttributeValues(context, newValuesMap);
+			// set description
+			doTemplateObject.setDescription(context, strDescription);
+
+			strURL = Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpener");
+			hmReturnVal = strURL;
+		}
+		catch (Exception ex) {
+			String strError = ex.toString();
+			// make the error more user friendly
+			hmReturnVal = strError;
+			ex.printStackTrace();
+			throw ex;
+		}
+		return hmReturnVal;
+	}
+
+	/**
+	 * This method Create Copy of the Audit Request Objects The newly created
+	 * copy is of type Audit Request Template. This method will connect the
+	 * newly created object with Audit Template object
+	 * 
+	 * @param context
+	 *            the context
+	 * @param mListRelatedRequest
+	 *            Related request
+	 * @param doTemplateObject
+	 *            Audit Template Object returs void
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static void copyRefrenceFileToTemplateRequest(Context context, String strRequestObjectId, DomainObject doAuditReqTemplate,
+			String strContextUser) throws Exception {
+
+		BusinessObject boNumGenFileAttachment = null;
+		boolean bContextPushed = false;
+		try {
+			StringList sListSelects = new StringList(2);
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+			DomainObject doRequestObject;
+			DomainObject doFileAttachment;
+			String strFileSequence = "";
+			String strFileAttachmentObjId = "";
+			String strFileAttachmentName = "";
+			BusinessObject boFileAttachmentClone = null;
+			Hashtable hmReqTemplateFiles = new Hashtable();
+			MapList mListReqTemplateFiles = null;
+
+			String strVerionFileObjId = "";
+			String strVersionObjID = "";
+			String strClonedFileID = "";
+			BusinessObject boVersionFileAttachment = null;
+			BusinessObject boLVersionFileAttachment = null;
+			DomainObject doCloneVersionFileAttachment = null;
+			DomainObject doVersionFileAttachment = null;
+
+			BusinessObject boObjGenFile = new BusinessObject(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_OBJECTGENERATOR),
+					AuditConstants.REG_TYPE_FILEATTACHMENT, "", PropertyUtil.getSchemaProperty(context, AuditConstants.VAULT_ADMINISTRATION));
+			String strFileAttachmentNamePrefix = boObjGenFile
+					.getAttributeValues(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_ESERVICENAMEPREFIX)).getValue();
+			if (null != strRequestObjectId && !"".equals(strRequestObjectId)) {
+				doRequestObject = DomainObject.newInstance(context, strRequestObjectId);
+
+				// Clone the related Request Template File Attachment Objects
+				// and connect to the Audit Request
+				// object
+				mListReqTemplateFiles = doRequestObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_FILEREFERENCE),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_FILEATTACHMENT), false, true, 1, sListSelects, null, null, "",
+						null, null, null);
+				if (null != mListReqTemplateFiles && !mListReqTemplateFiles.isEmpty()) {
+					if (!bContextPushed) {
+						ContextUtil.pushContext(context);
+						bContextPushed = true;
+					}
+					for (int iFileCnt = 0; iFileCnt < mListReqTemplateFiles.size(); iFileCnt++) {
+						hmReqTemplateFiles = (Hashtable) mListReqTemplateFiles.get(iFileCnt);
+						strFileAttachmentObjId = (String) hmReqTemplateFiles.get(DomainConstants.SELECT_ID);
+						doFileAttachment = DomainObject.newInstance(context, strFileAttachmentObjId);
+
+						// Code to get Latest and Active version Object Ids
+						strVerionFileObjId = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.ui.AuditAudit}.returnFileVersionObjId(context,
+								strFileAttachmentObjId);
+						if (null != strVerionFileObjId && !"null".equals(strVerionFileObjId)) {
+							doVersionFileAttachment = DomainObject.newInstance(context, strVerionFileObjId);
+						}
+						boVersionFileAttachment = doVersionFileAttachment.cloneObject(context, null, null, context.getVault().toString(), true, true);
+
+						strVersionObjID = boVersionFileAttachment.getObjectId();
+						doCloneVersionFileAttachment = DomainObject.newInstance(context, strVersionObjID);
+
+						try {
+							// boNumGenFileAttachment.unlock(context);
+							boNumGenFileAttachment = new BusinessObject(
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_NUMBERGENERATOR),
+									AuditConstants.REG_TYPE_FILEATTACHMENT, null,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.VAULT_ADMINISTRATION));
+
+							// Lock and Increment the number sequence attr
+							boNumGenFileAttachment.lock(context);
+							Attribute attrFileSequence = boNumGenFileAttachment.getAttributeValues(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_ESERVICENEXTNUMBER));
+							strFileSequence = attrFileSequence.getValue();
+							int iFileAttachmentSeq = Integer.parseInt(strFileSequence);
+							iFileAttachmentSeq++;
+							boNumGenFileAttachment.setAttributeValue(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_ESERVICENEXTNUMBER),
+									String.valueOf(iFileAttachmentSeq));
+							strFileAttachmentName = strFileAttachmentNamePrefix + String.valueOf(iFileAttachmentSeq);
+						}
+						catch (Exception ex) {
+							ex.printStackTrace();
+						}
+						finally {
+							// Unlock
+							if (null != boNumGenFileAttachment && boNumGenFileAttachment.isLocked(context)) {
+								boNumGenFileAttachment.unlock(context);
+							}
+							if (bContextPushed) {
+								ContextUtil.popContext(context);
+								bContextPushed = false;
+							}
+						}
+						if (!bContextPushed) {
+							ContextUtil.pushContext(context);
+							bContextPushed = true;
+						}
+						// Clone the File Attachment object
+						boFileAttachmentClone = doFileAttachment.cloneObject(context, strFileAttachmentName, null, context.getVault().toString(),
+								true, false);
+						boFileAttachmentClone.connect(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_FILEREFERENCE)), false,
+								doAuditReqTemplate);
+
+						// Getting the cloned file Id
+						strClonedFileID = boFileAttachmentClone.getObjectId();
+						DomainObject doLNewFileAttachment = DomainObject.newInstance(context, strClonedFileID);
+
+						// Code to connect Latest and Active version objects
+						doCloneVersionFileAttachment.connect(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_LATESTVERSION)), false,
+								doLNewFileAttachment);
+						doCloneVersionFileAttachment.connect(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTIVEVERSION)), false,
+								doLNewFileAttachment);
+						// Setting the logged in user as the owner
+						boFileAttachmentClone.setOwner(context, strContextUser);
+						boFileAttachmentClone.update(context);
+						doCloneVersionFileAttachment.setOwner(context, strContextUser);
+						doCloneVersionFileAttachment.update(context);
+						doLNewFileAttachment.setOwner(context, strContextUser);
+						doLNewFileAttachment.update(context);
+					}
+				}
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+	}
+
+	/**
+	 * This method Create Copy of the Audit Tasks associated with Audit request
+	 * This method will connect the newly cloned object with Audit Template
+	 * Request object
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strRequestObjectId
+	 *            Related Audit Request's Id
+	 * @param doTemplateObject
+	 *            Audit Request Template Object returs void
+	 * @throws Exception
+	 *             the exception
+	 */
+	public void copyAuditTaskToTemplateRequest(Context context, String strRequestObjectId, DomainObject doAuditReqTemplate) throws Exception {
+
+		BusinessObject boNumGenFileAttachment = null;
+
+		try {
+			DomainObject doTask;
+			String strTaskObjId = "";
+			String strTaskName = "";
+			DomainObject doRequestObject;
+			BusinessObject boTaskClone = null;
+			Hashtable hmReqTemplateTasks = new Hashtable();
+			MapList mListReqTemplateTasks = null;
+			StringList sListSelects = new StringList(2);
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+
+			if (null != strRequestObjectId && !"".equals(strRequestObjectId)) {
+				doRequestObject = DomainObject.newInstance(context, strRequestObjectId);
+
+				// Clone the related Request Template Action Task Objects and
+				// connect to the Audit Request Template
+				// object
+				mListReqTemplateTasks = doRequestObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_REQUEST_ACTION_TASK), false, true, 1, sListSelects,
+						null, null, "", null, null, null);
+				if (null != mListReqTemplateTasks && !mListReqTemplateTasks.isEmpty()) {
+					for (int iTaskCnt = 0; iTaskCnt < mListReqTemplateTasks.size(); iTaskCnt++) {
+						hmReqTemplateTasks = (Hashtable) mListReqTemplateTasks.get(iTaskCnt);
+						strTaskObjId = (String) hmReqTemplateTasks.get(DomainConstants.SELECT_ID);
+						doTask = DomainObject.newInstance(context, strTaskObjId);
+
+						// Get Unique name for the Action Task
+						strTaskName = doTask.getUniqueName(PREFIX_ACTION_TASK);
+
+						// Clone the Task object and connect to the new Audit
+						// Request Template Object
+						boTaskClone = doTask.cloneObject(context, strTaskName, null, context.getVault().toString(), true, false);
+						boTaskClone.connect(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM)), false,
+								doAuditReqTemplate);
+					}
+				}
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+
+		}
+	}
+
+	public Map<?, ?> getFieldAuditTemplateOwnerRange(Context context, String[] args) throws AuditException {
+		try {
+			Map<String, StringList> returnMap = new HashMap();
+			Role roleAuditTemplateManager = new Role(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITTEMPLATEMANAGER));
+			Role roleAuditAdmin = new Role(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN));
+			Role roleLeader = new Role(AuditConstants.ROLE_VPLM_PROJECT_LEADER);
+			RoleList childLeaderRoles = roleLeader.getChildren(context, true);
+			UserList userAuditAdminList = roleAuditAdmin.getAssignments(context);
+			UserList userLeaderList = roleLeader.getAssignments(context);
+			UserList userAuditTemplateManagerList = roleAuditTemplateManager.getAssignments(context);
+			userAuditAdminList.addAll(userLeaderList);
+			userAuditAdminList.addAll(userAuditTemplateManagerList);
+			for (Role role : childLeaderRoles) {
+				UserList userList = role.getAssignments(context);
+				userAuditAdminList.addAll(userList);
+			}
+
+			StringBuilder contextUserName = new StringBuilder();
+			String strContextUserName = context.getUser();
+			contextUserName.append(PersonUtil.getFullName(context, strContextUserName)).append(" (").append(strContextUserName).append(")");
+			StringList fullUserNames = new StringList();
+			StringList userNames = new StringList();
+			for (User user : userAuditAdminList) {
+				String username = user.getName();
+				StringBuilder fullName = new StringBuilder();
+				fullName.append(PersonUtil.getFullName(context, username)).append(" (").append(username).append(")");
+				if (!userNames.contains(username)) {
+					fullUserNames.add(fullName.toString());
+					userNames.add(username);
+				}
+			}
+
+			int contextUserIndex = userNames.indexOf(context.getUser());
+			userNames.remove(contextUserIndex);
+			userNames.add(0, context.getUser());
+
+			int index = fullUserNames.indexOf(contextUserName.toString());
+			fullUserNames.remove(index);
+			fullUserNames.add(0, contextUserName.toString());
+
+			returnMap.put(AuditConstants.FIELD_CHOICES, userNames);
+			returnMap.put(AuditConstants.FIELD_DISPLAY_CHOICES, fullUserNames);
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * get the HTML text for the users with the roles assigned Audit Admin ot
+	 * Template manager
+	 * 
+	 * @param context
+	 * @param args
+	 * @return string (HTML formatted output)
+	 * @throws Exception
+	 */
+	public String getAuditTemplateOwner(Context context, String[] args) throws Exception {
+		StringBuffer strBufferOutput = new StringBuffer();
+		MapList mAuditorTemp = new MapList();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) programMap.get("requestMap");
+			String strMode = (String) mapRequest.get("mode");// create/edit/search
+																// mode
+
+			String strAttribute = DomainConstants.SELECT_OWNER;
+
+			StringList sListSelects = new StringList(4);
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+			// Getting Current user
+			// String strCurrentUser = (String) (context.getUser());
+			String strObjectId = (String) mapRequest.get("objectId");
+			String strWhereExp = "";
+			String strSelectedOwner = "";
+			mAuditorTemp = DomainObject.findObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_PERSON), null,
+					strWhereExp, sListSelects);
+
+			// get roles list for the attribute passed
+			// comments this out because the following method will give wrong
+			// role,
+			// it gives Audit Admin and Audit Lead roles, instead of Audit Admin
+			// and Audit Template Manager
+			// StringList sListRoles =
+			// ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.ui.AuditAudit}.getRoles(
+			// strAttribute );
+			StringList sListRoles = new StringList(2);
+			sListRoles.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN));
+			sListRoles.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITTEMPLATEMANAGER));
+			sListRoles.add("VPLMProjectLeader");
+
+			if (null != strObjectId) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+				strSelectedOwner = doObject.getOwner(context).getName();
+			}
+			else {
+				strSelectedOwner = context.getUser();
+			}
+
+			String strId = "";
+			Map element = null;
+			Person doObject = null;
+			String strRole = "";
+			Iterator iterator = null;
+			boolean bTrue = false;
+			String strDisplayName = "";
+			if (null != strMode) {
+
+				strBufferOutput.append(" <select name='" + strAttribute + "' id='" + strAttribute + "' >");
+
+				// traverse through the users and check for role assignments
+				for (Iterator iter = mAuditorTemp.iterator(); iter.hasNext();) {
+					bTrue = false;
+					element = (Map) iter.next();
+					strId = (String) element.get(DomainConstants.SELECT_NAME);
+					doObject = new Person(strId);
+					if (!sListRoles.isEmpty()) {
+						for (iterator = sListRoles.iterator(); iterator.hasNext();) {
+							strRole = (String) iterator.next();
+							if (doObject.isAssigned(context, strRole)) {
+								bTrue = true;
+								break;
+							}
+						}
+					} // else if there are no roles specified then returns all
+						// users
+					else {
+						bTrue = true;
+					}
+
+					if (bTrue) {
+						strBufferOutput.append("<option value ='" + strId + "'");
+
+						if (strSelectedOwner.equalsIgnoreCase(strId)) {
+							strBufferOutput.append(" selected ");
+						}
+						strDisplayName = PersonUtil.getFullName(context, strId) + " ( " + strId + " ) ";
+						strBufferOutput.append(">" + strDisplayName + "</option>");
+					}
+				}
+				strBufferOutput.append("</select>");
+			}
+			else {
+				strBufferOutput.append(strSelectedOwner);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			System.err.println("e.getMessage()" + e.getMessage());
+		}
+		return strBufferOutput.toString();
+	}
+
+}
+

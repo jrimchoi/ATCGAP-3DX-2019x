@@ -1,0 +1,247 @@
+/*
+**  DSCShowActionsLink
+**
+**  Copyright Dassault Systemes, 1992-2007.
+**  All Rights Reserved.
+**  This program contains proprietary and trade secret information of Dassault Systemes and its 
+**  subsidiaries, Copyright notice is precautionary only
+**  and does not evidence any actual or intended publication of such program
+**
+**  Program to display Checkout Icon
+*/
+import com.designrule.drv6tools.jpointeraction.drDocumentActions;
+import com.matrixone.MCADIntegration.utils.*;
+import com.matrixone.apps.domain.util.i18nNow;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Vector;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+ 
+public class ${CLASSNAME} extends ${CLASS:DSCShowActionsLinkBase}
+{
+
+    /**
+	   * Constructor.
+	   *
+	   * @param context the eMatrix <code>Context</code> object
+	   * @param args holds no arguments
+	   * @throws Exception if the operation fails
+	   * @since Sourcing V6R2008-2
+	   */
+	public ${CLASSNAME} (Context context, String[] args) throws Exception
+	{
+	  super(context, args);
+	}	
+ 
+    @Override
+	protected String addViewerLink(Context context, String objectId, String integrationName, HashMap formatViewerMap, BusinessObjectWithSelect busObjectWithSelect)
+	{
+		try
+		{			
+			MCADGlobalConfigObject gco	= (MCADGlobalConfigObject)integrationNameGCOTable.get(integrationName);
+			String lang					= (String)context.getSession().getLanguage();
+			String sTipView				= i18nNow.getI18nString("emxTeamCentral.ContentSummary.ToolTipView", "emxTeamCentralStringResource", lang);
+			StringBuffer htmlBuffer		= new StringBuffer(300);
+
+			StringList filesList		= null;
+			StringList formatsList		= null;
+			short type					= 0;			
+			StringList objectIdList		= null;
+			StringList objectTypeList	= null;
+
+			// [NDM] QWJ
+			//String busType				= busObjectWithSelect.getSelectData("type");	
+			String busId				= busObjectWithSelect.getSelectData("id");	
+			String sIsVersion 			= busObjectWithSelect.getSelectData(SELECT_ISVERSIONOBJ);
+			boolean isVersion = Boolean.valueOf(sIsVersion).booleanValue();
+			
+			boolean isDerived = true;			
+
+			if(!isVersion) // [NDM] QWJ
+			{
+				filesList		= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_ACTIVE_MINOR + "format.file.name");
+				type			= busObjectWithSelect.getSelectDataType(SELECT_ON_ACTIVE_MINOR + "format.file.name");		
+				formatsList		= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_ACTIVE_MINOR + "format.file.format");
+				objectIdList	= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_ACTIVE_MINOR + "id");
+				objectTypeList	= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_ACTIVE_MINOR + "type");
+
+				if(filesList == null || type == 0)
+				{
+					//Finalized major
+					filesList		= (StringList)busObjectWithSelect.getSelectDataList("format.file.name");
+					formatsList		= (StringList)busObjectWithSelect.getSelectDataList("format.file.format");
+					objectIdList	= (StringList)busObjectWithSelect.getSelectDataList("id");
+					objectTypeList	= (StringList)busObjectWithSelect.getSelectDataList("type");
+				}
+			}
+			else
+			{
+				filesList		= (StringList)busObjectWithSelect.getSelectDataList("format.file.name");
+				type			= busObjectWithSelect.getSelectDataType("format.file.name");		
+				formatsList 	= (StringList)busObjectWithSelect.getSelectDataList("format.file.format");
+				objectIdList	= (StringList)busObjectWithSelect.getSelectDataList("id");
+				objectTypeList	= (StringList)busObjectWithSelect.getSelectDataList("type");
+
+				if(filesList == null || type == 0)
+				{
+					//Finalized minor
+					filesList		= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_MAJOR + "format.file.name");
+					formatsList 	= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_MAJOR + "format.file.format");
+					objectIdList	= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_MAJOR + "id");
+					objectTypeList	= (StringList)busObjectWithSelect.getSelectDataList(SELECT_ON_MAJOR + "type");
+				}
+			}			
+
+			appendViewerURLToBuffer(context, integrationName, objectIdList, objectTypeList, formatsList, filesList, formatViewerMap, sTipView, htmlBuffer,isDerived);		
+
+			String depDocRelSelect = SELECT_ON_DERIVED_OUTPUT;
+			StringList depDocObjectIdList	= null;
+			StringList depDocObjectTypeList	= null;
+			depDocObjectIdList = (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "id");
+
+			if(depDocObjectIdList == null || depDocObjectIdList.equals(""))
+			{
+				depDocRelSelect			= SELECT_ON_ACTIVE_MINOR + SELECT_ON_DERIVED_OUTPUT;
+				depDocObjectIdList		= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "id");
+				depDocObjectTypeList	= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "type");
+
+			}
+			if(depDocObjectIdList != null && !depDocObjectIdList.equals(""))
+			{			
+				filesList	= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "format.file.name");
+				formatsList = (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "format.file.format");
+
+				appendViewerURLToBuffer(context, integrationName, depDocObjectIdList, depDocObjectTypeList, formatsList, filesList, formatViewerMap, sTipView, htmlBuffer,isDerived);
+			}
+
+
+			depDocRelSelect			= SELECT_ON_VIEWABLE;
+			depDocObjectIdList		= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "id");
+			depDocObjectTypeList	= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "type");
+
+			if(depDocObjectIdList == null || depDocObjectIdList.equals(""))
+			{
+				depDocRelSelect			= SELECT_ON_ACTIVE_MINOR + SELECT_ON_VIEWABLE;
+				depDocObjectIdList		= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "id");
+				depDocObjectTypeList	= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "type");
+
+			}			
+			if(depDocObjectIdList != null)
+			{				
+				filesList	= (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "format.file.name");
+				formatsList = (StringList)busObjectWithSelect.getSelectDataList(depDocRelSelect + "format.file.format");
+				isDerived = false;
+
+				appendViewerURLToBuffer(context, integrationName, depDocObjectIdList, depDocObjectTypeList, formatsList, filesList, formatViewerMap, sTipView, htmlBuffer,isDerived);
+			}
+
+			return htmlBuffer.toString();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+
+		return "";
+	}
+
+	private void appendViewerURLToBuffer(Context context, String integrationName, StringList depDocObjectIdList, StringList depDocObjectTypeList, StringList formatsList, StringList filesList, HashMap formatViewerMap, String sTipView, StringBuffer htmlBuffer,boolean filesInSameObject) throws Exception
+	{	
+		MCADGlobalConfigObject gco	= (MCADGlobalConfigObject)integrationNameGCOTable.get(integrationName);
+
+                //drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+                drDocumentActions drDocActions = new drDocumentActions(context, paramMap);
+                //drV6Tools//
+            
+		if(depDocObjectIdList !=null && !depDocObjectIdList.equals("") && formatsList != null)
+		{
+
+			for (int i= 0; i<formatsList.size(); i++)
+			{
+				String format			= (String)formatsList.elementAt(i);
+				//IR-626211 : format comes empty for "Embedded Component"
+				if(!MCADStringUtils.isNullOrEmpty(format))
+				{  															 
+					String	objectId        = null;
+					if(filesInSameObject)
+					{
+						objectId			= (String)depDocObjectIdList.elementAt(0);	
+
+					}
+					else
+					{
+						String mxType	= "";
+
+						if(depDocObjectIdList.size()==1)
+							objectId	= (String)depDocObjectIdList.elementAt(0);						
+
+						else 
+						{
+							Vector cadMxTypeVector	= gco.getCADMxTypeForFormat(format);
+							if(!cadMxTypeVector.isEmpty())
+							{							
+								Iterator cadMxTypeItr	= cadMxTypeVector.iterator();
+								while(cadMxTypeItr.hasNext())
+								{
+									String	cadMxType = (String)cadMxTypeItr.next();
+									if(cadMxType.indexOf("|")!= -1)
+										mxType = cadMxType.substring(cadMxType.indexOf("|")+1, cadMxType.length());
+
+									for (int j= 0; j<depDocObjectTypeList.size(); j++)
+									{
+										String	objectType	= (String)depDocObjectTypeList.elementAt(j);
+										if(!"".equals(mxType) && mxType.equals(objectType))
+											objectId	= (String)depDocObjectIdList.elementAt(j);									
+									}
+								}
+							}
+						}						
+
+					}	
+					if(objectId == null)
+						objectId	= (String)depDocObjectIdList.elementAt(0);
+
+					String[] viewerServletAndTip = getViewerServletAndTip(context, formatViewerMap, format);
+					String sViewerServletName	 = viewerServletAndTip[0];
+					String tipView				 = viewerServletAndTip[1];
+
+					if (sViewerServletName == null || sViewerServletName.length() == 0)
+						continue;
+
+					if (tipView != null && tipView.length() != 0)
+						sTipView = tipView;
+
+					String fileName			 = (String)filesList.elementAt(i);
+					
+					//drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+					drDocActions.setupForObject(objectId);
+					if(drDocActions.isShowActivity()) {
+						HashMap<String, String> objectContentMap = new HashMap<String, String>();
+						objectContentMap.put("id", objectId);
+						objectContentMap.put("filename", fileName);
+						drDocActions.addActivityHTML(objectContentMap, htmlBuffer);
+					}
+
+					if (drDocActions.isShowViewer() ) {
+					//drV6Tools        
+							String sFileViewerLink	 = "/servlet/" + sViewerServletName;
+							String viewerURL		 = "../iefdesigncenter/emxInfoViewer.jsp?url=" + sFileViewerLink + "&amp;id=" + objectId + "&amp;format=" + format + "&amp;file=" + MCADUrlUtil.hexEncode(fileName);
+
+							String viewerHref		 = viewerURL;
+							viewerHref				 = "javascript:openWindow('"+ viewerURL + "')";
+
+							String url				 = getFullPathFeatureIconContent(viewerHref, "../iefdesigncenter/images/iconActionViewer.gif", sTipView + " (" + format + ")");
+
+							htmlBuffer.append(url);
+					}
+				}
+			}
+		}
+	}
+
+}
+
+

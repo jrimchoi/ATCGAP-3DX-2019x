@@ -1,0 +1,1125 @@
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.UOMUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.AttributeType;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME}
+{
+
+	/**
+	 * Method to return Attribute Group(s) name related to context Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the packed arguments
+	 * @throws Exception if the operation fails
+	 */
+	public StringList getAttributeGroupName(Context context,String [] args) throws DCLException {
+		try {
+			StringList returnMap = new StringList();
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			Map<?,?> requestMap =(Map<?,?>)programMap.get(DCLConstants.PARAMLIST);
+			String strTemplateId = (String) requestMap.get(DCLConstants.OBJECTID);
+			String strCharSet =  (String )requestMap.get("charSet");
+			boolean isExport            = false;
+			Map<?, ?> paramListMap = (Map) programMap.get("paramList");
+			String reportFormat = (String) paramListMap.get(DCConstants.REPORTFORMAT);
+			String exportFormat = (String) paramListMap.get("exportFormat");
+			if ("CSV".equalsIgnoreCase(reportFormat) || "CSV".equalsIgnoreCase(exportFormat)) {
+				isExport = true;
+			}
+			String href = DomainConstants.EMPTY_STRING;
+			MapList objectList = (MapList)programMap.get(DCLConstants.OBJECTLIST);
+			for(Object object : objectList)
+			{
+				Map<?,?> objectMap = (Map<?, ?>) object;
+				StringBuffer hrefBuffer = new StringBuffer();
+				String objName = (String)objectMap.get(DomainConstants.SELECT_ID);
+				if(isExport)
+				{
+					hrefBuffer.append(objName);
+				}
+				else{
+					String strDisplayName =objName;
+					String encodedDisplayName = FrameworkUtil.encodeNonAlphaNumeric(objName,strCharSet);
+
+					hrefBuffer.append("../common/emxIndentedTable.jsp?freezePane=Name");
+					hrefBuffer.append("&amp;program=ENODCLTemplateAttributesGroupingUI:getAttributeGroupAttributesAdded");
+					hrefBuffer.append("&amp;table=DCLAttributeGroupAttributesTable&amp;sortColumnName=Name");
+					hrefBuffer.append("&amp;sortDirection=ascending&amp;toolbar=DCLAttributeGroupAttributeToolbar");
+					hrefBuffer.append("&amp;header=enoDocumentControl.Header.Attributes&amp;Export=false");
+					hrefBuffer.append("&amp;showRMB=false&amp;selection=multiple&amp;displayView=details");
+					hrefBuffer.append("&amp;suiteKey=DocumentControl&amp;StringResourceFileId=enoDocumentControlStringResource");
+					hrefBuffer.append("&amp;SuiteDirectory=documentcontrol&amp;emxSuiteDirectory=");
+					hrefBuffer.append("&amp;suiteKey=DocumentControl");
+					hrefBuffer.append("&amp;objectName=");
+					hrefBuffer.append(encodedDisplayName);
+					hrefBuffer.append("&amp;AGName=");
+					hrefBuffer.append(objName);
+					hrefBuffer.append("&amp;templateId=");
+					hrefBuffer.append(strTemplateId);
+					href = hrefBuffer.toString();
+
+					String strImageHtmlCode = "<img border=\'0\' align=\'top\' SRC=\"images/iconSmallAttributeGroup.gif\"></img>";
+
+					StringBuffer strHTMLStartAnchorTag = new StringBuffer();
+					strHTMLStartAnchorTag.append("<a href=\"JavaScript:showModalDialog('");
+					strHTMLStartAnchorTag.append(href);
+					strHTMLStartAnchorTag.append("',730,450,'false','content')\" >");
+					String strHTMLEndAnchorTag = "</a>";
+
+					hrefBuffer = new StringBuffer();
+					hrefBuffer.append(strImageHtmlCode);
+					hrefBuffer.append(strHTMLStartAnchorTag.toString());
+					hrefBuffer.append(strDisplayName);
+					hrefBuffer.append(strHTMLEndAnchorTag);
+				}
+				returnMap.addElement(hrefBuffer.toString());
+				hrefBuffer = new StringBuffer();
+			}
+			return returnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public StringList getAttributeGroupDescription(Context context, String [] args) throws DCLException{
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			StringList slColumnValues = new StringList();
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for(Object object : objectList)
+			{
+				Map<?,?> objectMap = (Map<?, ?>) object;
+				String desc = (String)objectMap.get(DCLConstants.DESC);
+				if(desc==null){
+					desc = documentService.getAttributeGroupDetails(context, DomainConstants.SELECT_DESCRIPTION, (String)objectMap.get(DomainConstants.SELECT_ID));
+				}
+				slColumnValues.add(desc);
+			}
+			return slColumnValues;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	/**
+	 * Method to return list of Attribute(s) related to context Attribute Group
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the list of Attribute(s)
+	 * @throws DCLException if the operation fails
+	 */
+	public StringList getAttributeGroupAttributes(Context context, String [] args) throws DCLException{
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			StringList columnList = new StringList();
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList)programMap.get(DCLConstants.OBJECTLIST);
+			boolean isExport = false;
+			Map<?, ?> paramListMap = (Map) programMap.get("paramList");
+			String reportFormat = (String) paramListMap.get(DCConstants.REPORTFORMAT);
+			String exportFormat = (String) paramListMap.get("exportFormat");
+			if ("CSV".equalsIgnoreCase(reportFormat) || "CSV".equalsIgnoreCase(exportFormat)) {
+				isExport = true;
+			}
+			for(Object object : objectList){
+				String strInterfaceAttributes = DomainConstants.EMPTY_STRING;
+				Map<?,?> objectMap = (Map<?, ?>) object;
+				String attributes = (String)objectMap.get(DCLConstants.ATTRIBUTES);
+
+				String interfaceName = (String)objectMap.get(DomainConstants.SELECT_ID);	
+							if (UIUtil.isNullOrEmpty(attributes)) {
+					attributes =  documentService.getAttributeGroupDetails(context, DCLConstants.FIELD_TYPE_ATTRIBUTE, interfaceName);
+				}
+				String strMandatoryattributes =documentService.getAttributeGroupDetails(context, "property["+DCLConstants.MANDATORY_ATTRIBUTES+"].value", interfaceName);
+				StringList slMandatoryattributes = FrameworkUtil.split(strMandatoryattributes, DCLConstants.PIPE_SEPARATOR);
+				List<String> slAttributes = FrameworkUtil.split(attributes,DCLConstants.COMMA);
+							for (String strAttribute : slAttributes) {
+					if (slMandatoryattributes.contains(strAttribute)) {
+						StringBuilder sbAttribute = new StringBuilder();
+											if (isExport) {
+							sbAttribute.append(strAttribute);
+						}
+						else {
+							sbAttribute.append("<font class=\"custRed\">");
+						sbAttribute.append(strAttribute);
+						sbAttribute.append("</font>");
+											}
+						strInterfaceAttributes = strInterfaceAttributes.concat(sbAttribute.toString()+DCLConstants.COMMA);
+					}
+					else{
+						strInterfaceAttributes = strInterfaceAttributes.concat(strAttribute+DCLConstants.COMMA);
+					}
+
+				}
+				if(UIUtil.isNotNullAndNotEmpty(strInterfaceAttributes)){
+					strInterfaceAttributes = strInterfaceAttributes.substring(0, strInterfaceAttributes.length() - 1);
+				}
+				else
+					strInterfaceAttributes=DomainConstants.EMPTY_STRING;
+
+				columnList.add(strInterfaceAttributes);
+
+
+			}
+			return columnList;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+
+
+	/**
+	 * Method to return all the Attribute Group related to context Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the packed arguments
+	 * @return MapList list of Document Template Attribute Group(s)
+	 * @throws DCLException if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDocumentTemplateInterface(Context context,String [] args) throws DCLException{
+		MapList returnList = new MapList();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			String objectId = (String)programMap.get(DCLConstants.PARENTOID);
+			DomainObject dObj = DomainObject.newInstance(context,objectId);
+			String strObjecttype = dObj.getInfo(context, DomainConstants.SELECT_TYPE);
+
+			List<String> slAttributeGroups = documentService.getDocumentTemplateAttributeGroups(context, objectId);
+			
+			for (int i =0;i<slAttributeGroups.size();i++)
+			{
+				Map<String,String> objectMap = new HashMap<>();
+				String name =  slAttributeGroups.get(i);
+				if((!strObjecttype.equals(name))){
+
+				objectMap.put(DomainConstants.SELECT_ID,name.trim());
+				String desc = documentService.getAttributeGroupDetails(context, DomainConstants.SELECT_DESCRIPTION, name);
+				objectMap.put(DCLConstants.DESC,desc.trim());
+				String attributes = documentService.getAttributeGroupDetails(context, DCLConstants.FIELD_TYPE_ATTRIBUTE, name);
+				objectMap.put(DCLConstants.ATTRIBUTES, attributes);
+				returnList.add(objectMap);
+			}}
+			return returnList;
+		}  catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+
+
+	/**
+	 * Method to create new Attribute Group and add to the context Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the packed arguments
+	 * @throws DCLException if the operation fails
+	 */
+	public void createAttributeGroup(Context context,String [] args) throws DCLException{
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?,?> programMap      = JPO.unpackArgs(args);
+			Map<?,?> paramMap        = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			Map<?,?> requestMap      = (Map<?, ?>) programMap.get(DCLConstants.REQUESTMAP);
+			String objectId         = (String)paramMap.get(DCLConstants.OBJECTID);
+			String newName          = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String description      = ((String[])requestMap.get("Description"))[0];
+			String attributes       = ((String[])requestMap.get("Attributes"))[0];
+			//String attributesOID       = ((String[])requestMap.get("AttributesOID"))[0];
+			description             = FrameworkUtil.findAndReplace(description,"\n","");
+			description             = FrameworkUtil.findAndReplace(description,"\r","");
+			StringList methodArgsList = new StringList();
+			methodArgsList.add(newName);
+			methodArgsList.add(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS));
+			methodArgsList.add(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_TYPE_QUALITY_SYSTEM_DOCUMENT));
+			methodArgsList.add("product");
+			methodArgsList.add("QUC");
+
+			StringBuffer queryBuffer = new StringBuffer();
+			queryBuffer.append("add interface $1 type $2,$3 property $4 value $5");
+
+			if(UIUtil.isNotNullAndNotEmpty(description)){
+				queryBuffer.append(" description $6");
+				methodArgsList.add(description);
+			}
+			String strInterface = MqlUtil.mqlCommand(context,"list interface $1",newName);
+			if(UIUtil.isNullOrEmpty(strInterface)){
+			MqlUtil.mqlCommand(context, queryBuffer.toString(),methodArgsList);
+
+			documentService.addAttributeToAttributeGroup(context, newName, attributes);
+			MqlUtil.mqlCommand(context, "mod bus $1 add interface $2",objectId,newName);
+			String strInterfaceMandatoryAttributes = getPropertyMandatoryAttributes(attributes);
+			documentService.setPropertyMandatoryAttributes(context, newName, strInterfaceMandatoryAttributes);
+			}
+			else
+			{
+				String	strMessage = MessageUtil.getMessage(context, null,"enoDocumentControl.Error.Msg.AttributeGroupNameNotUnique", new String[]{strInterface}, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);
+			}
+			
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get Mandatory Attributes property for Attribute Group
+	 * @param strAttributes attributes of Attribute Group along with other specific details
+	 * @return String value of property
+	 * @throws DCLException if operation fails
+	 */
+	private String getPropertyMandatoryAttributes(String strInterfaceAttributes) throws DCLException
+	{
+		try {
+			String strMandatoryAttributes = new String();
+			List<String> slAttributeRanges = new StringList();
+			if(strInterfaceAttributes.indexOf(DCLConstants.PIPE_SEPARATOR)>-1)
+			{
+				slAttributeRanges = FrameworkUtil.split(strInterfaceAttributes, DCLConstants.PIPE_SEPARATOR);
+			}
+			else
+				slAttributeRanges.add(strInterfaceAttributes);
+			for(String strAttributeInfo : slAttributeRanges)
+			{
+				if(FrameworkUtil.split(strAttributeInfo,DCLConstants.ATTRIBUTE_INFO_SEPARATOR).get(1).toString().equals("yes"))
+				{
+					strMandatoryAttributes = strMandatoryAttributes.concat(FrameworkUtil.split(strAttributeInfo,DCLConstants.ATTRIBUTE_INFO_SEPARATOR).get(0).toString()+DCLConstants.PIPE_SEPARATOR);
+				}
+			}
+
+			if(UIUtil.isNotNullAndNotEmpty(strMandatoryAttributes))
+					strMandatoryAttributes = strMandatoryAttributes.substring(0, strMandatoryAttributes.length() - 1);
+
+			return strMandatoryAttributes;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> preProcessAddAtributeToAttributeGroup(Context context, String[] args) throws DCLException {
+
+		try {
+			Map<String,String> mpReturn = new HashMap();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String [] strInterfaceName = (String[]) programMap.get(DCLConstants.AGNAME);
+			
+					mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "preProcessAddAtributeToAttributeGroup",
+					DCLConstants.AGNAME, strInterfaceName[0]));
+			return mpReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+
+	/**
+	 * Method to return list of Attribute(s)  based on the Search Criteria
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the packed arguments
+	 * @throws DCLException if the operation fails
+	 */
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAttributeList(Context context, String[] args)
+			throws DCLException {
+		MapList mlAttributes        = new MapList();
+		MapList mlResutList         = new MapList();
+		String strInterfacesAttribute = DomainConstants.EMPTY_STRING;
+		String strObjectId = DomainConstants.EMPTY_STRING;
+
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?,?> programMap        = (Map<?,?>)JPO.unpackArgs(args);
+			String strDoFilter      = (String)programMap.get(DCLConstants.FILTER);
+			if(null!= strDoFilter && DCLConstants.TRUE.equalsIgnoreCase(strDoFilter)) {
+			String strNameMatches   = (String)programMap.get(DCLConstants.ATTRIBUTE_NAME_MATCHES);
+			String strTypeFilter    = (String)programMap.get(DCLConstants.ATTRIBUTE_TYPE);
+			Map<?,?> requestMap      = (Map<?,?>)programMap.get(DCLConstants.REQUESTVALUEMAP);
+			strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			List<String> slAttributesToExclude = DomainConstants.EMPTY_STRINGLIST;
+			StringList slInterfacesAttributes = DomainConstants.EMPTY_STRINGLIST;
+			if(DomainConstants.EMPTY_STRING.equals(strObjectId) || UIUtil.isNullOrEmpty(strObjectId))
+			{
+				String strAGName[]=((String[])requestMap.get(DCLConstants.AGNAME));
+				if(strAGName!=null)
+					strObjectId =strAGName[0]; 
+				strInterfacesAttribute = documentService.getAttributeGroupDetails(context, DCLConstants.FIELD_TYPE_ATTRIBUTE, strObjectId);
+				slAttributesToExclude = documentService.getAttributesToExcludeFromList(context,strObjectId);
+			}
+			else{
+				strInterfacesAttribute = MqlUtil.mqlCommand(context, "print bus $1 select $2 dump",strObjectId,"interface.attribute");
+			}
+			slInterfacesAttributes = FrameworkUtil.split(strInterfacesAttribute,DCLConstants.COMMA);
+			
+			boolean bUnused = true;
+			mlAttributes = documentService.getAttributesByQuery(context,strNameMatches,strTypeFilter,bUnused);
+			for(Object obj : mlAttributes )
+			{
+				Map<?,?> mpObjMap = (Map<?,?>) obj;
+				String strAttribute = mpObjMap.get(DomainConstants.SELECT_ID).toString();
+				if(!slInterfacesAttributes.contains(strAttribute) && !slAttributesToExclude.contains(strAttribute))
+				{
+					mlResutList.add(mpObjMap);
+				}
+			}
+		}
+		}
+		catch(Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+		return mlResutList;
+	}
+
+
+	/**
+	 * Method to return the Attribute(s) Name
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList list of Attribute(s) Name 
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getAttributeName(Context context, String[] args)
+			throws DCLException {
+		StringList slAttributesName = new StringList();
+		try {
+
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(DCLConstants.PARAMLIST);
+			String strLanguageStr = ((String) ((HashMap) programMap.get(DCLConstants.PARAMLIST)).get(DCLConstants.LANGUAGE_STR));
+			String tableName = (String) paramList.get(DCLConstants.TABLE);
+			for(Object object : objList)
+			{
+				Map<?,?> map = (Map<?, ?>) object;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				StringBuffer strI18nAttributeName = new StringBuffer();
+				strI18nAttributeName.append("<img align=\"top\" SRC=\"images/iconSmallAttribute.gif\"></img><span class='object'>");
+				strI18nAttributeName.append(i18nNow.getAttributeI18NString(
+						att.getName(), strLanguageStr));
+				strI18nAttributeName.append("</span>");
+				strI18nAttributeName.append(
+						"<img src=\"../common/images/iconActionEdit.gif\" name=\"magicalframe\" height=\"0\" width=\"0\"");
+				if (!"DCLAttributeGroupAttributesTable".equals(tableName)) {
+					strI18nAttributeName.append(" onload=\"javascript:modifyCheckbox();\"");
+				}
+				strI18nAttributeName.append(" style=\"visibility: hidden\"></img>");
+				slAttributesName.addElement(strI18nAttributeName.toString());
+			}
+		} catch (Exception ex) {
+			throw new DCLException(ex.getMessage());
+		}
+		return slAttributesName;
+	}
+
+	/**
+	 * Method to return the Attribute(s) Type
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList list of Attribute(s) Type 
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getAttributeType(Context context, String[] args)
+			throws DCLException {
+		StringList slAttributesType = new StringList();
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			String strLanguageStr = ((String) ((HashMap) programMap
+					.get(DCLConstants.PARAMLIST)).get(DCLConstants.LANGUAGE_STR));
+			for(Object object : objList)
+			{
+				Map<?,?> map = (Map<?, ?>) object;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				att.open(context);
+				String strI18nAttributeType = i18nNow.getAttributeTypeI18NString(context,att.getName(),strLanguageStr);
+				slAttributesType.addElement(strI18nAttributeType);
+				att.close(context);
+			}
+		} catch (Exception ex) {
+			throw new DCLException(ex.getMessage());
+		}
+		return slAttributesType;
+	}
+
+	/**
+	 * Method to return the Attribute(s) Description
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList list of Attribute(s) Description
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getAttributeDescription(Context context, String[] args) throws DCLException{
+		StringList slAttributesDescription = new StringList();
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for(Object object : objList)
+			{
+				Map<?,?> map = (Map<?, ?>) object;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				att.open(context);
+				slAttributesDescription.addElement(att.getDescription());
+				att.close(context);
+			}
+		} catch (Exception ex) {
+			throw new DCLException(ex.getMessage());
+		}
+		return slAttributesDescription;
+	}
+
+
+	/**
+	 * Method to return the Attribute(s) Default Value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return StringList list of Attribute(s) Default Value
+	 * @throws DCLException if operation fails
+	 */
+	public StringList getAttributeDefaultValue(Context context, String[] args)
+			throws DCLException {
+		ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+		StringList slAttributesDefaultValues = new StringList();
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			Map paramlist = (Map)programMap.get(DCLConstants.PARAMLIST);
+			String strInterfaceName = (String) paramlist.get(DCLConstants.AGNAME);
+			
+			for(Object object : objList)
+			{
+				Map<?,?>map = (Map<?,?>) object;
+				String strattributename = (String) map.get(DomainConstants.SELECT_ID);
+				slAttributesDefaultValues = documentService.showDefaultValues(context, strattributename, strInterfaceName,slAttributesDefaultValues);
+			}
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+		return slAttributesDefaultValues;
+	}
+
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> getSelectedAttributes(Context context, String[] args) throws DCLException {
+
+		try {
+			Map<String,String> mpReturn = new HashMap();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String [] strInterfaceName = (String[]) programMap.get(DCLConstants.AGNAME);
+			String [] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String strMessage = EnoviaResourceBundle.getProperty(context,DCLConstants.DCL_STRING_RESOURCE,context.getLocale(),"enoDocumentControl.Alert.Msg.SelectAttribute");
+			if (strObjectId == null) {
+				strObjectId = (String[]) programMap.get(DCLConstants.PARENTOID);
+			}
+
+			if(programMap.get(DCLConstants.AGNAME)== null){
+				mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "getSelectedAttributes", strObjectId[0], "", strMessage));
+			}else{
+				mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "getSelectedAttributes",
+						strObjectId[0], strInterfaceName[0], strMessage));
+					}
+				return mpReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> addExistingAttributeToAttributeGroup(Context context, String[] args) throws DCLException {
+		Map<String,String> mpReturn = new HashMap<>();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String [] AGName        = (String[]) programMap.get(DCLConstants.AGNAME);
+			//String [] attribute = (String[]) programMap.get("attributes");
+			String [] attributesInfo = (String[]) programMap.get("attributesInfo");
+			documentService.addAttributeToAttributeGroup(context, AGName[0], XSSUtil.decodeFromURL(attributesInfo[0]));
+			String strInterfaceMandatoryAttributes = getPropertyMandatoryAttributes(attributesInfo[0]);
+			if(UIUtil.isNotNullAndNotEmpty(strInterfaceMandatoryAttributes))
+				documentService.setPropertyMandatoryAttributes(context, AGName[0], strInterfaceMandatoryAttributes);
+			mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "addExistingAttributeToAttributeGroup"));
+
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+		return mpReturn;
+	}
+
+	/**
+	 * Method to display Document Template Attribute Group(s) Attribute(s) dynamically when selected Document Template while creating Document
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args    holds the packed arguments
+	 * @return        MapList of Attribute(s) with Attribute Group(s) as section header
+	 * @throws        DCL Exception if the operation fails
+	 */
+	public MapList displayInterfaceAttributes(Context context, String args[] ) throws DCLException{
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			String strPolicyDocumentTemplate = PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			String strPolicyDocument = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			MapList returnList  = new MapList();
+			Map<?,?> programMap  = JPO.unpackArgs(args);
+			Map<?,?> requestMap  = (Map<?, ?>) programMap.get(DCLConstants.REQUESTMAP);
+			String strTemplateId         = (String)requestMap.get("templateId");
+			if (UIUtil.isNullOrEmpty(strTemplateId))
+				strTemplateId = (String) requestMap.get(DCLConstants.selTemplateId);
+			String strDocObjectId         = (String)requestMap.get(DCLConstants.OBJECTID);
+			String formName     = (String)requestMap.get("form");
+			String DCMode   = (String)requestMap.get("DCMode");
+			boolean isCreate    = UIUtil.isNotNullAndNotEmpty(DCMode)?true:false;
+			String strObjectId  = UIUtil.isNotNullAndNotEmpty(strDocObjectId)&&(!isCreate)?strDocObjectId:strTemplateId;
+			if(!UIUtil.isNullOrEmpty(strObjectId)){
+				String strPolicy       = new DomainObject(strObjectId).getPolicy(context).getName();
+				//checking the policy of object to load interface attributes only for Document Template or Documents
+				if(strPolicy.equals(strPolicyDocumentTemplate)||strPolicy.equals(strPolicyDocument)){
+					returnList      = documentService.getAttributeGroupsAttributesFromDocumentTemplate(context, strObjectId);
+					returnList      = getDynamicFieldsMapList(context,returnList,formName,isCreate);
+				}
+			}
+			return returnList;
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+     * Method to create the Document Template Attribute Group(s) Attribute(s) fields dynamically while Document creation from Template
+     * @param context the ENOVIA <code>Context</code> object
+     * @param classificationAttributesList
+     * @param formName
+     * @param isCreate
+     * @return MapList containing the Fields
+     * @throws DCLException is operation fails
+     */
+	 private MapList getDynamicFieldsMapList(Context context,MapList classificationAttributesList,String formName,boolean isCreate) throws DCLException{
+		 try {
+			 ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+
+			 Map AttributeGroupMap;
+			 String attributeGroupName;
+			 HashMap settingsMapForAGHeader;
+			 HashMap fieldMapForAGHeader;
+
+			 HashMap attribute;
+			 String attributeName;
+			 HashMap fieldMap;
+			 HashMap settingsMap;
+
+			 //Define a new MapList to return.
+			 MapList fieldMapList = new MapList();
+			 String strLanguage =  context.getSession().getLanguage();
+
+			 if(classificationAttributesList == null)
+				 return fieldMapList;
+
+			 Iterator classItr = classificationAttributesList.iterator();
+			 while(classItr.hasNext()){
+				 AttributeGroupMap = (Map)classItr.next();
+				 attributeGroupName = (String)AttributeGroupMap.get("attributeGroupName");
+				 String strProperty = documentService.getAttributeGroupDetails(context, "property["+DCLConstants.MANDATORY_ATTRIBUTES+"].value", attributeGroupName);
+				 List <String> slProperty = DomainConstants.EMPTY_STRINGLIST;
+				 if(UIUtil.isNotNullAndNotEmpty(strProperty))
+				 {
+					 slProperty = FrameworkUtil.split(strProperty,DCLConstants.PIPE_SEPARATOR);
+				 }
+				 settingsMapForAGHeader = new HashMap();
+				 fieldMapForAGHeader = new HashMap();
+				 settingsMapForAGHeader.put(DCLConstants.SETTING_FIELD_TYPE,"Section Header");
+				 settingsMapForAGHeader.put(DCLConstants.SETTING_REGISTERED_SUITE,"DocumentControl");
+				 settingsMapForAGHeader.put("Section Level","1");
+				 fieldMapForAGHeader.put(DCLConstants.LABEL,attributeGroupName);
+				 fieldMapForAGHeader.put("settings", settingsMapForAGHeader);
+				 fieldMapList.add(fieldMapForAGHeader);
+
+				 MapList AGAttributes = (MapList)AttributeGroupMap.get(DCLConstants.ATTRIBUTES);
+
+				 for(int i=0;i<AGAttributes.size();i++){
+					 attribute =  (HashMap)AGAttributes.get(i);
+					 attributeName = (String)attribute.get(DomainConstants.SELECT_NAME);
+					 fieldMap = new HashMap();
+					 settingsMap = new HashMap();
+					 String attributeGroupFieldName = (isCreate==true?attributeGroupName+"."+attributeName:attributeName);
+					 fieldMap.put(DomainConstants.SELECT_NAME,attributeGroupFieldName);
+					 fieldMap.put(DCLConstants.LABEL,i18nNow.getAttributeI18NString(attributeName,strLanguage));
+					 fieldMap.put(DCLConstants.EXPRESSION_BUSINESSOBJECT,"attribute["+attributeGroupName+"."+attributeName+"].value");
+					 if(!slProperty.isEmpty() && slProperty.contains(attributeName))
+						 settingsMap.put(DCLConstants.SETTING_REQUIRED,DCLConstants.TRUE);
+
+					 if(!isCreate){
+						 fieldMap.put(DCLConstants.SETTING_ADMIN_TYPE,"attribute_"+attributeGroupName+"."+attributeName.replaceAll(" ",DomainConstants.EMPTY_STRING));
+					 }
+					 String attributeType = (String)attribute.get(DomainConstants.SELECT_TYPE);
+					 if(attributeType.equals(DCLConstants.TIMESTAMP)){
+						 settingsMap.put(DCLConstants.SETTING_FORMAT, DCLConstants.FORMAT_DATE);
+					 }
+					 else if(attributeType.equals(DCLConstants.ATTRIBUTE_TYPE_BOOLEAN) ){
+						 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE,DCLConstants.INPUT_TYPE_COMBOBOX);
+						 StringList range = (StringList)attribute.get(DCLConstants.RANGE);
+
+						 if(range==null){
+							 settingsMap.put(DCLConstants.SETTING_RANGE_PROGRAM, "ENODCLTemplateAttributesGroupingUI");
+							 settingsMap.put(DCLConstants.SETTING_RANGE_FUNCTION, "getRangeValuesForBooleanAttributes");
+
+						 }
+					 }
+					 else if(attributeType.equals(DCLConstants.ATTRIBUTE_TYPE_INTEGER)){
+						 settingsMap.put(DCLConstants.SETTING_FORMAT, DCLConstants.ATTRIBUTE_TYPE_INTEGER);
+						 if(UOMUtil.isAssociatedWithDimension(context, attributeName)) {
+							 addUOMDetailsToSettingsMap(context,attributeName,fieldMap,settingsMap);
+						 }
+						 //setting the input type to combobox
+						 if((StringList)attribute.get(DCLConstants.RANGE)!=null)
+							 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_COMBOBOX);
+					 }
+					 else if(attributeType.equals(DCLConstants.ATTRIBUTE_TYPE_REAL)){
+						 settingsMap.put(DCLConstants.SETTING_FORMAT, DCLConstants.FORMAT_NUMERIC);
+						 if(UOMUtil.isAssociatedWithDimension(context, attributeName)) {
+							 addUOMDetailsToSettingsMap(context,attributeName,fieldMap,settingsMap);
+						 }
+						 //setting the input type to combobox
+						 if((StringList)attribute.get(DCLConstants.RANGE)!=null)
+							 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_COMBOBOX);
+					 }
+					 else if(attributeType.equals(DCLConstants.ATTRIBUTE_TYPE_STRING))
+					 {
+						 StringList range = (StringList)attribute.get(DCLConstants.RANGE);
+						 String isMultiline=(String)attribute.get(DCLConstants.MULTILINE);
+
+
+						 if(range != null && range.size() > 0) {
+							 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_COMBOBOX);
+
+						 } else if (DCLConstants.TRUE.equalsIgnoreCase(isMultiline)) {
+							 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_TEXTAREA);
+						 } else {
+							 settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_TEXTBOX);
+						 }
+
+					 }
+					 else{
+
+					 }
+					String isMultiVal=(String)attribute.get("valuetype");
+					if (DCLConstants.MULTIVALUE.equalsIgnoreCase(isMultiVal)) {
+						fieldMap.put("isMultiVal", "true");
+					}
+					 settingsMap.put(DCLConstants.SETTING_FIELD_TYPE,DCLConstants.FIELD_TYPE_ATTRIBUTE);
+					 fieldMap.put("settings",settingsMap);
+					 fieldMapList.add(fieldMap);
+				 }
+			 }
+
+			 return fieldMapList;
+		 } catch (Exception e) {
+				throw new DCLException(e.getLocalizedMessage());
+			}
+	    }
+	 
+	 
+	 
+	 
+     private void addUOMDetailsToSettingsMap(Context context,String attributeName,HashMap fieldMap,HashMap settingsMap) throws DCLException{
+     	try {
+				String UOM_ASSOCIATEDWITHUOM     = "AssociatedWithUOM";
+				String DB_UNIT                   = "DB Unit";
+				String UOM_UNIT_LIST             = "DB UnitList";
+				String SETTING_EDITABLE_FIELD    = "Editable";
+
+				fieldMap.put(UOM_ASSOCIATEDWITHUOM, DCLConstants.TRUE);
+				fieldMap.put(DB_UNIT, UOMUtil.getSystemunit(context, null,attributeName,null));
+				fieldMap.put(UOM_UNIT_LIST, UOMUtil.getDimensionUnits(context, attributeName));
+				settingsMap.put(SETTING_EDITABLE_FIELD,DCLConstants.TRUE);
+				settingsMap.put(DCLConstants.SETTING_INPUT_TYPE, DCLConstants.INPUT_TYPE_TEXTBOX);
+			} catch (Exception e) {
+					throw new DCLException(e.getLocalizedMessage());
+			}
+     }
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> getSelectedTemplateInterface(Context context,String [] args) throws DCLException
+	{
+		Map<String,String> mpReturn = new HashMap<>();
+		try {			
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			String[] strTableRowIds =  (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+
+			TableRowId tableRowId=new TableRowId(strTableRowIds[0]);
+			String strSelectedObjectId = tableRowId.getObjectId();
+			DomainObject dObj = DomainObject.newInstance(context,strSelectedObjectId);
+			String strSelectedObjectName = dObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+			mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "createDocumentByTemplate", strSelectedObjectId, strSelectedObjectName));
+
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+		return mpReturn;
+	}
+
+
+	public  StringList getAllPossibleRangeValues(Context context, String[] args) throws DCLException {
+		try {
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			List<Map> objectList = (MapList)programMap.get(DCLConstants.OBJECTLIST);
+			StringList slColumnValues = new StringList();
+			for(Map mpObjectMap : objectList){
+				String strId = (String) mpObjectMap.get(DCLConstants.ID_LEVEL);
+				String strAttribute = (String) mpObjectMap.get(DomainConstants.SELECT_ID);
+				String strRanges = MqlUtil.mqlCommand(context, "print attribute $1 select range dump",strAttribute);
+				StringBuilder sb = new StringBuilder();
+				if (UIUtil.isNotNullAndNotEmpty(strRanges)){
+					List<String> slRanges = FrameworkUtil.split(strRanges,",");
+
+				sb.append("<select size=\"");
+				sb.append(slRanges.size());
+				sb.append("\" id=\"selectbox_");
+					sb.append(strId);
+								sb.append("\" multiple=\"true\" onChange=\"updateValuesColumnOxml(this);\" >");
+					for(String strRange : slRanges)
+					{
+						sb.append("<option selected=\"true\" value=\"");
+										sb.append(XSSUtil.encodeForHTMLAttribute(context, strRange.replace("=",DomainConstants.EMPTY_STRING)));
+						sb.append("\" >");
+						sb.append(XSSUtil.encodeForHTML(context, strRange.replace("=",DomainConstants.EMPTY_STRING)));
+						sb.append("</option>");
+					}
+					sb.append("</select>");
+				}
+				else
+				{
+					sb.append(DomainConstants.EMPTY_STRING);
+
+				}
+				slColumnValues.add(sb.toString());
+			}
+			return slColumnValues;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+
+				}
+
+	public  StringList getRangeValuesForMandatoryColumn(Context context, String[] args) throws DCLException {
+		try {			
+		Map<?,?> programMap = JPO.unpackArgs(args);
+		List<Map> objectList = (MapList)programMap.get(DCLConstants.OBJECTLIST);
+		StringList slColumnValues = new StringList();
+		for(Map mpObjectMap : objectList){
+			String strId = (String) mpObjectMap.get(DCLConstants.ID_LEVEL);
+			StringBuilder sb = new StringBuilder();
+				sb.append("<select id=\"selectboxMandatory_");
+				sb.append(strId);
+							sb.append("\" onChange=\"updateMandatoryColumnOxml(this);\" >");	//disabled=\"true\" 
+
+					sb.append("<option value=\"");
+					sb.append(DCLConstants.YES);
+					sb.append("\" >");
+					sb.append(DCLConstants.YES);
+					sb.append("</option>");
+					sb.append("<option selected=\"true\" value=\"");
+					sb.append(DCLConstants.NO);
+					sb.append("\" >");
+					sb.append(DCLConstants.NO);
+					sb.append("</option>");			
+				sb.append("</select>");
+			
+				slColumnValues.add(sb.toString());
+			}
+			return slColumnValues;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+
+	}
+
+	/**
+	 * Method to return the list of valid Attribute Group(s) for adding on Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return list of Attribute Group(s)
+	 * @throws DCLException if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getNotAddedAttributeGroups (Context context,String [] args) throws DCLException{
+		MapList returnList = new MapList();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			String objectId = (String)programMap.get(DCLConstants.PARENTOID);
+			String strDoFilter      = (String)programMap.get(DCLConstants.FILTER);
+
+			if(null!=strDoFilter&&!DomainConstants.EMPTY_STRING.equals(strDoFilter)){
+				String strNameMatches    = (String)programMap.get(DCLConstants.ATTRIBUTE_NAME_MATCHES);
+				returnList =  documentService.getFilteredAttributeGroups(context,objectId,strNameMatches);
+			}
+			return returnList;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+	} 	
+
+
+
+	/**
+	 * Method to add Attribute Group(s) to Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing script to be executed
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> addAttributeGroupToDocumentTemplate(Context context,String [] args) throws DCLException
+	{
+		Map<String,String> mpReturn = new HashMap();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strObjectId[] =  (String[])programMap.get(DCLConstants.OBJECTID);
+			List<String> slInterfaceList = new StringList();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tableRowId=new TableRowId(strRowId);
+				String strSelectedDocId=tableRowId.getObjectId();
+				slInterfaceList.add(strSelectedDocId);
+			}
+			documentService.addOrRemoveDocumentTemplateAttributeGroups(context,slInterfaceList,strObjectId[0],DCLConstants.ADD);
+					mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "addReferenceDocuments"));
+
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+		return mpReturn; 
+	}
+
+	/**
+	 * Method to remove Attribute Group(s) from Document Template
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing script to be executed
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeAttributeGroupFromDocumentTemplate(Context context,String [] args) throws DCLException{
+		Map<String,String> mpReturn = new HashMap<>();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strObjectId[] =  (String[])programMap.get(DCLConstants.OBJECTID);
+			List<String> slInterfaceList = new StringList();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tableRowId=new TableRowId(strRowId);
+				String strSelectedDocId=tableRowId.getObjectId();
+				slInterfaceList.add(strSelectedDocId);
+			}
+			documentService.addOrRemoveDocumentTemplateAttributeGroups(context,slInterfaceList,strObjectId[0],DCLConstants.REMOVE);
+					mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshTablePageTopWindow"));
+
+		}  				
+		catch (Exception e) {
+			throw new DCLException();
+		}
+		return mpReturn;
+	}
+
+
+
+	/**
+	 * Method to get the list list of Attribute(s) related to context Attribute Group(s)
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds the packed arguments
+	 * @return list of added Attribute(s) to Attribute Group(s)
+	 * @throws DCLException if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAttributeGroupAttributesAdded(Context context,String [] args) throws DCLException
+	{
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			MapList returnList 			= new MapList();
+			Map<?,?> programMap 			= JPO.unpackArgs(args);
+			String attributeGroupName 	= (String)programMap.get("objectName");
+			String result = documentService.getAttributeGroupDetails(context, "attribute", attributeGroupName);
+			if(UIUtil.isNotNullAndNotEmpty(result)){
+				String [] attributes = result.split(DCLConstants.COMMA);
+				for(String attribute:attributes){
+					Map<String,String> attributesMap	= new HashMap<>();
+					attributesMap.put(DomainConstants.SELECT_ID, attribute);
+					returnList.add(attributesMap);
+				}
+			}
+
+			return returnList;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	/**
+	 * Method to remove Attribute(s) from Attribute Group
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return Map containing script to be executed
+	 * @throws DCLException if operation fails
+	 */
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeAttributesFromAttributeGroup(Context context,String [] args) throws DCLException{
+		Map<String,String> mpReturn = new HashMap<>();
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strObjectId[] =  (String[])programMap.get(DCLConstants.AGNAME);
+			List<String> slAttributeList = new StringList();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tableRowId=new TableRowId(strRowId);
+				String strSelectedAttributeId=tableRowId.getObjectId();
+				slAttributeList.add(strSelectedAttributeId);
+			}
+			documentService.removeAttributesFromAttributeGroup(context,slAttributeList,strObjectId[0]);
+					mpReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshTablePageTopWindow"));
+
+		}  catch (Exception e) {
+			throw new DCLException();
+		}
+		return mpReturn;
+	}
+
+
+
+	/**
+	 * Access Program to show Active command when filter is Inactive
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments
+	 * @return boolean return true if filter is Inactive
+	 * @throws DCLException if operation fails
+	 */
+	public boolean showAddRemoveAttributes(Context context,String[] args) throws DCLException
+	{
+		boolean bShow = true;
+		try {
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DCConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			String strPolicyStateName = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname,
+					DCLConstants.SYMBOLIC_STATE_ACTIVE);
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			String strTemplateId = (String) programMap.get("templateId");
+			DomainObject dObj = DomainObject.newInstance(context,strTemplateId);
+			if(dObj.getInfo(context, DomainConstants.SELECT_CURRENT).equals(strPolicyStateName))
+			{
+				bShow=false;
+				return bShow;		
+			}
+			String strObjectId = (String) programMap.get(DCLConstants.AGNAME);
+			List<String> slAttributeGroups = documentService.getAttributeGroupsNotToModify(context);
+			if(!slAttributeGroups.isEmpty() && slAttributeGroups.contains(strObjectId))
+				bShow = false;
+			
+
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+		return bShow;
+	}
+	/***
+	 * Method to return boolean range values for boolean attribute field
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments if operation fails
+	 * @throws DCLException
+	 */
+	public HashMap getRangeValuesForBooleanAttributes(Context context,String [] args) throws DCLException {
+		HashMap rangeMap = new HashMap();
+		try
+		{
+			StringList fieldChoices = new StringList();
+			StringList fieldDisplayChoices = new StringList();
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			Map<?,?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String language = (String)paramMap.get(DCLConstants.LANGUAGE_STR);
+			String trueStr = EnoviaResourceBundle.getProperty(context,DCLConstants.FRAMEWORK_STRING_RESOURCE,new Locale(language),"emxFramework.Range.BooleanAttribute.TRUE");
+			String falseStr = EnoviaResourceBundle.getProperty(context,DCLConstants.FRAMEWORK_STRING_RESOURCE,new Locale(language),"emxFramework.Range.BooleanAttribute.FALSE");
+			fieldChoices.add("TRUE");
+			fieldChoices.add("FALSE");
+			fieldDisplayChoices.add(trueStr);
+			fieldDisplayChoices.add(falseStr);
+			rangeMap.put(DCLConstants.FIELD_CHOICES, fieldChoices);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, fieldDisplayChoices);
+		}catch(Exception ex)
+		{
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+		return rangeMap;
+	}
+
+	/***
+	 * Method to update attribute value for multivalue attribute
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args holds packed arguments if operation fails
+	 * @throws DCLException
+	 */
+	public HashMap updateDynamicAttributeForMultival(Context context,String [] args) throws DCLException {
+		HashMap rangeMap = new HashMap();
+		try
+		{
+			StringList fieldChoices = new StringList();
+			StringList fieldDisplayChoices = new StringList();
+			Map<?,?> programMap = JPO.unpackArgs(args);
+			Map<?,?> paramMap = (Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+			String language = (String)paramMap.get(DCLConstants.LANGUAGE_STR);
+			String trueStr = EnoviaResourceBundle.getProperty(context,DCLConstants.FRAMEWORK_STRING_RESOURCE,new Locale(language),"emxFramework.Range.BooleanAttribute.TRUE");
+			String falseStr = EnoviaResourceBundle.getProperty(context,DCLConstants.FRAMEWORK_STRING_RESOURCE,new Locale(language),"emxFramework.Range.BooleanAttribute.FALSE");
+			fieldChoices.add("TRUE");
+			fieldChoices.add("FALSE");
+			fieldDisplayChoices.add(trueStr);
+			fieldDisplayChoices.add(falseStr);
+			rangeMap.put(DCLConstants.FIELD_CHOICES, fieldChoices);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, fieldDisplayChoices);
+		}catch(Exception ex)
+		{
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+		return rangeMap;
+	}
+}
+
+
+

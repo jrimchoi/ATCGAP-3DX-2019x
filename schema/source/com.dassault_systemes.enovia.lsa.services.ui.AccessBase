@@ -1,0 +1,126 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+
+	/**
+	 * This method needs to be moved to ProjectMgmtExtensions framework in 2018x once MARE adopts 
+	 * ProjectMgmtExtensions framework.
+	 * 
+	 * The method checks if the Object(Project or subtype) is one of the type(or
+	 * a subtype of) specified under property key
+	 * 'ProjectMgmtExtensions.NotEditableTypes' then do not allow its type
+	 * change from Project properties page edit. For this just replace
+	 * field_value with readonly object type instead of the chooser link coming
+	 * from PRG programHTMLOutput.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws LSAException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void canEditFormPMCProjectDetailsViewFormFieldType(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get("formMap");
+			if (!Helper.isNullOrEmpty(requestMap) && !Helper.isNullOrEmpty(formMap)) {
+				MapList formFieldList = (MapList) formMap.get("fields");
+				String strObjectId = (String) requestMap.get("objectId");
+				String strLanguage = (String) requestMap.get("languageStr");
+				if (!Helper.isNullOrEmpty(strObjectId) && !Helper.isNullOrEmpty(formFieldList)) {
+					for (Object object : formFieldList) {
+						Map<String, String> fieldMap = (Map<String, String>) object;
+						String fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+						if ("Type".equalsIgnoreCase(fieldName)) {
+							String strNotEditableTypes = Helper.getProperty(context, "LSACommonFramework.NotEditableTypes");
+							if (!Helper.isNullOrEmpty(strNotEditableTypes)) {
+								String[] arrTypeIds = strNotEditableTypes.split(",");
+								if (!Helper.isNullOrEmpty(arrTypeIds)
+										&& (Helper.getTypeKindOf(context, DomainObject.newInstance(context, strObjectId), arrTypeIds))
+												.containsValue(Boolean.TRUE)) {
+									fieldMap.put("field_value", getObjectType(context, strObjectId, strLanguage));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * This method returns the type of the object.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param objectId
+	 *            object id of Task object
+	 * @return String object type value
+	 * @throws LSAException
+	 *             if the operation fails
+	 */
+	private static String getObjectType(Context context, String strObjectId, String strLanguage) throws LSAException {
+		try {
+			String strI18NObjectType = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(DomainConstants.SELECT_TYPE));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectinfo = (Map<?, ?>) lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectinfo)) {
+						String strObjectType = (String) mpObjectinfo.get(DomainConstants.SELECT_TYPE);
+						if (!Helper.isNullOrEmpty(strObjectType)) {
+							strI18NObjectType = !Helper.isNullOrEmpty(strLanguage)
+									? EnoviaResourceBundle.getTypeI18NString(context, strObjectType, strLanguage) : strObjectType;
+						}
+					}
+				}
+			}
+			return strI18NObjectType;
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+	}
+}
+

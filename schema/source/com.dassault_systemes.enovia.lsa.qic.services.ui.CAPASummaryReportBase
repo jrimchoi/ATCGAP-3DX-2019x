@@ -1,0 +1,457 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPAEffectivenessCheckService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARootCauseAnalysisService;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRisk;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets CAPAEffectivenessCheckService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return CAPAEffectivenessCheckService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private static CAPAEffectivenessCheckService getCAPAEffectivenessCheckService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPAEffectivenessCheckService service = (CAPAEffectivenessCheckService) LSAQICCore.getService(CAPAEffectivenessCheckService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the CAPARootCauseAnalysisService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARootCauseAnalysisService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARootCauseAnalysisService getCAPARootCauseAnalysisService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARootCauseAnalysisService service = (CAPARootCauseAnalysisService) LSAQICCore.getService(CAPARootCauseAnalysisService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Approval Date For CAPA associated Task Table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return String value for Date
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	public String getTableQICCAPAReportSummaryEffectivenessColumnDate(Context context, String[] args) throws QICException {
+		final CAPAEffectivenessCheckService CAPA_EFFECTIVENESS_SERVICE = getCAPAEffectivenessCheckService(context);
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strTaskId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strDate = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(strTaskId)) {
+				strDate = CAPA_EFFECTIVENESS_SERVICE.getCAPAAssociatedMOEEffectivenessDate(context, DomainObject.newInstance(context, strTaskId));
+			}
+			return strDate;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Returns list of MOE Phase to be used for QICCAPASummaryReportActionPlan
+	 * table
+	 * 
+	 * @param context
+	 *            context ENOVIA Context object
+	 * @param args
+	 *            holds no argumentsSELECT_ALL
+	 * @return MapList containing the ids of MOE Phase objects
+	 * @throws QICException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableQICCAPAActionPlanSummary(Context context, String[] args) throws QICException {
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		try {
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(QICConstants.OBJECT_ID);
+			List<Map<?, ?>> causeTaskReturnMap = new MapList();
+			if (!Helper.isNullOrEmpty(objectId)) {
+				DomainObject domainObject = DomainObject.newInstance(context, objectId);
+				Helper.ensureNotNull(domainObject, Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.Common.NullCAPAObject"));
+				int level = 1;
+				if ((Helper.getTypeKindOf(context, domainObject, QICConstants.SYMBOLIC_TYPE_CAPA)).containsValue(Boolean.TRUE)) {
+					List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context, domainObject,
+							QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE,
+							Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), false, true,
+							(short) level, null, null);
+					for (Map<?, ?> causeMap : returnMap) {
+						String strCauseId = (String) causeMap.get(DomainConstants.SELECT_ID);
+						if (!Helper.isNullOrEmpty(strCauseId)) {
+							DomainObject dmoCause = DomainObject.newInstance(context, strCauseId);
+							List<Map<?, ?>> taskReturnMap = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauseTasks(context, dmoCause);
+							if (!causeTaskReturnMap.containsAll(taskReturnMap))
+								causeTaskReturnMap.addAll(taskReturnMap);
+						}
+					}
+				}
+			}
+			return (MapList) causeTaskReturnMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets CAPA associated Root Causes for QICCAPASummaryReportRootCauses table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return String value for Root Causes
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	public String getTableQICCAPAReportSummaryActionPlanColumnAssociatedDefectCause(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strTaskId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			StringBuilder associatedDefectCause = new StringBuilder();
+			if (!Helper.isNullOrEmpty(strTaskId)) {
+				List<Map<?, ?>> associatedDefectCauseList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strTaskId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_RELATED_TASK, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME), Helper.stringList(DomainRelationship.SELECT_ID),
+						true, false, (short) 1, null, null);
+				if (!Helper.isNullOrEmpty(associatedDefectCauseList)) {
+					for (Map<?, ?> associatedObjMap : associatedDefectCauseList) {
+						if (associatedDefectCause != null && associatedDefectCause.length() != 0) {
+							associatedDefectCause.append(QICConstants.COMMA);
+						}
+						associatedDefectCause.append(associatedObjMap.get(DomainConstants.SELECT_NAME));
+					}
+				}
+			}
+			return associatedDefectCause.toString();
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets list of all completed and pending Approval tasks present on all
+	 * routes of the CAPA for QICCAPASummaryReportApprovals Table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return MapList containing the ids of completed and pending Approval
+	 *         tasks of CAPA Object
+	 * @throws QICException
+	 *             if operation fails
+	 * 
+	 */
+	public MapList getTableQICCAPAReportSummaryApprovals(Context context, String[] args) throws QICException {
+		final String SELECT_ATTRIBUTE_ROUTE_STATUS = "attribute[" + DomainObject.ATTRIBUTE_ROUTE_STATUS + "]";
+		final String SELECT_ATTRIBUTE_APPROVAL_STATUS = "attribute[" + DomainObject.ATTRIBUTE_APPROVAL_STATUS + "]";
+		final String SELECT_ATTRIBUTE_ROUTE_TASK_USER = "attribute[" + DomainObject.ATTRIBUTE_ROUTE_TASK_USER + "]";
+		final String SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE = "attribute[" + DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]";
+		final String SELECT_ROUTE_TASK_ASSIGNEE_TYPE = "from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.type";
+		final String SELECT_ROUTE_TASK_ASSIGNEE_NAME = "from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.name";
+		final String INFO_TYPE_ACTIVATED_TASK = "activatedTask";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.OBJECT_ID);
+			MapList associatedTaskFinalList = new MapList();
+			if (!Helper.isNullOrEmpty(objectId)) {
+				// Get state based route objects for this object
+				StringList slRelSelect = new StringList();
+				slRelSelect.add(DomainRelationship.SELECT_ID);
+				StringList slBusSelect = new StringList();
+				slBusSelect.add(DomainObject.SELECT_ID);
+				slBusSelect.add(DomainObject.SELECT_NAME);
+				slBusSelect.add(SELECT_ATTRIBUTE_ROUTE_STATUS);
+
+				List<Map<?, ?>> associatedRoutesList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, objectId),
+						DomainObject.RELATIONSHIP_OBJECT_ROUTE, DomainObject.TYPE_ROUTE,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, SELECT_ATTRIBUTE_ROUTE_STATUS),
+						Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 1, null, null);
+				for (Map<?, ?> routeMap : associatedRoutesList) {
+					String strRouteId = (String) routeMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strRouteId)) {
+						List<Map<?, ?>> associatedTaskList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strRouteId),
+								DomainObject.RELATIONSHIP_ROUTE_TASK, DomainObject.TYPE_INBOX_TASK, Helper.stringList(DomainConstants.SELECT_ID,
+										DomainConstants.SELECT_NAME, SELECT_ATTRIBUTE_APPROVAL_STATUS, DomainObject.SELECT_CURRENT,
+										SELECT_ATTRIBUTE_ROUTE_TASK_USER, SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE, SELECT_ROUTE_TASK_ASSIGNEE_TYPE,
+										SELECT_ROUTE_TASK_ASSIGNEE_NAME), Helper.stringList(DomainRelationship.SELECT_ID), true, true, (short) 1,
+								null, null);
+						for (Map taskMap : associatedTaskList) {
+							taskMap.put("infoType", INFO_TYPE_ACTIVATED_TASK);
+							taskMap.put("assigneeType", taskMap.get(SELECT_ROUTE_TASK_ASSIGNEE_TYPE));
+							taskMap.put("assigneeName", taskMap.get(SELECT_ROUTE_TASK_ASSIGNEE_NAME));
+							taskMap.put("completionDate", taskMap.get(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE));
+							taskMap.put("currentState", taskMap.get(DomainObject.SELECT_CURRENT));
+							taskMap.put("approvalStatus", taskMap.get(SELECT_ATTRIBUTE_APPROVAL_STATUS));
+							associatedTaskFinalList.add(taskMap);
+						}
+					}
+				}
+			}
+			return associatedTaskFinalList;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Approval Status for QICCAPASummaryReportApprovals Table
+	 * 
+	 * @param code
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return String value for Approval Status
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	public String getTableQICCAPAReportSummaryApprovalsColumnApprovalStatus(Context context, String[] args) throws QICException {
+		final String POLICY_INBOX_TASK_STATE_COMPLETE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,
+				DomainObject.POLICY_INBOX_TASK, "state_Complete");
+		final String SELECT_ATTRIBUTE_APPROVAL_STATUS = "attribute[" + DomainObject.ATTRIBUTE_APPROVAL_STATUS + "]";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strApprovalStatus = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> objectListMap = QueryUtil.getInfo(context, new String[] { objectId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, SELECT_ATTRIBUTE_APPROVAL_STATUS));
+				if (!Helper.isNullOrEmpty(objectListMap)) {
+					Map<?, ?> objectInfoMap = objectListMap.get(0);
+					if (POLICY_INBOX_TASK_STATE_COMPLETE.equals((String) objectInfoMap.get(DomainConstants.SELECT_CURRENT))) {
+						if ("Approve".equals((String) objectInfoMap.get(SELECT_ATTRIBUTE_APPROVAL_STATUS))) {
+							strApprovalStatus = "Approved";
+						}
+						else if ("Reject".equals((String) objectInfoMap.get(SELECT_ATTRIBUTE_APPROVAL_STATUS))) {
+							strApprovalStatus = "Rejected";
+						}
+						else if ("Abstain".equals((String) objectInfoMap.get(SELECT_ATTRIBUTE_APPROVAL_STATUS))) {
+							strApprovalStatus = "Abstained";
+						}
+					}
+					else {
+						// Show status as completed
+						strApprovalStatus = "Pending";
+					}
+				}
+			}
+			return strApprovalStatus;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the Approval Date for QICCAPASummaryReportApprovals Table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return String value for Approval Date
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	public String getTableQICCAPAReportSummaryApprovalsColumnDate(Context context, String[] args) throws QICException {
+		final String SELECT_ATTRIBUTE_APPROVAL_STATUS = "attribute[" + DomainObject.ATTRIBUTE_APPROVAL_STATUS + "]";
+		final String SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE = "attribute[" + DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strDate = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> objectListMap = QueryUtil.getInfo(context, new String[] { objectId },
+						Helper.stringList(SELECT_ATTRIBUTE_APPROVAL_STATUS, SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE));
+				if (!Helper.isNullOrEmpty(objectListMap)) {
+					Map<?, ?> objectInfoMap = objectListMap.get(0);
+					String strApprovalStatus = (String) objectInfoMap.get(SELECT_ATTRIBUTE_APPROVAL_STATUS);
+					if (!Helper.isNullOrEmpty(strApprovalStatus) && "Approve".equals(strApprovalStatus)) {
+						strDate = (String) objectInfoMap.get(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+					}
+				}
+			}
+			return strDate;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the Approver for QICCAPASummaryReportApprovals Table
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return String value for Approver
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	public String getTableQICCAPAReportSummaryApprovalsColumnApprover(Context context, String[] args) throws QICException {
+		final String SELECT_ROUTE_TASK_ASSIGNEE_TYPE = "from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.type";
+		final String SELECT_ROUTE_TASK_ASSIGNEE_NAME = "from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.name";
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strApprover = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> objectListMap = QueryUtil.getInfo(context, new String[] { objectId },
+						Helper.stringList(SELECT_ROUTE_TASK_ASSIGNEE_TYPE, SELECT_ROUTE_TASK_ASSIGNEE_NAME));
+				if (!Helper.isNullOrEmpty(objectListMap)) {
+					Map<?, ?> objectInfoMap = objectListMap.get(0);
+					if (DomainObject.TYPE_ROUTE_TASK_USER.equals(objectInfoMap.get("from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.type"))) {
+						// If the type of the assignee is RTU then get the name
+						// of the
+						// role/group as approver name
+						String strRouteTaskUser = (String) objectInfoMap.get("routeTaskUser");
+						if (strRouteTaskUser == null || "".equals(strRouteTaskUser.trim()) || "null".equals(strRouteTaskUser)) {
+							strApprover = "";
+						}
+						else {
+							if (strRouteTaskUser.startsWith("role_")) {
+								strRouteTaskUser = PropertyUtil.getSchemaProperty(context, strRouteTaskUser);// Symbolic->Real
+																												// name
+								strRouteTaskUser = Helper.getI18NString(context, Helper.StringResource.QIC,
+										"emxFramework.Role." + FrameworkUtil.findAndReplace(strRouteTaskUser, " ", "_"));
+								strRouteTaskUser = strRouteTaskUser + "("
+										+ Helper.getI18NString(context, Helper.StringResource.QIC, "emxFramework.Common.Role") + ")";
+								strApprover = strRouteTaskUser;
+							}
+							else if (strRouteTaskUser.startsWith("group_")) {
+								strRouteTaskUser = PropertyUtil.getSchemaProperty(context, strRouteTaskUser);// Symbolic->Real
+																												// name
+								strRouteTaskUser = Helper.getI18NString(context, Helper.StringResource.QIC,
+										"emxFramework.Group." + FrameworkUtil.findAndReplace(strRouteTaskUser, " ", "_"));
+								strRouteTaskUser = strRouteTaskUser + "("
+										+ Helper.getI18NString(context, Helper.StringResource.QIC, "emxFramework.Common.Group") + ")";
+
+								strApprover = strRouteTaskUser;
+							}
+							else {
+								strApprover = "";
+							}
+						}
+					}
+					else {
+						// If the type of the assignee is not RTU then it is
+						// person and
+						// get the name of the person as approver name
+						strApprover = (String) objectInfoMap.get("from[" + DomainObject.RELATIONSHIP_PROJECT_TASK + "].to.name");
+					}
+				}
+			}
+			return strApprover;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public String getTableQICCAPASummaryReportRisksColumnInitialRPN(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strInitialRPN = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				ManagedRisk mngRisk = new ManagedRisk(objectId);
+				strInitialRPN = mngRisk.getInitialRPN(context);
+			}
+			return strInitialRPN;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public String getTableQICCAPASummaryReportRisksColumnCurrentRPN(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(QICConstants.CURRENT_OBJECT_ID);
+			String strCurrentRPN = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				ManagedRisk mngRisk = new ManagedRisk(objectId);
+				strCurrentRPN = mngRisk.getCurrentRPN(context);
+			}
+			return strCurrentRPN;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+}
+

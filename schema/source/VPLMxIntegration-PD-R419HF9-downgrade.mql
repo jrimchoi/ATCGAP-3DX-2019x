@@ -1,0 +1,122 @@
+tcl;
+eval {
+	puts {Executing VPLMxIntegration-PD-R419HF9-downgrade.mql...}
+	
+	puts { Demote and Remove Trigger on EBOM delete override:  BackupConnectionMapping}
+	
+	set boState [mql temp query bus "eService Trigger Program Parameters" RelationshipEBOMDeleteOverride BackupConnectionMapping select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" "RelationshipEBOMDeleteOverride" BackupConnectionMapping
+		puts {Disabling the trigger RelationshipEBOMDeleteOverride BackupConnectionMapping... - Completed}
+	}	
+	
+	set boExists [mql temp query bus "eService Trigger Program Parameters" "RelationshipEBOMDeleteOverride" BackupConnectionMapping ;]
+	if {$boExists != "" } {			
+			mql delete businessobject "eService Trigger Program Parameters" "RelationshipEBOMDeleteOverride" BackupConnectionMapping
+			puts {Trigger RelationshipEBOMDeleteOverride removed successfully}
+	} else {
+		puts {Trigger RelationshipEBOMDeleteOverride already removed}
+	}
+	
+	puts { Demote and Remove Trigger on EBOM delete override:  BackupConnectionMapping Done}
+
+	puts { Demote and Remove Trigger on VPMInstance:  BackupConnectionMapping}
+	
+	set boState [mql temp query bus "eService Trigger Program Parameters" RelationshipVPMInstanceDeleteOverride BackupConnectionMapping select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" "RelationshipVPMInstanceDeleteOverride" "BackupConnectionMapping"
+		puts {Disabling the trigger RelationshipVPMInstanceDeleteOverride BackupConnectionMapping... - Completed}
+	}	
+	
+	set boExists [mql temp query bus "eService Trigger Program Parameters" "RelationshipVPMInstanceDeleteOverride" BackupConnectionMapping ;]
+	if {$boExists != "" } {			
+			mql delete businessobject "eService Trigger Program Parameters" "RelationshipVPMInstanceDeleteOverride" BackupConnectionMapping
+			puts {Trigger RelationshipVPMInstanceDeleteOverride removed successfully}
+	} else {
+		puts {Trigger RelationshipVPMInstanceDeleteOverride already removed}
+	}
+	
+	puts { Demote and Remove Trigger on VPMInstance:  BackupConnectionMapping Done}
+	
+	puts { Demote program VPLMIntegBackupMappingProjection}
+	set st_command [mql list program "VPLMIntegBackupMappingProjection" select name dump]	
+	if {$st_command != "" } {
+		mql delete program "VPLMIntegBackupMappingProjection"
+		puts {Program VPLMIntegBackupMappingProjection deleted}
+	} else {
+	 	puts {Program VPLMIntegBackupMappingProjection already deleted}
+	}
+	
+	puts { Demote program VPLMIntegBackupMappingProjection Done}
+	
+	#ANT4:FUN073896 - Block CA promotion from InWork to InApproval when CA is not collaborated
+	puts {deleting trigger PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks... - Start}
+
+	# 1.1  the trigger deactivation 
+	set boState [mql temp query bus "eService Trigger Program Parameters" PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks
+		puts {Disabling the trigger PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks... - Completed}
+	}	
+	
+	# 1.2 trigger delete
+	set boExists [mql temp query bus "eService Trigger Program Parameters" PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks;]
+	if {$boExists != ""} {
+		mql delete businessobject "eService Trigger Program Parameters" PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks
+	} 
+	
+	# 1.3 trigger command delete
+	set progName "VPLMIntegChangeActionCollaborationCheckTrigger"
+	set progExists [mql list program $progName]
+	
+	if {$progExists != ""} {
+		set progCmd "mql delete program $progName"
+		eval $progCmd
+	} 
+	
+	puts {deleting trigger PolicyChangeActionStateInWorkPromoteCheck CACollaborationChecks... - Completed}
+
+	# Removing attribute VPLMInteg-AuthorizeCollaboration 
+	puts {deleting attribute VPLMInteg-AuthorizeCollaboration ... - Start}
+
+	set attrExistance [list mql list attribute VPLMInteg-AuthorizeCollaboration select name dump |]
+	set mqlret [catch {eval $attrExistance} sOut]
+	if {$sOut == "VPLMInteg-AuthorizeCollaboration" } {
+		mql mod type VPLMInteg-SynchParameters remove attribute VPLMInteg-AuthorizeCollaboration;	
+		mql delete attribute VPLMInteg-AuthorizeCollaboration type string multiline;
+		puts "INFO: VPLMInteg-AuthorizeCollaboration attribute has been deleted"
+	} else {
+		puts "INFO: VPLMInteg-AuthorizeCollaboration attribute already deleted"
+	}
+	puts {deleting attribute VPLMInteg-AuthorizeCollaboration ... - Completed}
+
+	set pkgExistance [list mql list Package VPLMInteg-SynchEBOMPkg select member\[relationship VPLMInteg-VPLMProjection\] dump |]
+	set mqlret [catch {eval $pkgExistance} sOut]
+	if {$sOut == "TRUE" } {
+		puts "INFO: Removing VPLMInteg-VPLMProjection relationship from Package VPLMInteg-SynchEBOMPkg"
+		mql mod Package VPLMInteg-SynchEBOMPkg remove member relationship VPLMInteg-VPLMProjection;
+	} else {
+		puts "INFO: VPLMInteg-VPLMProjection relationship not present in Package VPLMInteg-SynchEBOMPkg"
+	}
+	
+	set synCommand VPLMIntegSynchLibraryWithVPLM
+    set commandList [list mql list command  $synCommand select name dump |]
+    set mqlret [catch {eval $commandList} sOut]
+	  if {$mqlret == 0} {
+		  puts "Modifying existing Command..."
+		   set lSettingCmd [list mql print command $synCommand select setting\[Licensed Product\] dump]
+		   set mqlret [catch {eval $lSettingCmd} sOut]
+			puts $sOut
+			  if {$sOut} {
+				   mql mod command $synCommand remove setting "Licensed Product"
+				   puts "INFO: Setting Licensed Product successfuly removed from $synCommand Command "
+			  } else {
+				  puts "INFO: $synCommand Command does not contains Setting Licensed Product"
+			  }
+		 
+	  } else {
+		   puts "INFO: $synCommand Command is not installed"
+	  }
+	exit 0;
+}
+

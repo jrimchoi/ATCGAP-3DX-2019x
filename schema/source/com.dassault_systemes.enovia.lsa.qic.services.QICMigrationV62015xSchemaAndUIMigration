@@ -1,0 +1,273 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.io.File;
+import java.io.IOException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+
+import matrix.db.Context;
+
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	private static Logger		logger					= Logger.getLogger(${CLASS:com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xSchemaAndUIMigration}.class
+																.getName());
+	// private static final String fileSeparator = java.io.File.separator;
+	private static final String	TRACE_QIC_MIGRATION		= "QICMigration";
+	private static final String	FILE_QIC_MIGRATION_LOG	= "QICMigration.log";
+
+	public static void schemaAndUIMigration(Context context, String[] args) throws QICException {
+		String strPath = new String();
+		String firstArg = "";
+		String strTypeOfMigration = "QIC";
+		boolean isValidFilePath = false;
+
+		if (args.length == 0) {
+			try {
+				help(context, args);
+				return;
+			}
+			catch (Exception e) {
+				throw new QICException(e.getLocalizedMessage());
+			}
+		}
+		else {
+			firstArg = args[0];
+			if (firstArg.equals("help")) {
+				try {
+					help(context, args);
+					return;
+				}
+				catch (Exception e) {
+					throw new QICException(e.getLocalizedMessage());
+				}
+			}
+		}
+		strPath = firstArg;
+		isValidFilePath = validateFilePath(strPath);
+		if (isValidFilePath) {
+			FileHandler fileLogging = createLogFile(getLogFileName(strTypeOfMigration), strPath + File.separator);
+			firstArg = args[0];
+			logger.log(Level.INFO, "Executing QIC Schema And UI Migration.");
+			migrateUIandSchema(context, logger);
+			logger.log(Level.INFO, "QIC Schema And UI Migration Completed.");
+			fileLogging.close();
+
+		}
+	}
+
+	protected static void migrateUIandSchema(final Context context, final Logger logger) throws QICException {
+
+		final ${CLASS:com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xUIMigration} uiMigration = new ${CLASS:com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xUIMigration}();
+		uiMigration.migrateUI(context, logger);
+
+		final ${CLASS:com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xSchemaMigration} schema = new ${CLASS:com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xSchemaMigration}();
+		schema.migrateSchema(context, logger);
+
+	}
+
+	protected static FileHandler createLogFile(String strFileNameForLogs, String strFullPath) throws QICException {
+		DateFormat dateFormat = new SimpleDateFormat("yyyyddMMHHmmss");
+		java.util.Date date = new java.util.Date();
+
+		FileHandler fh;
+		try {
+			File logFolder = new File(strFullPath + File.separator + "Logs_SchemaAndUIMigration_" + dateFormat.format(date));
+			logFolder.mkdir();
+			logFolder.setWritable(true);
+			logFolder.setExecutable(true);
+			logger.log(Level.INFO, "Creating log file");
+			File logFile = new File(logFolder.getAbsolutePath() + File.separator + strFileNameForLogs.trim().replace(" ", "_")
+					+ "SchemaAndUIMigration.txt");
+			logFile.setWritable(true);
+			logFile.setExecutable(true);
+			fh = new FileHandler(logFile.getAbsolutePath());
+			fh.setFormatter(new SimpleFormatter());
+			logger.addHandler(fh);
+			return fh;
+		}
+		catch (SecurityException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new QICException(e);
+		}
+		catch (IOException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new QICException(e);
+		}
+	}
+
+	protected static boolean validateFilePath(String strPath) throws QICException {
+		// Validate path
+		logger.log(Level.INFO, "Validating File Path");
+		boolean isPathNotNullOrNotEmpty = UIUtil.isNotNullAndNotEmpty(strPath);
+		File filePath = new File(strPath);
+		if (isPathNotNullOrNotEmpty && !filePath.isDirectory()) {
+			logger.log(Level.SEVERE, "Invalid file path!!!");
+			throw new QICException("Invalid file path!!!");
+		}
+		else {
+			logger.log(Level.INFO, "File Path Validated");
+			return true;
+		}
+	}
+
+	protected static String getLogFileName(String strLogFileName) {
+		boolean isLogFileNameGiven = UIUtil.isNotNullAndNotEmpty(strLogFileName);
+		if (isLogFileNameGiven) {
+			return strLogFileName + "_" + "Migration" + "_log";
+		}
+		else {
+			return "Migration" + "_log";
+		}
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void traceBeginMethod(Context context) throws QICException {
+		String methodName = getTracedMethodName();
+		traceBegin(context, methodName + "()");
+	}
+
+	/**
+	 * Print "ERROR: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void traceError(Context context, String message) throws QICException {
+		trace(context, "ERROR: " + message);
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void traceEndMethod(Context context) throws QICException {
+		final String methodName = getTracedMethodName();
+		traceEnd(context, methodName + "()");
+	}
+
+	/**
+	 * Print "End: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void traceEnd(Context context, String message) throws QICException {
+		trace(context, "End: " + message);
+	}
+
+	/**
+	 * Prints trace message for trace type LPIMigration
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void trace(Context context, String message) throws QICException {
+		try {
+			context.printTrace(TRACE_QIC_MIGRATION, message);
+		}
+		catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new QICException(exp);
+		}
+	}
+
+	/**
+	 * Print "Begin: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	protected static void traceBegin(Context context, String message) throws QICException {
+		trace(context, "Begin: " + message);
+	}
+
+	/**
+	 * Returns the name of the method being traced. This SHOULD NOT be called by
+	 * any client other than traceBeginMethod and traceEndMethod methods.
+	 * 
+	 * @return the method name
+	 */
+	protected static String getTracedMethodName() {
+		Exception exp = new Exception();
+		StackTraceElement[] stes = exp.getStackTrace();
+		StackTraceElement ste = stes[2];
+		String methodName = ste.getMethodName();
+		return methodName;
+	}
+
+	public static void mxMain(Context context, String[] args) throws QICException {
+		try {
+			boolean traceON = true;
+			boolean allSession = false; // false for only this session
+
+			context.setTrace(FILE_QIC_MIGRATION_LOG, TRACE_QIC_MIGRATION, traceON, allSession);
+			traceBeginMethod(context);
+
+			System.out.println("================================================================================================\n");
+			schemaAndUIMigration(context, args);
+			System.out.println("================================================================================================\n");
+		}
+		catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new QICException(exp);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	public static void help(Context context, String[] args) throws Exception {
+		if (!context.isConnected()) {
+			throw new Exception("not supported on desktop client");
+		}
+		System.out.println("================================================================================================\n");
+		System.out
+				.println(" QIC Migration does not migrate any Objects. It migrates Schema and UI elements only.But it provides a way to view legacy Objects  \n");
+		System.out.println(" Schema and UI elements can be migrated by executing below steps \n");
+		System.out.println(" Example: \n");
+		System.out.println(" execute com.dassault_systemes.enovia.lsa.qic.services.QICMigrationV62015xSchemaAndUIMigration F:\\Migration; \n");
+		System.out.println(" First parameter  = the directory where log file should be written \n");
+		System.out.println("================================================================================================\n");
+	}
+
+}
+

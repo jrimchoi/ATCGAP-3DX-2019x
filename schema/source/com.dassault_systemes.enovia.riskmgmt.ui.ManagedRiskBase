@@ -1,0 +1,900 @@
+
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+import matrix.db.AttributeType;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.ManagedRisk;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskContext;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskWithSelect;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtAdaptor;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskRPN;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtUICommon} implements RiskMgmtSymNames,
+		DomainConstants {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	/**
+	 * Gets the value for field RPN on Create Managed Risk Form
+	 */
+	public String getRPN(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String sevIndex = (String) requestMap.get(SEV_INDEX);
+			String occIndex = (String) requestMap.get(OCC_INDEX);
+
+			String rpnHTML = null;
+
+			if (!RiskMgmtUtil.isAnyNullOrEmpty(sevIndex, occIndex)) {
+
+				rpnHTML = getFormattedRPN(occIndex, sevIndex, RiskRPN.calcRPN(occIndex, sevIndex), true);
+			}
+			else {
+				rpnHTML = "<input name='RPN' size='2' value='-' maxlength='2' readonly='readonly'/>";
+			}
+
+			return rpnHTML;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createManagedRisk(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String CAPAObjId = (String) programMap.get(OBJECT_ID);
+
+			Map<String, String> returnMap = new HashMap<String, String>();
+
+			Map<String, String> attributes = new HashMap<String, String>();
+			attributes.put(SYM_ATTR_TITLE.get(context), (String) programMap.get(FIELD_TITLE));
+			attributes.put(SYM_ATTR_SEVERITY.get(context), (String) programMap.get(FIELD_SEVERITY));
+			attributes.put(SYM_ATTR_OCCURENCE.get(context), (String) programMap.get(FIELD_OCCURRENCE));
+			// attributes.put("description",
+			// (String)programMap.get(FIELD_DESCRIPTION));
+
+			ManagedRisk managedRisk = new ManagedRisk(context, DomainObject.newInstance(context, CAPAObjId));
+			managedRisk.createNew(context, attributes);
+			// managedRisk.addRPN(context, severity, occurence);
+
+			MQLCommand mqlCmd = new MQLCommand();
+			String[] cmdArgs = new String[] { managedRisk.getObjectId(context), SYM_INTERFACE_MANAGED_RISK.get(context) };
+			mqlCmd.executeCommand(context, "mod bus $1 add interface $2", cmdArgs);
+
+			Map<String, String> interfaceAttrs = new HashMap<String, String>();
+			interfaceAttrs.put(SYM_ATTR_RISK_IMPACT_TYPE.get(context), (String) programMap.get(FIELD_IMPACT_TYPE));
+			interfaceAttrs.put(SYM_ATTR_RISK_HAZARD_TYPE.get(context), (String) programMap.get(FIELD_HAZARD_TYPE));
+
+			managedRisk.setAttributeValues(context, interfaceAttrs);
+
+			returnMap.put(DomainConstants.SELECT_ID, managedRisk.getObjectId(context));
+
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getCurrentSeverity(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			return risk.getCurrentSeverity(context);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getCurrentOccurrence(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			risk.open(context);
+
+			String currOccurrence = risk.getCurrentOccurrence(context);
+
+			risk.close(context);
+
+			return currOccurrence;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getCurrentRPN(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+			String mode = (String) requestMap.get(MODE);
+			String currentRPN = EMPTY_STRING;
+			String reportFormat = (String) requestMap.get(RiskMgmtConstants.REPORT_FORMAT);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+			String rpn = risk.getCurrentRPN(context);
+
+			if (!RiskMgmtUtil.isNullOrEmpty(rpn)) {
+				if (RiskMgmtConstants.CSV.equalsIgnoreCase(reportFormat)) {
+					currentRPN = rpn;
+				}
+				else {
+					String occIndex = risk.getCurrentOccurrence(context);
+					String sevIndex = risk.getCurrentSeverity(context);
+					currentRPN = getFormattedRPN(occIndex, sevIndex, rpn,
+							!RiskMgmtUtil.isNullOrEmpty(mode) && RiskMgmtUtil.safeEqualsIgnoreCase(mode, MODE_EDIT));
+				}
+
+			}
+			else if (RiskMgmtUtil.safeEqualsIgnoreCase(mode, MODE_EDIT)) {
+
+				currentRPN = "<input name='RPN' size='2' value='' maxlength='2' readonly='readonly' />";
+			}
+
+			return currentRPN;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String getFormattedRPN(String occIndex, String sevIndex, String rpn, boolean editMode) {
+		String formattedRPN = null;
+		String riskColor = RiskMgmtUtil.getRiskColor(occIndex, sevIndex);
+		if (editMode) {
+			formattedRPN = String.format("<input name='RPN' size='2' value='%s' maxlength='2' readonly='readonly' style=\"background-color:%s\"/>",
+					rpn, riskColor);
+		}
+		else {
+			formattedRPN = String.format("<font style=\"background-color:%s;text-decoration:underline\">%s</font>", riskColor, rpn);
+		}
+
+		return formattedRPN;
+	}
+
+	public String getInitialSeverity(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			return risk.getInitialSeverity(context);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getInitialOccurrence(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			return risk.getInitialOccurrence(context);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getInitialRPN(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+			String initialRPN = EMPTY_STRING;
+			String reportFormat = (String) requestMap.get(RiskMgmtConstants.REPORT_FORMAT);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+			String rpn = risk.getInitialRPN(context);
+
+			if (!RiskMgmtUtil.isNullOrEmpty(rpn)) {
+				if (RiskMgmtConstants.CSV.equalsIgnoreCase(reportFormat)) {
+					initialRPN = rpn;
+				}
+				else {
+					String occIndex = risk.getInitialOccurrence(context);
+					String sevIndex = risk.getInitialSeverity(context);
+					initialRPN = getFormattedRPN(occIndex, sevIndex, rpn, false);
+				}
+
+			}
+
+			return initialRPN;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public String getRiskReductionNotNeededRationale(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			String riskObjId = (String) requestMap.get(OBJECT_ID);
+			String mode = (String) requestMap.get(MODE);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			String riskReductionNeeded = risk.getAttributeValue(context, SYM_ATTR_RISK_REDUCTION_NEEDED.get(context));
+			String riskReductionNeededNotNeedRationale = risk.getAttributeValue(context, SYM_ATTR_RISK_REDUCTION_NOT_NEEDED_RATIONALE.get(context));
+			String disabled = riskReductionNeeded.equalsIgnoreCase("No") ? "" : "disabled";
+
+			if (RiskMgmtUtil.safeEquals(mode, "edit")) {
+
+				return String
+						.format("<textarea style=\"float:left\" cols=\"25\" rows=\"5\" name=\"RiskReductionNotNeededRationale\" title=\"%s\" id=\"RiskReductionNotNeededRationale\" %s>%s</textarea>",
+								RiskMgmtUtil.getI18NString(context, "RiskMgmt.Common.RiskReductionNeeded"), disabled,
+								riskReductionNeededNotNeedRationale);
+			}
+			else {
+
+				return riskReductionNeededNotNeedRationale;
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public void setRiskReductionNotNeededRationale(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			Map requestMap = (HashMap) inputMap.get(REQUEST_MAP);
+
+			String[] objectId = (String[]) requestMap.get(OBJECT_ID);
+			String[] riskReductionNeededNotNeedRationale = (String[]) requestMap.get("RiskReductionNotNeededRationale");
+
+			String riskReductionNeededNotNeedRationaleValue = riskReductionNeededNotNeedRationale == null
+					|| riskReductionNeededNotNeedRationale.length == 0 || riskReductionNeededNotNeedRationale[0] == null ? ""
+					: riskReductionNeededNotNeedRationale[0];
+
+			ManagedRisk risk = new ManagedRisk(objectId[0]);
+
+			risk.setAttributeValue(context, SYM_ATTR_RISK_REDUCTION_NOT_NEEDED_RATIONALE.get(context), riskReductionNeededNotNeedRationaleValue);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getSeverityOptions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			Map<?, ?> fieldMap = (Map<?, ?>) programMap.get(FIELD_MAP);
+			String fieldName = (String) fieldMap.get(NAME);
+			String sevIndex = (String) requestMap.get(SEV_INDEX);
+
+			return RiskMgmtUtil.getNonI18NAttrRangeHTML(context, fieldName, SYM_ATTR_SEVERITY.get(context), new String[] { "-" }, sevIndex, false);
+
+			// TBD: Read from attribute, do not hard code!
+			// return
+			// "<select name=\"Severity\"><option value=\"-\">-</option><option
+			// value=\"1\">1</option><option value=\"2\">2</option><option
+			// value=\"3\">3</option><option value=\"4\">4</option><option
+			// value=\"5\">5</option></select>";
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getOccurrenceOptions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(REQUEST_MAP);
+			Map<?, ?> fieldMap = (Map<?, ?>) programMap.get(FIELD_MAP);
+			String fieldName = (String) fieldMap.get(NAME);
+			String occIndex = (String) requestMap.get(OCC_INDEX);
+
+			return RiskMgmtUtil.getNonI18NAttrRangeHTML(context, fieldName, SYM_ATTR_OCCURENCE.get(context), new String[] { "-" }, occIndex, false);
+
+			// TBD: Read from attribute, do not hard code!
+			// return
+			// "<select name=\"Occurence\"><option value=\"-\">-</option><option
+			// value=\"1\">1</option><option value=\"2\">2</option><option
+			// value=\"3\">3</option><option value=\"4\">4</option><option
+			// value=\"5\">5</option></select>";
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getOccurrenceEditOptions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			AttributeType attrRiskProbability = new AttributeType(SYM_ATTR_OCCURENCE.get(context));
+			attrRiskProbability.open(context);
+			StringList choices = attrRiskProbability.getChoices(context);
+			attrRiskProbability.close(context);
+
+			return choices;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getSeverityEditOptions(Context context, String[] args) throws RiskMgmtException {
+		try {
+			AttributeType attrRiskImpact = new AttributeType(SYM_ATTR_SEVERITY.get(context));
+			attrRiskImpact.open(context);
+			StringList choices = attrRiskImpact.getChoices(context);
+			attrRiskImpact.close(context);
+
+			return choices;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public void setCurrentOccurrence(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			Map requestMap = (HashMap) inputMap.get(REQUEST_MAP);
+
+			String[] objectId = (String[]) requestMap.get(OBJECT_ID);
+			String[] newOcc = (String[]) requestMap.get(FIELD_OCCURRENCE);
+			String[] newSev = (String[]) requestMap.get(FIELD_SEVERITY);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				ManagedRisk risk = new ManagedRisk(objectId[0]);
+				String currentSev = risk.getCurrentSeverity(context);
+				if (!RiskMgmtUtil.isNullOrEmpty(newSev) && newSev[0].equals(currentSev) && !RiskMgmtUtil.isNullOrEmpty(newOcc)) {
+					risk.addRPN(context, newSev[0], newOcc[0], null);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public void setCurrentSeverity(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			Map requestMap = (HashMap) inputMap.get(REQUEST_MAP);
+
+			String[] objectId = (String[]) requestMap.get(OBJECT_ID);
+			String[] newSev = (String[]) requestMap.get(FIELD_SEVERITY);
+			String[] newOcc = (String[]) requestMap.get(FIELD_OCCURRENCE);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				ManagedRisk risk = new ManagedRisk(objectId[0]);
+				if (!RiskMgmtUtil.isNullOrEmpty(newSev) && !RiskMgmtUtil.isNullOrEmpty(newOcc)) {
+					risk.addRPN(context, newSev[0], newOcc[0], null);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public void addRPNForTableEdit(Context context, String objectId, String occurrence, String severity, String status) throws RiskMgmtException {
+		try {
+			String storedRPE = PropertyUtil.getRPEValue(context, RPN_RPE_VAR, false);
+			String newRPNRPE = null;
+
+			if (RiskMgmtUtil.isNullOrEmpty(storedRPE)) {
+
+				String rpnRPE = String.format("%s|%s|%s", RiskMgmtUtil.isNullOrEmpty(occurrence) ? "" : occurrence,
+						RiskMgmtUtil.isNullOrEmpty(severity) ? "" : severity, RiskMgmtUtil.isNullOrEmpty(status) ? "" : status);
+
+				PropertyUtil.setRPEValue(context, RPN_RPE_VAR, rpnRPE, false);
+			}
+			else {
+
+				List<String> rpnData = RiskMgmtUtil.getListFromString(storedRPE, "|");
+
+				if (!RiskMgmtUtil.isAnyNullOrEmpty(rpnData.get(0), rpnData.get(1), rpnData.get(2))) {
+
+					ManagedRisk risk = new ManagedRisk(objectId);
+
+					risk.addRPN(context, rpnData.get(1), rpnData.get(0), rpnData.get(2));
+				}
+
+				String newOcc = !RiskMgmtUtil.isNullOrEmpty(occurrence) ? occurrence : rpnData.get(0);
+				String newSev = !RiskMgmtUtil.isNullOrEmpty(severity) ? severity : rpnData.get(1);
+				String newStatus = !RiskMgmtUtil.isNullOrEmpty(status) ? status : rpnData.get(2);
+
+				String newRPN = String.format("%s|%s|%s", RiskMgmtUtil.isNullOrEmpty(occurrence) ? "" : occurrence,
+						RiskMgmtUtil.isNullOrEmpty(severity) ? "" : severity, RiskMgmtUtil.isNullOrEmpty(status) ? "" : status);
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getRiskImpactTypes(Context context, String[] args) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.getAttrRangeHTML(context, "ImpactType", SYM_ATTR_RISK_IMPACT_TYPE.get(context), null, null, false);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getRiskHazardTypes(Context context, String[] args) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.getAttrRangeHTML(context, "HazardType", SYM_ATTR_RISK_HAZARD_TYPE.get(context), null,
+					RiskMgmtConstants.OTHER_ATTR_RANGE_OPTION, false);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAssociatedManagedRisks(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(OBJECT_ID);
+			return getAssociatedRisks(context, args, objectId);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * @param context
+	 * @param occIndex
+	 * @param sevIndex
+	 * @param row
+	 * @param col
+	 * @param riskContext
+	 * @return
+	 * @throws Exception
+	 */
+	private MapList getAssociatedRisks(Context context, String[] args, String objectId) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String occIndex = (String) inputMap.get(OCC_INDEX);
+			String sevIndex = (String) inputMap.get(SEV_INDEX);
+			String row = (String) inputMap.get(ROW);
+			String col = (String) inputMap.get(COL);
+			Set<String> selects = new HashSet<String>();
+			selects.add(SELECT_ID);
+			selects.add(SELECT_NAME);
+			selects.add(SELECT_TYPE);
+			selects.add(SELECT_CURRENT);
+			selects.add(SYM_ATTR_TITLE.getExpr(context));
+			selects.add(SYM_ATTR_RISK_IMPACT_TYPE.getExpr(context));
+			selects.add(SYM_ATTR_RISK_HAZARD_TYPE.getExpr(context));
+			selects.add(SELECT_OWNER);
+			selects.add(SELECT_DESCRIPTION);
+
+			Set<String> rpnSelects = new HashSet<String>();
+			rpnSelects.add(SYM_ATTR_SEVERITY.getExpr(context));
+			rpnSelects.add(SYM_ATTR_OCCURENCE.getExpr(context));
+			rpnSelects.add(SYM_ATTR_STATUS.getExpr(context));
+			rpnSelects.add(RiskMgmtUtil.concatExpr(SYM_ATTR_EFFECTIVE_DATE.getExpr(context), GENERIC));
+
+			/*
+			 * selects.add(RiskMgmtUtil.concatExpr(REL_RISK_RPN.getFromExpr(
+			 * context ), ATTR_SEVERITY.getExpr(context)));
+			 * selects.add(RiskMgmtUtil.concatExpr(
+			 * REL_RISK_RPN.getFromExpr(context),
+			 * ATTR_OCCURENCE.getExpr(context))); selects
+			 * .add(RiskMgmtUtil.concatExpr(REL_RISK_RPN.getFromExpr(context),
+			 * SYM_ATTR_EFFECTIVE_DATE.getExpr(context), GENERIC));
+			 */
+
+			List<ManagedRiskWithSelect> managedRisks = null;
+			ManagedRiskContext riskContext = new ManagedRiskContext(objectId);
+			if (!RiskMgmtUtil.isNullOrEmpty(occIndex) && !RiskMgmtUtil.isNullOrEmpty(sevIndex)) {
+
+				List<ManagedRiskWithSelect>[][] riskMatrix = riskContext.getRiskMatrix(context, selects, rpnSelects, null);
+				managedRisks = riskMatrix[Integer.valueOf(occIndex)][Integer.valueOf(sevIndex)];
+			}
+			else if (!RiskMgmtUtil.isNullOrEmpty(row) && !RiskMgmtUtil.isNullOrEmpty(col)) {
+
+				List<ManagedRiskWithSelect> unevaluatedRisks = new ArrayList<ManagedRiskWithSelect>();
+				List<ManagedRiskWithSelect>[][] riskMatrix = riskContext.getRiskMatrix(context, selects, rpnSelects, unevaluatedRisks);
+				managedRisks = getFilteredRisks(context, riskMatrix, unevaluatedRisks, row, col);
+			}
+			else {
+				DomainObject domainObject = new DomainObject(objectId);
+				if (SYM_TYPE_TASK.get(context).equals(domainObject.getInfo(context, "type")) && RiskMgmtUtil.isRelatedToCAPA(context, domainObject)) {
+					managedRisks = riskContext.getRisksRelatedToCAPATask(context, selects, null, rpnSelects);
+				}
+				else {
+					managedRisks = riskContext.getRisks(context, selects, null, rpnSelects);
+				}
+			}
+
+			MapList returnData = getRiskMapList(context, selects, managedRisks);
+
+			return returnData;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * @param context
+	 * @param selects
+	 * @param managedRisks
+	 * @return
+	 * @throws RiskMgmtException
+	 */
+	protected MapList getRiskMapList(Context context, Set<String> selects, List<ManagedRiskWithSelect> managedRisks) throws RiskMgmtException {
+		MapList returnData = new MapList();
+
+		if (!RiskMgmtUtil.isNullOrEmpty(managedRisks)) {
+
+			for (ManagedRiskWithSelect managedRisk : managedRisks) {
+
+				Map objDetailsMap = new HashMap<String, Object>(selects.size());
+				objDetailsMap.put(SELECT_ID, managedRisk.getValue(SELECT_ID));
+				objDetailsMap.put(SELECT_NAME, managedRisk.getValue(SELECT_NAME));
+				objDetailsMap.put(SELECT_TYPE, managedRisk.getValue(SELECT_TYPE));
+				objDetailsMap.put(SELECT_CURRENT, managedRisk.getValue(SELECT_CURRENT));
+				objDetailsMap.put(SYM_ATTR_TITLE.get(context), managedRisk.getValue(SYM_ATTR_TITLE.getExpr(context)));
+				objDetailsMap.put(SYM_ATTR_RISK_IMPACT_TYPE.get(context), managedRisk.getValue(SYM_ATTR_RISK_IMPACT_TYPE.getExpr(context)));
+				objDetailsMap.put(SYM_ATTR_RISK_HAZARD_TYPE.get(context), managedRisk.getValue(SYM_ATTR_RISK_HAZARD_TYPE.getExpr(context)));
+				objDetailsMap.put(SELECT_OWNER, managedRisk.getValue(SELECT_OWNER));
+				objDetailsMap.put(SELECT_DESCRIPTION, managedRisk.getValue(SELECT_DESCRIPTION));
+				objDetailsMap.put(SELECT_LEVEL, managedRisk.getValue(SELECT_LEVEL));
+
+				List<String> sevList = managedRisk.getRPNRelValue(SYM_ATTR_SEVERITY.getExpr(context));
+				List<String> occList = managedRisk.getRPNRelValue(SYM_ATTR_OCCURENCE.getExpr(context));
+				List<String> statusList = managedRisk.getRPNRelValue(SYM_ATTR_STATUS.getExpr(context));
+				List<String> effectiveDateList = managedRisk
+						.getRPNRelValue(RiskMgmtUtil.concatExpr(SYM_ATTR_EFFECTIVE_DATE.getExpr(context), GENERIC));
+
+				List<String> sortedDates = RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? null : RiskMgmtUtil.getSortedDates(effectiveDateList,
+						"yyyy/MM/dd@HH:mm:ss:z");
+
+				String initialSev = !RiskMgmtUtil.isNullOrEmpty(sevList) && !RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? (String) sevList
+						.get(effectiveDateList.indexOf(sortedDates.get(0))) : EMPTY_STRING;
+				String initialOcc = !RiskMgmtUtil.isNullOrEmpty(occList) && !RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? (String) occList
+						.get(effectiveDateList.indexOf(sortedDates.get(0))) : EMPTY_STRING;
+
+				String initialRPN = EMPTY_STRING;
+
+				if (!RiskMgmtUtil.isNullOrEmpty(initialSev) && !RiskMgmtUtil.isNullOrEmpty(initialOcc)) {
+
+					initialRPN = String.valueOf(Integer.parseInt(initialSev) * Integer.parseInt(initialOcc));
+				}
+
+				objDetailsMap.put(FIELD_INITIAL_SEVERITY, initialSev);
+				objDetailsMap.put(FIELD_INITIAL_OCCURENCE, initialOcc);
+				objDetailsMap.put(FIELD_INITIAL_RPN, initialRPN);
+
+				String currentSev = !RiskMgmtUtil.isNullOrEmpty(sevList) && !RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? (String) sevList
+						.get(effectiveDateList.indexOf(sortedDates.get(sortedDates.size() - 1))) : EMPTY_STRING;
+				String currentOcc = !RiskMgmtUtil.isNullOrEmpty(occList) && !RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? (String) occList
+						.get(effectiveDateList.indexOf(sortedDates.get(sortedDates.size() - 1))) : EMPTY_STRING;
+				String currentStatus = !RiskMgmtUtil.isNullOrEmpty(statusList) && !RiskMgmtUtil.isNullOrEmpty(effectiveDateList) ? (String) statusList
+						.get(effectiveDateList.indexOf(sortedDates.get(sortedDates.size() - 1))) : EMPTY_STRING;
+
+				String[] currentSevOcc = new String[] { EMPTY_STRING, EMPTY_STRING };
+
+				/*
+				 * if(!RiskMgmtUtil.isNullOrEmpty(sevList) &&
+				 * !RiskMgmtUtil.isNullOrEmpty(occList) &&
+				 * !RiskMgmtUtil.isNullOrEmpty(effectiveDateList)) {
+				 * 
+				 * currentSevOcc = getCurrentSevOcc(sevList, occList,
+				 * effectiveDateList); }
+				 */
+
+				objDetailsMap.put(FIELD_FINAL_SEVERITY, currentSev);
+				objDetailsMap.put(FIELD_FINAL_OCCURENCE, currentOcc);
+				objDetailsMap.put(FIELD_CURRENT_STATUS, currentStatus);
+
+				String currentRPN = EMPTY_STRING;
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentSev) && !RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+
+					currentRPN = String.valueOf(Integer.parseInt(currentSev) * Integer.parseInt(currentOcc));
+				}
+
+				objDetailsMap.put(FIELD_FINAL_RPN, currentRPN);
+
+				returnData.add(objDetailsMap);
+			}
+		}
+		return returnData;
+	}
+
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getPersonsForChangeOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			StringList lsProjectMemberIds = new StringList();
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(OBJECT_ID);
+			DomainObject dObj = DomainObject.newInstance(context, objectId);
+			if(dObj.isKindOf(context,SYM_TYPE_RISK.get(context))) {
+			RiskMgmtAdaptor adaptor = getRiskMgmtAdaptor(context, objectId);
+			lsProjectMemberIds = adaptor.getPersonsForChangeOwner(context, objectId);
+			return lsProjectMemberIds;
+			}
+			lsProjectMemberIds = RiskMgmtUtil.getProjectMembers(context,objectId,null);
+			return lsProjectMemberIds;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String changeOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String STATE_CONTROLLED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), "state_Controlled");
+
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String[] objectIds = (String[]) inputMap.get(ROW_IDS);
+			String[] newOwner = (String[]) inputMap.get(FIELD_OWNER);
+
+			List<String> selectedRiskIds = RiskMgmtUtil.getListFromString(objectIds[0], ",");
+			for (String selectedRiskId : selectedRiskIds) {
+				ManagedRisk risk = new ManagedRisk(selectedRiskId);
+				if (!risk.currentState(context).equals(STATE_CONTROLLED)) {
+					risk.setOwner(context, newOwner[0]);
+				}
+				else {
+					throw new Exception(MqlUtil.mqlCommand(context, "notice $1 $2 $3", risk.getName(context), ":", RiskMgmtUtil.getI18NString(
+							context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Message.CannotChangeOwnerRiskInControlledState")));
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_RISK_DETAILS_SUMMARY);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllRPNs(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final DateFormat inputDateFormat = new SimpleDateFormat("yyyy/MM/dd@HH:mm:ss:z");
+			final SimpleDateFormat MATRIX_DATE_FORMAT = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(OBJECT_ID);
+
+			ManagedRisk risk = new ManagedRisk(objectId);
+
+			List<RiskRPN> allRPNs = risk.getAllRPN(context);
+			MapList returnData = new MapList();
+
+			if (!RiskMgmtUtil.isNullOrEmpty(allRPNs)) {
+				for (int i = 0; i < allRPNs.size(); ++i) {
+					RiskRPN rpn = allRPNs.get(i);
+					Map objDetailsMap = new HashMap<String, Object>();
+					objDetailsMap.put(FIELD_SEVERITY, rpn.getSeverity());
+					objDetailsMap.put(FIELD_OCCURRENCE, rpn.getOccurrence());
+					objDetailsMap.put(FIELD_RPN, rpn.getRPN());
+					Date date = inputDateFormat.parse(RiskMgmtUtil.concat(rpn.getEffectiveDate(), " + 0.0"));
+					SimpleDateFormat displayDateFormat = new SimpleDateFormat("MM/dd/yyyy", Locale.US);
+					objDetailsMap.put(FIELD_EFFECTIVE_DATE, MATRIX_DATE_FORMAT.format(date));
+					returnData.add(objDetailsMap);
+				}
+			}
+
+			returnData.addSortKey(FIELD_EFFECTIVE_DATE, "decending", "date");
+			returnData.sort();
+
+			return returnData;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String deleteRisk(Context context, String[] args) throws RiskMgmtException {
+
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String tableRowIds[] = (String[]) inputMap.get(EMX_TABLE_ROW_ID);
+			final String STATE_IDENTIFIED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(),
+					RiskMgmtConstants.SYMBOLIC_STATE_IDENTIFIED);
+			boolean errorOccurred = false;
+			ArrayList<String> arrFailedRiskIds = new ArrayList<String>();
+			try {
+
+				for (String tableRowId : tableRowIds) {
+
+					List<String> tokens = RiskMgmtUtil.getListFromString(tableRowId, "|");
+
+					String riskObjId = tokens.get(0);
+					ManagedRisk risk = new ManagedRisk(riskObjId);
+					if (STATE_IDENTIFIED.equals(risk.currentState(context)) && context.getUser().equals(risk.getRiskOwner(context))) {
+						risk.delete(context);
+					}
+					else {
+						arrFailedRiskIds.add(risk.getRiskName(context));
+						errorOccurred = true;
+					}
+				}
+
+				if (!errorOccurred) {
+
+					return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_RISK_MATRIX);
+				}
+				else {
+					StringBuilder sbReturn = new StringBuilder();
+					sbReturn.append(RiskMgmtUtil.getI18NString(context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE,
+							"RiskMgmt.Message.CannotDeleteRisk"));
+					sbReturn.append('\n');
+					sbReturn.append(arrFailedRiskIds.toString());
+					return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG_AND_REFRESH, sbReturn.toString());
+				}
+			}
+			catch (Exception ex) {
+
+				return EMPTY_STRING;
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	protected List<ManagedRiskWithSelect> getFilteredRisks(Context context, List<ManagedRiskWithSelect>[][] riskMatrix,
+			List<ManagedRiskWithSelect> unevaluatedRisks, String row, String col) {
+		List<ManagedRiskWithSelect> filteredRisks = new ArrayList<ManagedRiskWithSelect>();
+		List<ManagedRiskWithSelect> unfilteredRisks = new ArrayList<ManagedRiskWithSelect>();
+
+		if (col.equalsIgnoreCase("Unevaluated") && !RiskMgmtUtil.isNullOrEmpty(unevaluatedRisks)) {
+
+			unfilteredRisks = unevaluatedRisks;
+
+		}
+		else {
+
+			for (int occIndex = 4; occIndex > -1; --occIndex) {
+
+				for (int sevIndex = 0; sevIndex < 5; ++sevIndex) {
+
+					String level = RiskMgmtUtil.getRiskLevel(occIndex + 1, sevIndex + 1);
+
+					if (level.equalsIgnoreCase(col) || col.equalsIgnoreCase("sum")) {
+
+						if (riskMatrix[occIndex][sevIndex] != null) {
+
+							unfilteredRisks.addAll(riskMatrix[occIndex][sevIndex]);
+						}
+					}
+				}
+			}
+		}
+
+		if (col.equalsIgnoreCase("sum")) {
+
+			unfilteredRisks.addAll(unevaluatedRisks);
+		}
+
+		if (row.indexOf("sum") != -1) {
+
+			filteredRisks = unfilteredRisks;
+		}
+		else {
+
+			for (ManagedRiskWithSelect managedRisk : unfilteredRisks) {
+
+				if (managedRisk.getValue(SELECT_CURRENT).equals(row)) {
+
+					filteredRisks.add(managedRisk);
+				}
+			}
+		}
+
+		return filteredRisks;
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public void tableEditPostProcess(Context context, String[] args) throws RiskMgmtException {
+		try {
+			/*
+			 * This seems to be dummy method placed to do any post edit actions
+			 */
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean showRiskReductionNotNeededRationale(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String riskObjId = (String) programMap.get(OBJECT_ID);
+			String mode = (String) programMap.get(MODE);
+
+			ManagedRisk risk = new ManagedRisk(riskObjId);
+
+			String riskReductionNeeded = risk.getAttributeValue(context, SYM_ATTR_RISK_REDUCTION_NEEDED.get(context));
+			boolean showField = RiskMgmtUtil.safeEquals(riskReductionNeeded, "No") || RiskMgmtUtil.safeEqualsIgnoreCase(mode, "edit") ? true : false;
+
+			return showField;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/*
+	 * private String[] getCurrentSevOcc(List<String> sevList, List<String>
+	 * occList, List<String> effectiveDates) throws Exception { String[]
+	 * currentSevOcc = new String[2]; Date storedDate = null; DateFormat
+	 * dateFormat = new SimpleDateFormat("yyyy/MM/dd@HH:mm:ss:z");
+	 * 
+	 * for(int i=0; i<sevList.size(); ++i) {
+	 * 
+	 * String tempSev = (String)sevList.get(i); String tempOcc =
+	 * (String)occList.get(i); Date tempDate =
+	 * dateFormat.parse(RiskMgmtUtil.concat((String)effectiveDates.get(i),
+	 * " + 0.0")); //Append '+ 0.0' as the input date is in GMT format with 0
+	 * offset.
+	 * 
+	 * if(storedDate == null || tempDate.after(storedDate)) {
+	 * 
+	 * currentSevOcc[0] = tempSev; currentSevOcc[1] = tempOcc;
+	 * 
+	 * storedDate = tempDate; } }
+	 * 
+	 * return currentSevOcc; }
+	 */
+}
+

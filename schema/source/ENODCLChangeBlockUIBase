@@ -1,0 +1,1338 @@
+/**
+ * emxDCLChangeBlock.java
+ * 
+ * Class to hold the business logic related to Change Block functionality 
+ */
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.ChangeBlockService;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UITableIndented;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME}
+{            
+	/**
+	 * Method to create new Change Blocks for Controlled Document File
+	 *  
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap contains objectId and parentId
+	 * @return empty map
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map addRow(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map)JPO.unpackArgs(args);
+			Map paramMap = (Map)programMap.get(DCLConstants.PARAMMAP);
+			Object objChangeRow =programMap.get("contextData");
+			MapList mlChgRows =UITableIndented.getChangedRowsMapFromElement(context, objChangeRow);
+			String strParentOID =(String)paramMap.get(DCConstants.PARENT_OID);
+			String strobjectId =(String)paramMap.get(DCConstants.OBJECTID);
+			String strAttrChangeSummary =  PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_SUMMARY);
+			String strAttrReasonForChange =  PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_ReasonforChange); 
+			String strAttrChangeJustification =  PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_JUSTIFICATION);
+			Map<String, String> mapAttributeValues = new HashMap<String, String>();
+			Map mapObj = new HashMap();
+			Map columnMap = new HashMap();
+			String strRowId=DomainConstants.EMPTY_STRING;
+			MapList mlChangedRows=new MapList();
+			Map mReturn = new HashMap<String, Object>();
+			for(int i = mlChgRows.size()-1 ; i>=0 ; i--){
+				mapObj = (Map)mlChgRows.get(i);
+				String markup=(String)mapObj.get("markup");		   
+				if(markup.equals("new"))
+				{              
+					columnMap=(Map)mapObj.get("columns");
+					 strRowId=(String)mapObj.get("rowId");
+					String strChangeSummary = (String)columnMap.get("ChangeSummary");
+					String strChangeJustification = (String)columnMap.get("ChangeJustification");
+					String strReasonForChange = (String)columnMap.get("ReasonForChange");
+					mapAttributeValues.put(strAttrChangeJustification,strChangeJustification);
+					mapAttributeValues.put(strAttrChangeSummary,strChangeSummary);
+					mapAttributeValues.put(strAttrReasonForChange, strReasonForChange);
+					ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+					mReturn = new HashMap<String, Object>();
+					mReturn=changeBlock.create(context,strobjectId,strParentOID,mapAttributeValues);
+					mReturn.put("rowId",strRowId);
+					mReturn.put("markup","add");
+					mReturn.put("columns", columnMap);
+					mlChangedRows.add(mReturn);
+				}
+			}
+			
+			Map mReturnMap=new HashMap();
+			mReturnMap.put("Action", "success"); 
+			mReturnMap.put("changedRows", mlChangedRows);
+			return mReturnMap;  
+		} catch (NumberFormatException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	   
+
+
+	}
+	/**
+	 * Method to get change block relationships connected to Change Controlled Document
+	 * This method is used as expand program for change blocks from Controlled Document side. 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap containing objectId and relId
+	 * @return MapList of connected Change Block relationships
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	 @com.matrixone.apps.framework.ui.ProgramCallable
+	public  MapList getTableDCLChangeBlockSummary(Context context,String args[])throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId=(String)programMap.get(DCConstants.OBJECTID);
+			String strRelId=(String)programMap.get(DCLConstants.RELID);
+			if(UIUtil.isNullOrEmpty(strRelId))
+			{ 
+				ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context); 
+				MapList mlRelatedObjects = changeBlock.getChangeBlocks(context,strObjectId,false,true);
+				return mlRelatedObjects;
+			}
+			else
+				return new MapList();
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method to get change block relationships connected to Versioned Document
+	 * This method is used as expand program for change blocks from Versioned Document side. 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap containing objectId and relId
+	 * @return MapList of connected Change Block relationships
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	 @com.matrixone.apps.framework.ui.ProgramCallable
+	public  MapList findVersionedFileBlock(Context context,String args[])throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId=(String)programMap.get(DCConstants.OBJECTID);
+			String strRelId=(String)programMap.get(DCLConstants.RELID);
+			if(UIUtil.isNullOrEmpty(strRelId)) {
+				ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+				MapList mlRelatedObjects = changeBlock.getChangeBlocks(context,strObjectId,true,false);       
+				return mlRelatedObjects;
+			}
+			else
+				return new MapList();
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method to get Filename and revision for Versioned Document
+	 * This is a column program for Document Change Block Summary Table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap containing paramList,ObjectList
+	 * @return StringList of FileNames of Versioned Document
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public  StringList getFileName(Context context,String args[]) throws DCLException 
+	{
+		StringList slFileName = null;
+		try {
+			Map paramMap = (Map)JPO.unpackArgs(args);
+			slFileName = new StringList();
+			Map mapObjectId=new HashMap();
+			DomainObject doObj;
+			String strFileName=DomainConstants.EMPTY_STRING;
+			MapList mlObject = (MapList)paramMap.get(DCConstants.OBJECTLIST);
+			String strTypeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			String strAttributeTitle = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_TITLE);
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_Version );
+			Map paramList = (Map) paramMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+			for (Object objectMap : mlObject)
+			{
+				StringBuilder sBuff=new StringBuilder();
+				mapObjectId = (Map)objectMap; 
+				String strObjId=(String)mapObjectId.get(DomainRelationship.SELECT_TO_ID);
+				if(UIUtil.isNullOrEmpty(strObjId))
+				{
+					String strRelId=(String)mapObjectId.get(DomainRelationship.SELECT_ID);
+					if(UIUtil.isNotNullAndNotEmpty(strRelId))
+					{
+						DomainRelationship dr=DomainRelationship.newInstance(context,strRelId);
+						MapList mlChangeBlock=dr.getInfo(context, new String[]{strRelId}, new StringList(DomainRelationship.SELECT_TO_ID));
+						Map mChangeBlock=(Map) mlChangeBlock.get(0);
+						strObjId=(String) mChangeBlock.get(DomainRelationship.SELECT_TO_ID);
+					}
+				}
+				if(UIUtil.isNotNullAndNotEmpty(strObjId)) {
+					doObj = DomainObject.newInstance(context, strObjId);
+					String strSelect = DomainObject
+							.getAttributeSelect(strAttributeTitle);
+					StringList slObjectSelect = new StringList(3);
+					slObjectSelect.add(strSelect);
+					slObjectSelect.add(DomainConstants.SELECT_POLICY);
+					slObjectSelect.add(DomainConstants.SELECT_REVISION);
+					Map mpFile = doObj.getInfo(context, slObjectSelect);
+					strFileName = (String) mpFile.get(strSelect);
+					String strRevision = (String) mpFile.get("revision");
+					String strPolicy = (String) mpFile
+							.get(DomainConstants.SELECT_POLICY);
+					String strFileImage = "<img src=\"images/"
+							+ strTypeIcon + "\" alt=\"\"></img>";
+					if (!strPolicy.equals(strPolicyname)) {
+						strFileName = DomainConstants.EMPTY_STRING;
+						strRevision = DomainConstants.EMPTY_STRING;
+						strFileImage = DomainConstants.EMPTY_STRING;
+					}
+					if (UIUtil.isNullOrEmpty(strReportFormat)){
+					sBuff
+					.append("<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?&amp;objectId="
+							+ XSSUtil.encodeForJavaScript(context, strObjId)
+							+ " ','700','600','false','popup','')\">");
+					sBuff.append(strFileImage);
+					sBuff.append(XSSUtil.encodeForHTML(context, strFileName));
+					sBuff.append("  ");
+					sBuff.append(XSSUtil.encodeForHTML(context, strRevision));
+					sBuff.append("</a>");
+				  }
+					else if(UIUtil.isNotNullAndNotEmpty(strReportFormat))
+						sBuff.append(strFileName);
+				
+					slFileName.add(sBuff.toString());
+					
+				}
+				else
+					slFileName.add(DomainConstants.EMPTY_STRING);
+			}
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slFileName; 
+	}
+
+	/**
+	 *  This is a Access Program for Reorder command
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args showReorder
+	 * @return true if showReorder is true
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean canReorderChangeBlocks (Context context, String[] args) throws DCLException
+	{
+		try {
+				Map programMap = (Map)JPO.unpackArgs(args);		
+				String strHideFile = (String)programMap.get("showReorder");
+				StringList slNotAllowStateList =getChangeBlockRestrictedState(context);
+				String strObjectId = (String)programMap.get(DCConstants.OBJECTID);
+				String strCuurentState =DCLUtil.getInfo(context, strObjectId, DomainConstants.SELECT_CURRENT);
+				if((DCLConstants.TRUE.equals(strHideFile))&&!slNotAllowStateList.contains(strCuurentState))
+						return true;
+				return false;
+				} catch (Exception e) {
+				throw new DCLException(e.getLocalizedMessage());
+			}
+		
+	}   
+
+	/**
+	 *  This is a Column Program for Sequence Number Column
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args contain program map
+	 * @return String List with column values
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public StringList getSequenceColumn(Context context, String[] args) throws DCLException{
+
+		StringList slReturn;
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			slReturn = new StringList();
+			Map mapObjectId=new HashMap();
+			DomainObject doObj;
+			MapList mlObject = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			String strAttrSequence = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_SEQUENCE);
+			String strAttrTitle = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_TITLE);
+			String strPolicyname = PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_policy_Version );
+			for (Object objectMap : mlObject)
+			{
+				mapObjectId = (Map)objectMap; 
+				String strRoot=(String)mapObjectId.get("Root Node");
+				if(DCLConstants.TRUE.equalsIgnoreCase(strRoot)){
+					String strId = (String)mapObjectId.get(DomainConstants.SELECT_ID);
+					doObj = DomainObject.newInstance(context, strId);
+					StringList slObjectSelect = new StringList(3);
+					slObjectSelect.add(DomainConstants.SELECT_POLICY);
+					slObjectSelect.add(DomainConstants.SELECT_REVISION);
+					slObjectSelect.add(DomainConstants.SELECT_NAME);
+					Map mpDoc = doObj.getInfo(context, slObjectSelect);
+					String strPolicy=(String)mpDoc.get(DomainConstants.SELECT_POLICY);
+					if(!strPolicy.equalsIgnoreCase(strPolicyname))
+					{
+						StringBuilder sBuff =new StringBuilder();
+						sBuff.append((String)mpDoc.get(DomainConstants.SELECT_NAME));
+						sBuff.append(" ");
+						sBuff.append((String)mpDoc.get(DomainConstants.SELECT_REVISION));
+						slReturn.add(sBuff.toString());
+					}
+					else
+						slReturn.add(doObj.getAttributeValue(context, strAttrTitle));
+				}else{
+					String strSeqNo=(String)mapObjectId.get("attribute["+strAttrSequence+"]");
+					if(UIUtil.isNullOrEmpty(strSeqNo))
+					{
+						DomainRelationship dr=DomainRelationship.newInstance(context,(String)mapObjectId.get(DomainRelationship.SELECT_ID) );
+						strSeqNo=dr.getAttributeValue(context, strAttrSequence);
+					}
+					slReturn.add(strSeqNo);
+				}
+			}
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slReturn; 
+	}
+
+	/**
+	 *  This is a Access Program for Delete command of Change Block in Released State
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args contain program map
+	 * @return false if current state is released 
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean canAccessChangeBlocks(Context context,String args[]) throws DCLException
+	{
+		boolean isCOConnected = false;
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			StringList slNotAllowStateList = getChangeBlockRestrictedState(context);
+			String strObjectId = (String)programMap.get(DCConstants.OBJECTID);
+			List<Map> lmChangeInfo = documentService.getConnectedChange(context, strObjectId);
+			if(lmChangeInfo.size()>0)
+				isCOConnected = true; 
+			String strCuurentState =DCLUtil.getInfo(context, strObjectId, DomainConstants.SELECT_CURRENT);
+			if(slNotAllowStateList.contains(strCuurentState) || !isCOConnected)
+				return false;
+			else
+				return true;
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * gets the modification restriction states for change block
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args
+	 * @return List of States
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	private StringList getChangeBlockRestrictedState(Context context)throws DCLException {
+		try {
+			String strRestrictionStates = EnoviaResourceBundle.getProperty(context,"enoDocumentControl.ChangeBlock.ModifyRestrictionStates");
+			StringList slNotAllowStateList =new StringList();
+			if(!UIUtil.isNullOrEmpty(strRestrictionStates)){
+				StringList slStateList = FrameworkUtil.split(strRestrictionStates, DCLConstants.COMMA);
+				for(int j=0;j<slStateList.size();j++)
+				{
+					String strResult = (String) slStateList.get(j);
+					StringList slResult = FrameworkUtil.split(strResult, ".");
+					String strSymbPolicyName = (String) slResult.get(0);
+					String strSymbStateName = (String) slResult.get(1);
+					String strStateName = DCLUtil.getStateName(context,strSymbPolicyName, strSymbStateName);
+					slNotAllowStateList.addElement(strStateName);
+				}
+			}
+			return slNotAllowStateList;
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		} 
+	}
+	/**
+	 * This method is to delete selected change blocks for Controlled Documents
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args emxTableRowId of change block
+	 * @return Map of Javascript to refresh the table
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map deleteChangeBlock(Context context,String args[]) throws DCLException
+	{
+		ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+		Map<String,String> mReturnMap = new HashMap<String, String>();
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String[] strArrEmxTableOID = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList slChangeBlockRelIds = new StringList();
+			for(Object obj:strArrEmxTableOID)
+			{
+				String strObjectId=(String)obj;
+				TableRowId tr=new TableRowId(strObjectId);
+				String strRelId=tr.getRelationshipId();
+				slChangeBlockRelIds.add(strRelId);
+			}
+			changeBlock.delete(context, slChangeBlockRelIds);
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "parentLocationRefresh"));
+		return mReturnMap;
+	}
+
+	/**
+	 * This is to manage change blocks from "Action" menu to populate table
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args emxTableRowId of document files
+	 * @return Map of Javascript
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map manageChangeBlock(Context context,String args[]) throws DCLException
+	{
+		Map<String, String> mReturnMap  = new HashMap<String, String>();
+		StringBuilder sbSubmitURL = new StringBuilder();
+		try {
+			String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.alert.MultipleFileSelction");
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String[] strArrEmxTableOID = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strDocId[]=(String[]) programMap.get(DCConstants.OBJECTID);
+			String strParentOID[] = (String[]) programMap.get(DCConstants.PARENT_OID);
+			String strDCLMode[]=(String[])programMap.get(DCConstants.ACTION_MODE);
+			boolean flag  = true;
+			if(!(strDCLMode==null))
+			{
+				if(strDCLMode[0].equals("ChangeOrderSummary"))
+				{
+					//Changing parent node from CO to Controlled Document
+					if(strArrEmxTableOID==null)
+					{
+						flag = false;
+					}
+					else
+					{
+						TableRowId tr=new TableRowId(strArrEmxTableOID[0]);
+						String strId=tr.getObjectId();
+						String strRelationshipId = tr.getRelationshipId();
+						mReturnMap =preProcessChangeBlockSummary(context, strId, strRelationshipId);
+						if(mReturnMap.containsKey(DCLConstants.ACTION_JAVASCRIPT))
+							return mReturnMap;
+						else
+						{
+							strDocId[0]=mReturnMap.get(DCConstants.OBJECTID);
+							strParentOID[0]=mReturnMap.get(DCConstants.PARENT_OID);
+						}
+					}
+				}
+			}
+			if((strArrEmxTableOID==null||strArrEmxTableOID.length==1) && flag == true)
+			{
+
+				String emxTableRowId=DomainConstants.EMPTY_STRING;
+				if(strArrEmxTableOID==null)
+					emxTableRowId=strDocId[0];
+				else if(!(strDCLMode==null) &&strDCLMode[0].equals("ChangeOrderSummary") )
+				{
+					TableRowId tr=new TableRowId(strArrEmxTableOID[0]);
+					emxTableRowId=tr.getObjectId();
+				}
+				else
+					emxTableRowId=strArrEmxTableOID[0];
+				String strAttrTitle = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_TITLE);
+
+				DomainObject doObj=DomainObject.newInstance(context,strDocId[0]);
+				StringList slObjectSelect = new StringList(2);
+				slObjectSelect.add(DomainConstants.SELECT_NAME);
+				slObjectSelect.add(DomainConstants.SELECT_REVISION);
+				Map mpDoc =  doObj.getInfo(context, slObjectSelect);
+				String strName=(String) mpDoc.get(DomainConstants.SELECT_NAME);
+				String strRev=(String) mpDoc.get(DomainConstants.SELECT_REVISION);
+				DomainObject dob=DomainObject.newInstance(context,emxTableRowId);
+				String strSubHeader=dob.getAttributeValue(context, strAttrTitle); 
+				String strHeader = MessageUtil.getMessage(context, null, "enoDocumentControl.Header.ManageChangeBlock",
+						new String[] {strName,strRev}, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);			
+
+				// In 15x and 16x EMX_TABLE_ROW_ID is not available for the file for which changeBlock is being is created,
+				//so this javascript code find the Ids of selected files
+				// and pass them in the URL
+				// Find the frame in which the files listing is shown
+				
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "getSelectedFileIds", requiredText, emxTableRowId, strDocId[0], strParentOID[0], strHeader, strSubHeader));
+			}
+			else if(flag == false || strArrEmxTableOID.length>1)
+			{
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+			}
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+		return mReturnMap;
+	}
+	private Map preProcessChangeBlockSummary(Context context ,String strId,String strRelId ) throws DCLException
+	{
+		try {
+			ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+			StringBuilder sbSubmitURL = new StringBuilder();
+			Map<String, String> mReturnMap  = new HashMap<String, String>();
+			StringList sListSelects= new StringList();
+			sListSelects.add(DomainConstants.SELECT_NAME);
+			sListSelects.add(DomainConstants.SELECT_REVISION);
+			sListSelects.add(DomainConstants.SELECT_CURRENT);
+			sListSelects.add(DomainConstants.SELECT_OWNER);
+			Map mInfo = DCLUtil.getInfo(context, strId,sListSelects);
+			String arrStrRelIds[] = new String[1];
+			arrStrRelIds[0] = strRelId;  
+			StringList slSelects = new StringList();
+			slSelects.add(DomainConstants.SELECT_NAME);
+			MapList mlInfo = null;
+			String strRelationship= new String();
+			if(null != strRelId){
+				mlInfo = changeBlock.getRelationshipInfo(context, arrStrRelIds, slSelects);
+				Map mDocInfo= (Map) mlInfo.get(0);
+				strRelationship =(String) mDocInfo.get(DomainConstants.SELECT_NAME);
+			}
+			StringList slNotAllowStateList =getChangeBlockRestrictedState(context);
+			
+			boolean isOwner=context.getUser().equals(mInfo.get(DomainConstants.SELECT_OWNER))?true:false;
+			String strVPLMProjectLeader=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+				
+			boolean isDCA = (PersonUtil.hasAssignment(context,strVPLMProjectLeader) || PersonUtil.hasAssignment(context,PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_DOCUMENT_CENTER_ADMINISTRATOR)));
+			boolean isResponsibleSME=DCLUtil.isResponsibleSME(context,strId);
+			boolean isSME = isResponsibleSME || PersonUtil.hasAssignment(context, PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT))||PersonUtil.hasAssignment(context,strVPLMProjectLeader) ;
+			
+			if(!(isOwner||isDCA||isSME))
+			{
+				String requiredText = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.CannotAddChangeBlock",
+						new String[] {mInfo.get(DomainConstants.SELECT_NAME).toString(),mInfo.get(DomainConstants.SELECT_REVISION).toString(),mInfo.get(DomainConstants.SELECT_CURRENT).toString()}, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+				return mReturnMap;
+			}
+			
+			
+			else if(slNotAllowStateList.contains(mInfo.get(DomainConstants.SELECT_CURRENT).toString()))
+			{
+				String requiredText = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.AddChangeBlock",
+						new String[] {mInfo.get(DomainConstants.SELECT_NAME).toString(),mInfo.get(DomainConstants.SELECT_REVISION).toString(),mInfo.get(DomainConstants.SELECT_CURRENT).toString()}, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+				return mReturnMap;
+			}
+			//else if(strRelationship.equals(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM))){
+//			mReturnMap.put(DCConstants.OBJECTID, strId);
+//			mReturnMap.put(DCConstants.PARENT_OID, strId);
+//			return mReturnMap;
+//			}
+			else if(strRelationship.equals(PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_BLOCK)))
+			{
+				String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),"enoDocumentControl.alert.ChangeBlockSelection");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+				return mReturnMap;
+			}
+			else {
+				mReturnMap.put(DCConstants.OBJECTID, strId);
+				mReturnMap.put(DCConstants.PARENT_OID, strId);
+			return mReturnMap;
+			}
+			//return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * This method is to reorder the sequence of selected change blocks
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args emxTableRowId of change blocks
+	 * @return Map of Javascript
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map pasteBelow(Context context,String args[]) throws DCLException
+	{
+		ChangeBlockService changeBlockObj = DCLServiceUtil.getChangeBlockService(context);
+		Map<String,String> mReturnMap = new HashMap<String, String>();
+
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String[] strArrEmxTableOID = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strArrParentOID = (String[]) programMap.get(DCConstants.PARENT_OID);
+			String[] strMoveBelowNumber = (String[])programMap.get("DCLMoveBelow"); 
+			StringList slChangeBlockRelIds = new StringList();
+			String requiredText = DomainConstants.EMPTY_STRING;
+
+			StringBuilder sbSubmitURL = new StringBuilder();
+			if(!strMoveBelowNumber[0].matches("[0-9]+"))
+			{
+				requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.alert.InvalidSequnceNo");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+				return mReturnMap;
+			}
+			for(Object obj:strArrEmxTableOID)
+			{
+				String strObjectId=(String)obj;
+				TableRowId tr=new TableRowId(strObjectId);
+				String strRelId=tr.getRelationshipId();
+				slChangeBlockRelIds.add(strRelId);
+			}
+			Map mReturn = changeBlockObj.reorder(context,slChangeBlockRelIds,strArrParentOID[0],Integer.parseInt(strMoveBelowNumber[0]));
+			String strAction=(String)mReturn.get(DCLConstants.ACTION);
+			if(strAction.equals(DCLConstants.ACTIONS_SUCCESS))
+			{
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "parentLocationRefresh"));
+			}
+			else
+			{
+				requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.alert.InvalidSequnceNo");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+			}				
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return mReturnMap;
+	}
+
+	/**
+	 * This method is to get Change Order, its Affected Items and Change Blocks
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return MapList containing objects to be displayed on structure browser (e.g. CO, Documents, Change Blocks)
+	 * @throws DCLException
+	 */
+	 @com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableDCLChangeBlockSummaryViewExpansion(Context context,String args[]) throws DCLException
+	{
+		MapList mList = new MapList();
+	
+		MapList mReturnDocuments = new MapList();
+		
+		String strDocumentTypeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS );
+		String strChangeOrderTypeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER );
+
+		String strChangeActionTypeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ACTION );
+		String strRelationChangeAction = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ACTION);
+		StringBuilder sbRelations = new StringBuilder();
+		sbRelations.append(strRelationChangeAction);
+		StringBuilder sbTypes = new StringBuilder();
+		sbTypes.append(strChangeActionTypeName);
+		sbTypes.append(", ");
+		sbTypes.append(strDocumentTypeName);
+
+		ChangeBlockService changeBlockObj = DCLServiceUtil.getChangeBlockService(context);
+		Map programMap;
+		try {
+			programMap = (Map)JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCConstants.OBJECTID);
+			String strParentId= (String)programMap.get("parentId");
+			int flag = 0;
+			if(UIUtil.isNotNullAndNotEmpty(strParentId))
+			{
+				DomainObject dObjTemp = DomainObject.newInstance(context, strParentId);
+				if(dObjTemp.isKindOf(context, strDocumentTypeName))
+				{
+					flag = 1;
+				}
+			}
+			
+			DomainObject domObject = DomainObject.newInstance(context, strObjectId);
+			if(domObject.isKindOf(context,strChangeOrderTypeName ))
+			{
+				mList = changeBlockObj.getConnectedItems(context, domObject, sbRelations.toString(), sbTypes.toString(), true, true);
+				for(Object objMap:mList)
+				{
+					Map mObj=(Map)objMap;
+					Object objectType=mObj.get(DomainObject.SELECT_ID);
+					Map mapDocumentIds = new HashMap();
+					if(objectType instanceof String)
+					{
+						String strDocId = (String) mObj.get(DomainObject.SELECT_ID);
+						DomainObject doObjDocument = new DomainObject(strDocId);
+						if(doObjDocument.isKindOf(context, strDocumentTypeName))
+						{
+							mapDocumentIds.put(DomainConstants.SELECT_ID, strDocId);
+							mReturnDocuments.add(mapDocumentIds);
+						}
+					}
+					if(objectType instanceof StringList)
+					{
+						StringList sListTemp = (StringList) objectType;
+						for(int i=0; i<sListTemp.size(); i++)
+						{
+							String strDocId = (String) sListTemp.get(i);
+							DomainObject doObjDocument = new DomainObject(strDocId);
+							mapDocumentIds = new HashMap();
+							if(doObjDocument.isKindOf(context, strDocumentTypeName))
+							{
+								mapDocumentIds.put(DomainConstants.SELECT_ID, strDocId);
+								mReturnDocuments.add(mapDocumentIds);
+							}
+						}
+					}
+				}
+			}
+			if(domObject.isKindOf(context, strDocumentTypeName) && flag == 0)
+				mReturnDocuments = changeBlockObj.getChangeBlocks(context, strObjectId, false, true);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return mReturnDocuments;
+	}
+
+	/**
+	 * This method is to get Change Order's Change Blocks
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return StringList forming URL to open Change Blocks in pop up mode
+	 * @throws DCLException
+	 */
+	public StringList getCOChangeBlocks (Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strSeqNo = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_SEQUENCE);
+			String strTypeCO=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);               
+			String strTypeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			MapList mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			String strTypeSymName = DomainConstants.EMPTY_STRING;
+			
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+			
+			StringList sListObjName=new StringList();
+			String strName=DomainConstants.EMPTY_STRING;
+			String strRevision = DomainConstants.EMPTY_STRING;
+			Map objectIdMap=new HashMap();
+			StringBuilder sBuff;
+			for (Object objectMap : mobjectList)
+			{
+				objectIdMap = (Map)objectMap; 
+				String strSequenceNo=(String)objectIdMap.get(DomainObject.getAttributeSelect(strSeqNo));
+				sBuff =new StringBuilder();
+				if(UIUtil.isNullOrEmpty(strSequenceNo))
+				{
+					String strRoot=(String)objectIdMap.get("Root Node");
+					String strObjId = (String)objectIdMap.get(DomainConstants.SELECT_ID);
+					DomainObject dobj=DomainObject.newInstance(context,strObjId);
+					strName=dobj.getInfo(context,DomainConstants.SELECT_NAME);
+					strRevision=dobj.getInfo(context,DomainConstants.SELECT_REVISION);
+
+					if(DCLConstants.TRUE.equalsIgnoreCase(strRoot))
+					{
+						strName=dobj.getInfo(context,DomainConstants.SELECT_NAME);
+						strRevision=dobj.getInfo(context,DomainConstants.SELECT_REVISION);
+					}
+
+					if(dobj.isKindOf(context,strTypeCO))
+					{
+						strTypeSymName = DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER;
+					}
+					if(UIUtil.isNullOrEmpty(strReportFormat))
+					{
+					sBuff.append("<B><a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?objectId=");
+					sBuff.append(XSSUtil.encodeForJavaScript(context, strObjId));
+					sBuff.append(" ','700','600','false','popup','')\"><img src=\"images/");
+					sBuff.append(XSSUtil.encodeForHTMLAttribute(context, strTypeIcon));
+					sBuff.append("\" alt=\"\"></img>");
+					sBuff.append(XSSUtil.encodeForHTML(context, strName));
+					sBuff.append("  ");
+					sBuff.append(XSSUtil.encodeForHTML(context, strRevision));
+					sBuff.append("</a></B>");
+                                        }
+                                 	else 
+					{
+						sBuff.append(XSSUtil.encodeForHTMLAttribute(context, strName));
+						sBuff.append("  ");
+						sBuff.append(XSSUtil.encodeForHTMLAttribute(context, strRevision));
+					}
+				}
+				else
+					sBuff.append(strSequenceNo);
+
+				sListObjName.add(sBuff.toString());
+			}
+			return sListObjName;
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get Change Summary attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return StringList containing Change Summary attribute value
+	 * @throws DCLException if the operation fails
+	 */
+	public StringList getChangeSummary (Context context, String[] args) throws DCLException
+	{
+		ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+		Map programMap;
+		try {
+			programMap = (Map)JPO.unpackArgs(args);
+			String strChangeSummary = PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_SUMMARY);
+			MapList mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			StringList sListChageSummary=new StringList();
+			sListChageSummary=impl.findAttributeValues(context,mobjectList,strChangeSummary);
+			return sListChageSummary;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get Change Justification attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return StringList containing Change Justification attribute value
+	 * @throws DCLException if the operation fails
+	 */
+	public StringList getChangeJustification (Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strChangeJustification= PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_JUSTIFICATION);
+			MapList mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			StringList sListChangeJustification=new StringList();
+			sListChangeJustification=impl.findAttributeValues(context,mobjectList,strChangeJustification);
+			return sListChangeJustification;
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get Reason For Change attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return StringList containing Reason For Change attribute value
+	 * @throws DCLException if the operation fails
+	 */
+	public StringList getReasonForChange(Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strReason= PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_ReasonforChange);
+			MapList mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			StringList sListChangeJustification=new StringList();
+			sListChangeJustification=impl.findAttributeValues(context,mobjectList,strReason);
+			return sListChangeJustification;
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to update Change Summary attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return void
+	 * @throws DCLException if the operation fails
+	 */
+	public void updateChangeSummary (Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			String strChangeSummary=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_SUMMARY);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			Map paramMap = (Map)programMap.get(DCLConstants.PARAMMAP);
+			String strResponseValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strRelId= (String)paramMap.get(DCLConstants.RELID);
+			String strObjectId=(String)paramMap.get(DCConstants.OBJECTID);
+			impl.updateAttributeValues(context,strRelId,strObjectId,strResponseValue,strChangeSummary);
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to update Reason For Change attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return void
+	 * @throws DCLException if the operation fails
+	 */
+	public void updateReasonForChange (Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strReasonForChange=PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_ReasonforChange);
+			Map paramMap = (Map)programMap.get(DCLConstants.PARAMMAP);
+			String strResponseValue = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			String strRelId= (String)paramMap.get(DCLConstants.RELID);
+			String strObjectId=(String)paramMap.get(DCConstants.OBJECTID);
+			impl.updateAttributeValues(context,strRelId,strObjectId,strResponseValue,strReasonForChange);
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to update Change Justification attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args programMap
+	 * @return void
+	 * @throws DCLException if the operation fails
+	 */
+	public void updateChangeJustification (Context context, String[] args) throws DCLException
+	{
+		try
+		{
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strChangeJustification=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_JUSTIFICATION);
+			Map paramMap = (Map)programMap.get(DCLConstants.PARAMMAP);
+			String strResponseValue = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			String strRelId= (String)paramMap.get(DCLConstants.RELID);
+			String strObjectId=(String)paramMap.get(DCConstants.OBJECTID);
+			impl.updateAttributeValues(context,strRelId,strObjectId,strResponseValue,strChangeJustification);
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method is to edit attribute value
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap
+	 * @return void
+	 * @throws DCLException if the operation fails
+	 */
+	public StringList editAttributeValue(Context context,String args[]) throws DCLException
+	//public List<Boolean> editAttributeValue(Context context,String args[]) throws DCLException
+	{	try {
+			String strRelnChangeBlock = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_BLOCK);
+			String strTypeChangeOrder = PropertyUtil
+					.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String strAttrChangeSummary = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_SUMMARY);
+			String strAttrChangeJustification = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_JUSTIFICATION);
+			String strAttrReasonForChange = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_ReasonforChange);
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_Version );
+			StringList slNotAllowStateList =getChangeBlockRestrictedState(context);
+			ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			MapList mobjectList = (MapList) paramMap.get(DCConstants.OBJECTLIST);
+			StringList sList=new StringList();
+			//List<Boolean> sList = new ArrayList<Boolean>();
+			boolean bEditAttribute = false;
+			boolean bEditChangeBlock = true;
+
+			for (Object mObjectMap : mobjectList) {
+				bEditChangeBlock = true;
+				Map ObjectMap = (Map) mObjectMap;
+				String strRelationship = (String) ObjectMap.get("relationship");
+				String strParent = (String) ObjectMap.get(DomainConstants.SELECT_ID);
+				String strType = (String) ObjectMap
+						.get(DomainConstants.SELECT_TYPE);
+				if(UIUtil.isNullOrEmpty(strType))
+					strType=DCLUtil.getInfo(context, strParent, DomainConstants.SELECT_TYPE);
+				if (strTypeChangeOrder.equals(strType)) {
+					String strObjectId = (String) ObjectMap.get(DomainConstants.SELECT_ID);
+					DomainObject dobjCo = DomainObject.newInstance(context,	strObjectId);
+					Map mCOAttribute = changeBlock.getAttributeMap(context,	dobjCo);
+					String strHasModifyAccess =DCLUtil.getInfo(context, strObjectId, "current.access[modify]");
+					if (mCOAttribute.containsKey(strAttrReasonForChange)&& mCOAttribute.containsKey(strAttrChangeJustification)
+							&& mCOAttribute.containsKey(strAttrChangeSummary)&&DCLConstants.TRUE.equalsIgnoreCase(strHasModifyAccess))
+						bEditAttribute = true;
+
+				}
+				if (!UIUtil.isNullOrEmpty(strParent)) {
+					StringList slSelects =new StringList();
+					slSelects.add(DomainConstants.SELECT_CURRENT);
+					slSelects.add(DomainConstants.SELECT_OWNER);
+					slSelects.add(DomainConstants.SELECT_POLICY);
+					String strState = (String) ObjectMap.get("from.current");
+					String strOwner= (String) ObjectMap.get("from.owner");
+					
+					boolean isOwner=context.getUser().equals(strOwner)?true:false;
+
+					String strVPLMProjectLeader=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+			
+					boolean isResponsibleSME=DCLUtil.isResponsibleSME(context,strParent);
+					boolean isSME = isResponsibleSME|| PersonUtil.hasAssignment(context, PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT));
+					boolean isDCA = ( PersonUtil.hasAssignment(context,PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_DOCUMENT_CENTER_ADMINISTRATOR)));
+					
+					if (slNotAllowStateList.contains(strState))
+						bEditChangeBlock = false;
+					else if(!slNotAllowStateList.contains(strState)&&!(isOwner||isDCA||isSME||PersonUtil.hasAssignment(context, strVPLMProjectLeader)))
+						bEditChangeBlock = false;
+				
+				}
+				if ((strRelationship == null && strType == null))
+					sList.add(String.valueOf(false));
+				else if ((!UIUtil.isNullOrEmpty(strRelationship)&& strRelationship.equals(strRelnChangeBlock) && bEditChangeBlock)|| (strType.equals(strTypeChangeOrder) && bEditAttribute))
+					sList.add(String.valueOf(true));
+				else
+					sList.add(String.valueOf(false));
+			}
+			return sList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get Change Block RelIds, form URL to open emxFullSearch.jsp and pass those RelIds with URL
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap
+	 * @return Map containing URL for opening emxFullSearch.jsp of CONTROLLED DOCUMENTS
+	 * @throws DCLException if the operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map copyTo(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			Map mReturnMap = new HashMap();
+			String[] emxTableRowId = (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strObjectId= (String[])programMap.get(DCConstants.OBJECTID);
+			StringBuilder sbChangeBlockRelIds = new StringBuilder();
+			StringList flagChangeBlock = new StringList();
+			String strTypeControlledDocument=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			String strRelnChangeBlock=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_BLOCK);
+			String strAttrChangeSummary=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_CHANGE_SUMMARY);
+			for(int i=0; i <= emxTableRowId.length-1; i++)
+			{
+
+				TableRowId tr = new TableRowId(emxTableRowId[i]);
+				sbChangeBlockRelIds.append(tr.getRelationshipId());
+				if(UIUtil.isNotNullAndNotEmpty(tr.getRelationshipId()))
+				{
+				sbChangeBlockRelIds.append(",");
+				DomainRelationship dr = DomainRelationship.newInstance(context,	tr.getRelationshipId());
+
+				if(dr.getAttributeDetails(context).keySet().contains(strAttrChangeSummary))
+				{
+					flagChangeBlock.add(PropertyUtil.getSchemaProperty(context, strRelnChangeBlock));
+				}
+				else
+				{
+					flagChangeBlock.add(strTypeControlledDocument);
+				}
+			}
+				else
+				{
+					flagChangeBlock.add(strTypeControlledDocument);
+				}
+			}
+			if(sbChangeBlockRelIds.length()>0)
+			sbChangeBlockRelIds.deleteCharAt(sbChangeBlockRelIds.length()-1);
+			if(!flagChangeBlock.toString().contains(strTypeControlledDocument))
+			{
+				String strAllowedStates = EnoviaResourceBundle.getProperty(context,"enoDocumentControl.ChangeBlock.ModifyAllowedStates");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "getChangeBlockRelIds", strAllowedStates, sbChangeBlockRelIds.toString(), strObjectId[0]));	
+			}
+			else
+			{
+				String requiredMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.alert.InvalidChangeBlocks");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredMessage));
+			}
+			return mReturnMap;
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to copy Change Blocks
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap
+	 * @return Map to refresh current page
+	 * @throws DCLException if the operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map copyChangeBlocks(Context context,String args[]) throws DCLException
+	{
+		Map paramMap;
+		try {
+			paramMap = (Map)JPO.unpackArgs(args);
+			Map mReturnMap = new HashMap();
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			StringList sListChangeBlockRelIds = new StringList();
+			String strAllRelIds = DomainConstants.EMPTY_STRING;
+			String[] emxTableRowId = (String[])paramMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList sListDocumentIds = new StringList();
+			for(int i=0; i <= emxTableRowId.length-1; i++)
+			{
+				TableRowId tr = new TableRowId(emxTableRowId[i]);
+				sListDocumentIds.add(tr.getObjectId());
+			}
+			String[] strChangeBlockIds = (String[])paramMap.get("objectIds");
+			for(int i=0; i < strChangeBlockIds.length; i++)
+			{
+				sListChangeBlockRelIds.add(strChangeBlockIds[i]);
+			}
+			impl.copyChangeBlocks(context, sListChangeBlockRelIds, sListDocumentIds);
+			StringBuilder sbSubmitURL = new StringBuilder();
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "parentRefresh"));	
+			return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to separate document RelIds received in emxTableRowId according to CONTROLLED DOCUMENT and 
+	 * its connected Change Blocks and for a map and calls delete method to delete selected Change Blocks
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args paramMap
+	 * @return Map to refresh current page
+	 * @throws DCLException 
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map separateDocumentRelIds(Context context,String args[]) throws DCLException
+	{
+
+		try {
+			Map	paramMap = (Map)JPO.unpackArgs(args);
+			ChangeBlockService changeBlock = DCLServiceUtil.getChangeBlockService(context);
+			boolean flag = false;
+			Map mReturnMap=new HashMap();
+			List mReturnList = new ArrayList();
+			String[] emxTableRowId = (String[])paramMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList sListParentObjId = new StringList();
+			StringList sListObjectId = new StringList();
+			String strRelIdToCheckRealtionship = DomainConstants.EMPTY_STRING;
+			String strRelationship = DomainConstants.EMPTY_STRING;
+			StringList sListNotAllowedDocuments=new StringList();
+			String strVPLMProjectLeader=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+			boolean isDCA = PersonUtil.hasAssignment(context, strVPLMProjectLeader)|| PersonUtil.hasAssignment(context,PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_DOCUMENT_CENTER_ADMINISTRATOR));
+			
+			for(int i=0; i <= emxTableRowId.length-1; i++)
+			{
+				TableRowId tr = new TableRowId(emxTableRowId[i]);
+				strRelIdToCheckRealtionship = tr.getRelationshipId();
+				if(UIUtil.isNotNullAndNotEmpty(strRelIdToCheckRealtionship))
+				{
+				String arrStrRelIds[] = new String[1];
+				arrStrRelIds[0] = strRelIdToCheckRealtionship;  
+				StringList slSelects = new StringList();
+				slSelects.add(DomainConstants.SELECT_NAME);         
+				MapList mlInfo = changeBlock.getRelationshipInfo(context, arrStrRelIds, slSelects);
+				Map mDocInfo= (Map) mlInfo.get(0);
+				strRelationship +=(String) mDocInfo.get(DomainConstants.SELECT_NAME);
+				}
+				
+			}
+			if(!UIUtil.isNullOrEmpty(strRelationship))
+			{
+				flag = true;
+				for(int i=0; i <= emxTableRowId.length-1; i++)
+				{
+					TableRowId tr = new TableRowId(emxTableRowId[i]);
+					String strRelId = tr.getRelationshipId();
+					String parentObjectId = tr.getParentObjectId();
+					StringList sListSelectables = new StringList();
+					sListSelectables.add(DomainConstants.SELECT_CURRENT);
+					sListSelectables.add(DomainConstants.SELECT_NAME);
+					sListSelectables.add(DomainConstants.SELECT_OWNER);
+					Map mDocInfo =DCLUtil.getInfo(context,parentObjectId, sListSelectables);
+					String strCurrent = (String) mDocInfo.get(DomainConstants.SELECT_CURRENT);
+					StringList slAllowStateList =getChangeBlockRestrictedState(context);
+					boolean isOwner=context.getUser().equals(mDocInfo.get(DomainConstants.SELECT_OWNER))?true:false;
+			
+					boolean isResponsibleSME=DCLUtil.isResponsibleSME(context,parentObjectId);
+					boolean isSME = isResponsibleSME || PersonUtil.hasAssignment(context, PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT));
+					
+					if(!sListParentObjId.contains(parentObjectId) && !slAllowStateList.contains(strCurrent)&&(isOwner||isDCA||isSME))
+					{
+						Map<String, StringList> deleteChangeBlocks = new HashMap<String, StringList>();
+						StringList sListTemp = new StringList();
+						sListTemp.add(strRelId);
+						deleteChangeBlocks.put(parentObjectId, sListTemp);	
+						sListParentObjId.add(parentObjectId);
+						mReturnList.add(deleteChangeBlocks);
+					}
+					else
+					{
+						String strName = (String) mDocInfo.get(DomainConstants.SELECT_NAME);
+						if(!sListNotAllowedDocuments.contains(strName))
+						sListNotAllowedDocuments.add(strName);
+						for(int j=0; j < mReturnList.size(); j++)
+						{
+							Map m = (Map) mReturnList.get(j);
+							if(m.keySet().contains(parentObjectId))
+							{
+								mReturnList.remove(j);
+								StringList sList = (StringList) m.get(parentObjectId);
+								sList.add(strRelId);
+								m.put(parentObjectId, sList);
+								mReturnList.add(j, m);	
+							}
+
+						}
+
+					}
+				}
+			}
+			else
+			{
+				String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.alert.DocumentSelection");
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));	 
+			}
+			if(flag)
+			{
+				StringList sListDeleteRelIds = new StringList();
+				for(int i=0; i < mReturnList.size(); i++)
+				{
+					Map map = (Map) mReturnList.get(i);
+					int sizeOfArray = map.values().size()+1;
+					Object[] arrValues = new Object[sizeOfArray];
+					arrValues = map.values().toArray();
+					sListDeleteRelIds = new StringList();
+					for(int j=0; j<arrValues.length; j++)
+					{
+						String strTemp = arrValues[j].toString().replace("[",DomainConstants.EMPTY_STRING).replace("]",DomainConstants.EMPTY_STRING);
+						sListDeleteRelIds.add(strTemp);
+					}
+					changeBlock.delete(context, sListDeleteRelIds);
+				}
+				if(sListNotAllowedDocuments.size() > 0)
+				{
+					String strMessage= MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.CannotDeleteChangeBlock",new String[] {sListNotAllowedDocuments.toString()}, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE);
+					mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strMessage));
+				}
+				if(sListDeleteRelIds.size()>0)
+					mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,DCLUtil.encodeFunctionForJavaScript(context, false, "parentLocationRefresh"));
+			}
+
+			return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Access function to hide edit command in complete state of Change Order
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args 
+	 * @return false if change order state is Complete 
+	 * @throws DCLException if Operation fails
+	 */
+	public boolean disableChangeBlockSummaryEdit(Context context,String[] args) throws DCLException
+	{
+		try {
+			String strPolicyName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strPolicyStateApproval = PropertyUtil.getSchemaProperty(context, DCConstants.POLICY, strPolicyName, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCConstants.OBJECTID);
+			if(PolicyUtil.checkState(context,strObjectId,strPolicyStateApproval,PolicyUtil.GE))
+				return false;
+			else
+				return true;
+		} 
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * IncludeOIDprogram method to include the Affected Documents of Change Order for Copying the Change Block
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args 
+	 * @return StringList of Affected Document objectId
+	 * @throws DCLException if Operation fails
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public List<String> includeDocumentsForCopyChangeBlocks(Context context,String args[]) throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCConstants.OBJECTID);
+			String args1[]=JPO.packArgs(programMap);
+			List<Map> mlDocuments =getTableDCLChangeBlockSummaryViewExpansion(context,args1);
+			List<String> slIncludeDocuemnt=new StringList();
+			for(Map mDoc:mlDocuments)
+			{
+				String strId=(String) mDoc.get(DomainConstants.SELECT_ID);
+				slIncludeDocuemnt.add(strId);
+			}
+			return slIncludeDocuemnt;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+	
+	/**
+	 *  This is a Access Program for Change Block Category - category should be visible if change Object attached
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args contain program map
+	 * @return false if current state is released 
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean showChangeBlockCategory(Context context,String args[]) throws DCLException
+	{
+		boolean showChangeBlockCategory = false;
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strObjectId = (String)programMap.get(DCConstants.OBJECTID);
+			DomainObject dmoDocument = DomainObject.newInstance(context, strObjectId);
+			List<Map> listOfChangeActionInfo = documentService.getConnectedCA(context, strObjectId, true, true);
+			if(listOfChangeActionInfo.size()>0)
+				showChangeBlockCategory = true;
+		} 
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return showChangeBlockCategory;
+	}
+}
+

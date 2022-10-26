@@ -1,0 +1,108 @@
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.HazardTemplate;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws RiskMgmtException {
+		super();
+	}
+
+	/**
+	 * Checks if the context user is either the owner or a project member.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public int checkForOwnerOrProjectMember(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String strHazardId = args[0];
+			String strProjectAccess = args[1];
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				Map hazardInfoMap = hazard.getInfo(context, RiskMgmtUtil.stringList(DomainConstants.SELECT_TYPE, DomainConstants.SELECT_OWNER));
+				if (!RiskMgmtUtil.isNullOrEmpty(hazardInfoMap)) {
+					String type = (String) hazardInfoMap.get(DomainConstants.SELECT_TYPE);
+					if (RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context).equals(type)) {
+						String strOwner = (String) hazardInfoMap.get(DomainConstants.SELECT_OWNER);
+						HazardContext hazardContext = hazard.getProductContext(context);
+						if (!RiskMgmtUtil.isNull(hazardContext)) {
+							String strProductId = hazardContext.getObjectId(context);
+							if (!(context.getUser().equalsIgnoreCase(strOwner) || (!RiskMgmtUtil.isNullOrEmpty(strProductId) && HazardMgmtUtil
+									.isProductsDesignProjectMember(context, DomainObject.newInstance(context, strProductId), strProjectAccess)))) {
+								RiskMgmtUtil.mqlError(context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.NoAccessError");
+								return 1;
+							}
+						}
+					}
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Checks if the Hazard Template is connected to atleast one hazard.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public int checkForConnectedHazards(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String strHazardTemplateId = args[0];
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardTemplateId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(strHazardTemplateId);
+				List<Map<?, ?>> hazardList = hazardTemplate.getHazards(context, new StringList(DomainObject.SELECT_ID), new StringList(
+						DomainRelationship.SELECT_ID), DomainConstants.EMPTY_STRING);
+				if (RiskMgmtUtil.isNullOrEmpty(hazardList)) {
+					RiskMgmtUtil.mqlError(context, RiskMgmtConstants.RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.CannotPromoteToActiveState");
+					return 1;
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

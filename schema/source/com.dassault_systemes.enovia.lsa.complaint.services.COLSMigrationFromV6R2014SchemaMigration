@@ -1,0 +1,251 @@
+
+/**
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import matrix.db.Context;
+import matrix.db.Group;
+import matrix.db.UserList;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainAccess;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ * @author v8l
+ * 
+ */
+public class ${CLASSNAME} {
+	public void migrateSchema(Context context, Logger logger) throws TicketException {
+		logger.log(Level.INFO, "Executing PQC Schema Migration");
+		try {
+			mqlCommand(context, logger, "verb on");
+			mqlCommand(context, logger, "modify policy $1 hidden", "Complaint");
+			mqlCommand(context, logger, "modify policy $1 hidden", "Inquiry");
+			mqlCommand(context, logger, "modify policy $1 hidden", "Equipment Service Request");
+
+			// mqlCommand(context, logger, "demote bus $1 $2 $3",
+			// "eService Trigger Program Parameters",
+			// "AttributeComplaintInvestigationRequiredModifyAction",
+			// "PopulateNoInvestigationSignerAndDate");
+
+			mqlCommand(context, logger, "modify bus $1 $2 $3 $4 $5 $6 $7 $8 $9 $10 $11 $12 $13 $14 $15 $16 $17",
+					"eService Trigger Program Parameters", "AttributeComplaintInvestigationRequiredModifyAction",
+					"PopulateNoInvestigationSignerAndDate", "eService Program Argument 5", "state_Complete", "eService Program Argument 3",
+					"${CURRENTSTATE}", "eService Program Argument 4", "state_Review", "eService Program Argument 2", "${NEWATTRVALUE}",
+					"eService Program Argument 1", "${OBJECTID}", "eService Program Name",
+					"com.dassault_systemes.enovia.lsa.pqc.services.trigger.ComplaintInvestigation", "eService Method Name",
+					"updateAndPromoteComplaintInvestigation");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeComplaintChangeOwnerAction",
+					"NotifyComplaintOwner");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "PolicyInboxTaskStateReviewPromoteAction",
+					"ComplaintRejectRouteAndDemoteParentObject");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "PolicyInboxTaskStateReviewPromoteAction",
+					"ComplaintInquiryRejectRouteAndDemoteParentObject");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "PolicyInboxTaskStateReviewPromoteAction",
+					"ComplaintESRRejectRouteAndDemoteParentObject");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "PolicyInboxTaskStateReviewPromoteAction",
+					"Reject route on Complaint Action Task state Assigned");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeComplaintRevisionAction",
+					"Update BPI Links");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeProductsDeleteCheck",
+					"CheckForAnyConnectedComplaint");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintStateInvestigationPromoteCheck", "CheckEventFieldsAreCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeComplaintChangeOwnerAction",
+					"NotifyComplaintOwner");
+			mqlCommand(context, logger, "modify policy $1 state $2 $3 $4,$5,$6,$7", "Complaint", "Closed", "owner", "read", "checkout", "show",
+					"toconnect");
+			mqlCommand(context, logger, "modify relationship $1 to add $2 $3", "Complaint Event Product", "type", "Model");
+			mqlCommand(context, logger, "modify policy $1 state $2 add $3 $4,$5", "Complaint", "Closed", "public", "toconnect", "todisconnect");
+			mqlCommand(context, logger, "modify policy $1 state $2 add $3 $4,$5", "Complaint Invalid", "Invalid", "public", "toconnect",
+					"todisconnect");
+			mqlCommand(context, logger, "modify policy $1 state $2 add user $3 $4,$5", "Equipment Service Request", "Closed",
+					"Complaint Investigator", "read", "show");
+			mqlCommand(context, logger, "modify policy $1 state $2 add user $3 $4,$5", "Equipment Service Request", "Closed", "Quality Manager",
+					"read", "show");
+			mqlCommand(context, logger, "modify policy $1 state $2 add user $3 $4,$5", "Inquiry", "Closed", "Complaint Investigator", "read", "show");
+			mqlCommand(context, logger, "modify policy $1 state $2 add user $3 $4,$5", "Inquiry", "Closed", "Quality Manager", "read", "show");
+			MqlUtil.mqlCommand(
+					context,
+					"modify policy $1 description $2 add type $3 add type $4 state $5 checkouthistory TRUE public $6,$7 $8 $9 $10 $11,$12,$13,$14,$15,$16,$17,$18,$19,$20 add user "
+							+ "$21 $22,$23,$24 $25 $26 add user $27 $28,$29,$30,$31,$32,$33,$34,$35,$36 $37 $38 add user $39 $40,$41,$42,$43,$44 $45 $46",
+					true, "Complaint Event", "Policy to handle the Complaint Event lifecycle and access", "Complaint Event", "Derived Event",
+					"Exists", "read", "show", "descendant", "organization", "owner", "read", "create", "modify", "delete", "changeowner",
+					"fromconnect", "toconnect", "fromdisconnect", "todisconnect", "show", "Complaint Investigator", "read", "show", "changeowner",
+					"descendant", "organization", "Quality Manager", "read", "show", "modify", "delete", "changeowner", "fromconnect", "toconnect",
+					"fromdisconnect", "todisconnect", "descendant", "organization", "Regulatory User", "read", "show", "toconnect", "fromconnect",
+					"fromdisconnect", "descendant", "organization");
+
+			migrateCIUsers(context);
+			migrateQMUsers(context);
+
+			mqlCommand(context, logger, "modify policy $1 hidden", "Life Science Complaint");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeLPORevisionAction", "Update BPI Links");
+			MqlUtil.mqlCommand(context, "modify policy $1 state $2 add $3 $4,$5;", "Life Science Complaint", "Closed", "public", "toconnect",
+					"todisconnect");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteDeleteFileVersions", "Delete All but current File Version");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateApprovalPromoteAction", "SetClosedDateOnApprove");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckComplaintFieldsAreCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckEventFieldsAreCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckProductFieldsAreCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckDecisionTreeCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckSubmissionsCompleted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyLifeScienceComplaintStateInvestigationPromoteCheck", "CheckNonreportableRationale");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "AttributeComplaintAwarenessDateModifyAction",
+					"UpdateSubmissionDueDate");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"AttributeComplaintSubmissionWaiveReasonModifyAction", "SetPolicyToWaived");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintMDRSubmissionStateCreatePromoteAction", "PopulateMDRSubmissionPDF");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintSubmissionStateReviewDemoteAction", "actionPolicyReviewDemoteDeleteFiles");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintSubmissionStateReviewPromoteAction", "PopulateSubmissionReviewerAndDate");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintSubmissionStateSubmitDemoteAction", "RemoveApprovalDateDemoteAction");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintSubmissionStateSubmitPromoteCheck", "CheckSubmissionDateAttribute");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeComplaintSubmissionCheckinAction",
+					"ClearReviewedInfo");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeComplaintSubmissionCheckinCheck",
+					"CheckIsSubmitted");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters",
+					"PolicyComplaintSubmissionStateCreatePromoteCheck", "CheckManufacturerReporterNumberIsCompletedForMDR");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeProductsDeleteCheck",
+					"CheckForAnyConnectedLifeScienceComplaint");
+			mqlCommand(context, logger, "demote bus $1 $2 $3", "eService Trigger Program Parameters", "TypeBuildsDeleteCheck",
+					"CheckForAnyConnectedLifeScienceComplaint");
+		}
+		catch (Exception e) {
+			throw new TicketException(e);
+		}
+		finally {
+			try {
+				mqlCommand(context, logger, "verb off");
+			}
+			catch (Exception e) {
+				throw new TicketException(e);
+			}
+		}
+		logger.log(Level.INFO, "COLS Schema Migration Completed");
+	}
+
+	private void migrateCIUsers(Context context) throws TicketException {
+		migrateUsers(context, "group_ComplaintInvestigator", "role_ComplaintInvestigator");
+	}
+
+	private void migrateQMUsers(Context context) throws TicketException {
+		migrateUsers(context, "group_ComplaintQualityManager", "role_QualityManager");
+	}
+
+	private void migrateUsers(Context context, String groupName, String roleName) throws TicketException {
+		try {
+			UserList userList = null;
+			Group group = new Group(PropertyUtil.getSchemaProperty(context, groupName));
+			userList = group.getAssignments(context);
+			ArrayList<String> activeUserList = new ArrayList<>();
+			if (userList != null) {
+				Iterator<matrix.db.User> userIter = userList.iterator();
+				while (userIter.hasNext()) {
+					String userName = ((matrix.db.User) userIter.next()).getName();
+					String personState = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select current dump $4", "Person", userName, "-", "|");
+
+					if (personState.equals("Active"))
+						activeUserList.add(userName);
+					Person user = (Person) DomainObject.newInstance(context, DomainConstants.TYPE_PERSON);
+					user = Person.getPerson(context, userName);
+
+					String relationshipAssignedSecurityContext = PropertyUtil.getSchemaProperty(context,
+							DomainSymbolicConstants.SYMBOLIC_relationship_AssignedSecurityContext);
+
+					DomainObject company = user.getCompany(context);
+					StringList selects = new StringList(2);
+					selects.addElement(DomainObject.SELECT_NAME);
+					selects.addElement(DomainObject.SELECT_TYPE);
+					selects.addElement(DomainObject.SELECT_REVISION);
+					selects.addElement(DomainObject.SELECT_VAULT);
+					Map<?, ?> companyMap = company.getInfo(context, selects);
+					String companyName = (String) companyMap.get(DomainObject.SELECT_NAME);
+					String companyType = (String) companyMap.get(DomainObject.SELECT_TYPE);
+					String orgRev = (String) companyMap.get(DomainObject.SELECT_REVISION);
+
+					try {
+						ContextUtil.pushContext(context);
+						try {
+							String scId = DomainAccess.createSecurityContext(context, DomainAccess.getDefaultProject(context), roleName, companyName,
+									companyType, orgRev);
+							DomainObject scObj = DomainObject.newInstance(context, scId);
+							String scName = scObj.getInfo(context, DomainObject.SELECT_NAME);
+							String str2 = "ctx::" + scObj.getName();
+							String assignedRoles = MqlUtil.mqlCommand(context, "print person $1 select assignment dump", true, userName);
+							if (assignedRoles.indexOf(scName) < 0) {
+								PersonUtil.addSecurityContextAssignment(context, userName, str2);
+								MqlUtil.mqlCommand(context, "trigger off", true, true);
+								DomainRelationship.connect(context, user.getObjectId(), relationshipAssignedSecurityContext, scId, true);
+								MqlUtil.mqlCommand(context, "trigger on", true, true);
+								MqlUtil.mqlCommand(context, "mod person $1 assign role $2", true, userName,
+										PropertyUtil.getSchemaProperty(context, roleName));
+								MqlUtil.mqlCommand(context, "mod person $1 assign role $2", true, userName, "ctx::" + scName);
+							}
+						}
+						catch (Exception e) {
+							throw new TicketException(e);
+						}
+						finally {
+							ContextUtil.popContext(context);
+						}
+					}
+					catch (Exception e) {
+						throw new TicketException(e);
+					}
+				}
+			}
+		}
+		catch (MatrixException e) {
+			throw new TicketException(e);
+		}
+	}
+
+	protected String mqlCommand(Context context, Logger logger, String command, String... args) throws TicketException {
+		String schemaVerbose = new String();
+		try {
+			schemaVerbose = MqlUtil.mqlCommand(context, command, true, args);
+			logger.log(Level.INFO, schemaVerbose);
+		}
+		catch (FrameworkException e) {
+			throw new TicketException(e);
+		}
+		return schemaVerbose;
+
+	}
+}
+

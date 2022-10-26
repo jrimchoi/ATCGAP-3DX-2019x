@@ -1,0 +1,675 @@
+/*
+* Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+* contains proprietary and trade secret information of Dassault Systemes.
+* Copyright notice is precautionary only and does not evidence any actual or
+* intended publication of such program.
+*/
+
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ * This program migrates V6R2013x Integware LSG product data to V6R2014 Dassault
+ * Systemes' LSA product schema. The details of the migration are described in
+ * RFL in PES. This program is to be executed from MQL command line. The program
+ * produces traces under <ENOVIA Server installation dir/logs.
+ * 
+ * @author Dassault Systems
+ * 
+ */
+public class ${CLASSNAME} {
+
+	private static final String TRACE_LSA_MIGRATION = "LSAMigration";
+	private static final String FILE_LSA_MIGRATION_LOG = "LSAMigration.log";
+
+	private String TYPE_CONTACT;
+	private String TYPE_REVIEWER;
+	private String TYPE_PERSON;
+
+	private String ATTRIBUTE_ABSENCE_DELEGATE;
+	private String ATTRIBUTE_ABSENCE_END_DATE;
+	private String ATTRIBUTE_ABSENCE_START_DATE;
+	private String ATTRIBUTE_ADDRESS;
+	private String ATTRIBUTE_CELL_PHONE_NUMBER;
+	private String ATTRIBUTE_CITY;
+	private String ATTRIBUTE_COUNTRY;
+	private String ATTRIBUTE_DISTINGUISHED_NAME;
+	private String ATTRIBUTE_EMAIL_ADDRESS;
+	private String ATTRIBUTE_FAX_NUMBER;
+	private String ATTRIBUTE_FILE_STORE_SYMBOLIC_NAME;
+	private String ATTRIBUTE_FIRST_NAME;
+	private String ATTRIBUTE_HOME_PHONE_NUMBER;
+	private String ATTRIBUTE_HOST_MEETINGS;
+	private String ATTRIBUTE_ICON_MAIL;
+	private String ATTRIBUTE_IMDS_CONTACT_ID;
+	private String ATTRIBUTE_JT_VIEWER_TYPE;
+	private String ATTRIBUTE_LAST_LOGIN_DATE;
+	private String ATTRIBUTE_LAST_NAME;
+	private String ATTRIBUTE_LOGIN_TYPE;
+	private String ATTRIBUTE_MAIL_CODE;
+	private String ATTRIBUTE_MEETING_KEY;
+	private String ATTRIBUTE_MEETING_PASSWORD;
+	private String ATTRIBUTE_MEETING_USERNAME;
+	private String ATTRIBUTE_MIDDLE_NAME;
+	private String ATTRIBUTE_ORIGINATOR;
+	private String ATTRIBUTE_PAGER_NUMBER;
+	private String ATTRIBUTE_POSTAL_CODE;
+	private String ATTRIBUTE_PREFERENCES;
+	private String ATTRIBUTE_STATE_REGION;
+	private String ATTRIBUTE_SUBSCRIPTION_LEVEL;
+	private String ATTRIBUTE_TITLE;
+	private String ATTRIBUTE_WEBSITE;
+	private String ATTRIBUTE_WORK_PHONE_NUMBER;
+
+	private String ATTRIBUTE_EXPERTISE;
+
+	private String POLICY_CONTACT;
+	private String FORMAT_GENERIC;
+
+	private Map<String, String> CONTACT_ATTRIBUTE_MAPPING;
+	private Map<String, String> CONTACT_ATTRIBUTE_SELECTABLE_MAPPING;
+
+	private StringList slPersonAttributes;
+	private StringList slPersonDuplicateAttributes;
+
+	private void initialize(Context context) throws LSAException {
+
+		TYPE_CONTACT = PropertyUtil.getSchemaProperty(context, "type_Contact");
+		POLICY_CONTACT = PropertyUtil.getSchemaProperty(context, "policy_Contact");
+		TYPE_REVIEWER = PropertyUtil.getSchemaProperty(context, "type_Reviewer");
+		TYPE_PERSON = PropertyUtil.getSchemaProperty(context, "type_Person");
+
+		FORMAT_GENERIC = PropertyUtil.getSchemaProperty(context, "format_generic");
+
+		ATTRIBUTE_ABSENCE_DELEGATE = PropertyUtil.getSchemaProperty(context, "attribute_AbsenceDelegate");
+		ATTRIBUTE_ABSENCE_END_DATE = PropertyUtil.getSchemaProperty(context, "attribute_AbsenceEndDate");
+		ATTRIBUTE_ABSENCE_START_DATE = PropertyUtil.getSchemaProperty(context, "attribute_AbsenceStartDate");
+		ATTRIBUTE_ADDRESS = PropertyUtil.getSchemaProperty(context, "attribute_Address");
+		ATTRIBUTE_CELL_PHONE_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_CellPhoneNumber");
+		ATTRIBUTE_CITY = PropertyUtil.getSchemaProperty(context, "attribute_City");
+		ATTRIBUTE_COUNTRY = PropertyUtil.getSchemaProperty(context, "attribute_Country");
+		ATTRIBUTE_DISTINGUISHED_NAME = PropertyUtil.getSchemaProperty(context, "attribute_DistinguishedName");
+		ATTRIBUTE_EMAIL_ADDRESS = PropertyUtil.getSchemaProperty(context, "attribute_EmailAddress");
+		ATTRIBUTE_FAX_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_FaxNumber");
+		ATTRIBUTE_FILE_STORE_SYMBOLIC_NAME = PropertyUtil.getSchemaProperty(context, "attribute_FileStoreSymbolicName");
+		ATTRIBUTE_FIRST_NAME = PropertyUtil.getSchemaProperty(context, "attribute_FirstName");
+		ATTRIBUTE_HOME_PHONE_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_HomePhoneNumber");
+		ATTRIBUTE_HOST_MEETINGS = PropertyUtil.getSchemaProperty(context, "attribute_HostMeetings");
+		ATTRIBUTE_ICON_MAIL = PropertyUtil.getSchemaProperty(context, "attribute_IconMail");
+		ATTRIBUTE_IMDS_CONTACT_ID = PropertyUtil.getSchemaProperty(context, "attribute_IMDSContactID");
+		ATTRIBUTE_JT_VIEWER_TYPE = PropertyUtil.getSchemaProperty(context, "attribute_JTViewerType");
+		ATTRIBUTE_LAST_LOGIN_DATE = PropertyUtil.getSchemaProperty(context, "attribute_LastLoginDate");
+		ATTRIBUTE_LAST_NAME = PropertyUtil.getSchemaProperty(context, "attribute_LastName");
+		ATTRIBUTE_LOGIN_TYPE = PropertyUtil.getSchemaProperty(context, "attribute_LoginType");
+		ATTRIBUTE_MAIL_CODE = PropertyUtil.getSchemaProperty(context, "attribute_MailCode");
+		ATTRIBUTE_MEETING_KEY = PropertyUtil.getSchemaProperty(context, "attribute_MeetingKey");
+		ATTRIBUTE_MEETING_PASSWORD = PropertyUtil.getSchemaProperty(context, "attribute_MeetingPassword");
+		ATTRIBUTE_MEETING_USERNAME = PropertyUtil.getSchemaProperty(context, "attribute_MeetingUsername");
+		ATTRIBUTE_MIDDLE_NAME = PropertyUtil.getSchemaProperty(context, "attribute_MiddleName");
+		ATTRIBUTE_ORIGINATOR = PropertyUtil.getSchemaProperty(context, "attribute_Originator");
+		ATTRIBUTE_PAGER_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_PagerNumber");
+		ATTRIBUTE_POSTAL_CODE = PropertyUtil.getSchemaProperty(context, "attribute_PostalCode");
+		ATTRIBUTE_PREFERENCES = PropertyUtil.getSchemaProperty(context, "attribute_Preferences");
+		ATTRIBUTE_STATE_REGION = PropertyUtil.getSchemaProperty(context, "attribute_StateRegion");
+		ATTRIBUTE_SUBSCRIPTION_LEVEL = PropertyUtil.getSchemaProperty(context, "attribute_SubscriptionLevel");
+		ATTRIBUTE_TITLE = PropertyUtil.getSchemaProperty(context, "attribute_Title");
+		ATTRIBUTE_WEBSITE = PropertyUtil.getSchemaProperty(context, "attribute_WebSite");
+		ATTRIBUTE_WORK_PHONE_NUMBER = PropertyUtil.getSchemaProperty(context, "attribute_WorkPhoneNumber");
+
+		slPersonAttributes = Helper.stringList();
+
+		slPersonAttributes.add(ATTRIBUTE_ABSENCE_DELEGATE);
+		slPersonAttributes.add(ATTRIBUTE_ABSENCE_END_DATE);
+		slPersonAttributes.add(ATTRIBUTE_ABSENCE_START_DATE);
+		slPersonAttributes.add(ATTRIBUTE_ADDRESS);
+		slPersonAttributes.add(ATTRIBUTE_CELL_PHONE_NUMBER);
+		slPersonAttributes.add(ATTRIBUTE_CITY);
+		slPersonAttributes.add(ATTRIBUTE_COUNTRY);
+		slPersonAttributes.add(ATTRIBUTE_DISTINGUISHED_NAME);
+		slPersonAttributes.add(ATTRIBUTE_EMAIL_ADDRESS);
+		slPersonAttributes.add(ATTRIBUTE_FAX_NUMBER);
+		slPersonAttributes.add(ATTRIBUTE_FILE_STORE_SYMBOLIC_NAME);
+		slPersonAttributes.add(ATTRIBUTE_FIRST_NAME);
+		slPersonAttributes.add(ATTRIBUTE_HOME_PHONE_NUMBER);
+		slPersonAttributes.add(ATTRIBUTE_HOST_MEETINGS);
+		slPersonAttributes.add(ATTRIBUTE_ICON_MAIL);
+		slPersonAttributes.add(ATTRIBUTE_IMDS_CONTACT_ID);
+		slPersonAttributes.add(ATTRIBUTE_JT_VIEWER_TYPE);
+		slPersonAttributes.add(ATTRIBUTE_LAST_LOGIN_DATE);
+		slPersonAttributes.add(ATTRIBUTE_LAST_NAME);
+		slPersonAttributes.add(ATTRIBUTE_LOGIN_TYPE);
+		slPersonAttributes.add(ATTRIBUTE_MAIL_CODE);
+		slPersonAttributes.add(ATTRIBUTE_MEETING_KEY);
+		slPersonAttributes.add(ATTRIBUTE_MEETING_PASSWORD);
+		slPersonAttributes.add(ATTRIBUTE_MEETING_USERNAME);
+		slPersonAttributes.add(ATTRIBUTE_MIDDLE_NAME);
+		slPersonAttributes.add(ATTRIBUTE_ORIGINATOR);
+		slPersonAttributes.add(ATTRIBUTE_PAGER_NUMBER);
+		slPersonAttributes.add(ATTRIBUTE_POSTAL_CODE);
+		slPersonAttributes.add(ATTRIBUTE_PREFERENCES);
+		slPersonAttributes.add(ATTRIBUTE_STATE_REGION);
+		slPersonAttributes.add(ATTRIBUTE_SUBSCRIPTION_LEVEL);
+		slPersonAttributes.add(ATTRIBUTE_TITLE);
+		slPersonAttributes.add(ATTRIBUTE_WEBSITE);
+		slPersonAttributes.add(ATTRIBUTE_WORK_PHONE_NUMBER);
+
+	}
+
+	/**
+	 * The attributes for migration are put into map. Every key is the old
+	 * attributes of 2013X and its value is the attribute to be mapped in 2014.
+	 * Incase any new attribute needs to mapped/change , add/change it in this
+	 * method accordingly.
+	 */
+	private void mapAttributesForMigration() {
+
+		CONTACT_ATTRIBUTE_MAPPING = new HashMap(15);
+		CONTACT_ATTRIBUTE_SELECTABLE_MAPPING = new HashMap(15);
+
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ABSENCE_DELEGATE, ATTRIBUTE_ABSENCE_DELEGATE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ABSENCE_END_DATE, ATTRIBUTE_ABSENCE_END_DATE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ABSENCE_START_DATE, ATTRIBUTE_ABSENCE_START_DATE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ADDRESS, ATTRIBUTE_ADDRESS);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_CELL_PHONE_NUMBER, ATTRIBUTE_CELL_PHONE_NUMBER);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_CITY, ATTRIBUTE_CITY);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_COUNTRY, ATTRIBUTE_COUNTRY);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_DISTINGUISHED_NAME, ATTRIBUTE_DISTINGUISHED_NAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_EMAIL_ADDRESS, ATTRIBUTE_EMAIL_ADDRESS);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_FAX_NUMBER, ATTRIBUTE_FAX_NUMBER);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_FILE_STORE_SYMBOLIC_NAME, ATTRIBUTE_FILE_STORE_SYMBOLIC_NAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_FIRST_NAME, ATTRIBUTE_FIRST_NAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_HOME_PHONE_NUMBER, ATTRIBUTE_HOME_PHONE_NUMBER);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_HOST_MEETINGS, ATTRIBUTE_HOST_MEETINGS);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ICON_MAIL, ATTRIBUTE_ICON_MAIL);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_IMDS_CONTACT_ID, ATTRIBUTE_IMDS_CONTACT_ID);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_JT_VIEWER_TYPE, ATTRIBUTE_JT_VIEWER_TYPE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_LAST_LOGIN_DATE, ATTRIBUTE_LAST_LOGIN_DATE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_LAST_NAME, ATTRIBUTE_LAST_NAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_LOGIN_TYPE, ATTRIBUTE_LOGIN_TYPE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_MAIL_CODE, ATTRIBUTE_MAIL_CODE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_MEETING_KEY, ATTRIBUTE_MEETING_KEY);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_MEETING_PASSWORD, ATTRIBUTE_MEETING_PASSWORD);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_MEETING_USERNAME, ATTRIBUTE_MEETING_USERNAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_MIDDLE_NAME, ATTRIBUTE_MIDDLE_NAME);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_ORIGINATOR, ATTRIBUTE_ORIGINATOR);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_PAGER_NUMBER, ATTRIBUTE_PAGER_NUMBER);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_POSTAL_CODE, ATTRIBUTE_POSTAL_CODE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_PREFERENCES, ATTRIBUTE_PREFERENCES);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_STATE_REGION, ATTRIBUTE_STATE_REGION);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_SUBSCRIPTION_LEVEL, ATTRIBUTE_SUBSCRIPTION_LEVEL);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_TITLE, ATTRIBUTE_TITLE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_WEBSITE, ATTRIBUTE_WEBSITE);
+		CONTACT_ATTRIBUTE_MAPPING.put(ATTRIBUTE_WORK_PHONE_NUMBER, ATTRIBUTE_WORK_PHONE_NUMBER);
+
+		for (Object objOldAttrName : CONTACT_ATTRIBUTE_MAPPING.keySet()) {
+			String strOldAttrName = (String) objOldAttrName;
+			String strNewAttrName = (String) CONTACT_ATTRIBUTE_MAPPING.get(objOldAttrName);
+
+			CONTACT_ATTRIBUTE_SELECTABLE_MAPPING.put(DomainObject.getAttributeSelect(strOldAttrName),
+					DomainObject.getAttributeSelect(strNewAttrName));
+		}
+	}
+
+	public ${CLASSNAME}(Context context, String[] args) throws LSAException {
+		try {
+			traceBeginMethod(context);
+
+			traceBegin(context, "Initializing");
+			initialize(context);
+			traceEnd(context, "Initializing Ends");
+
+			traceBegin(context, "Setting attributes to be mapped");
+			mapAttributesForMigration();
+			traceEnd(context, "Attributes to be mapped are set");
+		} catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new LSAException(exp);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * Entry point of the migration program.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The command line arguments
+	 * @throws LSAException
+	 *             if operation fails
+	 * @throws Exception
+	 */
+	public static void mxMain(Context context, String[] args) throws Exception {
+		try {
+			boolean traceON = true;
+			boolean allSession = false; // false for only this session
+
+			context.setTrace(FILE_LSA_MIGRATION_LOG, TRACE_LSA_MIGRATION, traceON, allSession);
+			traceBeginMethod(context);
+
+			Helper.runInTransaction(context, new Helper.Callable() {
+
+				@Override
+				public Object run(Context context, Object... args) throws LSAException {
+					new ${CLASSNAME}(context, null).run(context);
+					return null;
+				}
+			});
+
+		} catch (Exception exp) {
+			ContextUtil.abortTransaction(context);
+			traceError(context, exp.getMessage());
+			throw new Exception(exp);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * Starts the data migration.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private void run(Context context) throws LSAException {
+		try {
+			traceBeginMethod(context);
+			migrateContacts(context);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * For Contact the attributes of old Contact type will be mapped to the the new
+	 * Contact type that inherits from DS's Person type.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private void migrateContacts(Context context) throws LSAException {
+		try {
+			traceBeginMethod(context);
+
+			String busWhere = "";
+			StringList busSelect = Helper.stringList();
+			busSelect.add(DomainConstants.SELECT_ID);
+			busSelect.add(DomainConstants.SELECT_POLICY);
+
+			busSelect.addAll(getOldAndNewAttrSelectables());
+			List<Map<?, ?>> contacts = QueryUtil.findObjects(context, TYPE_CONTACT, busWhere, busSelect);
+
+			StringBuilder sbDerived = new StringBuilder("print type ");
+			sbDerived.append("$1");
+			sbDerived.append(" select derived dump");
+
+			String derived = MqlUtil.mqlCommand(context, sbDerived.toString(), TYPE_CONTACT);
+
+			if (derived != null && TYPE_PERSON.equalsIgnoreCase(derived)) {
+				migrateContactAttributes(context, contacts);
+				migrateContactPolicy(context, contacts);
+			}
+		} catch (Exception e) {
+			throw new LSAException(e);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private void migrateContactDerivation(Context context) throws LSAException {
+		traceBeginMethod(context);
+		try {
+			executeMQL(context, "modify type $1 remove derived;", TYPE_CONTACT);
+
+		} catch (Exception e) {
+			throw new LSAException(e);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private StringList getOldAndNewAttrSelectables() {
+		StringList busSelects = new StringList();
+
+		for (Object objOldAttrSelectable : CONTACT_ATTRIBUTE_SELECTABLE_MAPPING.keySet()) {
+			String strOldAttrSelectable = (String) objOldAttrSelectable;
+			String strNewAttrSelectable = (String) CONTACT_ATTRIBUTE_SELECTABLE_MAPPING.get(objOldAttrSelectable);
+			busSelects.add(strOldAttrSelectable);
+			busSelects.add(strNewAttrSelectable);
+		}
+
+		return busSelects;
+	}
+
+	/*
+	 * Modified for Person attributes.
+	 */
+
+	private void migrateContactAttributes(Context context, List<Map<?, ?>> mlContacts) throws LSAException {
+		traceBeginMethod(context);
+
+		/* Adding duplicate attributes of Person Type */
+
+		addDuplicatePersonAttributes(context);
+
+		/* Adding duplicate attributes to Contact Type */
+
+		changeSchemaContactAddAttributes(context, slPersonDuplicateAttributes);
+
+		/* Copying values of Person attributes to duplicate attributes. */
+
+		try {
+			for (Object omContact : mlContacts) {
+				Map<?, ?> mContact = (Map<?, ?>) omContact;
+
+				String strContactId = (String) mContact.get(DomainConstants.SELECT_ID);
+
+				DomainObject contact = DomainObject.newInstance(context, strContactId);
+
+				for (String attributeName : CONTACT_ATTRIBUTE_MAPPING.keySet()) {
+					String newAttribute = CONTACT_ATTRIBUTE_MAPPING.get(attributeName);
+					String attSelect = DomainObject.getAttributeSelect((String) attributeName);
+					String attributeValue = (String) mContact.get(attSelect);
+
+					contact.setAttributeValue(context, attributeName + "Dup", attributeValue);
+				}
+
+			}
+
+			/* Removing Contact derivation */
+
+			migrateContactDerivation(context);
+
+			/* Adding Person attributes to Contact Type */
+
+			slPersonAttributes.insertElementAt(TYPE_CONTACT, 0);
+			changeSchemaContactAddAttributes(context, slPersonAttributes);
+
+			/* Copying values of duplicate attributes to newly added Person Attributes. */
+
+			for (Object omContact : mlContacts) {
+				Map<?, ?> mContact = (Map<?, ?>) omContact;
+
+				String strContactId = (String) mContact.get(DomainConstants.SELECT_ID);
+
+				DomainObject contact = DomainObject.newInstance(context, strContactId);
+
+				for (String attributeName : CONTACT_ATTRIBUTE_MAPPING.keySet()) {
+					String newAttribute = CONTACT_ATTRIBUTE_MAPPING.get(attributeName);
+					String attSelect = DomainObject.getAttributeSelect((String) (attributeName + "Dup"));
+					String attributeValue = (String) contact.getInfo(context, attSelect);
+
+					trace(context,
+							"Mapping value for old attribute(Contact) " + attributeName + "Dup attribute "
+									+ attributeName + ", Setting new attribute " + attributeName + ", value ="
+									+ attributeValue);
+
+					contact.setAttributeValue(context, attributeName, attributeValue);
+				}
+
+			}
+			removeDuplicatePersonAttributes(context);
+
+		} catch (Exception e) {
+			throw new LSAException(e);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private void migrateContactPolicy(Context context, List<Map<?, ?>> mlContacts) throws LSAException {
+		traceBeginMethod(context);
+		try {
+			for (Object omContact : mlContacts) {
+				Map<?, ?> mContact = (Map<?, ?>) omContact;
+
+				DomainObject contact = DomainObject.newInstance(context,
+						(String) mContact.get(DomainConstants.SELECT_ID));
+
+				trace(context, "Setting new policy " + POLICY_CONTACT + "for Contact "
+						+ (String) mContact.get(DomainConstants.SELECT_NAME));
+				contact.setPolicy(context, POLICY_CONTACT);
+			}
+		} catch (Exception e) {
+			throw new LSAException(e);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private void addDuplicatePersonAttributes(Context context) throws LSAException {
+		traceBeginMethod(context);
+
+		StringBuilder strQuery;
+		StringList slOldNewAttr;
+		slPersonDuplicateAttributes = Helper.stringList();
+		slPersonDuplicateAttributes.insertElementAt(TYPE_CONTACT, 0);
+
+		try {
+			for (Object strAttr : slPersonAttributes) {
+				strQuery = new StringBuilder("copy attribute \"$1\" \"$2\"");
+				slPersonDuplicateAttributes.add(strAttr + "Dup");
+
+				try {
+					trace(context, "Adding duplicate attribute:" + strAttr);
+					executeMQL(context, strQuery.toString(), (String) strAttr, (String) strAttr + "Dup");
+					trace(context, "Added person's attributes to Contact...");
+				} catch (Exception ex) {
+					throw new LSAException(ex);
+				}
+			}
+		} catch (Exception ex) {
+			throw new LSAException(ex);
+		} finally {
+			traceEndMethod(context);
+		}
+
+	}
+
+	private void removeDuplicatePersonAttributes(Context context) throws LSAException {
+		traceBeginMethod(context);
+		StringBuilder strQuery;
+		slPersonDuplicateAttributes.remove(TYPE_CONTACT);
+		try {
+			for (Object strAttr : slPersonDuplicateAttributes) {
+				strQuery = new StringBuilder("delete attribute \"$1\"");
+				try {
+					trace(context, "deleting duplicate attribute:" + strAttr);
+					executeMQL(context, strQuery.toString(), (String) strAttr);
+					trace(context, "deleted duplicate person's attributes.");
+				} catch (Exception ex) {
+					throw new LSAException(ex);
+				}
+			}
+		} catch (Exception ex) {
+			throw new LSAException(ex);
+		} finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private void changeSchemaContactAddAttributes(Context context, StringList slAttributes) throws LSAException {
+
+		traceBeginMethod(context);
+
+		StringBuilder strQuery = new StringBuilder("modify type \"$1\"");
+		strQuery.append("add attribute \"$2\"");
+		strQuery.append("add attribute \"$3\"");
+		strQuery.append("add attribute \"$4\"");
+		strQuery.append("add attribute \"$5\"");
+		strQuery.append("add attribute \"$6\"");
+		strQuery.append("add attribute \"$7\"");
+		strQuery.append("add attribute \"$8\"");
+		strQuery.append("add attribute \"$9\"");
+		strQuery.append("add attribute \"$10\"");
+		strQuery.append("add attribute \"$11\"");
+		strQuery.append("add attribute \"$12\"");
+		strQuery.append("add attribute \"$13\"");
+		strQuery.append("add attribute \"$14\"");
+		strQuery.append("add attribute \"$15\"");
+		strQuery.append("add attribute \"$16\"");
+		strQuery.append("add attribute \"$17\"");
+		strQuery.append("add attribute \"$18\"");
+		strQuery.append("add attribute \"$19\"");
+		strQuery.append("add attribute \"$20\"");
+		strQuery.append("add attribute \"$21\"");
+		strQuery.append("add attribute \"$22\"");
+		strQuery.append("add attribute \"$23\"");
+		strQuery.append("add attribute \"$24\"");
+		strQuery.append("add attribute \"$25\"");
+		strQuery.append("add attribute \"$26\"");
+		strQuery.append("add attribute \"$27\"");
+		strQuery.append("add attribute \"$28\"");
+		strQuery.append("add attribute \"$29\"");
+		strQuery.append("add attribute \"$30\"");
+		strQuery.append("add attribute \"$31\"");
+		strQuery.append("add attribute \"$32\"");
+		strQuery.append("add attribute \"$33\"");
+		strQuery.append("add attribute \"$34\"");
+		strQuery.append("add attribute \"$35\";");
+
+		try {
+			trace(context, "Adding person's attributes to Contact...");
+
+			MqlUtil.mqlCommand(context, strQuery.toString(),
+					(String[]) slAttributes.toArray(new String[slAttributes.size()]));
+			trace(context, "Added person's attributes to Contact...");
+		} catch (Exception ex) {
+			throw new LSAException(ex);
+		} finally {
+			traceEndMethod(context);
+		}
+
+	}
+
+	/**
+	 * Prints trace message for trace type LSAMigration
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void trace(Context context, String message) throws LSAException {
+		try {
+			context.printTrace(TRACE_LSA_MIGRATION, message);
+		} catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new LSAException(exp);
+		}
+	}
+
+	/**
+	 * Print "Begin: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void traceBegin(Context context, String message) throws LSAException {
+		trace(context, "Begin: " + message);
+	}
+
+	/**
+	 * Print "End: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void traceEnd(Context context, String message) throws LSAException {
+		trace(context, "End: " + message);
+	}
+
+	/**
+	 * Print "ERROR: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void traceError(Context context, String message) throws LSAException {
+		trace(context, "ERROR: " + message);
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void traceEndMethod(Context context) throws LSAException {
+		String methodName = getTracedMethodName();
+		traceEnd(context, methodName + "()");
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private static void traceBeginMethod(Context context) throws LSAException {
+		String methodName = getTracedMethodName();
+		traceBegin(context, methodName + "()");
+	}
+
+	/**
+	 * Returns the name of the method being traced. This SHOULD NOT be called by any
+	 * client other than traceBeginMethod and traceEndMethod methods.
+	 * 
+	 * @return the method name
+	 */
+	private static String getTracedMethodName() {
+		Exception exp = new Exception();
+		StackTraceElement[] stes = exp.getStackTrace();
+		StackTraceElement ste = stes[2];
+		String methodName = ste.getMethodName();
+		return methodName;
+	}
+
+	private void executeMQL(Context context, String mqlCommand, String... args) throws LSAException {
+		try {
+			trace(context, "Executing : " + mqlCommand);
+			MqlUtil.mqlCommand(context, mqlCommand, args);
+		} catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new LSAException(exp);
+		}
+	}
+}
+

@@ -1,0 +1,98 @@
+tcl;
+eval {
+	puts "{Running VPLMxIntegration-R419HF6-downgrade.mql...}"
+	
+	# 1.1  the trigger deactivation 
+	
+	set boState [mql temp query bus "eService Trigger Program Parameters" PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment
+		puts {Disabling the trigger PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment... - Completed}
+	}	
+	# 1.2 trigger delete
+	
+	set boExists [mql temp query bus "eService Trigger Program Parameters" PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment;]
+	if {$boExists != ""} {
+		mql delete businessobject "eService Trigger Program Parameters" PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment
+	} 
+	puts {deleting trigger PolicyECPartStatePreliminaryPromoteCheck CheckForRevisionOrdersAlignment... - Completed}
+	
+	
+	# 1.1  the trigger deactivation 
+	
+	set boState [mql temp query bus "eService Trigger Program Parameters" TypePartReviseAction BlockIfExistingProductRevision select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" TypePartReviseAction BlockIfExistingProductRevision
+		puts {Disabling the trigger TypePartReviseAction BlockIfExistingProductRevision... - Completed}
+	}	
+	# 1.2 deleting the trigger
+	
+	set boExists [mql temp query bus "eService Trigger Program Parameters" TypePartReviseAction BlockIfExistingProductRevision;]
+	if {$boExists != ""} {
+		mql delete businessobject "eService Trigger Program Parameters" TypePartReviseAction BlockIfExistingProductRevision
+	} 
+	puts {deleting trigger TypePartReviseAction BlockIfExistingProductRevision... - Completed}
+
+	# 1.3 trigger command delete
+	set progName "VPLMIntegCheckForRevisionOrdersAlignment"
+	set progExists [mql list program $progName]
+	
+	if {$progExists != ""} {
+		set progCmd "mql delete program $progName"
+		eval $progCmd
+	} 
+	
+	# 1.1  the trigger deactivation 
+	
+	set boState [mql temp query bus "eService Trigger Program Parameters" 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision select current dump;]
+	if {[regexp {.+,Active} $boState]} {
+		mql demote businessobject "eService Trigger Program Parameters" 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision
+		puts {Disabling the trigger 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision... - Completed}
+	}	
+	# 1.2 deleting the trigger
+	
+	set boExists [mql temp query bus "eService Trigger Program Parameters" 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision;]
+	if {$boExists != ""} {
+		mql delete businessobject "eService Trigger Program Parameters" 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision
+	} 
+	puts {deleting trigger 3DX_TypePLMEntityMajorRevisionAction BlockIfExistingPartRevision... - Completed}
+
+	
+	#SBM1: FUN068718 - interface and attribute for CA collaboration
+	
+	set pkgExistance [list mql list Package EBOM select member\[interface VPLMIntegAuthoringLock\] dump |]
+	set mqlret [catch {eval $pkgExistance} sOut]
+		if {$sOut == "TRUE" } {
+		puts "INFO: Removing VPLMIntegAuthoringLock interface from Package EBOM"
+		mql mod Package EBOM remove member interface VPLMIntegAuthoringLock;
+	} else {
+		puts "INFO: VPLMIntegAuthoringLock interface not present in Package EBOM"
+	}
+	
+	#X32: R2017xFD05 Tree Order Convergence HL- FN Tree Order Mapping modification  to Tree Order attribute on both side
+	mql mod bus VPLMInteg-SynchParameters vplm VPM \
+		VPLMInteg-RelationAttrMapping "EBOM,Find Number|PLMProductDS,PLMInstance.V_TreeOrder\dnLogical Features,Find Number|PLMProductDS,PLMInstance.V_TreeOrder\nLogical Features,\$\$EFFECTIVITY\$\$|PLMProductInstanceDS,\$\$EFFECTIVITY\$\$\nGBOM,\$\$EFFECTIVITY\$\$|PLMProductInstanceDS,\$\$EFFECTIVITY\$\$"
+		mql mod bus VPLMInteg-SynchParameters vplm VPM \
+		VPLMInteg-VPMToMxRelationAttrMapping "VPMInstance,PLMInstance.V_TreeOrder|EBOM,Find Number"
+		
+	mql mod bus VPLMInteg-SynchParameters vplm Team \
+		VPLMInteg-VPMToMxRelationAttrMapping "VPMInstance,PLMInstance.V_TreeOrder|EBOM,Find Number"
+		mql mod bus VPLMInteg-SynchParameters vplm Team \
+		VPLMInteg-RelationAttrMapping "EBOM,Find Number|ENOSTProductDS,PLMInstance.V_TreeOrder"
+		
+	mql mod bus VPLMInteg-SynchParameters vplm NewTypingVPM \
+		VPLMInteg-RelationAttrMapping "EBOM,Find Number|VPMInstance,PLMInstance.V_TreeOrder\nLogical Features,Find Number|VPMInstance,PLMInstance.V_TreeOrder\nLogical Features,\$\$EFFECTIVITY\$\$|VPMInstance,\$\$EFFECTIVITY\$\$\nGBOM,\$\$EFFECTIVITY\$\$|VPMInstance,\$\$EFFECTIVITY\$\$"
+		mql mod bus VPLMInteg-SynchParameters vplm NewTypingVPM \
+		VPLMInteg-VPMToMxRelationAttrMapping "VPMInstance,PLMInstance.V_TreeOrder|EBOM,Find Number"
+		
+	mql mod bus VPLMInteg-SynchParameters vplm NewTypingTeam \
+		VPLMInteg-RelationAttrMapping "EBOM,Find Number|VPMInstance,PLMInstance.V_TreeOrder\nLogical Features,Find Number|VPMInstance,PLMInstance.V_TreeOrder\nLogical Features,\$\$EFFECTIVITY\$\$|VPMInstance,\$\$EFFECTIVITY\$\$\nGBOM,\$\$EFFECTIVITY\$\$|VPMInstance,\$\$EFFECTIVITY\$\$"
+		mql mod bus VPLMInteg-SynchParameters vplm NewTypingTeam \
+		VPLMInteg-VPMToMxRelationAttrMapping "VPMInstance,PLMInstance.V_TreeOrder|EBOM,Find Number"
+	puts {Cancel mapping parameters modifications =Completed}
+	
+	puts {VPLMxIntegration-PD-R419HF6-downgrade.mql - Completed}
+	
+    exit 0;
+}
+

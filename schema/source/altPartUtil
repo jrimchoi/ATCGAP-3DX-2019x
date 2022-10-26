@@ -1,0 +1,157 @@
+/* 
+ * altPartUtil.java
+ * This JPO is added to add part master for migrated parts
+ * Use the OOTB emxECPartBase method createAndConnectPartMaster
+ * To use this utility : 
+ * set context user admin_platform;
+ * exec prog altPartUtil -method addPartMaster 
+ * input file "C:\temp\AtlasProduction\Atlas_MigratedPartsWithoutPartMaster.txt" 
+ * success file "C:\temp\AtlasProduction\Atlas_CreatePartMasterSuccess.txt" 
+ * error file is "C:\temp\AtlasProduction\Atlas_CreatePartMasterError.txt"
+ * set context user admin_platform;
+ * exec prog altPartUtil -method addPartMasterForExisting 
+ * input file "C:\temp\AtlasProduction\Atlas_ExistingPartsWithoutPartMaster.txt" 
+ * success file "C:\temp\AtlasProduction\Atlas_CreatePartMasterForExistingSuccess.txt" 
+ * error file is "C:\temp\AtlasProduction\Atlas_CreatePartMasterForExistingError.txt"
+ */
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.PrintWriter;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.engineering.Part;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+
+public class ${CLASSNAME}
+{
+	public ${CLASSNAME} (Context context, String[] args) throws Exception {}
+
+	public void addPartMaster(Context context, String[] args)throws Exception
+	{ 
+		System.out.println("START:::altPartUtil:addPartMaster");
+		StringBuilder success = new StringBuilder();
+		StringBuilder error = new StringBuilder();
+		try {
+			String inputFile = "C:\\temp\\AtlasProduction\\Atlas_MigratedPartsWithoutPartMaster.txt";
+			System.out.println("Input file : "+inputFile);
+			int count = 1;
+			${CLASS:emxPart} partObject = new ${CLASS:emxPart}(context, args);
+			BufferedReader reader = null;
+			reader = new BufferedReader(new FileReader(inputFile));
+			String partID = reader.readLine();
+			while (partID != null && !partID.isEmpty()) {
+				System.out.println(count+" >> Creating Part Master to "+partID);
+				try {
+					partObject.createAndConnectPartMaster(context, partID);
+					System.out.println(count+" >> Created Part Master to "+partID);
+					success.append(partID).append("\n");
+				}catch(Exception ex) {
+					System.out.println(count+" >> Failed to create Part Master to "+partID);
+					error.append(partID).append("\n");
+				}
+				count = count+1;
+				partID = reader.readLine();
+			}
+			this.writeFile("C:\\temp\\AtlasProduction\\Atlas_CreatePartMasterSuccess.txt", success);
+			this.writeFile("C:\\temp\\AtlasProduction\\Atlas_CreatePartMasterError.txt", error);
+			reader.close();
+		}catch(Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		System.out.println("END:::altPartUtil:addPartMaster");
+	}
+	
+	public void addPartMasterForExisting(Context context, String[] args)throws Exception
+	{ 
+		System.out.println("START:::altPartUtil:addPartMaster");
+		StringBuilder success = new StringBuilder();
+		StringBuilder error = new StringBuilder();
+		try {
+			String inputFile = "C:\\temp\\AtlasProduction\\Atlas_ExistingPartsWithoutPartMaster.txt";
+			System.out.println("Input file : "+inputFile);
+			int count = 1;
+			BufferedReader reader = null;
+			reader = new BufferedReader(new FileReader(inputFile));
+			String partID = reader.readLine();
+			while (partID != null && !partID.isEmpty()) {
+				System.out.println(count+" >> Creating Part Master to "+partID);
+				try {
+					boolean result = this.connectPMNewRevPart(context, partID, count);
+					if(result) {
+						System.out.println(count+" >> Created Part Master to "+partID);
+						success.append(partID).append("\n");
+					}else {
+						System.out.println(count+" >> Failed to create Part Master to "+partID);
+						error.append(partID).append("\n");
+					}
+				}catch(Exception ex) {
+					System.out.println(count+" >> Failed to create Part Master to "+partID+". Error : "+ex.getMessage());
+					error.append(partID).append("\n");
+				}
+				count = count+1;
+				partID = reader.readLine();
+			}
+			this.writeFile("C:\\temp\\AtlasProduction\\Atlas_CreatePartMasterForExistingSuccess.txt", success);
+			this.writeFile("C:\\temp\\AtlasProduction\\Atlas_CreatePartMasterForExistingError.txt", error);
+			reader.close();
+		}catch(Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		System.out.println("END:::altPartUtil:addPartMaster");
+	}
+
+	public boolean connectPMNewRevPart(Context context, String strPartId, int count) throws Exception {
+		String relationshipPartRevision = PropertyUtil.getSchemaProperty(context, "relationship_PartRevision");
+		DomainObject doPart = DomainObject.newInstance(context, strPartId);
+		String firstRevisionId = doPart.getInfo(context, "first.id");
+		String firstRevision = doPart.getInfo(context, "first.revision");
+		System.out.println(count+" >> Retrieved first revision. ID = "+firstRevisionId+" & revision = "+firstRevision);
+		Part part = new Part();
+		String strPartMasterID = part.getPartMaster(context, firstRevisionId);
+		System.out.println(count+" >> Retrieved Part Master. ID = "+strPartMasterID);
+		if (UIUtil.isNotNullAndNotEmpty(strPartMasterID)) {
+			DomainObject doPartMaster = new DomainObject(strPartMasterID);
+			//ContextUtil.pushContext(context);
+			if(!doPart.hasRelatedObjects(context, relationshipPartRevision, false)) {
+				DomainRelationship.connect(context, doPartMaster, relationshipPartRevision, doPart);
+			}
+			//ContextUtil.popContext(context);
+			DomainObject doFirstPart= new DomainObject(firstRevisionId);
+			String owner = doFirstPart.getInfo(context, DomainConstants.SELECT_OWNER);
+			MqlUtil.mqlCommand(context,"modify bus $1 $2 '$3'", strPartMasterID, "owner" , owner);
+			System.out.println(count+" >> Updated Part Master Owner to "+owner);
+		}else {
+			return false;
+		}
+		return true;
+	}
+	
+	private void writeFile(String filePath, StringBuilder reportData) throws Exception {
+		PrintWriter writer = null;
+		try {
+			File file = new File(filePath);
+			writer = new PrintWriter(file);
+			writer.write(reportData.toString());
+			System.out.println("Created file "+filePath);
+		}finally {
+			if(writer != null) {
+				writer.flush();
+				writer.close();
+			}
+		}
+	}
+	
+}
+

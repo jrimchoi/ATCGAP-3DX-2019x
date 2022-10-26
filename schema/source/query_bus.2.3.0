@@ -1,0 +1,85 @@
+var params = proc.declareParameters(["type", "name", "revision", "vault", "select"],
+		["label", "where", "orderby", "limit", "dump", "notsubstitute", "format", "escape", "iterationCriteria","labelAbort"]);
+
+        
+if (where && !params.isWhereClauseValid(where))
+{
+	proc.write(label, null, "Invalid where clause");
+}
+else
+{       
+    var cmd = "temp query bus" + params.addVar(type) + params.addVar(name) + params.addVar(revision);
+    cmd += " vault" + params.addVar(vault);
+
+    if (where || iterationCriteria)
+    {
+        var fullWhere;
+        
+        if (where)
+        {
+            if (iterationCriteria)
+                fullWhere = "(" + where + ") AND ";
+            else
+                fullWhere = where;
+        }
+        else
+        {
+            fullWhere = "";
+        }
+        
+        if (iterationCriteria)
+        {
+            fullWhere += "(execute[ContentTrackerIterationFilter 'physicalid' '" + iterationCriteria + "']==TRUE)";
+        }
+        
+        if (params.getBoolean("escape"))
+            fullWhere = "escape " + fullWhere;
+
+        cmd += " where " + params.addVar(fullWhere);
+    }
+
+    if (orderby) {
+        var orderbys = JSON.parse(orderby);
+        for (var i = 0; i < orderbys.length; i++)
+            cmd += " orderby" + params.addVar(orderbys[i]);
+    }
+
+    if (limit)
+        cmd += " limit" + params.addVar(limit);
+
+    cmd += " select";
+    if (dump || params.getBoolean("notsubstitute"))
+        cmd += " notsubstitute";
+
+    cmd += params.addVars(JSON.parse(select));
+
+    if (dump)
+        cmd += " dump" + params.addVar(dump);
+
+    if (format) {
+        switch (format) {
+            case "tcl":
+                cmd += " tcl";
+                break;
+            case "json":
+                cmd += " json";
+                break;
+            case "txt":
+                break;
+            default:
+                proc.write(label, null, "format " + format + " not supported");
+                ok = false;
+        }
+    }
+    else {
+       cmd += " tcl";
+    }
+
+    mql.startTransaction(false);
+    mql.execute(label, cmd, params);
+	if (labelAbort)
+		mql.abortTransaction(null, true, labelAbort);
+	else
+		mql.abortTransaction();    
+}
+

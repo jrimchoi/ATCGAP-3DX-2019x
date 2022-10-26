@@ -1,0 +1,227 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.StringResource;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	public int checkMOEAttributesValueForPromotion(Context context, String[] args) throws QICException {
+		final String TYPE_EFFECTIVENESS_RESULT = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVENESS_RESULT);
+		try {
+			String moeId = args[0];
+			DomainObject dmoMOE = DomainObject.newInstance(context, moeId);
+			boolean isMOEType = Helper.getTypeKindOf(context, dmoMOE, QICConstants.SYMBOLIC_TYPE_MOE).containsValue(Boolean.TRUE);
+
+			if (isMOEType) {
+				String effectivenessResult = dmoMOE.getAttributeValue(context, TYPE_EFFECTIVENESS_RESULT);
+				if (Helper.isNullOrEmpty(effectivenessResult)
+						|| (!effectivenessResult.equals(QICConstants.PASS) && !effectivenessResult.equals(QICConstants.FAIL))) {
+					throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+							"QIC.CAPAEffectivenessCheck.EffectivenessResultAttributeValueError"));
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int checkEffectivenessLogicalTaskGrouping(Context context, String[] args) throws QICException {
+		try {
+			final String TYPE_CAPA = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA);
+			final String PROJECT_SNAPSHOT = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_PROJECT_SNAPSHOT);
+			final String TYPE_MOE_PHASE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_MOE_PHASE);
+			final String TYPE_MOE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_MOE);
+			final String TYPE_CAPA_TEMPLATE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA_TEMPLATE);
+			final String isKindOfCAPATemplateSelectable = QICUtil.getKindOfSelectable(context, TYPE_CAPA_TEMPLATE);
+			final String isKindOfCAPAProjectSelectable = QICUtil.getKindOfSelectable(context, TYPE_CAPA);
+			final String isKindOfProjectSnapshotSelectable = QICUtil.getKindOfSelectable(context, PROJECT_SNAPSHOT);
+
+			String toObjectId = args[0];
+			String fromObjectId = args[1];
+			if (!Helper.isNullOrEmpty(toObjectId) && !Helper.isNullOrEmpty(fromObjectId)) {
+				List<Map<?, ?>> objInfoList = QueryUtil.getInfo(context, new String[] { toObjectId, fromObjectId }, Helper.stringList(
+						DomainObject.SELECT_TYPE, isKindOfCAPATemplateSelectable, isKindOfCAPAProjectSelectable, isKindOfProjectSnapshotSelectable));
+				if (!Helper.isNullOrEmpty(objInfoList)) {
+					String toObjectType = (String) objInfoList.get(0).get(DomainObject.SELECT_TYPE);
+					String fromObjectType = (String) objInfoList.get(1).get(DomainObject.SELECT_TYPE);
+					String isFromObjectKindOfCAPATemplate = (String) objInfoList.get(1).get(isKindOfCAPATemplateSelectable);
+					String isFromObjectKindOfCAPAProject = (String) objInfoList.get(1).get(isKindOfCAPAProjectSelectable);
+					String isFromObjectKindOfProjectSnapshot = (String) objInfoList.get(1).get(isKindOfProjectSnapshotSelectable);
+
+					if (TYPE_MOE_PHASE.equals(fromObjectType) && !TYPE_MOE.equals(toObjectType)) {
+						throw new QICException(
+								Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPAEffectivenessCheck.SubTaskOtherThenMOETypeError"));
+					}
+					else if (!TYPE_MOE_PHASE.equals(fromObjectType) && TYPE_MOE.equals(toObjectType)) {
+						throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+								"QIC.CAPAEffectivenessCheck.ParentTaskOtherThenMOEPhaseTypeError"));
+					}
+					else if (TYPE_MOE_PHASE.equals(toObjectType) && !(QICConstants.TRUE.equalsIgnoreCase(isFromObjectKindOfCAPAProject)
+							|| QICConstants.TRUE.equalsIgnoreCase(isFromObjectKindOfProjectSnapshot)
+							|| QICConstants.TRUE.equalsIgnoreCase(isFromObjectKindOfCAPATemplate))) {
+						throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+								"QIC.CAPAEffectivenessCheck.ParentOtherThenCAPAForChildMOEPhaseOrMOEError"));
+					}
+				}
+
+			}
+		}
+		catch (
+
+		Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int checkOtherAttributeValues(Context context, String[] args) throws QICException {
+		final String TYPE_EFFECTIVENESS_RESULT = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVENESS_RESULT);
+		try {
+			String moeId = args[0];
+			DomainObject dmoMOE = DomainObject.newInstance(context, moeId);
+
+			String effectivenessResult = dmoMOE.getAttributeValue(context, TYPE_EFFECTIVENESS_RESULT);
+			if (!Helper.isNullOrEmpty(effectivenessResult) && effectivenessResult.equals(QICConstants.NONE)) {
+				throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+						"QIC.CAPAEffectivenessCheck.EffectivenessResultAttributeValuePassOrFailToModifyingResultNotes"));
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	public int checkCAPAState(Context context, String[] args) throws QICException {
+		final String POLICY_PROJECT_SPACE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_POLICY_PROJECT_SPACE);
+		final String POLICY_PROJECT_SPACE_HOLD_CANCEL = PropertyUtil.getSchemaProperty(context,
+				QICConstants.SYMBOLIC_POLICY_PROJECT_SPACE_HOLD_CANCEL);
+
+		final String STATE_COMPLETE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_PROJECT_SPACE,
+				QICConstants.SYMBOLIC_STATE_COMPLETE);
+		final String STATE_CANCEL = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_PROJECT_SPACE_HOLD_CANCEL,
+				QICConstants.SYMBOLIC_STATE_CANCEL);
+
+		try {
+			String fromObjectId = args[0];
+			String toObjectId = args[1];
+
+			boolean isCAPAType = Helper.getTypeKindOf(context, DomainObject.newInstance(context, fromObjectId), QICConstants.SYMBOLIC_TYPE_CAPA)
+					.containsValue(Boolean.TRUE);
+			boolean isMOEOrMOEPhaseType = Helper.getTypeKindOf(context, DomainObject.newInstance(context, toObjectId), QICConstants.SYMBOLIC_TYPE_MOE,
+					QICConstants.SYMBOLIC_TYPE_MOE_PHASE).containsValue(Boolean.TRUE);
+
+			String state = QICConstants.EMPTY_STRING;
+
+			if (isMOEOrMOEPhaseType) {
+				if (!isCAPAType) {
+					List<Map<?, ?>> lmAssociatedCAPA = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, fromObjectId),
+							QICConstants.SYMBOLIC_relationship_Subtask, QICConstants.SYMBOLIC_TYPE_CAPA,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT),
+							Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null, null);
+					if (!Helper.isNullOrEmpty(lmAssociatedCAPA)) {
+						state = (String) lmAssociatedCAPA.get(0).get(DomainConstants.SELECT_CURRENT);
+					}
+
+				}
+				else {
+					List<Map<?, ?>> lmCAPAInfo = QueryUtil.getInfo(context, new String[] { fromObjectId },
+							Helper.stringList(DomainConstants.SELECT_CURRENT));
+					if (!Helper.isNullOrEmpty(lmCAPAInfo)) {
+						state = (String) lmCAPAInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+					}
+				}
+
+				if (STATE_COMPLETE.equalsIgnoreCase(state) || STATE_CANCEL.equalsIgnoreCase(state)) {
+					throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+							"QIC.CAPAEffectivenessCheck.MOEPhaseAndMOECanNotCreateWhenCAPAStateCompleteOrCancel"));
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Check trigger on Task Management type change to check and block if the
+	 * new subtask type or old subtask type is a MOE/MOE Phase
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            Holds input arguments
+	 * @return 0 for OK, 1 for Error
+	 * @throws QICException
+	 *             If operation fails
+	 */
+	public int checkForMOESubtaskTypes(Context context, String[] args) throws QICException {
+		try {
+			String objectId = args[0];
+			if (!Helper.isNullOrEmpty(objectId)) {
+				DomainObject task = DomainObject.newInstance(context, args[0]);
+				Map<String, Boolean> taskTypeCheck = Helper.getTypeKindOf(context, task, QICConstants.SYMBOLIC_TYPE_MOE,
+						QICConstants.SYMBOLIC_TYPE_MOE_PHASE);
+				final String OLD_TYPE = args[1];
+				final String NEW_TYPE = args[2];
+				if (!Helper.isNullOrEmpty(taskTypeCheck)) {
+					if (!Helper.isNullOrEmpty(OLD_TYPE) && taskTypeCheck.containsKey(OLD_TYPE) && taskTypeCheck.get(OLD_TYPE)) {
+						Helper.mqlError(context, StringResource.QIC, "QIC.CAPAEffectivenessCheck.MOEOrMOEPhaseCannotBeChangedToOtherTaskType");
+						return 1;
+					}
+					if (!Helper.isNullOrEmpty(NEW_TYPE) && taskTypeCheck.containsKey(NEW_TYPE)) {
+						Helper.mqlError(context, StringResource.QIC, "QIC.CAPAEffectivenessCheck.TaskTypeCannotBeChangedToMOEOrMOEPhase");
+						return 1;
+					}
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+}
+

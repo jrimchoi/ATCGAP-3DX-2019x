@@ -1,0 +1,122 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ProductService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.PersonUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Contact constructor
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @since 10.0.0.0
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws LSAException {
+		super();
+	}
+
+	private ProductService getProductService(Context context) throws LSAException {
+		try {
+			final Component COMPONENT = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			final ProductService PRODUCT_SERVICE = (ProductService) COMPONENT.getService(ProductService.class);
+			return PRODUCT_SERVICE;
+		} catch (final ComponentException exception) {
+			throw new LSAException(exception);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.CellUpdateJPOCallable
+	public void updateAssignedPart(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			String productId = (String) paramMap.get("objectId");
+			String partId = (String) paramMap.get("New Value");
+
+			ProductService productService = getProductService(context);
+			DomainObject product = DomainObject.newInstance(context, productId);
+			if (partId != null && !"".equals(partId)) {
+				productService.setAssignedPart(context, product, DomainObject.newInstance(context, partId));
+			} else {
+				productService.removeAssignedPart(context, product);
+			}
+		} catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedPartOID(Context context, String[] args) throws LSAException {
+		try {
+			String busWhere = "to[relationship_AssignedPart]==True || policy.property[PolicyClassification].value!=Production";
+			List<Map<?, ?>> mListParts = QueryUtil.findObjects(context, "type_Part", busWhere,
+					Helper.stringList(DomainConstants.SELECT_ID));
+
+			StringList excludeOIDSList = Helper.stringList();
+			for (Map<?, ?> mapPart : mListParts) {
+				excludeOIDSList.add((String) mapPart.get(DomainConstants.SELECT_ID));
+			}
+			return excludeOIDSList;
+		} catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionUpdatePartFieldInPackageProduct(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+			String[] fieldNamesDisplay = (String[]) programMap.get("fieldNameDisplay");
+			String[] fieldNamesActual = (String[]) programMap.get("fieldNameActual");
+			String[] emxTableRowIds = (String[]) programMap.get("emxTableRowId");
+
+			EmxTableRowId emxTableRowId = new EmxTableRowId(emxTableRowIds[0]);
+			DomainObject dmoPart = DomainObject.newInstance(context, emxTableRowId.getObjectId());
+			StringList partInfo = Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION);
+			Map<String, String> mInfo = dmoPart.getInfo(context, partInfo);
+			String partName = mInfo.get(DomainConstants.SELECT_NAME);
+			String partRev = mInfo.get(DomainConstants.SELECT_REVISION);
+
+			String fieldDisplayName = fieldNamesDisplay[0];
+			String fieldActualName = fieldNamesActual[0];
+			String fieldDisplayValue = PersonUtil.getFullName(context, partName + " , " + partRev);
+			String fieldActualValue = emxTableRowId.getObjectId();
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "setCellForPartAndCloseSearch", "",
+					fieldDisplayName, fieldActualName, fieldDisplayValue, fieldActualValue);
+		} catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+}
+

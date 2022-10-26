@@ -1,0 +1,1031 @@
+# VPLM Data migration execution
+
+tcl;
+eval {
+
+proc checkMarkerStatus {sImplementationName bPrint} {
+# return code = 0 => migration already executed
+	set sReturnCode 0
+	set sResult [mql temp query bus VPLMDataMigration $sImplementationName ---]
+	if {$sResult == ""} {
+		set sReturnCode 1
+	} else {
+		set sStatus [mql print bus VPLMDataMigration $sImplementationName --- select attribute\[VPLMsys/MigrationStatus\] dump;];
+		if {$sStatus == "FINISHED"} {
+			if {$bPrint=="true"} {
+				puts "*******************************************************************"
+				puts "Data Migration: $sImplementationName already executed ..."
+			}
+			set sReturnCode 0
+		} else {
+		    if {$bPrint=="true"} {
+				puts "*******************************************************************"
+				puts "Data Migration: $sImplementationName not complete - Continuing..."
+			}
+			set sReturnCode 2
+		}
+	}
+	return $sReturnCode
+}
+
+proc getHostCompanyName {} {
+    set sMyCompany "MyCompany"
+    set sMyCompanyValues [lindex [mql temporary query businessobject "Company" "$sMyCompany" - select "current" dump | tcl] 0]
+    set sHostCompanyName [lindex $sMyCompanyValues 1]
+    set sHostCompanyStatus [join [lindex $sMyCompanyValues 3]]
+    if { "$sHostCompanyName" != "$sMyCompany" || "$sHostCompanyStatus" == "Inactive" } {
+        set sHostCompanyName [lindex [lindex [lindex [mql print program "eServiceSchemaVariableMapping.tcl" select property\[role_CompanyName\].to dump | tcl] 0] 0] 0]
+        set sHostCompanyName [string range "$sHostCompanyName" 5 [expr [string length "$sHostCompanyName"] - 1]]
+    }    
+    return "$sHostCompanyName"
+}
+
+proc getInstallationType {} {
+	set sInstallType [mql print prog eServiceSystemInformation.tcl select property\[Installation Mode ENOVIA VPM Multi-discipline Collaboration Platform\].value dump]
+	puts "Installation Mode: $sInstallType"
+    return "$sInstallType"
+}
+
+proc getGAVersion {} {
+	set sVersion [mql print prog eServiceSystemInformation.tcl select property\[appVersionENOVIA VPM Multi-discipline Collaboration Platform\].value dump]
+	if {$sVersion ==""} {
+		set sVersion [mql print prog eServiceSystemInformation.tcl select property\[appVersionENOVIA VPM Team Multi-discipline Collaboration Platform\].value dump]
+	}
+	set result ""
+	if {[string match -nocase "*.HF*" $sVersion]} {
+		set fields [split $sVersion "."]
+		set result [lindex $fields 0]
+	} else {
+		set result $sVersion
+	}
+	return $result
+}
+
+
+set EVT_previous_version [mql print program eServiceSystemInformation.tcl select property\[appVersionENOVIA VPM Team Multi-discipline Collaboration Platform\].value dump]
+
+if { "$EVT_previous_version" != ""} {
+	set previous_version $EVT_previous_version
+} else {
+	set previous_version [mql print program eServiceSystemInformation.tcl select property\[appVersionENOVIA VPM Multi-discipline Collaboration Platform\].value dump]
+}
+
+# utilities for MX_CLASSPATH modification "on the fly"  to be able to load dictionary
+proc getSystemParameter {param} {
+	set sResult [mql print system inivar $param]
+	set lValues [split $sResult "="]
+	set sValue [lindex $lValues 1]
+	return [string trim $sValue]
+}
+
+proc change_MXCLASSPATH {} {
+	set currentMxCP [getSystemParameter "MX_CLASSPATH"]
+	set matrixinstall [getSystemParameter "MATRIXINSTALL"]
+	set mxarch [getSystemParameter "MX_ARCH"]
+ 
+	# default : UNIX
+	set OS "UNIX"
+	set classPathdelimiter ":"
+
+	# if Win
+	if {$mxarch=="intel_a" || $mxarch=="win_b64"} {
+		set OS "WIN"
+		set classPathdelimiter ";"
+	}
+
+	#build new MX_CLASSPATH
+	# default: UNIX
+	set CPsuffix "/STAGING/ematrix/WEB-INF/classes"
+	
+	# replaces / by \ on WIN
+	if {"$OS"=="WIN"} {
+	    set CPsuffix [string map {"/" "\x5C"} "$CPsuffix"]
+	}
+
+	# new CP element
+	# remove slash / backslash if exists & Classpath separators
+	if {"$OS"=="WIN"} {
+		set matrixinstall [string trimright $matrixinstall "\x5C"]
+		set currentMxCP [string trimright $currentMxCP $classPathdelimiter]
+		
+	} else {
+		set matrixinstall [string trimright $matrixinstall "/"]
+		set currentMxCP [string trimright $currentMxCP $classPathdelimiter]
+	}
+	
+	# element to be added to current classpath
+	set newCPelement $matrixinstall$CPsuffix
+	
+	# check if current classpath already contains the new elt
+	set lElts [split $currentMxCP $classPathdelimiter]
+	set eltExist 1
+	foreach sElt $lElts {
+		if {$sElt == "$newCPelement"} {
+			set eltExist 0
+			puts "$sElt already exists"
+			break;
+		}
+	}
+
+	if {$eltExist != 0} {
+		set newMxCP $currentMxCP$classPathdelimiter$newCPelement
+		puts "Changing MX_CLASSPATH to: $newMxCP"
+		set ret [mql set system inivar set MX_CLASSPATH $newMxCP]
+	}
+}
+
+# Changing MX_CLASSPATH
+set ret [change_MXCLASSPATH]
+
+# Global RC
+set GlobalRC 0
+
+# list of procedures in error if any
+set error_msg ""
+
+# V6R2016x removeIRPCCustoFromERPackages MUST BE IN FIRST POSITION
+if {[checkMarkerStatus "PLMDictionaryRemoveIRPCCusto" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of removeIRPCCustoFromERPackages"
+	mql trigger off;
+	mql exec program emxPLMDictionaryProgram -method removeIRPCCustoFromERPackages;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: removeIRPCCustoFromERPackages ended"
+}
+
+if {[checkMarkerStatus "PLMDictionaryRemoveIRPCCusto" "no"] !=0} {
+	puts "removeIRPCCustoFromERPackages migration failed !"
+	append error_msg "removeIRPCCustoFromERPackages"
+	incr GlobalRC
+}
+
+# V6R2012 CATIASystemDisciplines
+if {[checkMarkerStatus "CATIASystemDisciplines" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATIASystemDisciplines"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATIASystemDisciplines -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATIASystemDisciplines ended"
+}
+
+if {[checkMarkerStatus "CATIASystemDisciplines" "no"] !=0} {
+	puts "CATIASystemDisciplines migration failed !"
+	append error_msg "CATIASystemDisciplines"
+	incr GlobalRC
+}
+
+# V6R2012 VPLMPosMigrateCompany
+if {[checkMarkerStatus "MigrateCompany" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigrateCompany"
+	mql trigger off;
+	mql execute program VPLMPosMigrateCompany;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigrateCompany ended"
+}
+
+if {[checkMarkerStatus "MigrateCompany" "no"] !=0} {
+	puts "MigrateCompany migration failed !"
+	append error_msg " MigrateCompany"
+	incr GlobalRC
+}
+
+# V6R2014 VPLMPosMigrateCompany2
+if {[checkMarkerStatus "MigrateCompany2" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigrateCompany2"
+	mql trigger off;
+	mql execute program VPLMPosMigrateCompany2;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigrateCompany2 ended"
+}
+
+if {[checkMarkerStatus "MigrateCompany2" "no"] !=0} {
+	puts "MigrateCompany2 migration failed !"
+	append error_msg " MigrateCompany2"
+	incr GlobalRC
+}
+
+# V6R2012x VPLMPosMigrateBO
+if {[checkMarkerStatus "MigrateBO" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigrateBO"
+	set sHostCompanyName [getHostCompanyName]
+	mql trigger off;
+	mql execute program VPLMPosMigrateBO "admin_platform" "NOTAPASSWORD" "VPLMAdmin.$sHostCompanyName.Default";
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigrateBO ended"
+}
+
+if {[checkMarkerStatus "MigrateBO" "no"] !=0} {
+	puts "VPLMPosMigrateBO migration failed !"
+	append error_msg " VPLMPosMigrateBO"
+	incr GlobalRC
+}
+
+# V6R2012x DELMIAPPRDisciplinesMigration
+if {[checkMarkerStatus "DELMIAPPRDisciplinesMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIAPPRDisciplinesMigration"
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIAPPRDisciplinesMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIAPPRDisciplinesMigration ended"
+}
+
+if {[checkMarkerStatus "DELMIAPPRDisciplinesMigration" "no"] !=0} {
+	puts "DELMIAPPRDisciplines migration failed !"
+	append error_msg " DELMIAPPRDisciplines"
+	incr GlobalRC
+}
+
+# V6R2012 HF2 CATIAFastenerMagnitudeReference
+if {[checkMarkerStatus "CATIAFastenerMagnitudeReference" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATIAFastenerMagnitudeReference"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATIAFastenerMagnitudeReference -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATIAFastenerMagnitudeReference ended"
+}
+
+if {[checkMarkerStatus "CATIAFastenerMagnitudeReference" "no"] !=0} {
+	puts "CATIAFastenerMagnitudeReference migration failed !"
+	append error_msg " CATIAFastenerMagnitudeReference"
+	incr GlobalRC
+}
+
+# V6R2012 HF2 CATIAFastenerMagnitudeBeadInstance
+if {[checkMarkerStatus "CATIAFastenerMagnitudeBeadInstance" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATIAFastenerMagnitudeBeadInstance"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATIAFastenerMagnitudeBeadInstance -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATIAFastenerMagnitudeBeadInstance ended"
+}
+
+if {[checkMarkerStatus "CATIAFastenerMagnitudeBeadInstance" "no"] !=0} {
+	puts "CATIAFastenerMagnitudeBeadInstance migration failed !"
+	append error_msg " CATIAFastenerMagnitudeBeadInstance"
+	incr GlobalRC
+}
+
+
+# V6R2012x CATIASystemBehaviorDisciplines
+if {[checkMarkerStatus "CATIASystemBehaviorDisciplines" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATIASystemBehaviorDisciplines"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATIASystemBehaviorDisciplines -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATIASystemBehaviorDisciplines ended"
+}
+
+if {[checkMarkerStatus "CATIASystemBehaviorDisciplines" "no"] !=0} {
+	puts "CATIASystemBehaviorDisciplines migration failed !"
+	append error_msg " CATIASystemBehaviorDisciplines"
+	incr GlobalRC
+}
+
+# V6R2012x Report from V6R2011x emxPubSubNewRelMigration
+if {([checkMarkerStatus "emxPubSubNewRelMigration" "true"] !=0) && ([getInstallationType] == "VPM")} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of emxPubSubNewRelMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program emxPubSubNewRelMigration -method dataMigration;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: emxPubSubNewRelMigration ended"
+}
+
+if {([checkMarkerStatus "emxPubSubNewRelMigration" "no"] !=0) && ([getInstallationType] == "VPM")} {
+	puts "emxPubSubNewRelMigration failed !"
+	append error_msg " emxPubSubNewRelMigration"
+	incr GlobalRC
+}
+
+
+# V6R2012x DocumentUnicornMigration
+if {[checkMarkerStatus "DocumentUnicornMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DocumentUnicornMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DocumentUnicornMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DocumentUnicornMigration ended"
+}
+
+if {[checkMarkerStatus "DocumentUnicornMigration" "no"] !=0} {
+	puts "DocumentUnicornMigration failed !"
+	append error_msg " DocumentUnicornMigration"
+	incr GlobalRC
+}
+
+# V6R2013 RMTSRMigration (Requirement Management)
+if {[checkMarkerStatus "RMTSRMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of RMTSRMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl RMTSRMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: RMTSRMigration ended"
+}
+
+if {[checkMarkerStatus "RMTSRMigration" "no"] !=0} {
+	puts "RMTSRMigration failed !"
+	append error_msg " RMTSRMigration"
+	incr GlobalRC
+}
+
+# V6R2013x DELMIAManufacturingSetupMigration (VPLMJResourceMigration)
+if {[checkMarkerStatus "DELMIAManufacturingSetupMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIAManufacturingSetupMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIAManufacturingSetupMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIAManufacturingSetupMigration ended"
+}
+
+if {[checkMarkerStatus "DELMIAManufacturingSetupMigration" "no"] !=0} {
+	puts "DELMIAManufacturingSetupMigration failed !"
+	append error_msg " DELMIAManufacturingSetupMigration"
+	incr GlobalRC
+}
+
+# V6R2013x PLMExchangeStatusDSNewType (SRM Migration with new typing)
+if {[checkMarkerStatus "PLMExchangeStatusDSNewType" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of PLMExchangeStatusDSNewType"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl PLMExchangeStatusDSNewType -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: PLMExchangeStatusDSNewType ended"
+}
+
+if {[checkMarkerStatus "PLMExchangeStatusDSNewType" "no"] !=0} {
+	puts "PLMExchangeStatusDSNewType failed !"
+	append error_msg " PLMExchangeStatusDSNewType"
+	incr GlobalRC
+}
+
+# V6R2014 Migration of CATMpgReference (PLMReference) mapping table
+if {[checkMarkerStatus "CATCoexMappingDBDI_Versions" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATCoexMappingDBDI_Versions"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATCoexMappingDBDI_Versions -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATCoexMappingDBDI_Versions ended"
+}
+
+if {[checkMarkerStatus "CATCoexMappingDBDI_Versions" "no"] !=0} {
+	puts "CATCoexMappingDBDI_Versions failed !"
+	append error_msg " CATCoexMappingDBDI_Versions"
+	incr GlobalRC
+}
+
+# V6R2014 Migration of project applicability to new persistence pattern (from relationships to SOV)
+if {[checkMarkerStatus "MigratePrjApp" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigratePrjApp"
+	set sHostCompanyName [getHostCompanyName]
+	mql trigger off;
+	mql execute program VPLMPosMigratePrjApp "admin_platform" "NOTAPASSWORD" "VPLMAdmin.$sHostCompanyName.Default";
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigratePrjApp ended"
+}
+
+if {[checkMarkerStatus "MigratePrjApp" "no"] !=0} {
+	puts "VPLMPosMigratePrjApp migration failed !"
+	append error_msg " VPLMPosMigratePrjApp"
+	incr GlobalRC
+}
+
+# V6R2014 Support of multiple ownership on P&O objects for new security feature
+if {[checkMarkerStatus "MigratePnOOwnership" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigratePnOOwnership"
+	mql trigger off;
+	mql execute program VPLMPosMigratePnOOwnership;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigratePnOOwnership ended"
+}
+
+if {[checkMarkerStatus "MigratePnOOwnership" "no"] !=0} {
+	puts "VPLMPosMigratePnOOwnership failed !"
+	append error_msg " VPLMPosMigratePnOOwnership"
+	incr GlobalRC
+}
+
+# V6R2014 Migration to new Fastener MCX subtyping migration
+if {[checkMarkerStatus "FstMCXMigrationBatch" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of FstMCXMigrationBatch"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl FstMCXMigrationBatch -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: FstMCXMigrationBatch ended"
+}
+
+if {[checkMarkerStatus "FstMCXMigrationBatch" "no"] !=0} {
+	puts "FstMCXMigrationBatch failed !"
+	append error_msg " FstMCXMigrationBatch"
+	incr GlobalRC
+}
+
+# V6R2014 Migration to new Fastener spot subtyping
+if {[checkMarkerStatus "FstSpotV2TypeMigrationBatch" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of FstSpotV2TypeMigrationBatch"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl FstSpotV2TypeMigrationBatch -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: FstSpotV2TypeMigrationBatch ended"
+}
+
+if {[checkMarkerStatus "FstSpotV2TypeMigrationBatch" "no"] !=0} {
+	puts "FstSpotV2TypeMigrationBatch failed !"
+	append error_msg " FstSpotV2TypeMigrationBatch"
+	incr GlobalRC
+}
+
+# V6R2014 New security feature adoption for Designer Workspace (ownership inheritance)
+if {[checkMarkerStatus "WorkspaceOwnershipMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of WorkspaceOwnershipMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl WorkspaceOwnershipMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: WorkspaceOwnershipMigration ended"
+}
+
+if {[checkMarkerStatus "WorkspaceOwnershipMigration" "no"] !=0} {
+	puts "WorkspaceOwnershipMigration failed !"
+	append error_msg " WorkspaceOwnershipMigration"
+	incr GlobalRC
+}
+
+# V6R2014 Migration of Semantic Relations towards a 'Path' data model persistency
+if {[checkMarkerStatus "SRonPathNewDataModel" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of SRonPathNewDataModel migration"
+	mql trigger off;
+	mql execute program migration_SRonPath;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: SRonPathNewDataModel ended"
+}
+
+if {[checkMarkerStatus "SRonPathNewDataModel" "no"] !=0} {
+	puts "SRonPathNewDataModel migration failed !"
+	append error_msg " SRonPathNewDataModel"
+	incr GlobalRC
+}
+
+# V6R2014x Clean-up of old project applicability persistence (deletion of relationships)
+if {[checkMarkerStatus "MigrateCleanPrjApp" "true"] !=0 || [checkMarkerStatus "MigratePrjApp" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosCleanPrjApp migration"
+	set sHostCompanyName [getHostCompanyName]
+	mql trigger off;
+	mql execute program VPLMPosCleanPrjApp "admin_platform" "NOTAPASSWORD" "VPLMAdmin.$sHostCompanyName.Default";
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosCleanPrjApp ended"
+}
+
+if {[checkMarkerStatus "MigrateCleanPrjApp" "no"] !=0 || [checkMarkerStatus "MigratePrjApp" "no"] !=0} {
+	puts "VPLMPosCleanPrjApp migration failed !"
+	append error_msg " VPLMPosCleanPrjApp"
+	incr GlobalRC
+}
+
+# V6R2014x Repair Resource PLM port to be New typing compliant (V_Discipline=Top modeler type)
+if {[checkMarkerStatus "DELMIAPPRPortHeadMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIAPPRPortHeadMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIAPPRPortHeadMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIAPPRPortHeadMigration ended"
+}
+
+if {[checkMarkerStatus "DELMIAPPRPortHeadMigration" "no"] !=0} {
+	puts "DELMIAPPRPortHeadMigration failed !"
+	append error_msg " DELMIAPPRPortHeadMigration"
+	incr GlobalRC
+}
+
+# V6R2014x Fixed Instance persistency (instance can be moved or not) is now based on a new attribute of the Instance  instead of an extension
+if {[checkMarkerStatus "LPABSTRACTFixedInstanceMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of LPABSTRACTFixedInstanceMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl LPABSTRACTFixedInstanceMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: LPABSTRACTFixedInstanceMigration ended"
+}
+
+if {[checkMarkerStatus "LPABSTRACTFixedInstanceMigration" "no"] !=0} {
+	puts "LPABSTRACTFixedInstanceMigration failed !"
+	append error_msg " LPABSTRACTFixedInstanceMigration"
+	incr GlobalRC
+}
+
+# V6R2014x Support of multiple ownership on P&O objects for new security feature
+if {[checkMarkerStatus "MigratePnOOwnership2" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigratePnOOwnership2"
+	mql trigger off;
+	mql execute program VPLMPosMigratePnOOwnership2;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigratePnOOwnership2 ended"
+}
+
+if {[checkMarkerStatus "MigratePnOOwnership2" "no"] !=0} {
+	puts "VPLMPosMigratePnOOwnership2 failed !"
+	append error_msg " VPLMPosMigratePnOOwnership2"
+	incr GlobalRC
+}
+
+# V6R2014x Migration to new multi-valuated attributes persistency for DMA/KWD
+if {[checkMarkerStatus "KWDDMAMValAttributes" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of migrMValAttributes"
+	mql trigger off;
+	mql exec program emxPLMDictionaryProgram -method migrMValAttributes ;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: migrMValAttributes ended"
+}
+
+if {[checkMarkerStatus "KWDDMAMValAttributes" "no"] !=0} {
+	puts "migrMValAttributes failed !"
+	append error_msg " migrMValAttributes"
+	incr GlobalRC
+}
+
+
+
+# V6R2014x HF1 Migration Name/External ID Discipline to avoid naming conflict between projects and disciplines
+if {[checkMarkerStatus "MigratePnODiscipline" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigratePnODiscipline"
+	mql trigger off;
+	mql exec program VPLMPosMigratePnODiscipline ;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigratePnODiscipline ended"
+}
+
+if {[checkMarkerStatus "MigratePnODiscipline" "no"] !=0} {
+	puts "VPLMPosMigratePnODiscipline failed !"
+	append error_msg " VPLMPosMigratePnODiscipline"
+	incr GlobalRC
+}
+
+# V6R2015x Modification of Policy on Coexistence mapping objects : they have to be independant from CollabSpace
+if {[checkMarkerStatus "CoexMappingTablePolicyMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CoexMapping_MigrationPolicy migration"
+	mql trigger off;
+	mql execute program CoexMapping_MigrationPolicy;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CoexMapping_MigrationPolicy ended"
+}
+
+if {[checkMarkerStatus "CoexMappingTablePolicyMigration" "no"] !=0} {
+	puts "CoexMapping_MigrationPolicy migration failed !"
+	append error_msg " CoexMapping_MigrationPolicy"
+	incr GlobalRC
+}
+
+# V6R2015x Removal of name mapping for DMA/KWD
+  if {[checkMarkerStatus "KWDDMANoNameMapping" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of migrNoNameMapping"
+	mql trigger off;
+	mql exec program emxPLMDictionaryProgram -method migrNoNameMapping;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: migrNoNameMapping ended"
+  }
+  
+  if {[checkMarkerStatus "KWDDMANoNameMapping" "no"] !=0} {
+	puts "migrNoNameMapping failed !"
+	append error_msg " migrNoNameMapping"
+	incr GlobalRC
+  }
+  
+# V6R2015x Removal of basics mapping for DMA/KWD
+  if {[checkMarkerStatus "DMAKWDDataPropertiesMigration_R417" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of migrBasicsDataProperties "
+	mql trigger off;
+	mql exec prog emxDictionaryAuthorUpdateProgram -method migrBasicsDataProperties;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: migrBasicsDataProperties ended"
+}
+  
+  if {[checkMarkerStatus "DMAKWDDataPropertiesMigration_R417" "no"] !=0} {
+	puts "migrBasicsDataProperties failed !"
+	append error_msg " migrBasicsDataProperties"
+	incr GlobalRC
+  }
+  
+ 
+# V6R2015x Split of Simulation discipline into FEM and Kinematics
+  if {[checkMarkerStatus "FEMDisciplineMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of FEMDisciplineMigration "
+	mql trigger off;
+	mql exec prog FEMDisciplineMigration;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: FEMDisciplineMigration ended"
+  }
+  
+  if {[checkMarkerStatus "FEMDisciplineMigration" "no"] !=0} {
+	puts "FEMDisciplineMigration failed !"
+	append error_msg " FEMDisciplineMigration"
+	incr GlobalRC
+  }
+  
+
+# V6R2015x Migration toward new DELMIA Implement Links modeling (SR on Instance)
+  if {[checkMarkerStatus "DELMIAPPRSROnInstanceMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIAPPRSROnInstanceMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIAPPRSROnInstanceMigration -nbThreads 10 ;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIAPPRSROnInstanceMigration ended"
+  }
+
+  if {[checkMarkerStatus "DELMIAPPRSROnInstanceMigration" "no"] !=0} {
+	puts "DELMIAPPRSROnInstanceMigration failed !"
+	append error_msg " DELMIAPPRSROnInstanceMigration"
+	incr GlobalRC
+  }
+
+# V6R2016x Removal of basics mapping of SRV2
+  if {[checkMarkerStatus "PLMDictionaryNoBasicsMapping" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of migrNoBasicsMapping"
+	mql trigger off;
+	mql exec program emxPLMDictionaryProgram -method migrNoBasicsMapping;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: migrNoBasicsMapping ended"
+  }
+  
+  if {[checkMarkerStatus "PLMDictionaryNoBasicsMapping" "no"] !=0} {
+    puts "PLMDictionaryNoBasicsMapping failed !"
+    append error_msg " migrNoBasicsMapping"
+    incr GlobalRC
+  }
+  
+# V6R2016x FD01 Last PhysicalID and Role flattening on Semantic Relations for PCS optimizations
+  set mxtracefilepath [getSystemParameter "MX_TRACE_FILE_PATH"]
+  if {[checkMarkerStatus "SRLastPIDAndRole" "true"] !=0} {
+    puts "*******************************************************************"
+    puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of SRLastPIDAndRole"
+  	mql trigger off;
+  	mql exec program SRLastPIDAndRole -migration -thread 3 -dir "$mxtracefilepath";
+  	mql trigger on;
+  	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: SRLastPIDAndRole ended"
+  }
+  
+  if {[checkMarkerStatus "SRLastPIDAndRole" "no"] !=0} {
+    puts "SRLastPIDAndRole failed !"
+    append error_msg " SRLastPIDAndRole"
+    incr GlobalRC
+  }
+
+# V6R2016x Migrate Production System Reference to a main input and output port identification based on a new internal attribute
+  if {[checkMarkerStatus "DELMIAPPRMainPortMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIAPPRMainPortMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIAPPRMainPortMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIAPPRMainPortMigration ended"
+  }
+
+  if {[checkMarkerStatus "DELMIAPPRMainPortMigration" "no"] !=0} {
+	puts "DELMIAPPRMainPortMigration failed !"
+	append error_msg " DELMIAPPRMainPortMigration"
+	incr GlobalRC
+  }
+
+# R2017x FD01 ChangeLog migration on FlatTable technology
+  if {[checkMarkerStatus "ChangeLogFlatTableMigration" "true"] !=0} {
+    puts "*******************************************************************"
+    puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of ChangeLogFlatTableMigration"
+    mql verbose on;
+    mql trigger off;
+
+    set lCmd [list mql execute program migration_ChangeLogOnFlatTable]
+    set mqlret [catch {eval $lCmd} sOut]
+    if {$mqlret != 0} {
+      puts "ERROR in ChangeLogFlatTableMigration: $sOut"
+    }
+
+    mql trigger on;
+    puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: ChangeLogFlatTableMigration ended"
+  }
+
+  if {[checkMarkerStatus "ChangeLogFlatTableMigration" "no"] !=0} {
+    puts "ChangeLogFlatTableMigration failed !"
+    append error_msg " ChangeLogFlatTableMigration"
+    incr GlobalRC
+  }
+
+# R2017x Add default value on attributes : Robot.V_DELRmi_MountingMethod and Robot.V_DELRmi_KinematicClass
+  if {[checkMarkerStatus "DELMIARobotMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of DELMIARobotMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl DELMIARobotMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: DELMIARobotMigration ended"
+  }
+
+  if {[checkMarkerStatus "DELMIARobotMigration" "no"] !=0} {
+	puts "DELMIARobotMigration failed !"
+	append error_msg " DELMIARobotMigration"
+	incr GlobalRC
+  }
+  
+# R2017x PLMParameter valuation type migration
+  if {[checkMarkerStatus "PlmParameterValuationTypeMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of PlmParameterValuationTypeMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl PlmParameterValuationTypeMigration -commit;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: PlmParameterValuationTypeMigration ended"
+  }
+
+  if {[checkMarkerStatus "PlmParameterValuationTypeMigration" "no"] !=0} {
+	puts "PlmParameterValuationTypeMigration failed !"
+	append error_msg " PlmParameterValuationTypeMigration"
+	incr GlobalRC
+  }
+  
+# R2018x improvement of the integration of old V5 native data imported through the COEXISTENCE
+  if {[checkMarkerStatus "CATCoexV5NativeExtension" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of CATCoexV5NativeExtension"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl CATCoexV5NativeExtension -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: CATCoexV5NativeExtension ended"
+  }
+
+  if {[checkMarkerStatus "CATCoexV5NativeExtension" "no"] !=0} {
+	puts "CATCoexV5NativeExtension failed !"
+	append error_msg " CATCoexV5NativeExtension"
+	incr GlobalRC
+  }
+  
+# R2018x FD01 BusinessRuleHasPrecedence
+ if {[checkMarkerStatus "BusinessRuleHasPrecedence" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of BusinessRuleHasPrecedence"
+	mql verbose on;
+	mql trigger off;
+	mql execute program emxDataSetupProgram -method migrBusinessRuleHasPrecedence;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: BusinessRuleHasPrecedence ended"
+  }
+
+  if {[checkMarkerStatus "BusinessRuleHasPrecedence" "no"] !=0} {
+	puts "BusinessRuleHasPrecedence failed !"
+	append error_msg " BusinessRuleHasPrecedence"
+	incr GlobalRC
+  }
+
+  
+ # R2018x FD01 UnifiedChangeControlIRPCMigration
+   if {[checkMarkerStatus "UnifiedChangeControlIRPCMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of UnifiedChangeControlIRPCMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl UnifiedChangeControlIRPCMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: UnifiedChangeControlIRPCMigration ended"
+  }
+
+  if {[checkMarkerStatus "UnifiedChangeControlIRPCMigration" "no"] !=0} {
+	puts "UnifiedChangeControlIRPCMigration failed !"
+	append error_msg " UnifiedChangeControlIRPCMigration"
+	incr GlobalRC
+  }
+  
+ # R2018x FD01 UnifiedChangeControlERMigration
+  if {[checkMarkerStatus "UnifiedChangeControlERMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of UnifiedChangeControlERMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl UnifiedChangeControlERMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: UnifiedChangeControlERMigration ended"
+  }
+
+  if {[checkMarkerStatus "UnifiedChangeControlERMigration" "no"] !=0} {
+	puts "UnifiedChangeControlERMigration failed !"
+	append error_msg " UnifiedChangeControlERMigration"
+	incr GlobalRC
+  }
+  
+ # V6R2018x FD01 MigrateProxyOwnership
+ if {[checkMarkerStatus "MigrateProxyOwnership" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of MigrateProxyOwnership"
+	set sHostCompanyName [getHostCompanyName]
+	mql trigger off;
+	mql execute program VPLMPosMigrate "admin_platform" "NOTAPASSWORD" "VPLMAdmin.$sHostCompanyName.Default" -proxy-ownership;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: MigrateProxyOwnership ended"
+ }
+
+ if {[checkMarkerStatus "MigrateProxyOwnership" "no"] !=0} {
+	puts "MigrateProxyOwnership migration failed !"
+	append error_msg " MigrateProxyOwnership"
+	incr GlobalRC
+ }
+ 
+ # V6R2018x FD02 BaselineExplicitSOV migration
+ if {[checkMarkerStatus "BaselineExplicitSOVMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of BaselineExplicitSOV migration"
+	mql trigger off;
+	mql execute program migration_BaselineExplicitSOV ;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: BaselineExplicitSOV migration ended"
+ }
+
+ if {[checkMarkerStatus "BaselineExplicitSOVMigration" "no"] !=0} {
+	puts "BaselineExplicitSOV migration failed !"
+	append error_msg " BaselineExplicitSOV"
+	incr GlobalRC
+ }
+ 
+ # R2018x FD03 UnifiedChangeDependenciesMigration
+  if {[checkMarkerStatus "UnifiedChangeDependenciesMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of UnifiedChangeDependenciesMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl UnifiedChangeDependenciesMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: UnifiedChangeDependenciesMigration ended"
+  }
+
+  if {[checkMarkerStatus "UnifiedChangeDependenciesMigration" "no"] !=0} {
+	puts "UnifiedChangeDependenciesMigration failed !"
+	append error_msg " UnifiedChangeDependenciesMigration"
+	incr GlobalRC
+  }
+
+# V6R2019x GA pathvault migration
+if {[checkMarkerStatus "PathVaultMigration" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of PathVaultMigration"
+	mql trigger off;
+	mql exec program PathVaultMigration PathVaultMigration vplm vplm_archive ;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: PathVaultMigration ended"
+}
+
+if {[checkMarkerStatus "PathVaultMigration" "no"] !=0} {
+	puts "PathVaultMigration migration failed !"
+	append error_msg "PathVaultMigration"
+	incr GlobalRC
+}
+
+# V6R2019x GA VPLMCounter migration
+if {[checkMarkerStatus "VPLMCounterProjectOrganizationMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMCounterProjectOrganizationMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl VPLMCounterProjectOrganizationMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMCounterProjectOrganizationMigration ended"
+  }
+
+if {[checkMarkerStatus "VPLMCounterProjectOrganizationMigration" "no"] !=0} {
+	puts "VPLMCounterProjectOrganizationMigration failed !"
+	append error_msg " VPLMCounterProjectOrganizationMigration"
+	incr GlobalRC
+}
+
+# V6R2019x FD01 TagTrailingSpaceMigration
+if {[checkMarkerStatus "TagTrailingSpaceMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of TagTrailingSpaceMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl TagTrailingSpaceMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: TagTrailingSpaceMigration ended"
+  }
+
+if {[checkMarkerStatus "TagTrailingSpaceMigration" "no"] !=0} {
+	puts "TagTrailingSpaceMigration failed !"
+	append error_msg " TagTrailingSpaceMigration"
+	incr GlobalRC
+}
+
+# V6R2019x FD01 LoginTicketProjectOrganizationMigration migration
+if {[checkMarkerStatus "LoginTicketProjectOrganizationMigration" "true"] !=0} {
+	puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of LoginTicketProjectOrganizationMigration"
+	mql verbose on;
+	mql trigger off;
+	mql execute program DataMigration -impl LoginTicketProjectOrganizationMigration -nbThreads 5;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: LoginTicketProjectOrganizationMigration ended"
+  }
+
+if {[checkMarkerStatus "LoginTicketProjectOrganizationMigration" "no"] !=0} {
+	puts "LoginTicketProjectOrganizationMigration failed !"
+	append error_msg " LoginTicketProjectOrganizationMigration"
+	incr GlobalRC
+}
+
+# V6R2019x FD02 Support collaborative space title
+ if {[checkMarkerStatus "MigrateCollaborativeSpaceTitle" "true"] !=0} {
+    puts "*******************************************************************"
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of VPLMPosMigrateCollaborativeSpaceTitle"
+	mql trigger off;
+	mql execute program VPLMPosMigrateCollaborativeSpaceTitle;
+	mql trigger on;
+	puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: VPLMPosMigrateCollaborativeSpaceTitle ended"
+ }
+
+ if {[checkMarkerStatus "MigrateCollaborativeSpaceTitle" "no"] !=0} {
+	puts "VPLMMigrateCollaborativeSpaceTitle failed !"
+	append error_msg " VPLMMigrateCollaborativeSpaceTitle"
+	incr GlobalRC
+ }
+
+# V6R2014x Update TXO cache with new attributes - TO BE EXECUTED AT THE END OF EACH RELEASE starting with 14x
+	set currentVersion [getGAVersion]
+	set marker emxDictionaryAuthorUpdateProgram_$currentVersion
+
+	if {[checkMarkerStatus $marker "true"] !=0} {
+		puts "*******************************************************************"
+		puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: starting execution of emxDictionaryAuthorUpdateProgram"
+		mql trigger off;
+		mql exec program emxDictionaryAuthorUpdateProgram -version $currentVersion;
+		mql trigger on;
+		puts "[clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: Data Migration: emxDictionaryAuthorUpdateProgram ended"
+	}
+
+	if {[checkMarkerStatus $marker "no"] !=0} {
+		puts "emxDictionaryAuthorUpdateProgram failed !"
+		append error_msg " emxDictionaryAuthorUpdateProgram"
+		incr GlobalRC
+	}
+
+# Summary
+if {$GlobalRC != 0} {
+    puts ""
+	puts ""
+	puts "*******************************************************************"
+	puts "          VPLM Data Migration failed with $GlobalRC error(s)"
+	puts " Run MQL>exec prog VPLMDataMigration; again to get more information"
+	puts "*******************************************************************"
+	puts ""	
+	return -code error "\nVPLM Data Migration failed with $GlobalRC error(s).\nPlease consult installVPMMultiDiscipline<version>.log for more details.\nProcedure(s) in error: $error_msg"
+
+} else {
+    puts ""
+	puts ""
+	puts "*******************************************************************"
+	puts "               VPLM Data Migration ended successfully"
+	puts "*******************************************************************"
+	puts ""
+	exit 0
+}
+}

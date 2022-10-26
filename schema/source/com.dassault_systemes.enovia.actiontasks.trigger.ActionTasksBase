@@ -1,0 +1,325 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.actiontasks.ActionTasksException;
+import com.dassault_systemes.enovia.actiontasks.Helper;
+import com.dassault_systemes.enovia.actiontasks.QueryUtil;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ * Trigger Service JPO for managing Action Tasks related triggers
+ * 
+ * @author V8L
+ * 
+ */
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws ActionTasksException {
+		super();
+	}
+
+	public int setUnBlockingRouteForActionTasks(Context context, String[] args) throws ActionTasksException {
+		try {
+			final String SYMBOLIC_BUSINESS_INTERFACE = "interface_ACTActionTaskInterface";
+			final String ATTRIBUTE_ROUTE_BASE_PURPOSE = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+			final String BUSINESS_INTERFACE = PropertyUtil.getSchemaProperty(context, SYMBOLIC_BUSINESS_INTERFACE);
+			String actionTaskId = args[0];
+			DomainObject actionTaskdOmObj = DomainObject.newInstance(context, actionTaskId);
+			Map<String, String> actionTskM = actionTaskdOmObj.getInfo(context,
+					Helper.stringList(DomainObject.SELECT_CURRENT,
+							DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TASK_REQUIREMENT),
+							"from[Route Task].to.id", "from[Route Task].to.to[Object Route].id",
+							"from[Route Task].to.interface",DomainObject.getAttributeSelect(ATTRIBUTE_ROUTE_BASE_PURPOSE)));
+			String strObjectInterface = actionTskM.get("from[Route Task].to.interface");
+			String strRouteBasePurpose = actionTskM.get(DomainObject.getAttributeSelect(ATTRIBUTE_ROUTE_BASE_PURPOSE));
+			if (BUSINESS_INTERFACE.equalsIgnoreCase(strObjectInterface)||strRouteBasePurpose.equalsIgnoreCase("Review")) {
+				String objectRouteRelId = actionTskM.get("from[Route Task].to.to[Object Route].id");
+				DomainRelationship relRoute = new DomainRelationship(objectRouteRelId);
+				List<Map<String, String>> actionTaskMap = (new Route(actionTskM.get("from[Route Task].to.id")))
+						.getRouteTasks(context,
+								Helper.stringList(DomainObject.SELECT_CURRENT,
+										DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TASK_REQUIREMENT)),
+								null,
+								(new StringBuffer()).append("(")
+										.append(DomainObject
+												.getAttributeSelect(DomainConstants.ATTRIBUTE_TASK_REQUIREMENT))
+										.append("==Mandatory) && (current!=Complete)").toString(),
+								true);
+
+				List<Map<String, String>> allActionTaskMapList = (new Route(actionTskM.get("from[Route Task].to.id")))
+						.getRouteTasks(context, Helper.stringList(DomainObject.SELECT_CURRENT), null, null, true);
+				boolean allTasksCompleted = true;
+				for (Map<String, String> actionTask : allActionTaskMapList) {
+					String state = (String) actionTask.get(DomainObject.SELECT_CURRENT);
+
+					if (!state.equalsIgnoreCase("Complete")) {
+						allTasksCompleted = false;
+					}
+				}
+
+				if (!(actionTaskMap.size() >= 1) && !allTasksCompleted) {
+
+					// if (!(actionTaskMap.size() >= 1)) {
+					Helper.runWithSuperUser(context, new Helper.Callable() {
+						@Override
+						public Object run(Context context, Object... args) throws ActionTasksException {
+							final DomainRelationship REL_ROUTE = (DomainRelationship) args[0];
+							try {
+								REL_ROUTE.setAttributeValue(context, DomainConstants.ATTRIBUTE_ROUTE_BASE_STATE,
+										"Ad Hoc");
+								return null;
+							} catch (final FrameworkException e) {
+								throw new ActionTasksException(e);
+							}
+						}
+					}, relRoute);
+				}
+			}
+			return 0;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public int blockAssociatedObject(Context context, String[] args) throws ActionTasksException {
+
+		try {
+			Helper.runWithSuperUser(context, new Helper.Callable() {
+				@Override
+				public Object run(Context context, Object... args) throws ActionTasksException {
+					try {
+						final String SYMBOLIC_BUSINESS_INTERFACE = "interface_ACTActionTaskInterface";
+						final String BUSINESS_INTERFACE = PropertyUtil.getSchemaProperty(context,
+								SYMBOLIC_BUSINESS_INTERFACE);
+						final String ATTRIBUTE_ROUTE_BASE_PURPOSE = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+						String associatedObjId = (String) args[0];
+						String associatedObjState = (String) args[1];
+
+						List<Map<?, ?>> atMap = QueryUtil.getInfo(context, new String[] { associatedObjId },
+								Helper.stringList(DomainObject.SELECT_POLICY));
+						String stateName = getBlockingStateName(context,
+								DomainObject.newInstance(context, associatedObjId));
+						String blockingStateName = FrameworkUtil.lookupStateName(context,
+								(String) atMap.get(0).get(DomainObject.SELECT_POLICY), stateName);
+						if (associatedObjState.equalsIgnoreCase(blockingStateName)) {
+							StringBuffer strBusWhere = new StringBuffer();
+							strBusWhere.append("( interface ").append("==\"").append(BUSINESS_INTERFACE).append("\" || ")
+									.append(DomainObject.getAttributeSelect(ATTRIBUTE_ROUTE_BASE_PURPOSE) + " == Review")
+									.append(" ) && current!=Complete");
+
+							List<Map<?, ?>> connectedRouteMapL = QueryUtil.getRelatedObjects(context,
+									DomainObject.newInstance(context, associatedObjId),
+									DomainObject.RELATIONSHIP_OBJECT_ROUTE, DomainObject.TYPE_ROUTE,
+									Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT,
+											DomainObject.SELECT_POLICY),
+									Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0,
+									strBusWhere.toString(), new String());
+
+							if (connectedRouteMapL.size() > 0) {
+								Map<String, Object> routeMap = (Map<String, Object>) connectedRouteMapL.get(0);
+								List<Map<String, String>> actionTaskMap = (new Route(
+										(String) routeMap.get(DomainObject.SELECT_ID)))
+												.getRouteTasks(context,
+														Helper.stringList(DomainObject.SELECT_CURRENT,
+																DomainObject.getAttributeSelect(
+																		DomainConstants.ATTRIBUTE_TASK_REQUIREMENT)),
+														null,
+														(new StringBuffer()).append("(")
+																.append(DomainObject.getAttributeSelect(
+																		DomainConstants.ATTRIBUTE_TASK_REQUIREMENT))
+																.append("==Mandatory) && (current!=Complete)")
+																.toString(),
+														true);
+								if (actionTaskMap.size() >= 1) {
+									throw new ActionTasksException(Helper.getI18NString(context,
+											"ActionTasks.PromoteAssociatedObjectToNextState.Error"));
+								}
+							}
+						}
+						return null;
+					} catch (final Exception e) {
+						throw new ActionTasksException(e);
+					}
+				}
+			}, args[0], args[1]);
+			return 0;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	private static String getBlockingStateName(Context context, DomainObject domObj) throws ActionTasksException {
+		try {
+			Map<String, String> objMap = domObj.getInfo(context,
+					Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_TYPE, DomainObject.SELECT_POLICY));
+			String strType = objMap.get(DomainObject.SELECT_TYPE);
+			String strPolicy = objMap.get(DomainObject.SELECT_POLICY);
+			String selType = FrameworkUtil.getAliasForAdmin(context, "Type", strType, true);
+			String selPolicy = FrameworkUtil.getAliasForAdmin(context, "Policy", strPolicy, true);
+			String propertyFileKey = Helper.getProperty(context, "ENOActionTasks.Routes.BlockingState");
+			propertyFileKey = propertyFileKey.trim();
+			List<String> list1 = FrameworkUtil.split(propertyFileKey, ",");
+			for (String key : list1) {
+				List<String> list2 = FrameworkUtil.split(key, "|");
+				if (list2.get(0).toString().equalsIgnoreCase(selType)) {
+					List<String> list3 = FrameworkUtil.split(list2.get(1), "@");
+					if (list3.get(0).toString().equalsIgnoreCase(selPolicy)) {
+						return list3.get(1);
+					}
+				}
+			}
+			return null;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public int grantAccessToInboxTasksUsers(Context context, String[] args) throws ActionTasksException {
+		try {
+			String strRouteId = args[0];
+			String strTaskUserName = args[1];
+			DomainObject dObjRoute = DomainObject.newInstance(context, strRouteId);
+			final String ATTRIBUTE_ROUTE_BASE_PURPOSE = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+			final String SYMBOLIC_BUSINESS_INTERFACE = "interface_ACTActionTaskInterface";
+			String strInterfaceACTActionTaskInterface = PropertyUtil.getSchemaProperty(context, SYMBOLIC_BUSINESS_INTERFACE);
+			String checkwhetherActionTask = MqlUtil.mqlCommand(context, "print bus $1 select interface $2 dump", dObjRoute.getId(context),
+					DomainObject.getAttributeSelect(ATTRIBUTE_ROUTE_BASE_PURPOSE));
+			if(Helper.isNullOrEmpty(checkwhetherActionTask))
+			{
+				return 0;
+			}
+			String [] actionTaskArray=checkwhetherActionTask.split(",");
+			String strConnectedInterface=actionTaskArray[0];
+			String routebasePurpose=actionTaskArray[1];
+			boolean isTypeRoute = dObjRoute.isKindOf(context, DomainObject.TYPE_ROUTE);
+			if (isTypeRoute && (routebasePurpose.equals("Review")||strConnectedInterface.equals(strInterfaceACTActionTaskInterface))) {
+				String connectedObjectId = dObjRoute.getInfo(context,
+						"to[" + DomainConstants.RELATIONSHIP_OBJECT_ROUTE + "].from.id");
+				boolean isRouteConnectedToOtherObject = Helper.isNullOrEmpty(connectedObjectId);
+				if (!isRouteConnectedToOtherObject) {
+					StringList sList = new StringList();
+					sList.add(DomainConstants.SELECT_ID);
+					StringBuilder stringBuilder = new StringBuilder();
+					stringBuilder.append("from[").append(DomainConstants.RELATIONSHIP_PROJECT_TASK)
+							.append("].to.name == '").append(strTaskUserName).append("' && from[")
+							.append(DomainConstants.RELATIONSHIP_ROUTE_TASK).append("].to.id == ").append(strRouteId);
+					List<Map<?, ?>> listInboxTasks = QueryUtil.findObjects(context,
+							DomainSymbolicConstants.SYMBOLIC_type_InboxTask, stringBuilder.toString(), sList);
+					if (listInboxTasks.size() <= 0) {
+						String access = getAccessValue(context, DomainObject.newInstance(context, connectedObjectId),
+								args);
+						if (Helper.isNullOrEmpty(access)) {
+							access = "read,show";
+						}
+						Helper.grantAccess(context, connectedObjectId, strTaskUserName, "", access);
+					}
+				}
+			}
+			return 0;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	private static String getAccessValue(Context context, DomainObject domObj, String[] args)
+			throws ActionTasksException {
+		try {
+			Map<String, String> objMap = domObj.getInfo(context,
+					Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_TYPE));
+			String strType = objMap.get(DomainObject.SELECT_TYPE);
+			String selType = FrameworkUtil.getAliasForAdmin(context, "Type", strType, true);
+			String propertyFileKey = Helper.getProperty(context, "ENOActionTasks.Routes.Content.AccessGrant.Access");
+			propertyFileKey = propertyFileKey.trim();
+			List<String> list1 = FrameworkUtil.split(propertyFileKey, ";");
+			for (String key : list1) {
+				List<String> list2 = FrameworkUtil.split(key, "|");
+				if (list2.get(0).toString().trim().equalsIgnoreCase(selType.trim())) {
+					List<String> list3 = FrameworkUtil.split(list2.get(1), ":");
+					if (list3.get(0).equalsIgnoreCase("access")) {
+						return list3.get(1);
+					}
+					String jpo = list3.get(0);
+					String method = list3.get(1);
+					return JPO.invoke(context, jpo, null, method, args, String.class);
+				}
+			}
+			return null;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public int revokeAccessFromActionTasksUsers(Context context, String[] args) throws ActionTasksException {
+
+		try {
+			String strRouteId = args[0];
+			String strTaskUserName = args[1];
+			String strConnObjectId = DomainObject.EMPTY_STRING;
+			String strType = DomainObject.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(args[1])) {
+				List<Map<?, ?>> infoMap = QueryUtil.getInfo(context, new String[] { strRouteId },
+						Helper.stringList("to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].from.id",
+								"to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].from.type"));
+				Object connObjectId = (Object) infoMap.get(0)
+						.get("to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].from.id");
+				if (connObjectId instanceof String) {
+					strConnObjectId = (String) connObjectId;
+				} else {
+					StringList saConnectionId = (StringList) connObjectId;
+					if (!Helper.isNullOrEmpty(saConnectionId))
+						strConnObjectId = (String) saConnectionId.get(0);
+				}
+				Object saType = (Object) infoMap.get(0)
+						.get("to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].from.type");
+				if (saType instanceof String) {
+					strType = (String) saType;
+				} else {
+					StringList sType = (StringList) saType;
+					if (!Helper.isNullOrEmpty(sType))
+						strType = (String) sType.get(0);
+				}
+				String selType = FrameworkUtil.getAliasForAdmin(context, "Type", strType, true);
+				String propertyFileKey = Helper.getProperty(context,
+						"ENOActionTasks.Routes.Content.AccessRevoke.Access");
+				List<String> typeL = FrameworkUtil.split(propertyFileKey, ",");
+				if (typeL.contains(selType)) {
+					String strWhereExpr = "from[" + DomainConstants.RELATIONSHIP_PROJECT_TASK + "].to.name == '"
+							+ strTaskUserName + "' && from[" + DomainConstants.RELATIONSHIP_ROUTE_TASK + "].to.id == "
+							+ strRouteId;
+					List<Map<?, ?>> listInboxTasks = QueryUtil.findObjects(context,
+							DomainSymbolicConstants.SYMBOLIC_type_InboxTask, strWhereExpr,
+							Helper.stringList(DomainConstants.SELECT_ID));
+
+					if (listInboxTasks.size() <= 0) {
+						Helper.revokeAccesses(context, DomainObject.newInstance(context, strConnObjectId),
+								strTaskUserName);
+					}
+				}
+			}
+			return 0;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+}
+

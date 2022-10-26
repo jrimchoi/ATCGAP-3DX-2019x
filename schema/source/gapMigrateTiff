@@ -1,0 +1,77 @@
+import com.designrule.drv6tools.drToolsRunOnObjects;
+import com.designrule.drv6tools.drlToolsEnoviaObject;
+import com.designrule.drv6tools.activities.drLookupValuesActivity;
+import com.designrule.drv6tools.common.drBusinessObject;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+
+/**
+ * JPO to process Tiff files
+ * @author ENGMASA
+ *
+ */
+public class ${CLASSNAME} {
+	/**
+	 * this method creates version document for Document
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static int createVersionDocument(Context context, String args[]) throws Exception
+	{
+		String strDoId = args[0];
+		String strFileName = args[1];
+		String strOwner = args[2];
+		String strProject = args[3];
+		CommonDocument masterObject = (CommonDocument)DomainObject.newInstance(context, CommonDocument.TYPE_DOCUMENTS);
+	    masterObject.setId(strDoId);
+	    String strVersionId = masterObject.createVersion(context, strFileName, strFileName, null);		
+	    // update version id
+	    if (UIUtil.isNotNullAndNotEmpty(strVersionId))
+	    {
+	    	StringBuffer sbMQL = new StringBuffer();
+	    	sbMQL.append("mod bus ")
+	    		 .append(strVersionId)
+	    		 .append(" owner \"")
+	    		 .append(strOwner)
+	    		 .append("\" organization \"GAP\" project \"")
+	    		 .append(strProject)
+	    		 .append("\" gapMigratedObject \"Yes\"");
+	    	// update mql
+	    	 MqlUtil.mqlCommand(context, sbMQL.toString());
+	    }
+		return 0;
+	}
+
+	public static void mxMain(Context context,String[] args) {System.out.println("1......");
+		String args1[] = new String[] {"7124.52964.41585.444","G-6970557743_0.pdf"};
+		//args1[0] ="7124.52964.41585.444";
+		//args1[1]= "G-6970557743_0.pdf";
+		try {
+			String objectId = "65080.62902.24416.43941";
+			${CLASS:gapDirectView} gapDirectView = new ${CLASS:gapDirectView}(context, null);
+			drlToolsEnoviaObject toolsEnoviaObject = new drlToolsEnoviaObject(context);
+			toolsEnoviaObject.setLookupValue("RunImportXML", "TRUE");
+			drLookupValuesActivity activity = gapDirectView.getLookupValuesActivity(toolsEnoviaObject);
+			if(activity != null){
+			System.out.println("DEBUG ::: processMigratedObjects, Processing object : "+objectId);
+			drBusinessObject busObj = new drBusinessObject(toolsEnoviaObject, objectId);
+			drToolsRunOnObjects runOnObjects = new drToolsRunOnObjects(busObj);
+			activity.runActions(runOnObjects);
+			System.out.println("DEBUG ::: processMigratedObjects, Processed object : "+objectId);
+			busObj.setValue(gapDirectView.ATTRIBUTE_GAP_DIRECT_VIEW_MIGRATION, "Yes");
+			busObj.Update();
+			}
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+

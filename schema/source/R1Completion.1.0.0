@@ -1,0 +1,73 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"}, {name:"SEL_PRD", type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                    [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var CompletionServicesConstants = Java.type("com.dassault_systemes.completion.service.CompletionServicesConstants");
+var FilterServices = Java.type("com.dassault_systemes.completion.service.FilterServices");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var System = Java.type("java.lang.System");
+var navSets = [PRD, PRCS];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+	
+	var R1CompletionID = "R1";
+	
+	var UserDefCompletionStop = System.getenv().get("UserDefCompletionStop");
+	var completionID="";
+	var primitiveName="";
+	if (UserDefCompletionStop != null)
+	{
+		var UserDefCompletionStopTab = UserDefCompletionStop.split("|");
+		completionID = UserDefCompletionStopTab[0];
+		primitiveName = UserDefCompletionStopTab[1];
+	}
+	
+	while (true)
+	{
+		///////////////////////////////////////
+		// 1- PRD = PRD + FA_Part->Fix C2(SEL_PRD) 
+		//	  PRD = PRD + FA_Fix->Part(PRD)
+		///////////////////////////////////////
+		var fastenerAnalysisTimer = new DebugTimer(context, 0, "PRD = PRD + FA_Part->Fix C2(SEL_PRD) & PRD = PRD + FA_Fix->Part(PRD)", true);
+		var resFastenerAnalysis = NavigationPrimitives.fastenersAnalysisBothSides(context, SEL_PRD);
+		PRD = PRD.merge(resFastenerAnalysis);
+		fastenerAnalysisTimer.complete();
+		if (completionID.equalsIgnoreCase(R1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.FastenerAnalysisPrimitiveName)) break; 
+
+		///////////////////////////////////////
+		// 2- PRCS = PRCS + SmartCompletionProduct->Process(PRD)
+		///////////////////////////////////////
+		var navMode = [true, true, true]; // [Ref/Ref, Ref/Occ-Ref, Inst/Occ]
+		var scPrdPrcsTimer = new DebugTimer(context, 0, "PRCS = PRCS + SmartCompletionProduct->Process(PRD)", true);
+		var processFromSmartCompletion = NavigationPrimitives.navigateFromProductToProcess(context, PRD, navMode);
+		PRCS = PRCS.merge(processFromSmartCompletion);
+		scPrdPrcsTimer.complete();
+		if (completionID.equalsIgnoreCase(R1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionProductProcessPrimitiveName)) break; 
+
+		///////////////////////////////////////
+		// 3- PRCS = SELECT IN (PRCS) WHERE (attribute[PLMEntity.V_discipline] ~~ 'Fasten')
+		///////////////////////////////////////
+		var filterTimer = new DebugTimer(context, 0, "PRCS = SELECT IN (PRCS) WHERE (attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_DISCIPLINE+"] ~~ 'Fasten')", true);
+		var whereClause = "attribute["+CompletionServicesConstants.BO_ATTRIBUTE_V_DISCIPLINE+"] ~~ 'Fasten'";
+		PRCS = FilterServices.filterOnLeaves( context, PRCS, whereClause);
+		filterTimer.complete();
+		break;
+	}
+	
+	///////////////////////////////////////
+	// 4- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

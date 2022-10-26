@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ds:services xmlns:ds="http://www.3ds.com/enovia/e6wv2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.3ds.com/enovia/e6wv2 servicesv2.xsd">
+
+  <ds:service name="DPM_WIDGET_CONSTANTS">
+    <ds:ref-subservice name="E6W_WIDGET_CONSTANTS"/>
+    <ds:field><ds:label text="emxProgramCentral.GanttView.SearchForProject" registeredSuite="ProgramCentral"/></ds:field>
+    <ds:field><ds:label text="emxProgramCentral.GanttView.NotProjectSpace" registeredSuite="ProgramCentral"/></ds:field>
+    <ds:field><ds:label text="emxProgramCentral.GanttView.ClearProject" registeredSuite="ProgramCentral"/></ds:field>
+  </ds:service>
+
+    <ds:service name="dpm.projects">
+
+        <ds:license products="ENO_PGE_TP"/>
+
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjects" returnedData="idsAndData"/>
+            <ds:updatejpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="updateProjectSpace" localInvokation="true" />
+        </ds:data>
+
+        <ds:ref-subservice name="dpm.basicFields"  includeByDefault="yes"/>
+        <ds:ref-subservice name="dpm.accessFields" includeByDefault="yes"/>
+        <ds:ref-subservice name="dpm.dateFields" includeByDefault="yes"/>
+
+		<!-- For Gantt Chart Infra :Start -->
+		
+		<ds:field name="kindofBaseline" includeByDefault="no"> <ds:selectable 	expression="type.kindof[Project Baseline]" 									type="bus"/></ds:field>
+		<ds:field name="kindofExperiment" includeByDefault="no"> 		<ds:selectable 	expression="type.kindof[Experiment]" 										type="bus"/></ds:field>
+		<ds:field name="kindofTemplate" includeByDefault="no"> <ds:selectable 	expression="type.kindof[Project Template]" 									type="bus"/></ds:field>		
+		<ds:field name="routeId" includeByDefault="no"> 		<ds:selectable 	expression="from[Object Route].to.id" 										type="bus"/></ds:field>		
+		<ds:field name="columns" includeByDefault="no" description="Gantt Chart columns">
+            <ds:selectable expression="id" type="bus"/>
+            <ds:fieldjpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getGanttColumns" localInvokation="true"/>
+        </ds:field>
+
+
+        <ds:field name="percentComplete"             description="Percentage complete of project" example="50">   <ds:selectable expression="attribute[Percent Complete]" type="bus"  createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedDurationInputValue" description=""><ds:selectable expression="attribute[Task Estimated Duration].inputvalue" type="bus" autosave="true"  createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedDurationInputUnit"  description=""><ds:selectable expression="attribute[Task Estimated Duration].inputunit" type="bus"  createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedDuration"           description=""><ds:selectable expression="attribute[Task Estimated Duration]" type="bus" autosave="true"  createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="actualDuration"             description="">    <ds:selectable expression="attribute[Task Actual Duration]" type="bus"  createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="constraintType"  includeByDefault="no" description="Reflects ASAP or ALAP depending on schedule from.">
+            <ds:selectable expression="attribute[Schedule From]" type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/>
+            <ds:fieldjpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="convertScheduleFromToConstraint" localInvokation="true"/>
+        </ds:field>
+        <ds:field name="constraintDate"             description="">    <ds:selectable expression="attribute[Task Constraint Date]" type="bus" format="isodate" autosave="true"  createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="defaultConstraintType"      description="">    <ds:selectable expression="attribute[Default Constraint Type]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="scheduleFrom"               description="">    <ds:selectable expression="attribute[Schedule From]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="scheduleBasedOn"            description="">    <ds:selectable expression="attribute[Schedule Based On]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="projectVisibility"          description="A non-controlling identification of the desired Project access.">    <ds:selectable expression="attribute[Project Visibility]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="currency" includeByDefault="no" description=""> <ds:selectable expression="attribute[Currency]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+
+        <ds:field name="notes"                      description=""><ds:selectable expression="attribute[Notes]" type="bus" autosave="true" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="PALId"                      description=" The Project Access List object (used for some navigation)" includeByDefault="no"><ds:selectable expression="to[Project Access List].from.id" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="objectId"                   description="" includeByDefault="no"><ds:selectable expression="id" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+
+	
+		<ds:field name="sequenceOrder" includeByDefault="no" description="the task sequence id within a project.">
+            <ds:selectable type="keyrel" createOperation="yes" modifyOperation="yes" readOperation="yes" />
+			<ds:sort type="integer" direction="ascending" order="1" />
+			<ds:fieldjpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getSequenceOrder" localInvokation="true">
+					<ds:arg arg-name="taskWBS" arg-value="taskWBS"/>
+					<ds:arg arg-name="palIdField" arg-value="PALId"/>
+			</ds:fieldjpo>
+        </ds:field>
+		
+		
+
+        <ds:field name="project-custom-fields">
+            <ds:customAttributes busTypes="Project Management"/>
+        </ds:field>
+        <!--
+        <ds:ref-subservice name="dpm.projects-custom-fields"/>
+        -->
+
+        <!-- related data -->
+
+        <ds:ref-subservice name="ownerInfo"       includeByDefault="no"/>
+        <ds:ref-subservice name="originatorInfo"  includeByDefault="no"/>
+        <ds:ref-subservice name="tasks"           includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Subtask" getFrom="true" recurseLevels="{level}"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.tskv2.TaskService" function="updateTasks" processMultiple="true"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="baselines" includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Project Baseline" getFrom="true" />
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="assessments" includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Project Assessment" getFrom="true" />
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="members" includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Member*" getFrom="true"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="updateMembers" />
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="risks" includeByDefault="no">
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="opportunities" includeByDefault="no">
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="allrisks" includeByDefault="no">
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="allopportunities" includeByDefault="no">
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="milestones" includeByDefault="no">
+        </ds:ref-subservice>
+
+
+        <ds:ref-subservice name="issues" includeByDefault="no">
+            <ds:data>
+               <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectIssues" returnedData="idsAndData"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:subservice name="programId" includeByDefault="never">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProgramProjects" returnedData="idsAndData"/>
+            </ds:data>
+        </ds:subservice>
+
+        <ds:ref-subservice name="folders" referenceName="e6w.workspaceFolders" includeByDefault="no">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.workspace.WorkspaceService" function="getWorkspaceFolders" returnedData="idsAndData" />
+                <ds:updatejpo classname="com.dassault_systemes.enovia.workspace.WorkspaceService" function="updateWorkspaceFolders" processMultiple="true"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="folderId" referenceName="e6w.workspaceFolders" includeByDefault="never">
+            <ds:data>
+                <ds:expand relationshipPattern="Sub Vaults" getFrom="true" recurseLevels="{foldersLevel}" preserveRoot="true"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:ref-subservice name="calendar" referenceName="tsk.calendar" includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Default Calendar" getFrom="true"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.tskv2.TaskService" function="updateCalendar" />
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:subservice name="performRollup" includeByDefault="never">
+            <ds:data>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="performRollup" />
+            </ds:data>
+        </ds:subservice>
+    </ds:service>
+
+<!-- ****************   OPPORTUNITIES  ************** -->
+
+    <ds:service name="allopportunities">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectOpportunitiesFromPAL" returnedData="idsAndData"/>
+        </ds:data>
+        <ds:field name="affectedItemType" description="">      <ds:selectable expression="from[Risk Item].to.type"    type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="affectedItemName" description="">      <ds:selectable expression="from[Risk Item].to.name"    type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="affectedItemId" description="">        <ds:selectable expression="from[Risk Item].to.physicalid"        type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:ref-subservice name="opportunitiesDetail" includeByDefault="yes"/>
+    </ds:service>
+
+    <ds:service name="opportunities">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectOpportunities" returnedData="idsAndData"/>
+        </ds:data>
+        <ds:ref-subservice name="opportunitiesDetail" includeByDefault="yes"/>
+    </ds:service>
+
+    <ds:service name="opportunitiesDetail">
+        <ds:ref-subservice name="dpm.basicFields" includeByDefault="yes"/>
+        <ds:ref-subservice name="dpm.dateFields2" includeByDefault="yes"/>
+        <ds:field name="opportunityType"       description="The classification of the Opportunity">  <ds:selectable expression="attribute[Opportunity Type]"        type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="opportunityVisibility" description="">                                                                           <ds:selectable expression="attribute[Risk Visibility]"  type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+
+        <!-- Field grouping included automatically - includeByDefault not yet enforced for Fields -->
+        <ds:subservice name="opportunitydetail"  includeByDefault="no">
+              <ds:field name="opportunityImpact"      description="The estimated benefit of the Opportunity.">             <ds:selectable expression="attribute[Opportunity Impact]"      type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+              <ds:field name="opportunityProbability" description="The estimated probability that the Opportunity will occur."> <ds:selectable expression="attribute[Opportunity Probability]" type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+              <ds:field name="opportunityOpnValue"    description="The relative rating of the Opportunity from the product of the  impact and probability.">                          <ds:selectable expression="attribute[Opportunity RPN Value]"   type="bus" createOperation="no"  modifyOperation="no" readOperation="yes"/></ds:field>
+         </ds:subservice>
+
+        <!-- related data -->
+        <ds:ref-subservice name="assignees"       includeByDefault="no"/>
+        <ds:ref-subservice name="ownerInfo"       includeByDefault="no"/>
+        <ds:ref-subservice name="originatorInfo"  includeByDefault="no"/>
+        <ds:ref-subservice name="opn"             includeByDefault="no"/>
+    </ds:service>
+
+    <ds:service name="opn" includeByDefault="no">
+        <ds:data>
+            <ds:expand relationshipPattern="Opportunity RPN" getFrom="true" recurseLevels="1" />
+        </ds:data>
+       <ds:field name="opnImpact"        description="(Assessment Instance) The estimated benefit of the Opportunity">                      <ds:selectable expression="attribute[Opportunity Impact]"      type="rel" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="opnProbability"   description="(Assessment Instance) The estimated probability that the Opportunity will occur.">         <ds:selectable expression="attribute[Opportunity Probability]" type="rel" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="opnValue"         description="(Assessment Instance) The relative rating of the Opportunity from the product of the  impact and probability."><ds:selectable expression="attribute[Opportunity RPN Value]"   type="rel" createOperation="no"  modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="opnStatus"        description="(Assessment Instance) The current status of the rating or reassessment">                                       <ds:selectable expression="attribute[Status]"                  type="rel" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+       <ds:field name="opnEffectiveDate" description="(Assessment Instance) The date this it Opportunity assessment becomes effective">                              <ds:selectable expression="attribute[Effective Date]"          type="rel" format="utc"  createOperation="yes" modifyOperation="yes" readOperation="yes"/>
+           <ds:sort name="latest" sortable="true" type="date" direction="descending" order="1" />
+       </ds:field>
+    </ds:service>
+
+
+<!-- ****************   RISKS  ************** -->
+    <ds:service name="allrisks">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectRisksFromPAL" returnedData="idsAndData"/>
+        </ds:data>
+        <ds:field name="affectedItemType" description="">      <ds:selectable expression="from[Risk Item].to.type"    type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="affectedItemName" description="">      <ds:selectable expression="from[Risk Item].to.name"    type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="affectedItemId" description="">        <ds:selectable expression="from[Risk Item].to.physicalid"        type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:ref-subservice name="risksDetail" includeByDefault="yes"/>
+    </ds:service>
+
+    <ds:service name="risks">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectRisks" returnedData="idsAndData"/>
+        </ds:data>
+        <ds:ref-subservice name="risksDetail" includeByDefault="yes"/>
+   </ds:service>
+
+    <ds:service name="risksDetail">
+
+        <ds:ref-subservice name="dpm.basicFields" includeByDefault="yes"/>
+        <ds:ref-subservice name="dpm.dateFields2" includeByDefault="yes"/>
+        <ds:field name="riskType"               description="The classification of the risk">                                           <ds:selectable expression="attribute[Risk Type]"        type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="riskVisibility"         description="The assignment of Public or Restricted visibility of the Risk information"><ds:selectable expression="attribute[Risk Visibility]"  type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+
+        <!-- Field grouping included automatically - includeByDefault not yet enforced for Fields -->
+       <ds:subservice name="riskdetail"  includeByDefault="no">
+              <ds:field name="riskImpact"       description="The estimated negative effect the Risk will have.">               <ds:selectable expression="attribute[Risk Impact]"         type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+              <ds:field name="riskProbability"  description="The relative probability that the Risk will occur.">              <ds:selectable expression="attribute[Risk Probability]"    type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+              <ds:field name="riskFactor"       description="The relative rating of the Risk from the product of the  impact and probability."><ds:selectable expression="attribute[Risk Factor]"         type="bus" createOperation="no"  modifyOperation="no" readOperation="yes"/></ds:field>
+              <ds:field name="riskResolution"   description="The status or assessment of the Risk resolution.">                   <ds:selectable expression="attribute[ResolutionStatement]" type="bus" createOperation="no"  modifyOperation="no" readOperation="no"/></ds:field>
+              <ds:field name="riskAbatement"    description="The actions being planned or taken to mitigate or resolve the Risk."><ds:selectable expression="attribute[Abatement Plan]"      type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+              <ds:field name="measureOfSuccess" description="The criteria to be used used to evaluate the Risk resolution.">      <ds:selectable expression="attribute[Measure of Success]"  type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+              <ds:field name="riskCategory"     description="">                                                                   <ds:selectable expression="attribute[Risk Category]"       type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+       </ds:subservice>
+
+        <!-- related data -->
+       <ds:ref-subservice name="assignees"       includeByDefault="no"/>
+       <ds:ref-subservice name="ownerInfo"       includeByDefault="no"/>
+       <ds:ref-subservice name="originatorInfo"  includeByDefault="no"/>
+       <ds:ref-subservice name="rpn"             includeByDefault="no"/>
+    </ds:service>
+
+    <ds:service name="rpn" includeByDefault="no">
+        <ds:data>
+            <ds:expand relationshipPattern="Risk RPN" getFrom="true" recurseLevels="1" />
+        </ds:data>
+       <ds:field name="rpnImpact"        description="(Assessment Instance) The estimated negative effect the Risk will have.">                <ds:selectable expression="attribute[Risk Impact]"      type="rel" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="rpnProbability"   description="(Assessment Instance) The relative probability that the Risk will occur.">               <ds:selectable expression="attribute[Risk Probability]" type="rel" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="rpnValue"         description="(Assessment Instance) The relative rating of the Risk from the product of the  impact and probability."> <ds:selectable expression="attribute[Risk RPN Value]"   type="rel" createOperation="no"  modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="rpnStatus"        description="(Assessment Instance) The current status of the rating or reassessment.">                                 <ds:selectable expression="attribute[Status]"           type="rel" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+       <ds:field name="rpnEffectiveDate" description="(Assessment Instance) The date this it Opportunity assessment becomes effective.">                        <ds:selectable expression="attribute[Effective Date]"   type="rel" format="utc"  createOperation="yes" modifyOperation="no" readOperation="yes"/>
+           <ds:sort name="latest" sortable="true" type="date" direction="descending" order="1" />
+       </ds:field>
+    </ds:service>
+
+<!-- ****************   ISSUES  ************** -->
+    <ds:service name="issues">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectIssues" returnedData="idsAndData"/>
+            <ds:updatejpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="updateProjectIssues"/>
+        </ds:data>
+
+        <ds:ref-subservice name="dpm.basicFields"   includeByDefault="yes"/>
+        <ds:ref-subservice name="dpm.dateFields2"    includeByDefault="yes"/>
+        <ds:field name="problemType"             description="Classification of problem or issue source.">     <ds:selectable expression="attribute[Problem Type]"        type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="priority"                description="Relative severity of the issue.">        <ds:selectable expression="attribute[Priority]"            type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+
+        <!-- Field grouping included automatically - includeByDefault not yet enforced for Fields -->
+        <ds:subservice name="issuedetail"          includeByDefault="no">
+              <ds:field name="priorityInternal" description="Internal priority ranking.">                    <ds:selectable expression="attribute[Internal Priority]"   type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+              <ds:field name="actionTaken"      description="Description of the action taken.">              <ds:selectable expression="attribute[Action Taken]"        type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+              <ds:field name="resolution"       description="Description of the resolution status.">         <ds:selectable expression="attribute[ResolutionStatement]" type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+              <ds:field name="steps"            description="Description of the steps needed to reproduce."> <ds:selectable expression="attribute[Steps To Reproduce]"  type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        </ds:subservice>
+
+        <!-- related data -->
+        <ds:ref-subservice name="dpm.accessFields"  includeByDefault="no"/>
+        <ds:ref-subservice name="assignees"       includeByDefault="no"/>
+        <ds:ref-subservice name="ownerInfo"       includeByDefault="no"/>
+        <ds:ref-subservice name="originatorInfo"  includeByDefault="no"/>
+        <!--
+        <ds:ref-subservice name="dpm.issues-custom-fields"/>
+        -->
+    </ds:service>
+
+
+
+ <!-- ****************   MILESTONES  ************** -->
+    <ds:service name="milestones">
+        <ds:license products="ENOPRPR_AP"/>
+        <ds:data>
+           <ds:jpo        classname="com.dassault_systemes.enovia.dpm.ProjectService" function="getProjectMilestones" returnedData="idsAndData"/>
+            <ds:updatejpo classname="com.dassault_systemes.enovia.dpm.ProjectService" function="updateProjectMilestones" localInvokation="true" />
+        </ds:data>
+        <ds:field name="title"          description="Title information if used, otherwise the object name.">         <ds:selectable expression="evaluate[if attribute[Title] != '' then attribute[Title] else name]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="description"    description="Description of the object.">         <ds:selectable expression="description"  autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="state"          description="Current lifecycle state">            <ds:selectable expression="current" createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="originated"     description="The creation date of the object.">   <ds:selectable expression="originated" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="modified"       description="Date of last modification to any object information.">             <ds:selectable expression="modified"   format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="ownerName"      description="The current owner of the object." includeByDefault="always">       <ds:selectable expression="owner" format="transient" createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedStartDate">         <ds:selectable busTypes="Project Management" expression="attribute[Task Estimated Start Date]"  type="bus" format="isodate" autosave="true"/></ds:field>
+        <ds:field name="dueDate">                    <ds:selectable busTypes="Project Management" expression="attribute[Task Estimated Finish Date]" type="bus" format="isodate" autosave="true"/></ds:field>
+        <ds:field name="actualStartDate">            <ds:selectable busTypes="Project Management" expression="attribute[Task Actual Start Date]"     type="bus" format="isodate" autosave="true"/></ds:field>
+        <ds:field name="actualFinishDate">           <ds:selectable busTypes="Project Management" expression="attribute[Task Actual Finish Date]"    type="bus" format="isodate" autosave="true"/></ds:field>
+        <ds:field name="parentId">                   <ds:selectable busTypes="Project Management" expression="to[Subtask].from.physicalid"           type="bus" /></ds:field>
+
+    </ds:service>
+
+
+<!-- ****************   COMMON SUB SERVICES  ************** -->
+
+    <ds:service name="dpm.basicFields">
+        <ds:field name="title"          description="Title information if used, otherwise the object name.">         <ds:selectable expression="evaluate[if attribute[Title] != '' then attribute[Title] else name]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="name"           description="The object name.">         <ds:selectable expression="name"         type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="revision"       description="(unique discriminator only, Projects and Tasks are not revisioned)">      <ds:selectable expression="revision"     type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="typeicon"       description="">                        <ds:image source="businessType"         size="icon"  createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="description"    description="Description of the object.">         <ds:selectable expression="description"  autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="state"          description="Current lifecycle state">            <ds:selectable expression="current" createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="originated"     description="The creation date of the object.">   <ds:selectable expression="originated" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="modified"       description="Date of last modification to any object information.">      <ds:selectable expression="modified"   format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="ownerName"      description="The current owner of the object." includeByDefault="always">         <ds:selectable expression="owner" format="transient" createOperation="no" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="originatorName" description="The user who originally created the object." includeByDefault="always"><ds:selectable expression="attribute[Originator]" format="transient" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+    </ds:service>
+
+    <ds:service name="dpm.accessFields">
+        <ds:field name="policy"         description="The policy of the object.">       <ds:selectable expression="policy" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="modifyAccess"   description="Whether the user has modify access to the Project."> <ds:selectable expression="current.access[modify,changename]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="deleteAccess"   description="Whether the user has delete access to the Project."> <ds:selectable expression="current.access[delete]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="project"        description="Collaborative Space (project) the Project was created in.">      <ds:selectable expression="project" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+    </ds:service>
+
+    <ds:service name="dpm.personFields">
+        <ds:field name="name"      description="">    <ds:selectable expression="name" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="firstname" description="">    <ds:selectable expression="attribute[First Name]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="lastname"  description="">    <ds:selectable expression="attribute[Last Name]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="email"     description="" includeByDefault="no"><ds:selectable expression="attribute[Email Address]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+
+        <ds:subservice name="calendar" includeByDefault="no">
+            <ds:data>
+                <!-- recurse to "rel". -->
+                <ds:expand relationshipPattern="Work Place,Calendar" getFrom="true" recurseToLevel="-2"/>
+            </ds:data>
+
+            <ds:field name="title" description=""><ds:selectable expression="name" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        </ds:subservice>
+    </ds:service>
+
+    <ds:service name="dpm.dateFields">
+        <ds:field name="estimatedStartDate"   description="Project start date target"> <ds:selectable expression="attribute[Task Estimated Start Date]" type="bus" format="isodate" createOperation="yesyes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedFinishDate"  description="Project completion date target"><ds:selectable expression="attribute[Task Estimated Finish Date]" type="bus" format="isodate"/>
+           <ds:sort name="latest" sortable="true" type="date" direction="ascending" order="1" />
+        </ds:field>
+        <ds:field name="dueDate"             description="Project completion date target (depecatd)">            <ds:selectable expression="attribute[Task Estimated Finish Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="actualStartDate"     description="Project actual start date">      <ds:selectable expression="attribute[Task Actual Start Date]" type="bus" format="isodate" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="actualFinishDate"    description="Project actual completion date"> <ds:selectable expression="attribute[Task Actual Finish Date]" type="bus" format="isodate" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    </ds:service>
+
+    <ds:service name="dpm.dateFields2">
+        <ds:field name="estimatedStartDate"  description="Object start date target">     <ds:selectable expression="attribute[Estimated Start Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="estimatedFinishDate" description="Object completion date target"><ds:selectable expression="attribute[Estimated End Date]" type="bus" format="isodate"/>
+           <ds:sort name="latest" sortable="true" type="date" direction="ascending" order="1" />
+        </ds:field>
+        <ds:field name="dueDate"             description="Object completion date target (depecatd)">            <ds:selectable expression="attribute[Estimated End Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="actualStartDate"     description="Object start date target">      <ds:selectable expression="attribute[Actual Start Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="actualFinishDate"    description="Object actual completion date"> <ds:selectable expression="attribute[Actual End Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+    </ds:service>
+
+    <ds:service name="baselines">
+      <ds:data>
+          <ds:print/>
+      </ds:data>
+      <ds:ref-subservice name="dpm.basicFields"  includeByDefault="yes"/>
+      <ds:field name="sortdate" includeByDefault="always"  description="The Baseline creation date sorted most recent first.">
+          <ds:selectable expression="originated" format="transient"  createOperation="no" modifyOperation="no" readOperation="no"/>
+          <ds:sort sortable="true" type="date" direction="descending" order="1"/>
+      </ds:field>
+      <ds:field name="baselineCurrentStartDate" description=""> <ds:selectable expression="attribute[Baseline Current Start Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+      <ds:field name="baselineCurrentFinishDate" description=""><ds:selectable expression="attribute[Baseline Current End Date]" type="bus" format="isodate" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+      <ds:ref-subservice name="originatorInfo"  includeByDefault="yes"/>
+      <ds:ref-subservice name="tasks" includeByDefault="no">
+          <ds:data>
+              <ds:expand relationshipPattern="Subtask" getFrom="true" recurseLevels="{level}"/>
+          </ds:data>
+      </ds:ref-subservice>
+
+  </ds:service>
+
+  <ds:service name="assessments">
+    <ds:data>
+        <ds:print/>
+    </ds:data>
+    <ds:ref-subservice name="dpm.basicFields"  includeByDefault="yes"/>
+    <ds:field name="sortdate" includeByDefault="always">
+        <ds:selectable expression="originated" format="transient"/>
+        <ds:sort sortable="true" type="date" direction="descending" order="1"/>
+    </ds:field>
+    <ds:field name="assessmentComments" description="">           <ds:selectable expression="attribute[Assessment Comments]"  type="bus"                createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="assessmentStatus" description="">             <ds:selectable expression="attribute[Assessment Status]"    type="bus" format="range" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="financeComments" description="">              <ds:selectable expression="attribute[Finance Comments]"     type="bus"                createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="financeStatus" description="">                <ds:selectable expression="attribute[Finance Status]"       type="bus" format="range" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="resourceComments" description="">             <ds:selectable expression="attribute[Resource Comments]"    type="bus"                createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="resourceStatus" description="">               <ds:selectable expression="attribute[Resource Status]"      type="bus" format="range" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="riskComments" description="">                 <ds:selectable expression="attribute[Risk Comments]"        type="bus"                createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="riskStatus" description="">                   <ds:selectable expression="attribute[Risk Status]"          type="bus" format="range" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="scheduleComments" description="">             <ds:selectable expression="attribute[Schedule Comments]"    type="bus"                createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+    <ds:field name="scheduleStatus" description="">               <ds:selectable expression="attribute[Schedule Status]"      type="bus" format="range" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+</ds:service>
+
+
+      <ds:service name="members">
+        <ds:data>
+            <ds:print/>
+        </ds:data>
+        <ds:ref-subservice name="dpm.personFields"/>
+        <ds:field name="projectAccess"><ds:selectable expression="attribute[Project Access]" type="rel" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+    </ds:service>
+
+    <!-- Note the dependency on TSK2 methods -->
+    <ds:service name="assignees">
+        <ds:data>
+            <ds:expand relationshipPattern="Assigned*" getTo="true"/>
+        </ds:data>
+        <ds:ref-subservice name="dpm.personFields"/>
+    </ds:service>
+
+    <ds:service name="ownerInfo" >
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.tskv2.TaskService" function="getPerson" localInvokation="false" returnedData="idsAndData">
+                <ds:arg arg-name="owner" arg-value="true"/>
+            </ds:jpo>
+        </ds:data>
+        <ds:field name="name.transient" includeByDefault="always"><ds:selectable expression="name" format="transient" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:ref-subservice name="dpm.personFields"/>
+    </ds:service>
+
+    <!-- Note the dependency on TSK2 methods -->
+    <ds:service name="originatorInfo">
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.tskv2.TaskService" function="getPerson" localInvokation="false" returnedData="idsAndData">
+                <ds:arg arg-name="originator" arg-value="true"/>
+            </ds:jpo>
+        </ds:data>
+        <ds:field name="name.transient" includeByDefault="always"><ds:selectable expression="name" format="transient" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:ref-subservice name="dpm.personFields"/>
+    </ds:service>
+
+</ds:services>
+

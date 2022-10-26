@@ -1,0 +1,271 @@
+/************************************************************************************************************
+ * /* AuditAuditBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditAuditBase program to handle Audit type
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.services.AuditedItemsService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Gets AuditedItemsService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return AuditedItemsService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private static AuditedItemsService getAuditedItemsService(Context context) throws AuditException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAAUDCoreComponent");
+			AuditedItemsService service = (AuditedItemsService) LSAQICCore.getService(AuditedItemsService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditedItems(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String contextObjectId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			StringList slBusSelects = new StringList();
+			slBusSelects.add(DomainConstants.SELECT_ID);
+
+			AuditedItemsService auditedItemsService = getAuditedItemsService(context);
+			return auditedItemsService.getAuditedItems(context, DomainObject.newInstance(context, contextObjectId), slBusSelects, null,
+					DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Shows search page for object selection and than calls JPO method to
+	 * associates selected objects to Parent Object with Audited Items
+	 * relationship.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return Javascript function to be called to show search page.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSelectAuditedItems(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showSearchPageForAuditedItems", parentIds[0]);
+		}
+		catch (Exception exception) {
+			throw new AuditException(exception);
+		}
+	}
+
+	/**
+	 * Associates selected objects to Parent Object with Audited Items
+	 * relationship.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function name to refresh Structure browser.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddAuditedItems(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get("parentId");
+			String parentId = parentIds[0];
+			DomainObject dmoParent = null;
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+			}
+			AuditedItemsService auditedItemsService = getAuditedItemsService(context);
+			String[] emxTableRowIds = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> tableRowIdsList = EmxTableRowId.getTableRowIds(emxTableRowIds);
+			String[] objectIds = new String[tableRowIdsList.size()];
+
+			int objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				objectIds[objectIdCount] = emxTableRowId.getObjectId();
+				objectIdCount++;
+			}
+
+			List<Map<?, ?>> mListAccessCheckResults = QueryUtil.getInfo(context, objectIds, Helper.stringList("current.access[toconnect]",
+					DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_REVISION));
+			boolean isUserDoesNotHaveAccess = false;
+			StringBuffer strBuffErrorMessage = new StringBuffer("\n");
+			for (Object obj : mListAccessCheckResults) {
+				Map<?, ?> mapAccessCheckResult = (Map<?, ?>) obj;
+				String strAccessToConnect = (String) mapAccessCheckResult.get("current.access[toconnect]");
+
+				if ("FALSE".equalsIgnoreCase(strAccessToConnect)) {
+					isUserDoesNotHaveAccess = true;
+					strBuffErrorMessage.append(mapAccessCheckResult.get(DomainConstants.SELECT_TYPE)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_NAME)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_REVISION)).append(' ').append('\n');
+				}
+			}
+			if (isUserDoesNotHaveAccess) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+						"LQIAudit.Command.QICAUDAddAuditedItems.Action.Add.Error");
+				throw new AuditException(strErrorMessage + strBuffErrorMessage);
+			}
+			objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				DomainObject dmoAuditedItem = DomainObject.newInstance(context, emxTableRowId.getObjectId());
+				auditedItemsService.addAuditedItem(context, dmoParent, dmoAuditedItem, "");
+				objectIdCount++;
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e.getMessage());
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshAuditedItemsSBAfterAddingItem");
+	}
+
+	/**
+	 * Gets the Objectd Ids to be excluded from search list.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return StringList containing list object id's.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getAuditedItemsToExclude(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String parentId = (String) programMap.get("parentId");
+			DomainObject dmoParent = null;
+			StringList excludeOIDs = new StringList();
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+				AuditedItemsService auditedItemsService = getAuditedItemsService(context);
+				MapList mlAuditedItems = auditedItemsService.getAuditedItems(context, dmoParent, Helper.stringList(DomainConstants.SELECT_ID), null,
+						null, null);
+				excludeOIDs.add(parentId);// Self
+				for (Object objAuditedItem : mlAuditedItems) {
+					Map<?, ?> mapAuditedItem = (Map<?, ?>) objAuditedItem;
+					String auditedItemId = (String) mapAuditedItem.get(DomainConstants.SELECT_ID);
+					excludeOIDs.add(auditedItemId); // Already related id
+				}
+			}
+			return excludeOIDs;
+		}
+		catch (Exception exception) {
+			throw new AuditException(exception);
+		}
+	}
+
+	/**
+	 * Removes the Audited Item association between selected objects and Parent
+	 * Object.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function name to refresh Structure browser.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveAuditedItems(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			String parentId = parentIds[0];
+			DomainObject dmoParent = null;
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+			}
+
+			List<DomainObject> relatedItems = new ArrayList<DomainObject>();
+			String[] emxTableRowIds = (String[]) programMap.get("emxTableRowId");
+
+			List<EmxTableRowId> tableRowIdsList = EmxTableRowId.getTableRowIds(emxTableRowIds);
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				relatedItems.add(DomainObject.newInstance(context, emxTableRowId.getObjectId()));
+			}
+			String[] objectIds = new String[tableRowIdsList.size()];
+
+			int objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				objectIds[objectIdCount] = emxTableRowId.getObjectId();
+				objectIdCount++;
+			}
+			List<Map<?, ?>> mListAccessCheckResults = QueryUtil.getInfo(context, objectIds, Helper.stringList("current.access[fromdisconnect]",
+					DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_REVISION));
+			boolean isUserDoesNotHaveAccess = false;
+			StringBuffer strBuffErrorMessage = new StringBuffer("\n");
+			for (Object obj : mListAccessCheckResults) {
+				Map<?, ?> mapAccessCheckResult = (Map) obj;
+				String strAccessFromDisconnect = (String) mapAccessCheckResult.get("current.access[fromdisconnect]");
+
+				if ("FALSE".equalsIgnoreCase(strAccessFromDisconnect)) {
+					strBuffErrorMessage.append(mapAccessCheckResult.get(DomainConstants.SELECT_TYPE)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_NAME)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_REVISION)).append(' ').append('\n');
+				}
+			}
+			if (isUserDoesNotHaveAccess) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+						"LQIAudit.Command.QICAUDRemoveAuditedItems.Action.Remove.Error");
+				throw new LSAException(strErrorMessage + strBuffErrorMessage);
+			}
+			AuditedItemsService AuditedItemsService = getAuditedItemsService(context);
+
+			AuditedItemsService.removeAuditedItems(context, dmoParent, relatedItems);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshAuditedItemsSBAfterRemovingItem");
+	}
+
+}
+

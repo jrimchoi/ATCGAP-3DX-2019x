@@ -1,0 +1,970 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.Group;
+import matrix.db.JPO;
+import matrix.db.User;
+import matrix.db.UserList;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalService;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionUtil;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.dassault_systemes.enovia.questionnaire.TableRowId;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+	
+	private final String SYMBOLIC_TYPE_CHANGE_ORDER = "type_ChangeOrder";
+	private final String SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE = "relationship_ChangeInstance";
+	private final String SYMBOLIC_POLICY_FORMAL_CHANGE = "policy_FormalChange";
+	private final String SYMBOLIC_STATE_IN_APPROVAL = "state_InApproval";
+
+	 private static ConfigureApprovalService getConfigureApprovalService(
+			 Context context) throws FrameworkException {
+		 ConfigureApprovalService configureApprovalService  = new ConfigureApprovalServiceImpl();
+		 return configureApprovalService;
+	 }
+
+/*	public void createDummyRoute(Context context, String args[]) throws Exception {
+
+		String strObjectId = args[0];
+		ConfigureApprovalService changeOrderService = getConfigureApprovalService(context);
+		changeOrderService.createDummyRoute(context, strObjectId);
+	}*/
+	 public void createCORoute(Context context, String args[])	throws FrameworkException {
+		 try {
+			 Map programMap=JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get(QuestionnaireConstants.OBJECTID);
+			 ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+			changeOrderService.createRouteOnQuestionSubmit(context, strObjectId[0],
+					QuestionnaireConstants.ROUTE_TEMPLATE_ROUTE_BASE_POURPOSE_APPROVAL, "Approval",
+					QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+			changeOrderService.createCOEForms(context, strObjectId[0], "Approval",QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+		 } catch (Exception e) {
+			 throw new FrameworkException(e.getLocalizedMessage());
+		 }
+	 }
+	 @com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	 public StringList excludeApprovalRoutes(Context context,String args[])throws FrameworkException {
+		 try {
+			 ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+			 MapList mlRouteTemplate =changeOrderService.findApprovalBasedRoutes(context);
+			 StringList sListRouteTempId=new StringList();
+			 for(Object objRoute:mlRouteTemplate) {
+				 Map mRoute=(Map) objRoute;
+				 String strRouteTemplateId=(String) mRoute.get(DomainConstants.SELECT_ID);
+				 sListRouteTempId.add(strRouteTemplateId);
+			 }
+			 return sListRouteTempId;
+		 } catch (Exception e) {
+			 throw new FrameworkException(e.getLocalizedMessage());
+		 }
+	 }
+	  @com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String addActionTaskToApproval(Context context, String args[]) throws FrameworkException {
+		 try {
+			 Map<?,?> programMap = (Map<?,?> )JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get(QuestionnaireConstants.OBJECTID);
+			String strParentObjectId[] = (String[]) programMap.get(QuestionnaireConstants.PARENT_OID);
+			String strEmxTableRowId[] = (String[]) programMap.get(QuestionnaireConstants.EMX_TABLE_ROW_ID);
+			String strAttributeAssigneeSetDueDate = PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_attribute_AssigneeSetDueDate);
+			 String strAttributeDueDateOffset =PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_DueDateOffset);
+			 String strAttributeDateOffsetFrom =PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_DateOffsetFrom);
+			String strAttributeRouteInstruction = PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_attribute_RouteInstructions);
+			String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+			String strAttributeRouteAction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+			String strAttributeRouteTaskUser = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteTaskUser);
+			 Map mAttribute=new HashMap();
+			 StringList sListApprovalObj=new StringList();
+			 for(String strRowIds:strEmxTableRowId) {
+				 String strRowId=strRowIds;
+				 TableRowId tr=new TableRowId(strRowId);
+				 String strObjId=tr.getObjectId();
+				 sListApprovalObj.add(strObjId);
+			 }
+			 String strObjId=DomainObject.EMPTY_STRING;
+			 if(strObjectId!=null && strObjectId.length>0 && UIUtil.isNotNullAndNotEmpty(strObjectId[0])) {
+				 strObjId	=strObjectId[0];
+			 }
+			else{
+				 ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+				 strObjId=changeOrderService.createAndConnectRouteTemplate(context, strParentObjectId[0]);
+			}
+
+			String storeArray[] = new String[sListApprovalObj.size()];
+			for (int i = 0; i < sListApprovalObj.size(); i++) {
+
+				String temp[] = (String[]) programMap.get(sListApprovalObj.get(i) + "Count");
+
+				if (temp != null && UIUtil.isNotNullAndNotEmpty(temp[0]))
+					storeArray[i] = temp[0];
+			}
+
+			String strError = DomainConstants.EMPTY_STRING;
+			StringBuilder sb = new StringBuilder();
+
+
+			String strSelectedRelId[] = (String[]) programMap.get("relId");
+
+			if (strSelectedRelId != null && strSelectedRelId.length > 0) {
+				DomainRelationship.setToObject(context, strSelectedRelId[0], DomainObject.newInstance(context, sListApprovalObj.get(0).toString()));
+				DomainRelationship dr = DomainRelationship.newInstance(context, strSelectedRelId[0]);
+				dr.setAttributeValue(context, strAttributeRouteTaskUser, "");
+			 }
+			 else {
+				if (storeArray != null && storeArray.length > 0)
+					strError = validateSequence(context, strObjId, storeArray);
+				if (UIUtil.isNotNullAndNotEmpty(strError)) {
+
+					return QuestionUtil.encodeFunctionForJavaScript(context, false, "setFullSearchSubmitProgressVariable", strError);
+				}
+			 ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+			 Map<String,String> mRElIds=changeOrderService.assignActionTaskToRouteTemplate(context, strObjId, sListApprovalObj);
+
+			 for (Iterator iterator = mRElIds.keySet().iterator(); iterator.hasNext();) {
+				 String strApproval = (String) iterator.next();
+				 String strStartValue[] =(String[]) programMap.get(strApproval+"StartValue");
+				 String strInstruction[]=(String[]) programMap.get(strApproval+"Instruction");
+					String routeSequence[] = (String[]) programMap.get(strApproval + "Count");
+					String routeAction[] = (String[]) programMap.get(strApproval + "RouteAction");
+				 String strRelId=mRElIds.get(strApproval);
+					if (strStartValue[0].equals(QuestionnaireConstants.ASSIGNEE_SET_DUE_DATE)) {
+						mAttribute.put(strAttributeAssigneeSetDueDate, QuestionnaireConstants.YES);
+				 }
+					else if (strStartValue[0].equals(QuestionnaireConstants.ROUTE_START_DATE)
+							|| strStartValue[0].equals(QuestionnaireConstants.TASK_CREATE_DATE)) {
+						mAttribute.put(strAttributeAssigneeSetDueDate, QuestionnaireConstants.NO);
+					 mAttribute.put( strAttributeDateOffsetFrom,strStartValue[0]);
+					 String strNoofDays[]=(String[]) programMap.get(strApproval+"Days");
+					 strNoofDays[0]=UIUtil.isNotNullAndNotEmpty(strNoofDays[0])?strNoofDays[0]:"1";
+					 mAttribute.put(strAttributeDueDateOffset,strNoofDays[0]);
+				 }
+
+					if (UIUtil.isNotNullAndNotEmpty(strInstruction[0]))
+					 mAttribute.put(strAttributeRouteInstruction,strInstruction[0]);
+					if (UIUtil.isNotNullAndNotEmpty(routeSequence[0]))
+						mAttribute.put(strAttributeRouteSequence, routeSequence[0]);
+					if (UIUtil.isNotNullAndNotEmpty(routeAction[0]))
+						mAttribute.put(strAttributeRouteAction, routeAction[0]);
+				 changeOrderService.assigneeAttributeValues(context,strRelId,mAttribute);
+			 }
+			 }
+
+			return QuestionUtil.encodeFunctionForJavaScript(context, false, "refresWindow");
+		 } catch (Exception e) {
+			 throw new FrameworkException(e.getLocalizedMessage());
+		 }
+	 }
+	  public void updateColumnDateOffsetFrom(Context context, String args[]) throws Exception {
+			try {
+				String strAttributeAssigneeSetDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_AssigneeSetDueDate);
+				String strAttributeDateOffsetFrom = PropertyUtil.getSchemaProperty(context,
+						DomainSymbolicConstants.SYMBOLIC_attribute_DateOffsetFrom);
+				String strAttributeDueDateOffset = PropertyUtil.getSchemaProperty(context,
+						DomainSymbolicConstants.SYMBOLIC_attribute_DueDateOffset);
+				QuestionService questionService = new QuestionServiceImpl();
+				Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+				Map<?, ?> paramMap = (Map<?, ?>) programMap.get(QuestionnaireConstants.PARAMMAP);
+				Map<?, ?> requestMap = (Map<?, ?>) programMap.get(QuestionnaireConstants.REQUESTMAP);
+				String strStartValue = (String) paramMap.get(QuestionnaireConstants.NEW_VALUE);
+				String strQuestionId = (String) paramMap.get("relId");
+			DomainRelationship dobjTask = DomainRelationship.newInstance(context, strQuestionId);
+				if (strStartValue.equals(QuestionnaireConstants.ASSIGNEE_SET_DUE_DATE)) {
+					dobjTask.setAttributeValue(context,strAttributeAssigneeSetDueDate, QuestionnaireConstants.YES);
+				dobjTask.setAttributeValue(context, strAttributeDueDateOffset, "");
+			 }
+				else if (strStartValue.equals(QuestionnaireConstants.ROUTE_START_DATE)
+						|| strStartValue.equals(QuestionnaireConstants.TASK_CREATE_DATE)) {
+					dobjTask.setAttributeValue(context,strAttributeAssigneeSetDueDate, QuestionnaireConstants.NO);
+					dobjTask.setAttributeValue(context,strAttributeDateOffsetFrom,strStartValue);
+			 }
+				
+
+			}
+			catch (Exception e) {
+				throw new Exception(e);
+			}
+		}
+	 @com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String removeActionTasks(Context context, String args[])throws FrameworkException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strTableRowIds[] = (String[]) programMap.get(QuestionnaireConstants.EMX_TABLE_ROW_ID);
+			String strPerson=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strBusinessRole=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTaskUser);
+			StringList slActionTaskRelId= new StringList();
+			StringBuffer sbActionTasksRowId= new StringBuffer();
+			String strErrorMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+					"enoQuestionnaire.Alert.CannotRemoveActionTask");
+			for(String strRowIds:strTableRowIds) {
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strObjectId = tr.getObjectId();
+				String strType=DomainObject.newInstance(context, strObjectId).getInfo(context, DomainConstants.SELECT_TYPE);
+				if(!strType.equals(strPerson)&&!strType.equals(strBusinessRole)) {
+					return QuestionUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strErrorMessage);
+				}
+				String strRelId=tr.getRelationshipId();
+				slActionTaskRelId.add(strRelId);
+				sbActionTasksRowId.append(strRowId).append(";");
+			}
+			ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+			changeOrderService.disconnectActionTaskFromRouteTemplate(context,slActionTaskRelId);
+			 return QuestionUtil.encodeFunctionForJavaScript(context, false, "removeActionTasks", sbActionTasksRowId.toString());
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getRouteNoOfDaysColumnValues(Context context, String args[])throws FrameworkException {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slRouteDateType=new StringList();
+			for(Object objMap:objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<input type=\"text\" disabled=\"disabled\" size = '3' name='").append(strobjectId).append("Days'></input>");
+				slRouteDateType.add(sBuff.toString());
+			}
+			return slRouteDateType;
+		} catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getRouteAssigneeDateTypeColumnValues(Context context, String args[]) throws Exception {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slRouteDateType=new StringList();
+			for(Object objMap:objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				String strAssigneeDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+						context.getLocale(), "enoQuestionnaire.Range.AssigneeSetDueDate");
+				String strRouteStartDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+						context.getLocale(),
+						"enoQuestionnaire.Range.RouteStartDate");
+				String strTaskCreateDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+						context.getLocale(),
+						"enoQuestionnaire.Range.TaskCreateDate");
+
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<select  name='"+strobjectId+"StartValue'  onchange=\"disableActionTaskNoOfDays('"+strobjectId+"');\">");
+				sBuff.append("<option value='").append(QuestionnaireConstants.ASSIGNEE_SET_DUE_DATE).append("'>").append(strAssigneeDate)
+						.append("</option>");
+				sBuff.append("<option value='").append(QuestionnaireConstants.ROUTE_START_DATE).append("'>").append(strRouteStartDate)
+						.append("</option>");
+				sBuff.append("<option value='").append(QuestionnaireConstants.TASK_CREATE_DATE).append("'>").append(strTaskCreateDate)
+						.append("</option>");
+				sBuff.append("</select>");
+				slRouteDateType.add(sBuff.toString());
+			}
+			return slRouteDateType;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public Map<String, List<String>> getColumnDateOffsetFromRange(Context context, String args[]) throws Exception {
+		try {
+			String strAssigneeDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+					"enoQuestionnaire.Range.AssigneeSetDueDate");
+			String strRouteStartDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+					context.getLocale(), "enoQuestionnaire.Range.RouteStartDate");
+			String strTaskCreateDate = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+					context.getLocale(), "enoQuestionnaire.Range.TaskCreateDate");
+			List<String> slResponseDisplay = new StringList();
+			slResponseDisplay.add(strAssigneeDate);
+			slResponseDisplay.add(strTaskCreateDate);
+			slResponseDisplay.add(strRouteStartDate);
+			List<String> slResponse = new StringList();
+			slResponse.add(QuestionnaireConstants.ASSIGNEE_SET_DUE_DATE);
+			slResponse.add(QuestionnaireConstants.TASK_CREATE_DATE);
+			slResponse.add(QuestionnaireConstants.ROUTE_START_DATE);
+			Map<String, List<String>> rangeMap = new HashMap<String, List<String>>();
+			rangeMap.put(QuestionnaireConstants.FIELD_CHOICES, slResponse);
+			rangeMap.put(QuestionnaireConstants.FIELD_DISPLAY_CHOICES, slResponseDisplay);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	//public List<Boolean> checkEditAccessDateOffsetFromColumn(Context context, String[] args) throws Exception {
+	public StringList checkEditAccessDateOffsetFromColumn(Context context, String[] args) throws Exception {	
+	try {
+			StringList list = new StringList();
+			//List<Boolean> list = new ArrayList<Boolean>();
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map> mobjectList = (List<Map>) paramMap.get(QuestionnaireConstants.OBJECTLIST);
+			String strAttrAssigneeSetDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_AssigneeSetDueDate);
+			String strAttrQuestionRangeType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_TYPE);
+			boolean isEditActionReqd = false;
+			for (Map mObjectMap : mobjectList) {
+				isEditActionReqd = false;
+				String strObjectId = (String) mObjectMap.get(DomainRelationship.SELECT_ID);
+				if (!UIUtil.isNullOrEmpty(strObjectId)) {
+					DomainRelationship dobj = DomainRelationship.newInstance(context, strObjectId);
+					String strRangeType = dobj.getAttributeValue(context, strAttrAssigneeSetDueDate);
+					if (strRangeType.equals(QuestionnaireConstants.YES))
+							isEditActionReqd = false;
+						else
+							isEditActionReqd = true;
+				}
+				list.add(String.valueOf(isEditActionReqd));
+			}
+			return list;
+		}
+		catch (FrameworkException e) {
+			throw new Exception(e);
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+	
+	public List<String> getRouteInstructionsColumnValues(Context context, String args[])throws FrameworkException {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slResponse=new StringList();
+			for(Object objMap:objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<textarea name='").append(strobjectId).append("Instruction'></textarea>");
+				slResponse.add(sBuff.toString());
+			}
+			return slResponse;
+		} catch (Exception e) {
+			throw new FrameworkException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getRouteTemplateActionTasks(Context context,String args[]) throws Exception {
+
+		Map programMap=JPO.unpackArgs(args);
+		String strObjectId = (String) programMap.get(QuestionnaireConstants.OBJECTID);
+		ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+		MapList mlRouteTemplate = changeOrderService.getCORouteTemplate(context, strObjectId);
+		List<Map> mlObjects = new MapList();
+		if (mlRouteTemplate.size() > 0) {
+			Map mRouteTemplate = (Map) mlRouteTemplate.get(0);
+			String strRouteTemplateId = (String) mRouteTemplate.get(DomainConstants.SELECT_ID);
+
+			mlObjects = changeOrderService.getCORouteActionTasks(context, strRouteTemplateId);
+		}
+		return mlObjects;
+	}
+
+	public List<String> getActionTaskColumnValues(Context context,String args[])throws Exception {
+		try {
+
+			Map<?,?> programMap = (Map<?,?> )JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get(QuestionnaireConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(QuestionnaireConstants.REPORTFORMAT);
+			String strRouteTaskUser=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTaskUser);
+			String strTypePerson=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strAttrRouteTaskUser=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteTaskUser);
+			String strTypeRoutetemplate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTemplate);
+			List<String> slActionTaskName=new StringList();
+			List<Map<String, String>> mlObjectList= (List<Map<String, String>>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			String strTypeSymName = FrameworkUtil.getAliasForAdmin(context,DomainConstants.SELECT_TYPE, strTypePerson, true);
+			String strTypeSymRoutetemplate = FrameworkUtil.getAliasForAdmin(context,DomainConstants.SELECT_TYPE, strTypeRoutetemplate, true);
+			String strTypeIconPerson = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + strTypeSymName);
+			String strTypeIconRoute = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + strTypeSymRoutetemplate);
+			
+			for(Object objMap:mlObjectList)  {
+				Map mQues =(Map) objMap;
+				String strId= (String) mQues.get(DomainConstants.SELECT_ID);
+				String strName= (String) mQues.get(DomainConstants.SELECT_NAME);
+				String strType  =  (String) mQues.get(DomainConstants.SELECT_TYPE);
+				String strTypeIcon=UIUtil.isNotNullAndNotEmpty(strType)&&strType.equals(strTypeRoutetemplate)?strTypeIconRoute:strTypeIconPerson;
+				if(UIUtil.isNotNullAndNotEmpty(strType)&&strType.equals(strRouteTaskUser)) {
+					strName=(String) mQues.get("attribute["+strAttrRouteTaskUser+"].value");
+					strName=PropertyUtil.getSchemaProperty(context, strName);
+					strTypeIcon=DomainObject.EMPTY_STRING;
+				}
+				if (UIUtil.isNullOrEmpty(strName)) {
+					strName=DomainObject.newInstance(context,strId).getInfo(context,DomainConstants.SELECT_NAME );
+					strTypeIcon=FrameworkUtil.getAliasForAdmin(context,DomainConstants.SELECT_TYPE, SYMBOLIC_TYPE_CHANGE_ORDER, true);
+				}
+				StringBuilder sBuff= new StringBuilder();
+				if (UIUtil.isNullOrEmpty(strReportFormat)) {
+					sBuff.append("<img src = \"images/").append(strTypeIcon).append("\"/>&#160;");
+					sBuff.append("<a class=\"object\" href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=");
+					sBuff.append(strId);
+					sBuff.append("', '930', '650', 'true')\" >");
+					sBuff.append(strName);
+					sBuff.append("</a>");
+				}
+				else
+					sBuff.append(strName);
+				slActionTaskName.add(sBuff.toString());
+			}
+			return slActionTaskName;
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	
+	@com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String preProcessAddActionTask(Context context, String args[]) throws Exception {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get(QuestionnaireConstants.OBJECTID);
+			String strTableRowIds[] =  (String[])programMap.get(QuestionnaireConstants.EMX_TABLE_ROW_ID);
+			String strErrorMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+					"enoQuestionnaire.Alert.CannotAddActionTask");
+			String strTypeRoutetemplate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTemplate);
+			StringBuilder sbURL=new StringBuilder();
+			Map mReturn=new HashMap();
+
+			String sbApprovalObj = DomainConstants.EMPTY_STRING;
+			if(strTableRowIds!=null) {
+				for(String strRowIds:strTableRowIds) {
+					String strRowId=strRowIds;
+					TableRowId tr=new TableRowId(strRowId);
+					String strObjId=tr.getObjectId();
+					String strType = QuestionUtil.getInfo(context, strObjId, DomainConstants.SELECT_TYPE);
+					if(!strType.equals(strTypeRoutetemplate))  {				
+						return QuestionUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strErrorMessage);
+				}
+					else
+						sbApprovalObj = strObjId;
+			}
+		}
+			return QuestionUtil.encodeFunctionForJavaScript(context, false, "preProcessAddActionTask", sbApprovalObj, strObjectId[0]);
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}	
+	}
+	
+	public boolean canConfigureApproval(Context context,String args[])throws FrameworkException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(QuestionnaireConstants.OBJECTID);
+			String strRelChgangeInstance=PropertyUtil.getSchemaProperty(context, SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE);
+			String strPolicyFormalChange=PropertyUtil.getSchemaProperty(context,SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strPolicyStateInApproval= PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange, SYMBOLIC_STATE_IN_APPROVAL);
+			StringList slObjectSelect =new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_CURRENT);
+			slObjectSelect.add("to[" + strRelChgangeInstance + "].from.id");
+			Map mCOInfo = DomainObject.newInstance(context,strObjectId).getInfo(context, slObjectSelect);
+			String strChangeTemplateId = mCOInfo.get("to[" + strRelChgangeInstance + "].from.id").toString();
+			if(UIUtil.isNotNullAndNotEmpty(strChangeTemplateId)&&!PolicyUtil.checkState(context,strObjectId,strPolicyStateInApproval,PolicyUtil.GE)) {
+				return true;
+			}
+			return false;
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Add action Task from Route Template to Approval Route and remove Approval Route Template from CO
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args objectId of CO
+	 * @throws FrameworkException if operation fails
+	 * @exclude
+	 */
+	public void addTaskToRouteAndRemoveRouteTemplate(Context context,String args[])throws FrameworkException {
+		try {
+			String strCOId=args[0];
+			ConfigureApprovalService changeOrderService=getConfigureApprovalService(context);
+			changeOrderService.addTaskToRouteAndRemoveRouteTemplate(context, strCOId);
+
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	public void removeRouteTemplate(Context context, String args[]) throws FrameworkException {
+		try {
+			String strCOId = args[0];
+			ConfigureApprovalService changeOrderService = getConfigureApprovalService(context);
+			List<Map> mlObjects = changeOrderService.getCORouteActionTasks(context, strCOId);
+			DomainObject objectCO = DomainObject.newInstance(context, strCOId);
+
+			String strTypeChangeRequest = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_REQUEST);
+			String strRelChangeOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ORDER);
+			String exprCR = "to[" + strRelChangeOrder + "].from[" + strTypeChangeRequest + "].id";
+			String idCR = objectCO.getInfo(context, exprCR);
+			String attrDecompostion =DomainConstants.EMPTY_STRING;
+
+			if(null!=idCR && !idCR.isEmpty()){
+				DomainObject objectCR = DomainObject.newInstance(context, idCR);
+				attrDecompostion = objectCR.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_ChangeDecomposition"));
+			}
+
+			for (Map mApproval : mlObjects) {
+				if(!attrDecompostion.isEmpty() && "Enabled".equals(attrDecompostion)){
+					String strConnectionId = (String) mApproval.get(DomainRelationship.SELECT_ID);
+					DomainRelationship.disconnect(context, strConnectionId);
+				}
+				else{
+					String strId = (String) mApproval.get(DomainConstants.SELECT_ID);
+					DomainObject dobj = DomainObject.newInstance(context, strId);
+					dobj.deleteObject(context);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+	
+	@com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String preProcessApprovals(Context context, String args[]) throws Exception {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId[] = (String[]) programMap.get(QuestionnaireConstants.OBJECTID);
+			String strCurrentState = QuestionUtil.getInfo(context, strObjectId[0], DomainConstants.SELECT_CURRENT);
+			String strCOApprovalTable = "true";
+			if (strCurrentState.equals("Complete") || strCurrentState.equals("Implemented")) {
+				strCOApprovalTable = "false";
+			}
+			return QuestionUtil.encodeFunctionForJavaScript(context, false, "preProcessApprovals", strObjectId[0], strCOApprovalTable);
+		}
+		catch (Exception e) {
+			throw new Exception();
+		}
+	}
+
+	public List<String> getAssignApprovalTableSequence(Context context, String args[]) throws Exception {
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			for (Object objMap : mlObjList) {
+				Map mObj = (Map) objMap;
+				String id = (String) mObj.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff = new StringBuilder();
+				sBuff.append("<select name='");
+				sBuff.append(id + "Count");
+				sBuff.append("' >");
+				for (int i = 1; i <= 20; i++) {
+
+					sBuff.append("'<option  name=\'" + id + "Sequence" + "\'>" + String.valueOf(i) + "</option>");
+				}
+				sBuff.append("</select>");
+
+				((StringList) slColumnValues).addElement(sBuff.toString());
+			}
+			return slColumnValues;
+		}
+		catch (Exception ex) {
+			throw new Exception(ex.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getApprovalTableRouteAction(Context context, String args[]) throws Exception {
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			String strAttributeRouteAction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+			List<String> slAttributeRange = FrameworkUtil.getRanges(context, strAttributeRouteAction);
+
+			for (Object objMap : mlObjList) {
+				Map mObj = (Map) objMap;
+				String id = (String) mObj.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff = new StringBuilder();
+
+				sBuff.append("<select name='");
+				sBuff.append(id + "RouteAction");
+				sBuff.append("' >");
+				for (String range : slAttributeRange) {
+
+					sBuff.append("'<option  name=\'" + id + "RouteAction" + "\'>" + range + "</option>");
+				}
+				sBuff.append("</select>");
+
+				((StringList) slColumnValues).addElement(sBuff.toString());
+			}
+			return slColumnValues;
+		}
+		catch (Exception ex) {
+			throw new Exception(ex.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeActionTask(Context context, String args[]) throws Exception {
+		try {
+			ConfigureApprovalService changeOrderService = getConfigureApprovalService(context);
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("parentOID");
+			MapList mlRouteTemplate = changeOrderService.getCORouteTemplate(context, strObjectId);
+			Map mRouteTemplate = (Map) mlRouteTemplate.get(0);
+			String strRouteTemplateId = (String) mRouteTemplate.get(DomainConstants.SELECT_ID);
+
+			List<Map> mlActionTask = changeOrderService.getCORouteActionTasks(context, strRouteTemplateId);
+
+			StringList sListTempId = new StringList();
+			for (Map mtask : mlActionTask) {
+				String strPersonId = (String) mtask.get(DomainConstants.SELECT_ID);
+				String routeTaskUser = (String) mtask.get(DomainRelationship.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+						DomainSymbolicConstants.SYMBOLIC_attribute_RouteTaskUser)));
+				if (UIUtil.isNotNullAndNotEmpty(routeTaskUser) && routeTaskUser.contains("role_")) {
+					String strRoleName = PropertyUtil.getSchemaProperty(context, routeTaskUser);// Symbolic->Real
+																								// name;
+					String strId = QuestionUtil.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", true, "Business Role", strRoleName, "-",
+							"id");
+					sListTempId.add(strId);
+				}
+				sListTempId.add(strPersonId);
+			}
+			return sListTempId;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getActionTaskAssigneeColumn(Context context, String args[]) throws Exception {
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map paramList = (Map) programMap.get("paramList");
+			String strObjectId = (String) paramList.get("parentOID");
+			MapList mlObjList = (MapList) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			StringBuilder sbURL = new StringBuilder();
+			String strHeader = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+					"enoQuestionnaire.Header.AddActionTask");
+
+			boolean flag = true;
+			for (Object objMap : mlObjList) {
+				Map mObj = (Map) objMap;
+				String id = (String) mObj.get(DomainRelationship.SELECT_ID);
+				StringBuilder sBuff = new StringBuilder();
+
+				sbURL = new StringBuilder();
+				DomainRelationship dobj = DomainRelationship.newInstance(context, id);
+				String strUser = dobj.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteTaskUser));
+				sbURL.append("emxFullSearch.jsp?field=TYPES=type_Person:CURRENT=policy_Person.state_Active");
+				flag = true;
+				if (UIUtil.isNotNullAndNotEmpty(strUser) && strUser.contains("role")) {
+
+					sbURL.append(":USERROLE=").append(strUser);
+
+				}
+
+				else if (UIUtil.isNotNullAndNotEmpty(strUser) && strUser.contains("group")) {
+
+					String GroupName = PropertyUtil.getSchemaProperty(context, strUser);
+					Group group = new Group(GroupName);
+					UserList ul = group.getAssignments(context, true);
+					StringBuilder sb = new StringBuilder();
+					for (Object oUser : ul) {
+						User u = (User) oUser;
+						String strUserName = u.toString();
+						sb.append(strUserName);
+						sb.append(",");
+					}
+					if (sb.length() > 0)
+						sb.deleteCharAt(sb.length() - 1);
+					sbURL.append("&amp;includeOIDprogram=ENOConfigureApprovalUI:includeGroupPersons&amp;GroupUsers=").append(sb.toString());
+				}
+				else
+ {
+					flag = false;
+					slColumnValues.add(DomainConstants.EMPTY_STRING);
+				}
+
+				if (flag) {
+					sbURL.append("&amp;table=AEFPersonChooserDetails&amp;form=AEFSearchPersonForm&amp;selection=single&amp;submitURL=../questionnaire/enoQuestionnaireExecute.jsp?questionAction=ENOConfigureApprovalUI:addActionTaskToApproval");
+					sbURL.append(
+							"&amp;emxSuiteDirectory=questionnaire&amp;suiteKey=Questionnaire&amp;SuiteDirectory=questionnaire&amp;StringResourceFileId=enoQuestionnaireStringResource&amp;header=")
+							.append(strHeader);
+					sbURL.append("&amp;").append(QuestionnaireConstants.PARENT_OID).append("=").append(strObjectId);
+					sbURL.append("&amp;relId=").append(id);
+					sBuff.append("<a href=\"JavaScript:showNonModalDialog('").append(sbURL.toString());
+					sBuff.append("', '930', '650', 'true')\" >");
+					sBuff.append("<img src='").append("images/iconActionAdd.gif").append("' alt='Add'/>");
+					sBuff.append("</a>");
+				((StringList) slColumnValues).addElement(sBuff.toString());
+			}
+			}
+			return slColumnValues;
+		}
+		catch (Exception ex) {
+			throw new Exception(ex.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList includeGroupPersons(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			String strUser = (String) programMap.get("GroupUsers");
+			List<String> slGroupUsers = FrameworkUtil.split(strUser, ",");
+			StringList slIncludePersons = new StringList();
+			for (String strGroupUser : slGroupUsers) {
+				String strPersonId = PersonUtil.getPersonObjectID(context, strGroupUser);
+				slIncludePersons.add(strPersonId);
+			}
+			return slIncludePersons;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	public Map<String, List<String>> getApprovalTableSequence(Context context, String args[]) throws Exception {
+		try {
+			StringBuilder sBuff = new StringBuilder();
+			StringList slRange = new StringList();
+			for (int i = 1; i <= 20; i++) {
+
+				slRange.add(String.valueOf(i));
+			}
+
+
+			Map mRange = new HashMap();
+			mRange.put("field_choices", slRange);
+			mRange.put("field_display_choices", slRange);
+
+			return mRange;
+		}
+		catch (Exception ex) {
+			throw new Exception(ex.getLocalizedMessage());
+		}
+	}
+
+	public void updateActionTaskSequence(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(QuestionnaireConstants.PARAMMAP);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(QuestionnaireConstants.REQUESTMAP);
+			String strCOId = (String) requestMap.get(QuestionnaireConstants.OBJECTID);
+			String strResponseValue = (String) paramMap.get(QuestionnaireConstants.NEW_VALUE);// value
+			String strRelId = (String) paramMap.get("relId");
+			ConfigureApprovalService changeOrderService = getConfigureApprovalService(context);
+			MapList mlRouteTemplate = changeOrderService.getCORouteTemplate(context, strCOId);
+			Map mRouteTemplate = (Map) mlRouteTemplate.get(0);
+			String strRouteTemplateId = (String) mRouteTemplate.get(DomainConstants.SELECT_ID);
+
+			String strError = validateSequence(context, strRouteTemplateId, new String[] { strResponseValue });
+			if (UIUtil.isNullOrEmpty(strError)) {
+				DomainRelationship dr = DomainRelationship.newInstance(context, strRelId);
+				dr.setAttributeValue(context, strAttributeRouteSequence, strResponseValue);
+			}
+			else
+				throw new Exception(strError);
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	private String validateSequence(Context context, String strObjId, String[] storeArray) throws Exception {
+		try {
+			ConfigureApprovalService changeOrderService = getConfigureApprovalService(context);
+			List<Map> mlRouteActions = changeOrderService.getCORouteActionTasks(context, strObjId);
+			String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+			int missingValue = 0;
+			int errorValue = 0;
+
+			int iStoreArray[] = sortNum(storeArray, storeArray.length);
+			int temp = mlRouteActions.size();
+			int j = 0;
+			for (Map mlRMap : mlRouteActions) {
+				String Sequence = (String) mlRMap.get(DomainRelationship.getAttributeSelect(strAttributeRouteSequence));
+				if (j < Integer.parseInt(Sequence))
+					j = Integer.parseInt(Sequence);
+
+			}
+
+			if (temp == 0) { // only one order field
+				if (iStoreArray[0] != 1) {
+					missingValue = 1;
+					errorValue = Integer.parseInt(storeArray[0]);
+				}
+			}
+			if (missingValue == 0) {
+				for (int i = 0; i < (iStoreArray.length); i++) {
+
+					boolean flag = true;
+					if (iStoreArray[i] <= j) {
+						flag = false;
+					}
+					else if ((j + 1) != iStoreArray[i]) {
+						missingValue = (j + 1);
+						errorValue = iStoreArray[i];
+						break;
+					}
+					if (flag)
+						j++;
+					temp++;
+				}
+			}
+			if (missingValue > 0) {
+
+				String tempValue = EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+						"emxComponents.RouteAction.Enterorder") + " ";
+				tempValue += missingValue
+						+ " "
+						+ EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+								"emxComponents.RouteAction.EnterorderSmall") + " ";
+				tempValue += errorValue
+						+ " "
+						+ EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+								"emxComponents.RouteAction.Encounter") + " ";
+				tempValue += missingValue
+						+ " "
+						+ EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+								"emxComponents.RouteAction.Missing");
+				System.out.println(tempValue);
+				return tempValue;
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getMessage());
+		}
+		return "";
+
+	}
+
+	public int[] sortNum(String storeArray[], int length) {
+
+		int arrayName[] = new int[storeArray.length];
+		for (int i = 0; i < storeArray.length; i++) {
+			arrayName[i] = Integer.parseInt(storeArray[i]);
+		}
+
+		for (int i = 0; i < (length - 1); i++) {
+			for (int b = i + 1; b < length; b++) {
+				if (arrayName[b] < arrayName[i]) {
+					int temp = arrayName[i];
+					arrayName[i] = arrayName[b];
+					arrayName[b] = temp;
+			}
+				}
+		}
+		return arrayName;
+	}
+
+	public boolean checkRouteTemplateConnected(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(QuestionnaireConstants.OBJECTID);
+			ConfigureApprovalService configureService = getConfigureApprovalService(context);
+			List<Map> mlRoList = configureService.getCORouteTemplate(context, strObjectId);
+			if (mlRoList.size() > 0)
+				return true;
+			return false;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public List<String> getColumnDateOffsetFrom(Context context, String args[]) throws Exception {
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map paramList = (Map) programMap.get("paramList");
+			String strObjectId = (String) paramList.get("parentOID");
+			MapList mlObjList = (MapList) programMap.get(QuestionnaireConstants.OBJECTLIST);
+
+			for (Object objMap : mlObjList) {
+				Map mObj = (Map) objMap;
+				String strObjId = (String) mObj.get(DomainRelationship.SELECT_ID);
+				String strType = (String) mObj.get(DomainConstants.SELECT_TYPE);
+				DomainRelationship dobj = DomainRelationship.newInstance(context, strObjId);
+				String strDateOffsetFrom = dobj.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DateOffsetFrom));
+				if (strType.equals(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person))
+						|| strType.equals(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTaskUser))) {
+					if (UIUtil.isNullOrEmpty(strDateOffsetFrom))
+						slColumnValues.add(EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+								context.getLocale(), "enoQuestionnaire.Range.AssigneeSetDueDate"));
+					else if (UIUtil.isNotNullAndNotEmpty(strDateOffsetFrom) && strDateOffsetFrom.equals(QuestionnaireConstants.TASK_CREATE_DATE))
+						slColumnValues.add(EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+								context.getLocale(), "enoQuestionnaire.Range.TaskCreateDate"));
+					else if (UIUtil.isNotNullAndNotEmpty(strDateOffsetFrom) && strDateOffsetFrom.equals(QuestionnaireConstants.ROUTE_START_DATE))
+						slColumnValues.add(EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+								context.getLocale(), "enoQuestionnaire.Range.RouteStartDate"));
+				}
+				else
+					slColumnValues.add(DomainConstants.EMPTY_STRING);
+			}
+			return slColumnValues;
+		}
+		catch (Exception ex) {
+			throw new Exception(ex.getLocalizedMessage());
+		}
+	}
+
+	public boolean checkApprovalViewOnChangeOrder(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strAction = (String) programMap.get(QuestionnaireConstants.QUESTION_MODE);
+			String strObjectId = (String) programMap.get(QuestionnaireConstants.OBJECTID);
+			MapList mlRelatedAttributes = new MapList();
+			String strKeyProperty = "enoQuestionnaire.Component." + strAction + ".";
+			List<Map<String, String>> mlQuestionPropertyList = QuestionUtil.getQuestionnaireProperty(context, strAction);
+			List<String> slChildType = new StringList();
+
+			String strCurrentState = QuestionUtil.getInfo(context, strObjectId, DomainConstants.SELECT_CURRENT);
+			String strType = QuestionUtil.getInfo(context, strObjectId, DomainConstants.SELECT_TYPE);
+
+			if (strType.equals(PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER))
+					&& PolicyUtil.checkState(context, strObjectId, "In Approval", PolicyUtil.GE)) {
+				return false;
+			}
+
+			if (strType.equals(PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_REQUEST))
+					&& PolicyUtil.checkState(context, strObjectId, "In Process CO", PolicyUtil.GE)) {
+				return false;
+			}
+			for (Map<String, String> dataMap : mlQuestionPropertyList) {
+
+				String childType = dataMap.get(strKeyProperty + "ConditionalQuestions");
+				if (UIUtil.isNotNullAndNotEmpty(childType) && childType.equalsIgnoreCase("true")) {
+					return true;
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+		return false;
+	}
+}
+

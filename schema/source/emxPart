@@ -1,0 +1,130 @@
+/*
+ ** ${CLASS:MarketingFeature}
+ **
+ ** Copyright (c) 1993-2016 Dassault Systemes. All Rights Reserved.
+ ** This program contains proprietary and trade secret information of
+ ** Dassault Systemes.
+ ** Copyright notice is precautionary only and does not evidence any actual
+ ** or intended publication of such program
+ */
+import matrix.util.StringList;
+import java.util.Map;
+import matrix.db.JPO;
+ 
+import matrix.db.Context;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.MapList;
+
+/**
+ * The <code>emxPart</code> class contains code for the "Part" business type.
+ *
+ * @version EC 9.5.JCI.0 - Copyright (c) 2002, MatrixOne, Inc.
+ */
+  public class ${CLASSNAME} extends ${CLASS:emxPartBase}
+  {
+      /**
+       * Constructor.
+       *
+       * @param context the eMatrix <code>Context</code> object.
+       * @param args holds no arguments.
+       * @throws Exception if the operation fails.
+       * @since EC 9.5.JCI.0.
+       */
+
+      public ${CLASSNAME} (Context context, String[] args)
+          throws Exception
+      {
+          super(context, args);
+      }
+	  /**
+     * Added for excluding the reference documents connected to the object.
+     * This can be used for generic purpose.
+     * @param context
+     * @param args
+     * @return List of Object Ids
+     * @throws Exception
+     * @since R211
+     */
+    @com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+    public StringList excludeConnectedObjects(Context context, String[] args) throws Exception {
+        Map programMap = (Map) JPO.unpackArgs(args);
+        String strObjectIds = (String)programMap.get("objectId");
+        String strRelationship=(String)programMap.get("relName");
+        //Get the From side from the URL to decide on traversal
+        String strFrom=(String)programMap.get("from");
+        String sMode=(String)programMap.get("sMode");
+        StringList excludeList= new StringList();
+        String strField = (String)programMap.get("field");
+        if(strField!= null){
+            //get the Field value from URL param to know the types
+            strField = strField.substring(strField.indexOf('=')+1,strField.length());
+            if( strField.indexOf(':')>0){
+                strField = strField.substring(0,strField.indexOf(':'));
+            }
+        }
+        StringList sSelectables= new StringList();
+        sSelectables.add(DomainConstants.SELECT_ID);
+        String sWhere ="";
+
+        //Maplist to get the records from DB
+        MapList childObjects = null;
+        if(sMode != null && sMode.equals("ECRAddExisting")){
+                  sWhere = "to["+PropertyUtil.getSchemaProperty(context,"relationship_ECRSupportingDocument")+"]== TRUE";
+            childObjects = DomainObject.findObjects(context,strField,DomainConstants.QUERY_WILDCARD,sWhere,
+                    sSelectables);
+        }
+        //fix for bug IR-067474V6R2012
+        //while connecting Markup to Drawing Print through Add Existing, markups which are already connected should not be displayed on the search page.
+
+        else if(sMode != null && sMode.equals("MarkupAddExisting")){
+			// Added to exclude markup which are already connected to the current object .
+			    DomainObject dObject = DomainObject.newInstance(context,strObjectIds);
+			    childObjects = dObject.getRelatedObjects(context,
+                    PropertyUtil.getSchemaProperty(context,strRelationship),
+                    strField==null?"*":strField,
+                    new StringList(DomainConstants.SELECT_ID),
+                    null,
+                    false,
+                    true,
+                   (short) 1,
+                    DomainConstants.EMPTY_STRING,
+                    DomainConstants.EMPTY_STRING);
+				//commented to -while connecting Markup to Drawing Print and CA through Add Existing, markups which are already connected should  be displayed on the search page
+				// sWhere = "to["+PropertyUtil.getSchemaProperty(context,"relationship_Markup")+"]== TRUE";
+                /* childObjects = DomainObject.findObjects(context,strField,DomainConstants.QUERY_WILDCARD,sWhere,
+                        sSelectables); */
+			   
+        }
+        else {
+
+            boolean bisTo=true;
+            boolean bisFrom=false;
+            DomainObject domObj= new DomainObject(strObjectIds);
+
+            if(strFrom!=null && strFrom.equalsIgnoreCase("true")){
+                bisTo=false;
+                bisFrom=true;
+            }
+            childObjects=domObj.getRelatedObjects(context,
+                    PropertyUtil.getSchemaProperty(context,strRelationship),
+                    strField==null?"*":strField,
+                    new StringList(DomainConstants.SELECT_ID),
+                    null,
+                    bisTo,
+                    bisFrom,
+                   (short) 1,
+                    DomainConstants.EMPTY_STRING,
+                    DomainConstants.EMPTY_STRING);
+        }
+        for(int i=0;i<childObjects.size();i++){
+            Map tempMap=(Map)childObjects.get(i);
+            excludeList.add((String) tempMap.get(DomainConstants.SELECT_ID));
+        }
+        excludeList.add(strObjectIds);
+        return excludeList;
+    }
+  }
+
+

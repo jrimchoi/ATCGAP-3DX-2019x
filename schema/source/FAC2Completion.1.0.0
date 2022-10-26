@@ -1,0 +1,37 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"}, {name:"SEL_PRD", type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                    [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var navSets = [PRD];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+    
+	///////////////////////////////////////
+	// 1- PRD = PRD + FA_Part->Fix C2(PRD)
+	//	  PRD = PRD + FA_Fix->Part(PRD)
+	///////////////////////////////////////
+	//@fastenersAnalysisBothSides|SEL_PRD|0@//
+	var fastenerAnalysisTimer = new DebugTimer(context, 0, "PRD = PRD + FA_Part->Fix C2(SEL_PRD) & PRD = PRD + FA_Fix->Part(PRD)", true);
+	var resFastenerAnalysis = NavigationPrimitives.fastenersAnalysisBothSides(context, SEL_PRD);
+	PRD = PRD.merge(resFastenerAnalysis);
+	fastenerAnalysisTimer.complete();
+	
+	///////////////////////////////////////
+	// 2- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+	//@Open|2,PRCS,SYS,WKPL,RSC|@//
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

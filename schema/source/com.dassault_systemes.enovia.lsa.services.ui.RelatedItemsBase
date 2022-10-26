@@ -1,0 +1,381 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.RelatedItemsService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+	private static final String	PARAM_objectId				= "objectId";
+	private static final String	SYMBOLIC_ATTRIBUTE_COMMENTS	= "attribute_Comments";
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws LSAException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws LSAException {
+		// Do nothing
+	}
+
+	/**
+	 * Returns the implementation reference for RelatedItemsService
+	 * 
+	 * @param context
+	 *            the eMatrix Context object
+	 * @return implementation reference for the service
+	 * @throws ComponentException
+	 *             if operation fails
+	 */
+	private static RelatedItemsService getRelatedItemsService(Context context) throws ComponentException {
+		Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		RelatedItemsService relatedItemsService = (RelatedItemsService) component.getService(RelatedItemsService.class);
+		return relatedItemsService;
+	}
+
+	/**
+	 * Gets all the objects associated with Related Items relationship to the
+	 * Parent Object.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return MapList containing all related items.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getRelatedItems(Context context, String[] args) throws LSAException {
+		final String ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, SYMBOLIC_ATTRIBUTE_COMMENTS);
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strParentId = (String) programMap.get(PARAM_objectId);
+			DomainObject dmoObject = null;
+			if (!Helper.isNullOrEmpty(strParentId)) {
+				dmoObject = DomainObject.newInstance(context, strParentId);
+			}
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			MapList relatedItems = relatedItemsService.getRelatedItems(context, dmoObject, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainRelationship.SELECT_ID, DomainRelationship.getAttributeSelect(ATTRIBUTE_COMMENTS)), null, null);
+
+			return relatedItems;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Shows search page for object selection and than calls JPO method to
+	 * associates selected objects to Parent Object with Related Items
+	 * relationship.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return Javascript function to be called to show search page.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSelectRelatedItems(Context context, String[] args) throws LSAException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get(PARAM_objectId);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showSearchPageForRelatedItems", parentIds[0]);
+		}
+		catch (Exception exception) {
+			throw new LSAException(exception);
+		}
+	}
+
+	/**
+	 * Associates selected objects to Parent Object with Related Items
+	 * relationship.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function name to refresh Structure browser.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddRelatedItems(Context context, String[] args) throws LSAException {
+		final String ROLE_PROJECT_USER = PropertyUtil.getSchemaProperty(context, "role_ProjectUser");
+		final String ROLE_PROJECT_LEAD = PropertyUtil.getSchemaProperty(context, "role_ProjectLead");
+		final String ROLE_PROJECT_ADMINISTRATOR = PropertyUtil.getSchemaProperty(context, "role_ProjectAdministrator");
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get("parentId");
+			String parentId = parentIds[0];
+			DomainObject dmoParent = null;
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+			}
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			String[] emxTableRowIds = (String[]) programMap.get("emxTableRowId");
+			List<EmxTableRowId> tableRowIdsList = EmxTableRowId.getTableRowIds(emxTableRowIds);
+			String[] objectIds = new String[tableRowIdsList.size()];
+
+			String strAccessFromConnect = "true";
+			int objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				objectIds[objectIdCount] = emxTableRowId.getObjectId();
+				objectIdCount++;
+			}
+
+			Vector roleAssignedToLoggedInUser = PersonUtil.getAssignments(context);
+
+			boolean isProjectUserNotProejctLeadNotAdministrator = false;
+			if (roleAssignedToLoggedInUser.contains(ROLE_PROJECT_USER) && !roleAssignedToLoggedInUser.contains(ROLE_PROJECT_LEAD)
+					&& !roleAssignedToLoggedInUser.contains(ROLE_PROJECT_ADMINISTRATOR)) {
+				isProjectUserNotProejctLeadNotAdministrator = true;
+			}
+			List<Map<?, ?>> mListAccessCheckResults = QueryUtil.getInfo(context, objectIds, Helper.stringList("current.access[toconnect]",
+					"current.access[fromconnect]", DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_REVISION));
+			boolean isUserDoesNotHaveAccess = false;
+			StringBuffer strBuffErrorMessage = new StringBuffer("\n");
+			for (Object obj : mListAccessCheckResults) {
+				Map<?, ?> mapAccessCheckResult = (Map) obj;
+				String strAccessToConnect = (String) mapAccessCheckResult.get("current.access[toconnect]");
+				if (isProjectUserNotProejctLeadNotAdministrator) {
+					strAccessFromConnect = (String) mapAccessCheckResult.get("current.access[fromconnect]");
+				}
+
+				if ("FALSE".equalsIgnoreCase(strAccessToConnect) || "FALSE".equalsIgnoreCase(strAccessFromConnect)) {
+					isUserDoesNotHaveAccess = true;
+					strBuffErrorMessage.append(mapAccessCheckResult.get(DomainConstants.SELECT_TYPE)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_NAME)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_REVISION)).append(' ').append('\n');
+				}
+			}
+			if (isUserDoesNotHaveAccess) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.LSA,
+						"LSACommonFramework.Command.LSARelatedItems.Action.Add.Error");
+				throw new LSAException(strErrorMessage + strBuffErrorMessage);
+			}
+			objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				DomainObject dmoRelatedItem = DomainObject.newInstance(context, emxTableRowId.getObjectId());
+				relatedItemsService.addRelatedItem(context, dmoParent, dmoRelatedItem, "");
+				objectIdCount++;
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e.getMessage());
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshRelatedItemsSBAfterAddingItem");
+	}
+
+	/**
+	 * Removes the Related Item association between selected objects and Parent
+	 * Object.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function name to refresh Structure browser.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveRelatedItems(Context context, String[] args) throws LSAException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] parentIds = (String[]) programMap.get(PARAM_objectId);
+			String parentId = parentIds[0];
+			DomainObject dmoParent = null;
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+			}
+
+			List<DomainObject> relatedItems = new ArrayList<DomainObject>();
+			String[] emxTableRowIds = (String[]) programMap.get("emxTableRowId");
+
+			List<EmxTableRowId> tableRowIdsList = EmxTableRowId.getTableRowIds(emxTableRowIds);
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				relatedItems.add(DomainObject.newInstance(context, emxTableRowId.getObjectId()));
+			}
+			String[] objectIds = new String[tableRowIdsList.size()];
+
+			int objectIdCount = 0;
+			for (EmxTableRowId emxTableRowId : tableRowIdsList) {
+				objectIds[objectIdCount] = emxTableRowId.getObjectId();
+				objectIdCount++;
+			}
+			List<Map<?, ?>> mListAccessCheckResults = QueryUtil.getInfo(context, objectIds, Helper.stringList("current.access[fromdisconnect]",
+					DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_REVISION));
+			boolean isUserDoesNotHaveAccess = false;
+			StringBuffer strBuffErrorMessage = new StringBuffer("\n");
+			for (Object obj : mListAccessCheckResults) {
+				Map<?, ?> mapAccessCheckResult = (Map) obj;
+				String strAccessFromDisconnect = (String) mapAccessCheckResult.get("current.access[fromdisconnect]");
+
+				if ("FALSE".equalsIgnoreCase(strAccessFromDisconnect)) {
+					strBuffErrorMessage.append(mapAccessCheckResult.get(DomainConstants.SELECT_TYPE)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_NAME)).append(' ')
+							.append(mapAccessCheckResult.get(DomainConstants.SELECT_REVISION)).append(' ').append('\n');
+				}
+			}
+			if (isUserDoesNotHaveAccess) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.LSA,
+						"LSACommonFramework.Command.LSARelatedItems.Action.Remove.Error");
+				throw new LSAException(strErrorMessage + strBuffErrorMessage);
+			}
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			relatedItemsService.removeRelatedItems(context, dmoParent, relatedItems);
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshRelatedItemsSBAfterRemovingItem");
+	}
+
+	/**
+	 * Gets the comments for Related Items.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return Vector containing Comments.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	public Vector getComments(Context context, String[] args) throws LSAException {
+		final String ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, SYMBOLIC_ATTRIBUTE_COMMENTS);
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+
+			Vector columnValues = new Vector(objectList.size());
+			for (int i = 0; i < objectList.size(); i++) {
+				Map mapObject = (Map) objectList.get(i);
+				String relId = (String) mapObject.get(DomainRelationship.SELECT_ID);
+				String comment = DomainRelationship.getAttributeValue(context, relId, ATTRIBUTE_COMMENTS);
+				columnValues.add(comment);
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Sets the value for comments.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	public void updateComments(Context context, String[] args) throws LSAException {
+		final String ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, SYMBOLIC_ATTRIBUTE_COMMENTS);
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get("paramMap");
+			Map requestMap = (Map) programMap.get("requestMap");
+			String comment = (String) paramMap.get("New Value");
+			String strParentId = (String) requestMap.get(PARAM_objectId);
+			DomainObject dmoParent = null;
+			if (!Helper.isNullOrEmpty(strParentId)) {
+				dmoParent = DomainObject.newInstance(context, strParentId);
+			}
+			String objectId = (String) paramMap.get(PARAM_objectId);
+			DomainObject dmoRelatedItem = null;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				dmoRelatedItem = DomainObject.newInstance(context, objectId);
+			}
+			Map<String, String> attributeValues = new HashMap<String, String>();
+			if (null != comment) {
+				attributeValues.put(ATTRIBUTE_COMMENTS, comment);
+			}
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			relatedItemsService.updateDetails(context, dmoParent, dmoRelatedItem, attributeValues);
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Gets the Objectd Ids to be excluded from search list.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return StringList containing list object id's.
+	 * @throws LSAException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getRelatedItemsToExclude(Context context, String[] args) throws LSAException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String parentId = (String) programMap.get("parentId");
+			DomainObject dmoParent = null;
+			StringList excludeOIDs = new StringList();
+			if (!Helper.isNullOrEmpty(parentId)) {
+				dmoParent = DomainObject.newInstance(context, parentId);
+				RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+				MapList mlRelatedItems = relatedItemsService.getRelatedItems(context, dmoParent, Helper.stringList(DomainConstants.SELECT_ID), null,
+						null, null);
+				excludeOIDs.add(parentId);// Self
+				for (Object objRelatedItem : mlRelatedItems) {
+					Map mapRelatedItem = (Map) objRelatedItem;
+					String relatedItemId = (String) mapRelatedItem.get(DomainConstants.SELECT_ID);
+					excludeOIDs.add(relatedItemId); // Already related id
+				}
+			}
+			return excludeOIDs;
+		}
+		catch (Exception exception) {
+			throw new LSAException(exception);
+		}
+	}
+}
+

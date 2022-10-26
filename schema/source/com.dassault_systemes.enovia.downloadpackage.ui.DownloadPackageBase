@@ -1,0 +1,796 @@
+
+import java.text.NumberFormat;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.downloadpackage.DownloadPackageException;
+import com.dassault_systemes.enovia.downloadpackage.EmxTableRowId;
+import com.dassault_systemes.enovia.downloadpackage.Helper;
+import com.dassault_systemes.enovia.downloadpackage.QueryUtil;
+import com.dassault_systemes.enovia.downloadpackage.componentframework.Component;
+import com.dassault_systemes.enovia.downloadpackage.componentframework.ComponentException;
+import com.dassault_systemes.enovia.downloadpackage.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.downloadpackage.services.DownloadPackageService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	private static DownloadPackageService getDownloadPackageService(Context context) throws ComponentException {
+		Component DownloadPackageCore = ComponentFactory.getInstance(context, "DownloadPackageCoreComponent");
+		DownloadPackageService service = (DownloadPackageService) DownloadPackageCore.getService(DownloadPackageService.class);
+		return service;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> actionGetEntirePackagingData(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strPackage = (String) programMap.get("package");
+			String objectId = (String) programMap.get("objectId");
+			String strExpandlevel = (String) programMap.get("expandLevel");
+			Map<?, ?> requestValueMap = (Map<?, ?>) programMap.get("RequestValuesMap");
+			String selectedId = ((String[]) requestValueMap.get("selectedID"))[0];
+			if (selectedId == null || "".equals(selectedId)) {
+				selectedId = ((String[]) requestValueMap.get("objectId"))[0];
+			}
+			String strLevel = (String) programMap.get("level");
+			short shortLevel = 0;
+			if (strLevel != null || "".equals(strLevel)) {
+				if (!"All".equalsIgnoreCase(strExpandlevel) && strExpandlevel != null) {
+					shortLevel = Short.parseShort(strExpandlevel);
+				}
+			}
+
+			DomainObject dmoObj = DomainObject.newInstance(context, objectId);
+			DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+			Map<String, String> xmlMap = downloadPackageService.getDownloadPackageConfiguredProperties(context, strPackage);
+			List<Map<?,?>> mListObjs = new ArrayList<Map<?,?>>();
+			String exPandProgFunction = xmlMap.get("ExpandProgram");
+			String strFolderName = xmlMap.get("ExportName");
+			if(!Helper.isNullOrEmpty(exPandProgFunction)) {
+				mListObjs = invokeExpandProg(context, exPandProgFunction, programMap, strFolderName);
+			}
+			else {
+				String strTypes = xmlMap.get("TypePattern");
+				String strRels = xmlMap.get("RelationshipPattern");
+				String strDirection = xmlMap.get("Direction");
+
+				StringList objSelects = formObjectSelectsForDownloadTable(context);
+
+				if (strFolderName != null && !"".equals(strFolderName) && strFolderName.startsWith("attribute_")) {
+					objSelects.add("attribute[" + strFolderName + "]");
+				}
+
+				if ("".equals(strTypes)) {
+					throw new IllegalArgumentException("mandatory parameter 'TypePattern' is not present in package" + strPackage);
+				}
+				if ("".equals(strRels)) {
+					throw new IllegalArgumentException("mandatory parameter 'RelationshipPattern' is not present in package" + strPackage);
+				}
+				if ("".equals(strDirection)) {
+					throw new IllegalArgumentException("mandatory parameter 'Direction' is not present in package" + strPackage);
+				}
+
+				boolean isFrom = false;
+				boolean isTo = false;
+
+				if ("from".equalsIgnoreCase(strDirection)) {
+					isFrom = true;
+				}
+				else {
+					isTo = true;
+				}
+				if (!objSelects.contains("attribute[attribute_Title]")) {
+					objSelects.add("attribute[attribute_Title]");
+				}
+				StringBuilder strBuildRels = new StringBuilder(strRels);
+				strBuildRels.append(",relationship_ActiveVersion");
+
+				objSelects.add("format.file.name");
+				StringBuilder strBuildTypes = new StringBuilder(strTypes);
+				strBuildTypes.append(",type_DOCUMENTS");
+				mListObjs = QueryUtil.getRelatedObjects(context, dmoObj, strBuildRels.toString(), strBuildTypes.toString(), objSelects,
+						Helper.stringList(DomainRelationship.SELECT_ID, DomainRelationship.SELECT_FROM_ID), isTo, isFrom, shortLevel,
+						DomainConstants.EMPTY_STRING, DomainConstants.EMPTY_STRING);
+			}
+			mListObjs = formatMapListForDownload(context, mListObjs, xmlMap, strFolderName);
+			return new MapList(mListObjs);
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * invokes Expand Program and returns List<Map<?,?>>
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param exPandProgramFunct
+	 *            name of Expand Program and function : separated
+	 * @param args
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	private List<Map<?, ?>> invokeExpandProg(Context context, String exPandProgramFunct, Map programMap, String strFolderName) throws Exception {
+		programMap.put("ExportName", strFolderName);
+		String[] args = JPO.packArgs(programMap);
+		List<Map<?,?>> mListObjs = new ArrayList<Map<?,?>>();
+		String[] arrProgFunction = exPandProgramFunct.split(":");
+		mListObjs = JPO.invoke(context, arrProgFunction[0], null, arrProgFunction[1], args, List.class);
+		return mListObjs;
+	}
+
+	/**
+	 * form the required object selectables for Download Package table
+	 * 
+	 * @return StringList the list of selectable
+	 */
+	private StringList formObjectSelectsForDownloadTable(Context context) {
+		final String TYPE_DOCUMENTS = PropertyUtil.getSchemaProperty(context, "type_DOCUMENTS");
+		final String ATTRIBUTE_IS_VERSION_OBJECT = PropertyUtil.getSchemaProperty(context, "attribute_IsVersionObject");
+
+		final String SELECT_IS_KIND_OF_DOCUMENTS = (new StringBuilder()).append("type.kindof[").append(TYPE_DOCUMENTS).append("]").toString();
+		final String SELECT_IS_VERSION_OBJECT = new StringBuilder().append("attribute[").append(ATTRIBUTE_IS_VERSION_OBJECT).append(']').toString();
+
+		StringList objSelects = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_REVISION,
+				DomainConstants.SELECT_POLICY, DomainConstants.SELECT_NAME, SELECT_IS_VERSION_OBJECT, SELECT_IS_KIND_OF_DOCUMENTS);
+		return objSelects;
+
+	}
+
+	/**
+	 * appends NewName key in each map of given maplist. It fetches
+	 * attributeName from mapList and treat it as newName value and if
+	 * attributeName is left empty then it calls user defined format program and
+	 * function(program and method is : separated) and pass the maplist to the
+	 * format program where application can define their own newName based on
+	 * the requirement. If both attributeName and formatProgramAndFunnction is
+	 * null then newName for each map is returned empty
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param mListObjs
+	 *            the List<Map<?,?>> in each map of mListObjs newName key is
+	 *            added with proper value
+	 * @param attributeName
+	 *            the attribute name whose value for each Map is considered as
+	 *            NewName
+	 * @param formatProgramAndFunnction
+	 *            the user defined format program and method(: separated) which
+	 *            will be called if attributeName is left empty TO DO
+	 * @return List<Map<?, ?>> where in each map a new key NewName is added with
+	 *         appropriate value
+	 * @throws DownloadPackageException
+	 *             if the operation fails
+	 */
+	private List<Map<?, ?>> formatMapListForDownload(Context context, List<Map<?, ?>> mListObjs, Map<String, String> propertyMap, String exportName)
+			throws DownloadPackageException {
+		try {
+			List<String> versionDocPolicyList = getVersionDocList(context, propertyMap);
+			final String POLICY_VERSION = PropertyUtil.getSchemaProperty(context, "policy_Version");
+			if (Helper.isNullOrEmpty(versionDocPolicyList)) {
+				versionDocPolicyList.add(POLICY_VERSION);
+			}
+			mListObjs = excludeVersionDocumentChildren(propertyMap, mListObjs, versionDocPolicyList);
+			if (exportName.startsWith("attribute_") && !exportName.contains(":")) {
+				for (Map mapObj : mListObjs) {
+					mapObj.put("NewName", mapObj.get("attribute[" + PropertyUtil.getSchemaProperty(context, exportName) + "]"));
+				}
+			}
+			else if (exportName != null && !"".equals(exportName)) {
+				StringList sListProgramFunction = FrameworkUtil.split(exportName, ":");
+				if (sListProgramFunction != null && sListProgramFunction.size() != 0) {
+					JPO.invoke(context, (String) sListProgramFunction.get(0), null, (String) sListProgramFunction.get(1), JPO.packArgs(mListObjs));
+				}
+			}
+			else {
+				final String ATTRIBUTE_TITLE = PropertyUtil.getSchemaProperty(context, "attribute_Title");
+				StringBuilder attrTitleSelectExpression = new StringBuilder();
+				attrTitleSelectExpression.append("attribute[").append(ATTRIBUTE_TITLE).append(']');
+
+				for (Map mapObj : mListObjs) {
+					if (versionDocPolicyList.contains(mapObj.get(DomainConstants.SELECT_POLICY))) {
+						mapObj.put("NewName", mapObj.get(attrTitleSelectExpression));
+					}
+					else {
+						StringBuilder typeNameRev = new StringBuilder();
+						typeNameRev.append(mapObj.get(DomainConstants.SELECT_TYPE)).append('_').append(mapObj.get(DomainConstants.SELECT_NAME))
+								.append('_').append(mapObj.get(DomainConstants.SELECT_REVISION));
+						mapObj.put("NewName", typeNameRev.toString());
+					}
+				}
+			}
+			return mListObjs;
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	private List<Map<?, ?>> excludeVersionDocumentChildren(Map<String, String> propertyXMLMap, List<Map<?, ?>> mListObjs,
+			List<String> versionDocPolicyList) {
+		int removedObjLevel = -1;
+
+		List<Map<?, ?>> finalList = new ArrayList<Map<?, ?>>();
+		for (Map<?, ?> mapObj : mListObjs) {
+			int objLevel = Integer.parseInt((String) mapObj.get(DomainConstants.SELECT_LEVEL));
+			if (removedObjLevel != -1) {
+				if (objLevel > removedObjLevel) {
+					continue;
+				}
+				else {
+					removedObjLevel = -1;
+				}
+			}
+			finalList.add(mapObj);
+			String strObjectPolicy = (String) mapObj.get(DomainConstants.SELECT_POLICY);
+			if (versionDocPolicyList.contains(strObjectPolicy)) {
+				removedObjLevel = objLevel;
+			}
+		}
+		return finalList;
+	}
+
+	private List<String> getVersionDocList(Context context, Map<String, String> propertyMap) {
+		String strPolicyList = propertyMap.get("VersionDocPolicy");
+		StringList symbolicPolicyList = FrameworkUtil.split(strPolicyList, ",");
+		List<String> policyList = new ArrayList<String>(symbolicPolicyList.size());
+		for (Object objPolicy : symbolicPolicyList) {
+			String strPolicy = (String) objPolicy;
+			if (strPolicy.startsWith("policy_")) {
+				policyList.add(PropertyUtil.getSchemaProperty(context, strPolicy));
+			}
+			else {
+				policyList.add(strPolicy);
+	    	        }
+		}
+		return policyList;
+	}
+
+	/**
+	 * Writes all the selected files with proper structure on the server
+	 * workspace folder and creates a zip of the folder. this zip is used for
+	 * download
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 * @return the name of javascript function which will navigate the request
+	 *         to servlet to complete the download operation
+	 * @throws DownloadPackageException
+	 */
+	public String actionDownloadPackage(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+
+			String[] imageData = (String[]) programMap.get("ImageData");
+			String[] newEmxTableRowId = (String[]) programMap.get("newEmxTableRowId");
+			String[] objectId = (String[]) programMap.get("objectId");
+			String[] arrZipStructure = (String[]) programMap.get("DownloadPackageZipStructure");
+			String[] arrSaveAsPDF = (String[]) programMap.get("DownloadPackageSaveAsPDF");
+
+			String mcsURL = imageData[0];
+			String strEmxTableRowId = "";
+			if (newEmxTableRowId != null && newEmxTableRowId.length != 0) {
+				strEmxTableRowId = newEmxTableRowId[0];
+			}
+			StringList sListRowIDs = FrameworkUtil.split(strEmxTableRowId, "|");
+			Map<String, String> mapObjInfoAndNewName = new HashMap<>();
+			for (Object objRowId : sListRowIDs) {
+				StringList sListInfo = FrameworkUtil.split((String) objRowId, "=");
+				mapObjInfoAndNewName.put((String) sListInfo.get(0), (String) sListInfo.get(1));
+			}
+			String strObjectId = objectId[0];
+			boolean isStructure = Boolean.FALSE;
+			if (arrZipStructure != null && "Structure".equalsIgnoreCase(arrZipStructure[0])) {
+				isStructure = Boolean.TRUE;
+			}
+			boolean isPDFRequired = Boolean.FALSE;
+			if (arrSaveAsPDF != null && "Yes".equalsIgnoreCase(arrSaveAsPDF[0])) {
+				isPDFRequired = Boolean.TRUE;
+			}
+			try {
+				String zipFileName="";
+				
+//			DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+//				String zipFileName = downloadPackageService.performDownload(context, strObjectId, mapObjInfoAndNewName, isStructure, isPDFRequired,
+//						args);
+			return Helper.encodeFunctionForJavaScript(context, false, "navigateToServlet", zipFileName, mcsURL);
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+			finally {
+				DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+				downloadPackageService.sendNotification(context, args);
+			}
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * jpo method to poulate Download name on SB DownloadPackageTable
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return Vector<String> containing download name for each row on SB
+	 * @throws DownloadPackageException
+	 */
+	public Vector<String> getTableDownloadPackageColumnNewName(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			// TODO
+			Map<?, ?> paramList = (Map<?, ?>) programMap.get("paramList");
+			String strPackage = (String) paramList.get("package");
+
+			DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+			Map<String, String> propertyMap = downloadPackageService.getDownloadPackageConfiguredProperties(context, strPackage);
+			List<String> versionDocList = getVersionDocList(context, propertyMap);
+			final String POLICY_VERSION = PropertyUtil.getSchemaProperty(context, "policy_Version");
+			if (Helper.isNullOrEmpty(versionDocList)) {
+				versionDocList.add(POLICY_VERSION);
+			}
+
+			Vector<String> vectorNewName = new Vector<>();
+
+			for (Object objList : objectList) {
+				Map<?, ?> mapObj = (Map<?, ?>) objList;
+				String newName = (String) mapObj.get("NewName");
+				if (newName != null && !"".equals(newName)) {
+					vectorNewName.add(newName);
+				}
+				else {
+					String objPolicy = (String) mapObj.get(DomainConstants.SELECT_POLICY);
+					if (versionDocList.contains(objPolicy)) {
+						vectorNewName.add((String) mapObj.get("format.file.name"));
+					}
+					else {
+						String type = (String) mapObj.get(DomainConstants.SELECT_TYPE);
+						String name = (String) mapObj.get(DomainConstants.SELECT_NAME);
+						String revision = (String) mapObj.get(DomainConstants.SELECT_REVISION);
+						StringBuilder typeNameRev = new StringBuilder();
+
+						if (type != null && name != null && revision != null) {
+							typeNameRev.append(type).append('_').append(name).append('_').append(revision);
+						}
+						else {
+							Map<String, String> rootMap = (Map<String, String>) QueryUtil.getInfo(context,
+									new String[] { (String) mapObj.get(DomainConstants.SELECT_ID) },
+									Helper.stringList(DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION))
+									.get(0);
+
+							typeNameRev.append(rootMap.get(DomainConstants.SELECT_TYPE)).append('_').append(rootMap.get(DomainConstants.SELECT_NAME))
+									.append('_').append(rootMap.get(DomainConstants.SELECT_REVISION));
+						}
+						vectorNewName.add(typeNameRev.toString());
+					}
+				}
+			}
+			return vectorNewName;
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * jpo method is used for extracting the download name of objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return String name of javascript function to be invoked for further
+	 *         processing
+	 * @throws DownloadPackageException
+	 */
+	public String actionGetNewName(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] selectedRowIds = (String[]) programMap.get("emxTableRowIdActual");
+
+			List<EmxTableRowId> listTableRowId = EmxTableRowId.getTableRowIds(selectedRowIds);
+			StringBuilder strBuildReturnString = new StringBuilder();
+
+			String[] rowIds = new String[listTableRowId.size()];
+			int i = 0;
+			for (EmxTableRowId tableRowId : listTableRowId) {
+				String parentId = tableRowId.getParentObjectId();
+				if (Helper.isNullOrEmpty(parentId)) {
+					parentId = null;
+				}
+				if (strBuildReturnString.length() > 0) {
+					strBuildReturnString.append(";").append(tableRowId.getObjectId()).append(':').append(parentId).append(':')
+							.append(tableRowId.getLevel());
+				}
+				else {
+					strBuildReturnString.append(tableRowId.getObjectId()).append(':').append(parentId).append(':').append(tableRowId.getLevel());
+				}
+				rowIds[i] = tableRowId.getLevel();
+				i++;
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, "getNewNameForDownload", strBuildReturnString.toString());
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * jpo method to invoke javascript method which will collect the disabled
+	 * checkboxes objectId from SB
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return String the name of javascript method to be invoked
+	 * @throws DownloadPackageException
+	 */
+	public String actionGetDisabledCheckboxesId(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] imgData = (String[]) programMap.get("ImageData");
+			String[] zipStructure = (String[]) programMap.get("DownloadPackageZipStructure");
+			String[] saveAsPDF = (String[]) programMap.get("DownloadPackageSaveAsPDF");
+			String[] objectId = (String[]) programMap.get("objectId");
+			String[] selectedRowIds = (String[]) programMap.get("emxTableRowId");
+			String[] table = (String[]) programMap.get("table");
+			String[] languageStr = (String[]) programMap.get("languageStr");
+			String[] timeZone = (String[]) programMap.get("timeZone");
+			String[] packageName = (String[]) programMap.get("package");
+
+			DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+			Map<String, String> propertyMap = downloadPackageService.getDownloadPackageConfiguredProperties(context, packageName[0]);
+			List<String> versionDocPolicyList = getVersionDocList(context, propertyMap);
+			final String POLICY_VERSION = PropertyUtil.getSchemaProperty(context, "policy_Version");
+			if (Helper.isNullOrEmpty(versionDocPolicyList)) {
+				versionDocPolicyList.add(POLICY_VERSION);
+			}
+
+			List<EmxTableRowId> listTableRowId = EmxTableRowId.getTableRowIds(selectedRowIds);
+
+			String[] arrObjectIds = new String[listTableRowId.size()];
+			int count = 0;
+			for (EmxTableRowId rowId : listTableRowId) {
+				arrObjectIds[count] = rowId.getObjectId();
+				count++;
+			}
+		
+			List<Map<?, ?>> mListObjectsInfo = QueryUtil.getInfo(context, arrObjectIds,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_POLICY));
+			List<String> versionList = new ArrayList<>();
+
+			for (Map<?, ?> mapInfo : mListObjectsInfo) {
+				String strPolicy = (String) mapInfo.get(DomainConstants.SELECT_POLICY);
+				if (versionDocPolicyList.contains(strPolicy)) {
+					versionList.add((String) mapInfo.get(DomainConstants.SELECT_ID));
+				}
+			}
+			if (versionList.size() <= 0) {
+				return Helper.encodeFunctionForJavaScript(context, false, "messageForNoFiles");
+			}
+			// TODO
+			return Helper.encodeFunctionForJavaScript(context, false, "getDisabledCheckboxesId", objectId[0], imgData[0], zipStructure[0],
+					saveAsPDF[0], table[0], languageStr[0], timeZone[0], packageName[0]);
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * JPO method to verify objects policy is Version or not
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return Map<String, String> where key is objectId and value is either
+	 *         "true" or "false"
+	 * @throws DownloadPackageException
+	 */
+	public Map<String, String> checkWhetherObjectsHasPolicyVersionOrNot(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			String objectIds = (String) paramMap.get("objectIds");
+			StringList sListObjectIds = FrameworkUtil.split(objectIds, ":");
+
+			final String POLICY_VERSION = PropertyUtil.getSchemaProperty(context, "policy_Version");
+			String[] arrObjIds = (String[]) sListObjectIds.toArray(new String[sListObjectIds.size()]);
+
+			Map<String, String> isObjectHasVersionPolicy = new TreeMap<>();
+			List<Map<?, ?>> mListInfo = QueryUtil.getInfo(context, arrObjIds,
+					Helper.stringList(DomainConstants.SELECT_POLICY, DomainConstants.SELECT_ID));
+			for (Map<?, ?> mapInfo : mListInfo) {
+				String strPolicy = (String) mapInfo.get(DomainConstants.SELECT_POLICY);
+				String strObjId = (String) mapInfo.get(DomainConstants.SELECT_ID);
+				if (POLICY_VERSION.equals(strPolicy)) {
+					isObjectHasVersionPolicy.put(strObjId, "true");
+				}
+				else {
+					isObjectHasVersionPolicy.put(strObjId, "false");
+				}
+			}
+			return isObjectHasVersionPolicy;
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * jpo method to initiate Downloading of files
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return String name of javascript method to invoke after execution of
+	 *         this method
+	 * @throws DownloadPackageException
+	 */
+	public String actionInitiateDownloadPackage(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			String[] arrObjId = (String[]) programMap.get("objectId");
+			if (emxTableRowId != null) {
+				List<EmxTableRowId> listTableRowId = EmxTableRowId.getTableRowIds(emxTableRowId);
+				String selectedId = "";
+				if (listTableRowId != null && listTableRowId.size() > 0) {
+					selectedId = listTableRowId.get(0).getObjectId();
+				}
+				return Helper.encodeFunctionForJavaScript(context, false, "formDownloadPackageURL", selectedId);
+			}
+			if (arrObjId == null) {
+				return Helper.encodeFunctionForJavaScript(context, false, "errorMessageForNoObjectId");
+			}
+			else {
+				return Helper.encodeFunctionForJavaScript(context, false, "formDownloadPackageURL", arrObjId[0]);
+			}
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * returns attachment icon in table DownloadPackageTable. attachments icons
+	 * are returned wherever required
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return List<String> the list of icons along with their href
+	 * @throws DownloadPackageException
+	 */
+	public List<String> getAttachementsIcon(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get("objectList");
+			List<String> vcAttachementIconList = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map<?, ?> objectMap = (Map<?, ?>) obj;
+					String strObjectId = (String) objectMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strObjectId)) {
+						DomainObject dmoCause = DomainObject.newInstance(context, strObjectId);
+						String strIcon = new String();
+						if (Helper.countConnectionsWithRel(context, dmoCause, "relationship_ActiveVersion", "from") > 0) {
+							strIcon = "iconSmallDocumentAttachment";
+							StringBuilder sbIconAttachement = new StringBuilder();
+							sbIconAttachement.append("<img src=\"../common/images/");
+							sbIconAttachement.append(strIcon);
+							sbIconAttachement.append(".gif\" border=\"0\" ");
+							sbIconAttachement.append("/>");
+
+							StringBuilder sbHrefMaker = new StringBuilder();
+							sbHrefMaker
+									.append("../common/emxIndentedTable.jsp?program=emxCommonDocumentUI:getDocuments&amp;table=APPDocumentSummary&amp;selection=multiple&amp;sortColumnName=Name&amp;sortDirection=ascending&amp;toolbar=ProductDocumentSummaryToolBar&amp;header=emxProduct.Menu.Documents&amp;HelpMarker=emxhelprefdoclist&amp;freezePane=Name&amp;suiteKey=ProductLine&amp;parentRelName=relationship_ActiveVersion");
+							sbHrefMaker.append("&amp;objectId=");
+							sbHrefMaker.append(XSSUtil.encodeForURL(context, strObjectId));
+
+							StringBuilder sbLinkMaker = new StringBuilder();
+							sbLinkMaker.append("<a href=\"javascript:emxTableColumnLinkClick('");
+							sbLinkMaker.append(sbHrefMaker.toString());
+							sbLinkMaker.append("', '600', '600', 'false', 'popup')\"  class='object'>");
+							sbLinkMaker.append(sbIconAttachement.toString());
+							sbLinkMaker.append("</a>");
+							vcAttachementIconList.add(sbLinkMaker.toString());
+						}
+						else {
+							vcAttachementIconList.add(DomainConstants.EMPTY_STRING);
+						}
+
+					}
+					else {
+						vcAttachementIconList.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcAttachementIconList;
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+
+	/**
+	 * method is used to calculate the size of the file object for column Size
+	 * for folder summary table.
+	 * 
+	 * @param context
+	 *            The Matrix Context object
+	 * @param args
+	 *            array containing list of objects to be displayed on S.B.
+	 * @return The Vector containing object's size
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	public Vector<String> getColumnDocumentFileSizeData(Context context, String[] args) throws Exception {
+		Vector<String> vectorFileSize = new Vector<String>();
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+		MapList mapObjectList = (MapList) programMap.get("objectList");
+		NumberFormat numberFormat = NumberFormat.getInstance();
+		numberFormat.setMaximumFractionDigits(2);
+		String arrObjectIds[] = null;
+		int size = 0;
+		if (null != mapObjectList) {
+			size = mapObjectList.size();
+		}
+		else {
+			throw new IllegalArgumentException();
+		}
+
+		arrObjectIds = new String[size];
+		int i = 0;
+		Map<String, Map<?, ?>> mObjectsInfoMap = new HashMap<String, Map<?, ?>>();
+		for (Object objDocument : mapObjectList) {
+			Map<?, ?> mapDocument = (Map<?, ?>) objDocument;
+			String strObjectId = (String) mapDocument.get(DomainConstants.SELECT_ID);
+			arrObjectIds[i++] = strObjectId;
+			mObjectsInfoMap.put(strObjectId, mapDocument);
+		}
+
+		StringList slObjectSelects = formObjectSelectsForDownloadTable(context);
+
+		final String ATTRIBUTE_TITLE = PropertyUtil.getSchemaProperty(context, "attribute_Title");
+		final String TYPE_DOCUMENTS = PropertyUtil.getSchemaProperty(context, "type_DOCUMENTS");
+		final String ATTRIBUTE_IS_VERSION_OBJECT = PropertyUtil.getSchemaProperty(context, "attribute_IsVersionObject");
+
+		final String SELECT_IS_KIND_OF_DOCUMENTS = (new StringBuilder()).append("type.kindof[").append(TYPE_DOCUMENTS).append("]").toString();
+		final String SELECT_IS_VERSION_OBJECT = new StringBuilder().append("attribute[").append(ATTRIBUTE_IS_VERSION_OBJECT).append(']').toString();
+
+		StringBuilder strBuildTitleSelect = new StringBuilder();
+		strBuildTitleSelect.append("attribute[").append(ATTRIBUTE_TITLE).append(']');
+
+		List<Map<?, ?>> mListInfo = QueryUtil.getInfo(context, arrObjectIds, slObjectSelects);
+		Map<String, Map<?, ?>> mapObjectsInfo = objectsInfoInMap(mListInfo);
+
+		for (Map<?, ?> mapInfo : mListInfo) {
+			String sChildObjId = (String) mapInfo.get(DomainConstants.SELECT_ID);
+			Map<?, ?> mapDocument = mObjectsInfoMap.get(sChildObjId);
+			String strIsVersionObject = (String) mapInfo.get(SELECT_IS_VERSION_OBJECT);
+			String sIsDocumentsType = (String) mapInfo.get(SELECT_IS_KIND_OF_DOCUMENTS);
+
+			String strFileSize = null;
+			if ("true".equalsIgnoreCase(sIsDocumentsType) && "true".equalsIgnoreCase(strIsVersionObject)) {
+				String strFileTitle = (String) mapDocument.get(strBuildTitleSelect.toString());
+
+				StringBuilder strBuildFileSize = new StringBuilder();
+				strBuildFileSize.append("format.file[").append(strFileTitle).append("].size");
+
+				StringList slMasterObjectSelects = Helper.stringList(DomainConstants.SELECT_ID, SELECT_IS_KIND_OF_DOCUMENTS,
+						strBuildFileSize.toString());
+
+				String strDocId = (String) mapDocument.get(DomainRelationship.SELECT_FROM_ID);
+
+				if (!Helper.isNullOrEmpty(strDocId)) {
+					Map<?, ?> mMasterObjInfo = mapObjectsInfo.get(strDocId);
+					if (null != mMasterObjInfo) {
+						String sIsMasterObjOfTypeDocuments = (String) mMasterObjInfo.get(SELECT_IS_KIND_OF_DOCUMENTS);
+
+						if ("true".equalsIgnoreCase(sIsMasterObjOfTypeDocuments)) {
+							DomainObject dmoDocument = DomainObject.newInstance(context, strDocId);
+							Map<?, ?> dmoDocumentInfo = dmoDocument.getInfo(context, slMasterObjectSelects);
+							strFileSize = (String) dmoDocumentInfo.get(strBuildFileSize.toString());
+							String strFormatedFileSize = "0";
+							if (!Helper.isNullOrEmpty(strFileSize)) {
+								strFormatedFileSize = numberFormat.format((Float.parseFloat(strFileSize)) / 1024);
+								if (null != strFormatedFileSize && strFormatedFileSize.length() <= 6) {
+									vectorFileSize.add(strFormatedFileSize + " KB");
+								}
+								else {
+									vectorFileSize.add(numberFormat.format((Float.parseFloat(strFileSize)) / (1024 * 1024)) + " MB");
+								}
+							}
+						}
+					}
+				}
+			}
+			if (Helper.isNullOrEmpty(strFileSize)) {
+				vectorFileSize.add(DomainConstants.EMPTY_STRING);
+			}
+		}
+
+		return vectorFileSize;
+	}
+
+	/**
+	 * returns the map where key is object id and value is map which contains
+	 * information about object
+	 * 
+	 * @param mListInfo
+	 *            information list which needs to be converted into map
+	 * @return Map<String, Map<?, ?>> where key is objectId and value is objects
+	 *         info
+	 */
+	private Map<String, Map<?, ?>> objectsInfoInMap(List<Map<?, ?>> mListInfo) {
+		Map<String, Map<?, ?>> objectsInfo = new HashMap<>();
+		for (Map<?, ?> mapInfo : mListInfo) {
+			objectsInfo.put((String) mapInfo.get(DomainConstants.SELECT_ID), mapInfo);
+		}
+		return objectsInfo;
+	}
+
+	public Map<String, String> getVersionDocPolicyList(Context context, String[] args) throws DownloadPackageException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strPackage = ((String[]) programMap.get("Package"))[0];
+
+			DownloadPackageService downloadPackageService = getDownloadPackageService(context);
+			Map<String, String> xmlMap = downloadPackageService.getDownloadPackageConfiguredProperties(context, strPackage);
+			List<String> versionDocPolicyList = getVersionDocList(context, xmlMap);
+			if (Helper.isNullOrEmpty(versionDocPolicyList)) {
+				final String POLICY_VERSION = PropertyUtil.getSchemaProperty(context, "policy_Version");
+				versionDocPolicyList.add(POLICY_VERSION);
+			}
+			String strPolicyList = FrameworkUtil.join(versionDocPolicyList.toArray(new String[versionDocPolicyList.size()]), ",");
+			Map<String, String> resultMap = new HashMap<String, String>();
+			resultMap.put("versionDocPolicy", strPolicyList);
+			return resultMap;
+		}
+		catch (Exception e) {
+			throw new DownloadPackageException(e);
+		}
+	}
+}
+

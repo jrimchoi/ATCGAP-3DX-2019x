@@ -1,0 +1,1211 @@
+#	Inventor Migration TCL from VDR to 3dPLM
+
+tcl;
+eval {
+
+
+# This func returns either list of files got ( maybe empty ) of throws error [ Like exception in C++ ]
+# Arguments :-	1> startDir	: folder name followed by trailing slash. Eg "c:\\"
+#		2> namePat	: pattern onto which file is to be seached. Eg '*' for Match any number of any characters; '?' for Match exactly one character; '[chars]' for Match any character in chars. Please refer glob command in TCL
+#		3> recursiveLevel : determines the level of seraching. 0 means search for 'startDir' level only.
+#		4> { searchedFilesList [list] }	: List of files got in searching. User internally by this fuunction.
+# NOTE :-	This fn fails when user has no read rights over a folder or file. Needs to be looked at. So to work with this fn. Make sure that folder and its sub folders have read permission
+proc FindFilesInFolder { startDir namePat recursiveLevel { searchedFilesList "" } } {
+
+	global pMigrationLogFile
+
+	set pwd [pwd]
+	if [catch {cd $startDir} err] {
+
+		puts $pMigrationLogFile "\[FindFilesInFolder\] ERROR1 =$err"
+		error $err;		#raise an error
+		return
+	}
+
+	foreach match [glob -nocomplain -- $namePat] {
+		lappend searchedFilesList [file join $startDir $match]
+	}
+
+	if { $recursiveLevel > 1 } {
+		foreach file [glob -nocomplain *] {
+			if [file isdirectory $file] {
+				if [catch {set sResult [FindFilesInFolder [file join $startDir $file] $namePat [expr { $recursiveLevel -1 } ]  $searchedFilesList ]} sErrorMessage] {
+
+					puts $pMigrationLogFile "\[FindFilesInFolder\] ERROR2 =$sErrorMessage"
+					error $sErrorMessage;		#raise an error
+					return
+				} else {
+					set searchedFilesList $sResult
+				}
+			}
+		}
+	}
+	cd $pwd
+
+	return $searchedFilesList
+}
+
+
+# This func checks out files of "designview" type or its children types of a format. 
+# Arguments :-	1> sObjectBusinessId	: DesignView business object to checkout.
+#		2> sFolderName	: the folder where the files are checked out.
+# return :-	This fn return "success" on succful checkout of files. Else "failure" is returned. No exception is thrown.
+# NOTE :-	THIS IS NOT GENERIC FN. This fn internally uses global variable "sDesignViewMajorTypeDetails".
+proc CheckoutFilesOfObject {sObjectBusinessId sFolderName } {
+
+	global pMigrationLogFile
+
+	set sRetVal "success"
+
+	if [ catch  {
+
+		global sDesignViewMajorTypeDetails;
+
+		set sMajorObjectTypeName [ GetCorrespondingMajorObjectType $sObjectBusinessId ]
+
+		set sDefaultFormat $sDesignViewMajorTypeDetails($sMajorObjectTypeName,defaultformat)
+
+		set sMqlCmd "mql checkout businessobject $sObjectBusinessId format \"$sDefaultFormat\" all directory \"$sFolderName\";"
+
+		puts $pMigrationLogFile "Executing checkout: $sMqlCmd"
+
+		if [catch { eval $sMqlCmd } sErrorMessage] {
+
+			puts $pMigrationLogFile "\[CheckoutFilesOfObject\]ERROR occured is :- $sErrorMessage"
+			set sRetVal "failure"
+		} else {
+		}
+
+	} sException ] {
+
+		puts $pMigrationLogFile "\[CheckoutFilesOfObject\]\[ERROR\]Exception occured. Exception msg is : $sException. Error in checkouting files."
+		set sRetVal "failure"
+	}
+
+	return $sRetVal
+}
+
+# This func checks in all files present in folder to a format. The format is foound by global variable "sAssemblyMajorTypeDetails".
+# Arguments :-	1> sObjectBusinessId	: "assembly" business objects to checkout.
+#		2> sFolderName	: the folder from where all the files are to be checked in.
+# return :-	This fn return "success" on succful checkout of files. Else "failure" is returned. No exception is returned.
+# NOTE :-	THIS IS NOT GENERIC FN. This fn internally uses global variable "sAssemblyMajorTypeDetails".
+proc CheckinFilesInObject { sObjectBusinessId sFolderName } {
+
+	global pMigrationLogFile
+
+	set sRetVal "success"
+
+	if [ catch  {
+
+		global sAssemblyMajorTypeDetails;
+
+		set sMajorObjectTypeName [ GetCorrespondingMajorObjectType $sObjectBusinessId ]
+
+		set sDefaultFormat $sAssemblyMajorTypeDetails($sMajorObjectTypeName,defaultformat)
+
+
+		if [ catch { set searchedFilesList [ FindFilesInFolder $sFolderName "*" 1 ] } sErrorMessage ] {
+
+			puts $pMigrationLogFile "\[CheckinFilesInObject\]ERROR =$sErrorMessage"
+			return "failure"
+		} else {
+			set sMqlCmd "mql checkin businessobject $sObjectBusinessId format \"asm\" append "
+			foreach fileList $searchedFilesList {
+				append sMqlCmd \"$fileList\" " "
+			}
+		}
+
+		append $sMqlCmd " ;"
+
+		puts $pMigrationLogFile "Executing checkin: $sMqlCmd"
+
+		if { [ llength $fileList ] <= 0 } {
+			# There are no files in folder and hence no file to checkin.
+
+			puts $pMigrationLogFile "\[CheckinFilesInObject\]ERROR =$sErrorMessage"
+			puts $pMigrationLogFile "\[CheckinFilesInObject\]No file to checked in back in this bus id $sObjectBusinessId"
+			return "success"
+		}
+
+		if [catch { eval $sMqlCmd } sErrorMessage] {
+
+			puts $pMigrationLogFile "\[CheckinFilesInObject\]ERROR is =$sErrorMessage"
+			set sRetVal "failure"
+		} else {
+		}
+
+
+	} sException ] {
+
+
+		puts $pMigrationLogFile "\[CheckinFilesInObject\]\[ERROR\]Exception occured. Exception msg is : $sException. Error in checkin files."
+		set sRetVal "failure"
+	}
+
+	return $sRetVal
+}
+
+
+
+# This func Gets Major object busid from a minor object busid.
+# Arguments :-	1> sMinorBusObjectId	: bus id of a minor object.
+# return :-	a valid business id of major object is returned if a valid minor object business was passed. Elso empty string ("") is returned. This fn doesnot return exception.
+# NOTE :-	The logic for this fn is finding connected major objects using the relationships "VersionOf [ to ] ", "Active Version [ from ]", "Latest Version [ to ] "
+proc GetMajorObjectOfMinorObject { sMinorBusObjectId } {
+
+	set sRetVal "";					# To store finalisation state of an object.
+	set sMajorObjectId "";
+	set sResult ""
+
+
+	global pMigrationLogFile
+
+# Finding any valid major object connected through "VersionOf" relationship.
+	if [catch {set sResult [ mql print bus \"$sMinorBusObjectId\" select relationship\[VersionOf\].to.id dump | ; ]} sErrorMessage] {
+
+	} else {
+		set sMajorObjectId $sResult
+
+		if { $sMajorObjectId != "" } {
+
+			if { $sMinorBusObjectId == $sMajorObjectId } {
+				puts $pMigrationLogFile "\[GetMajorObjectOfMinorObject\]\[INFO\] No valid major object found for object $sMinorBusObjectId"
+				return ""
+			}
+
+			if [ catch { set sTempMajorObjectId [ mql print bus $sMajorObjectId select id dump | ; ] } sErrorMessage ] {
+
+			} else {
+				if { $sTempMajorObjectId == $sMajorObjectId } {
+					set sRetVal $sMajorObjectId
+					return $sRetVal
+				} else {
+					# Major object is not got
+				}
+
+			}
+		}
+
+	}
+
+# Since we have come here this means that we didnt get any valid major object connected through "VersionOf" relationship.
+
+# Finding any valid major object connected through "Active Version" relationship.
+
+	if [catch {set sResult [ mql print bus \"$sMinorBusObjectId\" select relationship\[Active Version\].from.id dump | ; ]} sErrorMessage] {
+
+	} else {
+		set sMajorObjectId $sResult
+
+		if { $sMajorObjectId != "" } {
+
+			if { $sMinorBusObjectId == $sMajorObjectId } {
+				puts $pMigrationLogFile "\[GetMajorObjectOfMinorObject\]\[INFO\] No valid major object found for object $sMinorBusObjectId"
+				return ""
+			}
+
+			if [ catch { set sTempMajorObjectId [ mql print bus $sMajorObjectId select id dump | ; ] } sErrorMessage ] {
+
+			} else {
+				if { $sTempMajorObjectId == $sMajorObjectId } {
+					set sRetVal $sMajorObjectId
+					return $sRetVal
+				} else {
+					# Major object is not got
+				}
+			}
+
+		}
+
+	}
+
+# Since we have come here this means that we didnt get any valid major object connected through "Active Version" relationship.
+
+# Finding any valid major object connected through "Latest Version" relationship.
+
+	if [catch {set sResult [ mql print bus \"$sMinorBusObjectId\" select relationship\[Latest Version\].from.id dump | ; ]} sErrorMessage] {
+
+	} else {
+		set sMajorObjectId $sResult
+
+		if { $sMajorObjectId != "" } {
+
+			if { $sMinorBusObjectId == $sMajorObjectId } {
+				puts $pMigrationLogFile "\[GetMajorObjectOfMinorObject\]\[INFO\] No valid major object found for object $sMinorBusObjectId"
+				return ""
+			}
+
+			if [ catch { set sTempMajorObjectId [ mql print bus $sMajorObjectId select id dump | ; ] } sErrorMessage ] {
+
+			} else {
+				if { $sTempMajorObjectId == $sMajorObjectId } {
+					set sRetVal $sMajorObjectId
+					return $sRetVal
+				} else {
+					# Major object is not got
+				}
+			}
+
+		}
+
+	}
+
+
+# Since we have come here this means that we didnt get any valid major object connected through "Latest Version" relationship.
+
+	puts $pMigrationLogFile "\[GetMajorObjectOfMinorObject\]\[INFO\] No valid major object found for object $sMinorBusObjectId"
+
+	set sRetVal "";
+	return $sRetVal
+}
+
+# This func determines if assembly object (or it children objects) are finalised or not.
+# Arguments :-	1> sAssemblyObjectBusinessId	: major assembly object. [ NOTE : Dont give minor object here ]
+# return :-	"true" id major assembly object is finalised , else "false" . This fn doesnot return exception.
+# NOTE :-	THIS IS NOT GENERIC FN. It uses global variable "sAssemblyMajorTypeDetails"
+proc IsMajorObjectFinalized { sAssemblyObjectBusinessId } {
+
+	set sRetVal "true";								# assume that object is finalised. # returning true means that this object is finalised.
+
+	global pMigrationLogFile
+	global sAssemblyMajorTypeDetails;
+
+	if [ catch  {
+
+		set sMajorObjectTypeName [ GetCorrespondingMajorObjectType $sAssemblyObjectBusinessId ]
+
+		set sFinalisationState $sAssemblyMajorTypeDetails($sMajorObjectTypeName,finalisationstate)
+		set sStatesOfObject $sAssemblyMajorTypeDetails($sMajorObjectTypeName,states)
+
+		set iIndexOfFinalisedState [lsearch -exact $sStatesOfObject $sFinalisationState]
+
+	#	Getting current state of object
+		if [catch {set sResult [mql print bus \"$sAssemblyObjectBusinessId\" select current dump |;] } sErrorMessage] {
+
+			puts $pMigrationLogFile "\[IsMajorObjectFinalized\]ERROR = $sErrorMessage"
+			puts $pMigrationLogFile "\[IsMajorObjectFinalized\]Assuming that this object is finalised"
+			set sRetVal "false"
+
+		} else {
+
+			set sCurrentState $sResult
+
+			set iIndexOfCurrentState [lsearch -exact $sStatesOfObject $sCurrentState]
+
+			if { $iIndexOfCurrentState < $iIndexOfFinalisedState } {
+				set sRetVal "false"
+			}
+
+		}
+
+	} sException ] {
+
+		puts $pMigrationLogFile "\[IsMajorObjectFinalized\]\[ERROR\]$sException. Exception in getting finalisation status of bus object with id $sAssemblyObjectBusinessId."
+		puts $pMigrationLogFile "\[IsMajorObjectFinalized\]\[ERROR\]Exception msg is : $sException"
+		set sRetVal "false"
+	}
+
+	return $sRetVal;
+}
+
+
+# proc for determine id an object should contain any file or not. This is done on basis of finalization state and also on the major or minor type of object.
+# Arguments :-	1> sAssemblyObjectBusinessId	: major assembly object. [ NOTE : Dont give minor object here ]
+# return :-	"True" on if valid document for migration , else "false" . This fn doesnot return exception.
+# NOTE :-	THIS IS NOT GENERIC FN. It uses some other non generic func.
+proc ObjectValidForContainingFile { sObjectToTest } {
+
+	global pMigrationLogFile
+
+	set sRetVal "false"
+	set sMajorObject ""
+
+	if [ catch  {
+
+		set sMajorObject [GetMajorObjectOfMinorObject $sObjectToTest ]
+
+		if { $sMajorObject == "" } {
+			# This is major object.
+
+			set bIsFinalized [IsMajorObjectFinalized $sObjectToTest ];	# assumed that fn "IsMajorObjectFinalized" will not throw error.
+
+			set sRetVal $bIsFinalized
+		} else {
+			# This is minor object.
+
+			set bIsFinalized [IsMajorObjectFinalized $sMajorObject ];	# assumed that fn "IsMajorObjectFinalized" will not throw error.
+
+			if { $bIsFinalized == "true" } {
+
+				# Now since a finalised minor object does not contain files. so we assume that this object is not valid for migration
+				set sRetVal "false"
+
+			} else {
+
+				set sRetVal "true"
+
+			}
+
+		}
+
+	} sException ] {
+
+		puts $pMigrationLogFile "\[ObjectValidForContainingFile\]\[ERROR\]Exception occured. Exception msg is : $sException. Error in finding whether this business id $sObjectToTest should contain any file or not."
+		set sRetVal "false"
+	}
+
+	return $sRetVal
+}
+
+
+# proc for migrate individual busineess object from designview to assembly.
+# Arguments :-	1> sDesignViewObjectBusinessId	: designview busineess id
+# Arguments :-	2> sAssemblyObjectBusinessId	: assembly busineess id
+# Arguments :-	3> sWorkingFolderName		: working folder. slected by user. This fn may throw exception.
+# return :-	"success" on success , else "failure" .
+proc ParformIndividualObjectMigration { sDesignViewObjectBusinessId sAssemblyObjectBusinessId sWorkingFolderName } {
+
+	global pMigrationLogFile
+
+	set sRetVal "success"
+
+	set sTempFolderName [file join $sWorkingFolderName "TempFolder" ]
+
+	if { [file exists $sTempFolderName] == 0 } {
+		file mkdir $sTempFolderName;		# Create a folder
+	}
+
+	set bValidForMigration [ ObjectValidForContainingFile $sAssemblyObjectBusinessId ];	# We ObjectValidForContainingFile fn will not throw error
+
+	if { $bValidForMigration == "true" } {
+
+		set sResult [CheckoutFilesOfObject $sDesignViewObjectBusinessId $sTempFolderName ]
+
+		if { $sResult == "success" } {
+
+			set sResult [CheckinFilesInObject $sAssemblyObjectBusinessId $sTempFolderName]
+			if { $sResult == "success" } {
+
+			} else {
+
+				puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]ERROR occured in checkin in files."
+				set sRetVal "failure"
+			}
+
+		} else {
+
+			puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]ERROR occured in checkin out files"
+			set sRetVal "failure"
+		}
+
+	} else {
+
+		puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]\[INFO\] The business object of bus id $sAssemblyObjectBusinessId is not valid object to have file. So the files are not moved."
+	}
+
+
+	if { [file exists $sTempFolderName] == 1 } {
+		file delete -force $sTempFolderName;		# delete file
+	}
+
+
+	if { $sRetVal == "success" } {
+
+#		Disconnect "INV Design View" Objects
+		set sMqlCmd "mql disconnect businessobject $sDesignViewObjectBusinessId relationship \"CAD SubComponent\" from $sAssemblyObjectBusinessId;"
+
+		puts $pMigrationLogFile "Executing disconnect: $sMqlCmd"
+
+		if [catch { eval $sMqlCmd } sErrorMessage] {
+
+			puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]ERROR = $sErrorMessage"
+			set sRetVal "failure"
+		} else {
+		}
+
+	} else {
+	}
+
+	return $sRetVal
+}
+
+
+# proc to perform migration
+#//<<JP>>To do: add catch here
+
+# proc proc to perform actual migration and creation of MigrationError file if there is any error.
+# Arguments :-	1> sMigrationDataFile	: migration data file which is to be read.
+# Arguments :-	2> sAssemblyObjectBusinessId	: assembly busineess id
+# Arguments :-	3> sWorkingFolderName		: working folder. slected by user. This fn may throw exception.
+# return :-	"success" on success , else "failure" .
+proc PerformMigration { sMigrationDataFile sWorkingFolderName } {
+
+	global pMigrationLogFile
+	global pMigrationErrorsFile
+
+	set sRetVal "success"
+
+	set sMqlCmd "mql trigger off;"
+
+	puts $pMigrationLogFile "turning off trigger : $sMqlCmd"
+
+	if [catch { eval $sMqlCmd } sErrorMessage] {
+		puts $sErrorMessage
+		puts $pMigrationLogFile "\[PerformMigration\]ERROR in turning off trigger. Error msg is = $sErrorMessage"
+		return "failure"
+	} else {
+	}
+
+	set pMigrationDataFile [open $sMigrationDataFile r]; # 'r' means : Opens for reading. The file must exist.
+
+	foreach sLineInFile [split [read $pMigrationDataFile] \n] {
+
+		set sErrorInMovingObjectInWholeLine "false";			# This determine if all the objects in MigrationData file is move successfully or not.
+
+		set sLineLength [string length $sLineInFile]
+		if { $sLineLength <= 0 } {
+			continue
+		}
+
+#		Start transaction.
+		set sMqlCmd "mql start transaction;"
+		puts $pMigrationLogFile "starting transation : $sMqlCmd"
+
+		if [catch { eval $sMqlCmd } sErrorMessage] {
+			puts $sErrorMessage
+			puts $pMigrationLogFile "\[PerformMigration\]ERROR =$sErrorMessage"
+
+			set sErrorInMovingObjectInWholeLine "true";		# some error occured in moving objects
+
+			set sRetVal "failure"
+		}
+
+		set sTokenisedData [split $sLineInFile "|"]
+		set sDesignViewObjectType [lindex $sTokenisedData 0]		; #this is the designViewObject type which are to be added
+		set sDesignViewObjectName [lindex $sTokenisedData 1]		; #this is the designViewObject name which are to be added
+		set sDesignViewObjectRevision [lindex $sTokenisedData 2]	; #this is the designViewObject revision which are to be added
+		set sDesignViewObjectBusinessId [lindex $sTokenisedData 3]	; #this is the designViewObjectBusinessIDs which are to be added
+		set sSizeOfTokenisedData [ llength $sTokenisedData]
+
+		if { $sSizeOfTokenisedData >= 5 } {
+			for {set i 4} {$i < $sSizeOfTokenisedData} {incr i 1} {
+
+				set sAssemblyObjectBusinessId [lindex $sTokenisedData $i]	; #this is the designViewObjectBusinessIDs which are to be added
+
+				set sErrorInMoving "false"; # Determine if there was any problem in moving object or not.
+
+				if [catch {set sResult [ParformIndividualObjectMigration $sDesignViewObjectBusinessId $sAssemblyObjectBusinessId $sWorkingFolderName]} sErrorMessage] {
+
+					puts $pMigrationLogFile "\[PerformMigration\]ERROR in moving files. Error msg is = $sErrorMessage"
+					set sRetVal "failure"
+					set sErrorInMoving "true"
+				} else {
+					if { $sResult == "success" } {
+					} else {
+						puts $pMigrationLogFile " *************** ERROR in migration from $sDesignViewObjectBusinessId to $sAssemblyObjectBusinessId *************** "
+						puts $pMigrationLogFile "\[PerformMigration\]ERROR in moving files. Error msg is = $sErrorMessage"
+						set sRetVal "failure"
+						set sErrorInMoving "true"
+					}
+				}
+
+				set sTransactionState [ mql print transaction ; ]
+
+				if [ string match *abort* $sTransactionState ] {
+					puts "Transaction Corrupted"
+					set sErrorInMovingObjectInWholeLine "true";		# some error occured in moving objects
+				}
+				if { $sErrorInMoving == "true" } {
+					set sErrorInMovingObjectInWholeLine "true";		# some error occured in moving objects
+					break;
+				}
+			}
+		} else {
+#			puts "This may be an empty line and hence this is not being considered"
+		}
+
+		if { $sErrorInMovingObjectInWholeLine == "true" } {
+
+		puts $pMigrationErrorsFile $sLineInFile
+		puts " *************** Migration could not be done for line. $sLineInFile ******************"
+
+#			abort transaction.
+			set sMqlCmd "mql abort transaction;"
+			puts $pMigrationLogFile "ERROR : aborting transaction: $sMqlCmd"
+			if [catch {eval $sMqlCmd } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]ERROR is euual to= $sErrorMessage"
+				set sRetVal "failure"
+			}
+		} else {
+#			commit transaction.
+			set sMqlCmd "mql commit transaction;"
+			puts $pMigrationLogFile "commiting transaction: $sMqlCmd"
+			if [catch {eval $sMqlCmd } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile "\[ParformIndividualObjectMigration\]ERROR is = $sErrorMessage"
+				set sRetVal "failure"
+			} else {
+				puts $pMigrationLogFile "\[INFO\] Successfully moved files from MigrationData file for date $sLineInFile"
+			}
+		}
+
+	}
+	close $pMigrationDataFile
+
+	puts "\n\nNOTE : Trigger was turned off before migration. You can turn it on now."
+
+	return $sRetVal
+}
+
+
+# To check valid GCO from type name and revision.
+proc ValidateNCorrectsInventorGCOInfo { sGCOType sGCOName sGCORevision } {
+
+	set sRetVal "success"
+
+	if [catch {set sResult [ mql print bus $sGCOType $sGCOName $sGCORevision select id dump | ; ]} sErrorMessage] {
+		puts "\[ValidateNCorrectsInventorGCOInfo\]\[ERROR\] in gettng value valid GCO for \"$sGCOType\" \"$sGCOName\" \"$sGCORevision\" entered \n\nAborting "
+		set sRetVal "failure"
+	} else {
+		if { $sResult == "" } {
+			puts "\[ValidateNCorrectsInventorGCOInfo\]\[ERROR\] in gettng value valid GCO for \"$sGCOType\" \"$sGCOName\" \"$sGCORevision\" entered \n\nAborting "
+			set sRetVal "failure"
+		} else {
+
+		}
+	}
+
+	return $sRetVal
+}
+
+
+# proc for Getting all users input.
+# return failure in case of any wrong inputs.
+proc GetUsersInput {  } {
+
+	set sRetVal "success"
+
+	global sWorkingFolderName
+	global sMigrationDataFile
+	global sMigrationErrorsFile
+	global sDesignViewObjectList
+	global sInventorGCOType
+	global sInventorGCOName
+	global sInventorGCORevision
+
+	if [ catch  {
+
+	#	Getting Working folder from User
+		puts "\nPlease specify an working folder ( This is the place where migration data file, log files, temporary folders, etc will be generated )"
+		puts "NOTE : User should have access rights in working folder. Also No trailing slashes in foldername"
+		flush stdout ;												# Necessary to get partial line utput
+		set sUserInput [gets stdin]
+
+		set sWorkingFolderName $sUserInput
+
+
+	#	Getting MigrationData File Name
+		puts "\nPlease specify MigrationData File Name. Press ENTER key to generate new MigrationData File. Otherwise a file name \"InventorMigrationData.txt\" will be generated which will generate information of the migration data."
+		puts "NOTE : Please provide only the file name here and not the whole file path"
+		flush stdout ;												# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sMigrationDataFile $sUserInput
+
+
+	#	Getting MigrationErrors File Name
+		puts "\nPlease specify MigrationErrors File Name."
+		puts "NOTE : You can use this MigrationErrors file as input to MigrationData file in next migration run. MigrationErrors File Name should not be full file name."
+		flush stdout ;												# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sMigrationErrorsFile $sUserInput
+
+
+	#	Getting Design view object list and its derived design view objects also. \[ Both major and minor object \]
+		puts "\nPlease specify comma sepereated Design view object and its derived design view objects also. \[ Both major and minor object \]"
+		puts "NOTE : Format is \nINV Design View,INV Versioned Design View, ......"
+		flush stdout ;												# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sDesignViewObjectList [ split $sUserInput "," ]
+
+		if { $sWorkingFolderName == "" || $sMigrationErrorsFile == "" || [ llength $sDesignViewObjectList ] == 0 } {
+
+			puts "\[GetUsersInput\]\[ERROR\]Error in data. Maybe data is entered in wrong format. Please correct enter data correctly next time"
+			set sRetVal "failure"
+		}
+
+
+	#	Getting inventor GCO type to use for migration
+		puts "\nPlease specify Inventor GCO ( Global Config Object ) Type to use for migration"
+		puts "This is used to identify GCO for migration"
+		flush stdout ;# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sInventorGCOType $sUserInput
+
+
+
+	#	Getting inventor GCO name to use for migration
+		puts "\nPlease specify Inventor GCO ( Global Config Object ) Name to use for migration"
+		puts "This is used to identify GCO for migration"
+		flush stdout ;# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sInventorGCOName $sUserInput
+
+
+	#	Getting inventor GCO revision to use for migration
+		puts "\nPlease specify Inventor GCO ( Global Config Object ) Revision to use for migration"
+		puts "This is used to identify GCO for migration"
+		flush stdout ;# Necessary to get partial line output
+		set sUserInput [gets stdin]
+
+		set sInventorGCORevision $sUserInput
+
+
+
+	#	Validate and Correct Inventor GCO Type, name and revision
+		if [catch {set sResult [ ValidateNCorrectsInventorGCOInfo $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] } sErrorMessage] {
+			puts "\[ERROR\]\[GetUsersInput\] $sErrorMessage"
+			return "failure"
+		} else {
+			if { $sResult == "failure" } {
+				puts "\[ERROR\]\[GetUsersInput\] Error in validating Inventor GCO Type, name and revision. Please ensure that data is correct."
+				return "failure"
+			}
+		}
+
+
+	} sException ] {
+
+		puts "\[GetUsersInput\]\[ERROR\]$sException"
+		puts "\[GetUsersInput\]\[ERROR\]Exception occured. Maybe data is entered in wrong format. Please correct enter data correctly next time"
+		set sRetVal "failure"
+
+	}
+
+	return $sRetVal
+}
+
+
+# proc to generate migration data file.
+proc GenerateMigrationDataFile { sMigrationDataFile sDesignViewObjectList } {
+
+	global pMigrationLogFile
+	set sRetVal "success"
+
+	if [ catch  {
+
+		set pMigrationDataFile [open $sMigrationDataFile w]
+
+		foreach thisDesignViewType $sDesignViewObjectList {
+
+			set sMqlCmd "mql temp query bus \"$thisDesignViewType\" * * select id relationship\[CAD SubComponent\].from.id dump |;"
+			puts $pMigrationLogFile "\[GenerateMigrationDataFile\]\[INFO\]querying : $sMqlCmd and dumping result to file $sMigrationDataFile"
+
+			if [catch {set sResult [mql temp query bus "$thisDesignViewType" * * select id relationship\[CAD SubComponent\].from.id dump |;] } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile "\[GenerateMigrationDataFile\]\[ERROR\] error = $sErrorMessage"
+				set sRetVal "failure"
+			} else {
+				puts $pMigrationDataFile $sResult
+			}
+		}
+
+		close $pMigrationDataFile
+
+	} sException ] {
+
+		puts "\[GenerateMigrationDataFile\]\[ERROR\]$sException"
+		puts "\[GenerateMigrationDataFile\]\[ERROR\]Exception occured. Maybe designview types [majar and minor ] entered are incorrect"
+		set sRetVal "failure"
+
+	}
+
+	return $sRetVal
+}
+
+# proc to get object type
+# return string of valid type on success. else empty string is returned.
+# This fn will not return exception.
+proc GetObjectType { sObjectBusId } {
+
+	set sRetVal ""
+	global pMigrationLogFile
+
+	if [ catch  {
+
+		set sRetVal [mql print bus \"$sObjectBusId\" select type dump |;]
+
+	} sException ] {
+		puts $pMigrationLogFile "\[GetObjectType\]\[ERROR\]Error getting of business object of id $sObjectBusId"
+		set sRetVal ""
+	}
+
+
+	return $sRetVal
+}
+
+
+# proc to get object type of corresponding major type.
+# return string of valid type on success. else empty string is returned.
+# This fn will not return exception.
+proc GetCorrespondingMajorObjectType { sObjectBusId } {
+
+
+	set sRetVal ""
+	global pMigrationLogFile
+
+	if [ catch  {
+
+		set sMajorObject [GetMajorObjectOfMinorObject $sObjectBusId ]
+
+		if { $sMajorObject == "" } {
+
+			# This itself is major.
+			set sRetVal [mql print bus \"$sObjectBusId\" select type dump |;]
+		} else {
+
+			#this is minor.
+			set sRetVal [mql print bus \"$sMajorObject\" select type dump |;]
+		}
+
+	} sException ] {
+		puts $pMigrationLogFile "\[GetCorrespondingMajorObjectType\]\[ERROR\]Error getting of business object of id $sObjectBusId"
+		set sRetVal ""
+	}
+
+	return $sRetVal
+}
+
+
+# Gets format for a specified GCO.
+# on success valid string value is returned. Or else blank string is returned. NOT THROWING EXCEPTION.
+proc GetFormatOfTypeInGCOContext {sType sMatrixObjectType sGCOType sGCOName sGCORevision} {
+
+	set sRetVal "";					# This will store finalised state string.
+	set sException ""
+
+	if [ catch {
+
+		global pMigrationLogFile
+
+		if [catch {set sResult [ mql print bus $sGCOType $sGCOName $sGCORevision select attribute\[MCADInteg-TypeFormatMapping\] dump | ; ]} sErrorMessage] {
+			puts "\[GetFormatOfTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+			puts $pMigrationLogFile "\[GetFormatOfTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+
+		} else {
+
+			set mappingList [split $sResult "\n"]
+
+			foreach thisMapping $mappingList {
+
+				set sTemp "$sType|$sMatrixObjectType"
+
+				set sTokenisedData [ split $thisMapping "," ]
+
+				set sFirst [ lindex $sTokenisedData 0 ]
+				set sSecond [ lindex $sTokenisedData 1 ]
+
+				if { [ string equal -nocase $sTemp $sFirst ] } {
+
+					set sRetVal $sSecond
+					break
+				}
+			}
+		}
+
+	} sException ] {
+		puts "\[GetFormatOfTypeInGCOContext\]\[ERROR\] Exception occured . The excxeption is $sException"
+		set sRetVal ""
+	}
+
+	return $sRetVal
+}
+
+
+# Get list of all the states of a business object for A GCO. It is done by getting the Design policy and getting the design policy states.
+# on success valid list is returned.
+proc GetStatesOfBusObjectTypeInGCOContext {sBusObjectType sGCOType sGCOName sGCORevision} {
+
+	set sRetVal { };					# This will in the end store list. Now starting with empty list
+
+	global pMigrationLogFile
+
+	if [catch {set sResult [ mql print bus $sGCOType $sGCOName $sGCORevision select attribute\[MCADInteg-TypePolicyMapping\] dump | ; ]} sErrorMessage] {
+		puts "\[GetStatesOfBusObjectTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+		puts $pMigrationLogFile "\[GetStatesOfBusObjectTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+	} else {
+
+		set mappingList [split $sResult "\n"]
+
+		foreach thisMapping $mappingList {
+
+			set sTokenisedData [ split $thisMapping "|" ]
+
+			set sType [ lindex $sTokenisedData 0 ]
+			set sPolicy [ lindex $sTokenisedData 1 ]
+
+			if { [ string equal -nocase $sType $sBusObjectType ] } {
+
+				if [catch {set sResult [ mql print policy $sPolicy select state dump | ; ]} sErrorMessage] {
+					puts "\[GetStatesOfBusObjectTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+					puts $pMigrationLogFile "\[GetStatesOfBusObjectTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+
+				} else {
+					set sRetVal [split $sResult "|"]
+					return $sRetVal
+				}
+			}
+		}
+	}
+
+	return $sRetVal
+}
+
+
+# Gets finalisation state of a policy for a specified GCO.
+# on success valid string value is returned. Or else blank string is returned.
+proc GetFinalisationStateOfPolicyInGCOContext {sTestPolicy sGCOType sGCOName sGCORevision} {
+
+	set sRetVal "";					# This will store finalised state string.
+
+	global pMigrationLogFile
+
+	if [catch {set sResult [ mql print bus $sGCOType $sGCOName $sGCORevision select attribute\[IEF-FinalizationState\] dump | ; ]} sErrorMessage] {
+		puts "\[GetFinalisationStateOfPolicyInGCOContext\]\[ERROR\] = $sErrorMessage"
+		puts $pMigrationLogFile "\[GetFinalisationStateOfPolicyInGCOContext\]\[ERROR\] = $sErrorMessage"
+
+	} else {
+
+		set mappingList [split $sResult "\n"]
+
+		foreach thisMapping $mappingList {
+
+			set sTokenisedData [ split $thisMapping "|" ]
+
+			set sPolicy [ lindex $sTokenisedData 0 ]
+			set sFinalizationState [ lindex $sTokenisedData 1 ]
+
+			if { [ string equal -nocase $sPolicy $sTestPolicy ] } {
+				return $sFinalizationState
+			}
+		}
+	}
+
+	return $sRetVal
+}
+
+
+# Get Associated policy for a bus type ( specific to a GCO)
+# on success valid name string is returned. On error blank string is returned.
+proc GetPolicyForBusTypeInGCOContext { sBusObjectType sGCOType sGCOName sGCORevision } {
+
+	set sRetVal "";					# To store finalisation state of an object.
+
+	global pMigrationLogFile
+
+	if [catch {set sResult [ mql print bus $sGCOType $sGCOName $sGCORevision select attribute\[MCADInteg-TypePolicyMapping\] dump | ; ]} sErrorMessage] {
+		puts "\[GetPolicyForBusTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+		puts $pMigrationLogFile "\[GetPolicyForBusTypeInGCOContext\]\[ERROR\] = $sErrorMessage"
+
+	} else {
+
+		set mappingList [split $sResult "\n"]
+
+		foreach thisMapping $mappingList {
+
+			set sTokenisedData [ split $thisMapping "|" ]
+
+			set sType [ lindex $sTokenisedData 0 ]
+			set sPolicy [ lindex $sTokenisedData 1 ]
+
+			if { [ string equal -nocase $sType $sBusObjectType ] } {
+				return $sPolicy
+			}
+		}
+	}
+
+	return $sRetVal
+}
+
+
+#//<<JP>>To complete
+#//<<JP>>This is essential data.Please dont continue if this return "failure"
+# proc to get "INV Assembly" states, "INV Versioned Assembly" states, "INV Assembly" finalization state, "INV Versioned Assembly" finalization state.
+proc GetAssemblyRelatedGlobalValues { sInventorGCOType sInventorGCOName sInventorGCORevision } {
+
+	set sRetVal "failure"
+
+	if [ catch  {
+
+		global sAssemblyMajorTypeDetails
+
+		set sAssemblyMajorObjectTypes { }
+		set sAssemblyMajorObjectStates ""
+		set sAssemblyMajorObjectPolicy ""
+		set sAssemblyMajorObjectFinalizationState ""
+
+		global pMigrationLogFile
+
+		set sMCADIntegBusTypeMapping "MCADInteg-BusTypeMapping"
+		if [catch {set sResult [ mql print bus $sInventorGCOType $sInventorGCOName $sInventorGCORevision select attribute\[$sMCADIntegBusTypeMapping\] dump | ; ]} sErrorMessage] {
+			puts $sErrorMessage
+			puts "\[GetAssemblyRelatedGlobalValues\]\[ERROR\] in gettng value $sMCADIntegBusTypeMapping for GCO \"$sInventorGCOType\" \"$sInventorGCOName\" \"$sInventorGCORevision\" "
+			return "failure"
+		} else {
+
+			set mappingList [split $sResult "\n"]
+
+			foreach thisMapping $mappingList {
+
+				set sTokenisedData [ split $thisMapping "|" ]
+
+				set sFirst [ lindex $sTokenisedData 0 ]
+				set sSecond [ lindex $sTokenisedData 1 ]
+
+				if { [ string equal -nocase $sFirst "assembly" ] } {
+
+					set sAssemblyMajorObjectTypes [split $sSecond ","]
+					break
+				}
+			}
+		}
+
+		foreach thisAssemblyObjectType $sAssemblyMajorObjectTypes {
+
+			if { $thisAssemblyObjectType == "" } {
+				puts $pMigrationLogFile "\[GetAssemblyRelatedGlobalValues\]\[ERROR\]Error getting major object type"
+				return $sRetVal
+			}
+
+			if [catch {set sResult [ GetStatesOfBusObjectTypeInGCOContext "$thisAssemblyObjectType" $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile $sErrorMessage
+				return
+			} else {
+				set sAssemblyMajorObjectStates $sResult
+			}
+
+			if [catch {set sResult [ GetPolicyForBusTypeInGCOContext "$thisAssemblyObjectType" $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile $sErrorMessage
+				return
+			} else {
+				set sAssemblyMajorObjectPolicy $sResult
+			}
+
+			if [catch {set sResult [ GetFinalisationStateOfPolicyInGCOContext $sAssemblyMajorObjectPolicy $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] } sErrorMessage] {
+				puts $sErrorMessage
+				puts $pMigrationLogFile $sErrorMessage
+				return
+			} else {
+
+				set sAssemblyMajorObjectFinalizationState $sResult
+			}
+
+			set sFormat [ GetFormatOfTypeInGCOContext "assembly" $thisAssemblyObjectType $sInventorGCOType $sInventorGCOName $sInventorGCORevision ];	# Assuming that this fn GetFormatOfTypeInGCOContext will not throw exception.
+
+			set sAssemblyMajorTypeDetails($thisAssemblyObjectType,states) $sAssemblyMajorObjectStates
+			set sAssemblyMajorTypeDetails($thisAssemblyObjectType,finalisationstate) $sAssemblyMajorObjectFinalizationState
+			set sAssemblyMajorTypeDetails($thisAssemblyObjectType,defaultformat) $sFormat
+			
+
+		}
+
+	} sException ] {
+		puts $pMigrationLogFile "\[GetAssemblyRelatedGlobalValues\]\[ERROR\]Exception occured. Exception is $sException"
+		return "failure"
+	}
+
+	set sRetVal "success"
+	return $sRetVal
+}
+
+
+proc GetDesignViewRelatedGlobalValues { sInventorGCOType sInventorGCOName sInventorGCORevision } {
+
+	set sRetVal "failure"
+	global pMigrationLogFile
+	global sDesignViewMajorTypeDetails
+
+	if [ catch  {
+
+		set sDesignViewMajorObjectTypes { }
+
+		set sMCADIntegBusTypeMapping "MCADInteg-BusTypeMapping"
+		if [catch {set sResult [ mql print bus $sInventorGCOType $sInventorGCOName $sInventorGCORevision select attribute\[$sMCADIntegBusTypeMapping\] dump | ; ]} sErrorMessage] {
+			puts $sErrorMessage
+			puts "\[GetDesignViewRelatedGlobalValues\]\[ERROR\] in gettng value $sMCADIntegBusTypeMapping for GCO \"$sInventorGCOType\" \"$sInventorGCOName\" \"$sInventorGCORevision\" "
+			return "failure"
+		} else {
+
+			set mappingList [split $sResult "\n"]
+
+			foreach thisMapping $mappingList {
+
+				set sTokenisedData [ split $thisMapping "|" ]
+
+				set sFirst [ lindex $sTokenisedData 0 ]
+				set sSecond [ lindex $sTokenisedData 1 ]
+
+				if { [ string equal -nocase $sFirst "designview" ] } {
+
+					set sDesignViewMajorObjectTypes [split $sSecond ","]
+					break
+				}
+			}
+		}
+
+
+		foreach thisDesignViewObjectType $sDesignViewMajorObjectTypes {
+
+			if { $thisDesignViewObjectType == "" } {
+				puts $pMigrationLogFile "\[GetAssemblyRelatedGlobalValues\]\[ERROR\]Error getting major object type"
+				return $sRetVal
+			}
+
+			set sFormat [ GetFormatOfTypeInGCOContext "designview" $thisDesignViewObjectType $sInventorGCOType $sInventorGCOName $sInventorGCORevision ];	# Assuming that this fn GetFormatOfTypeInGCOContext will not throw exception.
+
+			set sDesignViewMajorTypeDetails($thisDesignViewObjectType,defaultformat) $sFormat
+			
+
+		}
+
+
+
+	} sException ] {
+		puts $pMigrationLogFile "\[GetDesignViewRelatedGlobalValues\]\[ERROR\]Exception occured. Exception is $sException"
+		return "failure"
+	}
+
+	set sRetVal "success"
+	return $sRetVal
+}
+
+
+proc GetGlobalValues { sInventorGCOType sInventorGCOName sInventorGCORevision } {
+
+	global pMigrationLogFile
+
+	if [ catch {
+
+		set sResult1 [ GetAssemblyRelatedGlobalValues $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] ;	# This populates global object "sAssemblyMajorTypeDetails"
+		set sResult2 [ GetDesignViewRelatedGlobalValues $sInventorGCOType $sInventorGCOName $sInventorGCORevision ] ;	# This populates global object "sDesignViewMajorTypeDetails"
+
+		if { $sResult1 == "failure" || $sResult2 == "failure" } {
+			puts $pMigrationLogFile "\[GetGlobalValues\]\[ERROR\]Error getting values of assembly or design view objects"
+			return "failure"
+		}
+
+	} sException ] {
+		puts $pMigrationLogFile "\[GetGlobalValues\]\[ERROR\]Exception occured. Exception is $sException"
+		return "failure"
+	}
+
+
+}
+
+
+
+
+#--------------- STARTING ACTUAL IMPLIMENTATION ---------------#
+
+	set sWorkingFolderName ""
+	set sMigrationDataFile ""
+	set sMigrationErrorsFile ""
+	set sMigrationLogFile ""
+	set sDesignViewObjectList { };										# empty list
+	set sInventorGCOType ""
+	set sInventorGCOName ""
+	set sInventorGCORevision ""
+#	set sAssemblyMajorTypeDetails "";										# details of major type.
+	set sAssemblyMajorTypeDetails("Temp","something45645654") "anything";							# Just initialising value with some garbage value.
+	set sDesignViewMajorTypeDetails("Temp","something3254236874") "anything";							# Just initialising value with some garbage value.
+
+	set bCreateNewMigrationDataFile "false";								# To determine if new migration file is to be created or not
+
+
+	set sMigration_Date [clock format [clock second]]
+
+	puts "\n\nInventor Migration from VDR to 3dPLM"
+	puts "\nTime/date is : $sMigration_Date"
+
+
+	set sResult [ GetUsersInput ]
+
+	if { $sResult == "failure" } {
+
+		puts "\[ERROR\]\[Main\]Faliure occured. Maybe data is entered in wrong format. Please correct enter data correctly next time"
+		puts "\[ERROR\]\[Main\]Aborting"
+		return
+	}
+
+	set sMigrationErrorsFile [ file join $sWorkingFolderName $sMigrationErrorsFile ]; 
+	set pMigrationErrorsFile [open $sMigrationErrorsFile w];						# To be used as Global variable # for putting error migration data files.
+	set sMigrationLogFile [file join $sWorkingFolderName "InventorMigration.log" ];				# To add migration logs.
+	# opening migration log file
+	set pMigrationLogFile [open $sMigrationLogFile a];							# To be used as Global variable # for logging.
+
+	if { $sMigrationDataFile == "" } {
+		set sMigrationDataFile [file join $sWorkingFolderName "InventorMigrationData.txt" ]
+
+		set bCreateNewMigrationDataFile "true";								# create new migration file
+	} else {
+		set sTemp $sMigrationDataFile;									# Temporary variable.
+		set sMigrationDataFile [file join $sWorkingFolderName $sTemp ]
+		set bCreateNewMigrationDataFile "false";							# dont create new migration file
+	}
+
+	puts $pMigrationLogFile "Inventor Migration from VDR to 3dPLM"
+	puts $pMigrationLogFile "\nTime/date is : $sMigration_Date"
+
+	puts $pMigrationLogFile "User input working folder name is $sWorkingFolderName"
+	puts $pMigrationLogFile "User input migration datafile name is $sMigrationDataFile"
+	puts $pMigrationLogFile "User input migration data errors file name is $sMigrationErrorsFile"
+	puts $pMigrationLogFile "User input for DesignView and its derived types \[ both major and minor \] are $sDesignViewObjectList"
+
+
+#	Getting all users input
+	set sResult [ GetGlobalValues $sInventorGCOType $sInventorGCOName $sInventorGCORevision ];		# assuming GetGlobalValues does not throw exception
+	
+	if { $sResult == "failure" } {
+
+		puts $pMigrationLogFile "\[ERROR\]\[Main\]Error in generating global values. Hence aborting."
+		puts "\[ERROR\]\[Main\]Error in generating global values. Hence aborting."
+		return
+
+	}
+
+#	Create Migration Data file according to users choice.
+	if { $bCreateNewMigrationDataFile == "true" } {
+
+		puts $pMigrationLogFile "\[INFO\] User has opted to create a new MigrationData file by Pressing Enter"
+
+		set sResult [ GenerateMigrationDataFile $sMigrationDataFile $sDesignViewObjectList ]
+
+		if { $sResult == "failure" } {
+			puts "\[ERROR\]\[Main\]Error in generating migration data file. Hence aborting."
+			return
+		}
+	} else {
+
+		puts $pMigrationLogFile "\[INFO\]\[Main\] User opted to Use existing migrationdata file \"$sMigrationDataFile\"."
+	}
+
+	
+
+	set sResult [ PerformMigration $sMigrationDataFile $sWorkingFolderName ]
+
+	if { $sResult == "failure" } {
+		puts $pMigrationLogFile "\[ERROR\]\[Main\] Some Error occured in migration. The objects which could not be saved are kept stored in MigrationError file."
+	}
+
+
+	return
+}
+

@@ -1,0 +1,495 @@
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Set;
+
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MqlUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+public class ${CLASSNAME} 
+{
+	public int mxMain(Context context, String[] args)
+		    throws Exception 
+	{
+		if (!context.isConnected()) {
+            throw new Exception("not supported on desktop client");
+        }
+		
+		String strOutputFileName = DomainConstants.EMPTY_STRING;
+		String strAction = "";
+		
+		try {
+			strAction = args[0];
+			strOutputFileName = args[1];
+        } catch (Exception e) {
+        	System.out.println("Incorrect Arguments");
+        }
+		
+		if (strAction.contains("Rev") || strAction.contains("rev"))
+		{
+			fixRevisionChains(context, strOutputFileName);
+		} else if (strAction.contains("SWV") || strAction.contains("swv")) {
+			fixSWVersionRevisionChains(context, strOutputFileName);
+		} else if (strAction.contains("Dup") || strAction.contains("dup")) {
+			findDuplicatePDMObjects(context, strOutputFileName);
+		} else if (strAction.contains("Check") || strAction.contains("check")) {
+			
+			String strOID, strPath, strFileName, strFormat;
+			strOID = strPath = strFileName = strFormat = "";
+			
+			try {
+				strOID = args[1];
+				strPath = args[2];
+				strFileName = args[3];
+				strFormat = args[4];
+	        } catch (Exception e) {
+	        	System.out.println("Incorrect Arguments for checkin");
+	        }
+			
+			checkinFileMethod(context, strOID, strPath, strFileName, strFormat);
+		}
+		
+		return 0;
+	}
+	
+	private void fixDuplicateObjects(Context context) 
+			throws Exception
+	{
+		// find all objects that have attribute[gapLegacyPDMIdentifier] set to something, if they don't also have a file of that name, output the OID
+		String strGetObjectsCommand = "temp query bus * * * where 'attribute[gapLegacyPDMIdentifier] != \"\"' select id attribute[gapLegacyPDMIdentifier] dump ~;";
+		String strObjectsList = MqlUtil.mqlCommand(context, strGetObjectsCommand);
+		
+		String [] saObjectsList = strObjectsList.split("\n");
+		for (int i = 0; i < saObjectsList.length; ++i)
+		{
+			String strNextLine = saObjectsList[i];
+			String [] saTokens = strNextLine.split("~");
+			String strNextOID = saTokens[3];
+			String strNextLegacy = saTokens[4];
+			
+			DomainObject doNextObject = DomainObject.newInstance(context, strNextOID);
+			String strFileList = doNextObject.getInfo(context, "format.file.name");
+		}
+	}
+	
+	private void fixRevisionChains(Context context, String strOutputFileName)
+		throws Exception
+	{
+		PrintWriter writer = new PrintWriter(strOutputFileName, "UTF-8");
+		
+		// STEP ONE: Capture a list of all TNR for objects with names that match G-* and aren�t *Version* or *Derived*Output* policies
+		//Query for "G-" objects: String strQueryCommand = "temp query bus * G-* * where 'policy !~~ *Version* && policy !~~ *Derived*Output* && policy !~~ *gapBatchLoad*' select id dump ~";
+		String strQueryCommand = "temp query bus SW* * * where 'policy ~~ *Version*' select id dump ~";
+		String strObjectsList = MqlUtil.mqlCommand(context, strQueryCommand);
+		
+		// STEP TWO: Group the results by unique Type+Name and collect the existing revision numbers into a list
+		String [] saObjectsList = strObjectsList.split("\n");
+		HashMap hmTNToRevs = new HashMap<String, ArrayList<String>>();
+		
+		//System.out.println("There are: " + saObjectsList.length + " G-* objects to process");
+		
+		for (int i = 0; i < saObjectsList.length; ++i)
+		{
+			String strNextLine = saObjectsList[i];
+			String [] saTokens = strNextLine.split("~");
+			String strType = saTokens[0];
+			String strName = saTokens[1];
+			String strRevision = saTokens[2];
+			
+			// pad the revision with zeros for sorting
+			if (strRevision.length() == 1)
+			{
+				strRevision = "000" + strRevision;
+			} else if (strRevision.length() == 2) {
+				strRevision = "00" + strRevision;
+			} else if (strRevision.length() == 3) {
+				strRevision = "0" + strRevision;
+			}
+			
+			String strTypeName = strType + "|" + strName;
+			
+			if (hmTNToRevs.containsKey(strTypeName))
+			{
+				// add this revision to the list
+				ArrayList<String> alExistingRevs = (ArrayList<String>) hmTNToRevs.get(strTypeName);
+				alExistingRevs.add(strRevision);
+			} else {
+				ArrayList<String> alExistingRevs = new ArrayList<String>();
+				alExistingRevs.add(strRevision);
+				hmTNToRevs.put(strTypeName, alExistingRevs);
+			}
+		}
+		
+		// STEP THREE: sort the lists of revisions in ascending order, then compare the revisions.next to the next existing revision, output "revise bus" commands if needed
+		Set<String> sTNKeys = hmTNToRevs.keySet();
+		for (String strNextTNKey : sTNKeys)
+		{
+			ArrayList<String> alNextRevList = (ArrayList<String>) hmTNToRevs.get(strNextTNKey);
+			Collections.sort(alNextRevList);
+			hmTNToRevs.put(strNextTNKey, alNextRevList);
+			
+			String []saTNTokens = strNextTNKey.split("\\|");
+			String strType = saTNTokens[0];
+			String strName = saTNTokens[1];
+			
+			//System.out.println("Processing revisions for Type: " + strType + " Name: " + strName);
+			
+			// for each revision, make sure the object is connected to the next revision
+			int iIndexOfFirstBreak = -1;
+			for (int i = 0; i < alNextRevList.size()-1; ++i)
+			{
+				String strCurrentRev = alNextRevList.get(i);
+				String strNextRev = alNextRevList.get(i+1);
+				
+				strCurrentRev = stripZeros(strCurrentRev);
+				strNextRev = stripZeros(strNextRev);
+				
+				String strResult = MqlUtil.mqlCommand(context, "print bus '" + strType + "' '" + strName + "' '" + strCurrentRev + "' select revisions[" + strCurrentRev + "].next dump ~");
+				strResult = strResult.replace("~", "");
+				
+				// if this current Revision doesn't have the next rev as it's "revisions.next", break and repair the chain from this point onward
+				if (!strResult.equals(strNextRev))
+				{
+					//System.out.println("Found a broken chain. revisions.next: " + strResult + " not equal to next in sequence: " + strNextRev);
+					iIndexOfFirstBreak = i;
+					break;
+				}
+				
+			}
+			
+			// if there was a broken link found, generate the required "revise bus" commands to repair the breakage to the rev chain
+			if (iIndexOfFirstBreak != -1)
+			{
+				for (int i = iIndexOfFirstBreak; i < alNextRevList.size()-1; ++i)
+				{
+					String strCurrentRev = alNextRevList.get(i);
+					String strNextRev = alNextRevList.get(i+1);
+					
+					strCurrentRev = stripZeros(strCurrentRev);
+					strNextRev = stripZeros(strNextRev);
+					
+					writer.println("revise bus '" + strType + "' '" + strName + "' '" + strCurrentRev + "' bus '" + strType + "' '" + strName + "' '" + strNextRev + "';");
+					writer.flush();
+				}
+			} else {
+				//System.out.println("Found no breaks in the revision chain. Moving to next Type|Name combination.");
+			}
+		}
+		
+		writer.close();
+	
+	}
+	
+	private void fixSWVersionRevisionChains(Context context, String strOutputFileName)
+		throws Exception
+	{
+		PrintWriter writer = new PrintWriter(strOutputFileName, "UTF-8");
+		
+		// STEP ONE: Capture a list of all TNR for objects with names that match SW* type and are *Version* policies
+		String strQueryCommand = "temp query bus SW* * * where 'policy ~~ *Version*' select id dump |";
+		String strObjectsList = MqlUtil.mqlCommand(context, strQueryCommand);
+		
+		// STEP TWO: Group the results by unique Type+Name and collect the existing revision numbers into a list
+		String [] saObjectsList = strObjectsList.split("\n");
+		HashMap hmTNToRevs = new HashMap<String, ArrayList<String>>();
+		
+		System.out.println("There are: " + saObjectsList.length + " SW* objects to process");
+		
+		for (int i = 0; i < saObjectsList.length; ++i)
+		{
+			String strNextLine = saObjectsList[i];
+			String [] saTokens = strNextLine.split("|");
+			String strType = saTokens[0];
+			String strName = saTokens[1];
+			String strRevision = saTokens[2];
+
+			System.out.println("Processing: " + strType + "|" + strName + "|" + strRevision);
+			
+			// pad the revision with zeros for sorting
+			//System.out.println("STEP 2 - Before Remove: " + strRevision);
+			strRevision = addZeros(strRevision);
+			//System.out.println("STEP 2 - After Remove: " + strRevision);
+			
+			String strTypeName = strType + "|" + strName;
+			
+			if (hmTNToRevs.containsKey(strTypeName))
+			{
+				// add this revision to the list
+				ArrayList<String> alExistingRevs = (ArrayList<String>) hmTNToRevs.get(strTypeName);
+				alExistingRevs.add(strRevision);
+			} else {
+				ArrayList<String> alExistingRevs = new ArrayList<String>();
+				alExistingRevs.add(strRevision);
+				hmTNToRevs.put(strTypeName, alExistingRevs);
+			}
+			System.out.println("STEP 2: Item added to array");
+		}
+		
+		// STEP THREE: sort the lists of revisions in ascending order, then compare the revisions.next to the next existing revision, output "revise bus" commands if needed
+		Set<String> sTNKeys = hmTNToRevs.keySet();
+		for (String strNextTNKey : sTNKeys)
+		{
+			System.out.println("STEP 3: Getting item");
+			ArrayList<String> alNextRevList = (ArrayList<String>) hmTNToRevs.get(strNextTNKey);
+			Collections.sort(alNextRevList);
+			hmTNToRevs.put(strNextTNKey, alNextRevList);
+			
+			String []saTNTokens = strNextTNKey.split("\\|");
+			String strType = saTNTokens[0];
+			String strName = saTNTokens[1];
+			
+			// for each revision, make sure the object is connected to the next revision
+			int iIndexOfFirstBreak = -1;
+			for (int i = 0; i < alNextRevList.size()-1; ++i)
+			{
+				String strCurrentRev = alNextRevList.get(i);
+				String strNextRev = alNextRevList.get(i+1);
+				
+				//System.out.println("STEP 3.1 - Before Remove: " + strCurrentRev + "," + strNextRev);
+				strCurrentRev = removeZeros(strCurrentRev);
+				strNextRev = removeZeros(strNextRev);
+				
+				String strResult = MqlUtil.mqlCommand(context, "print bus '" + strType + "' '" + strName + "' '" + strCurrentRev + "' select revisions[" + strCurrentRev + "].next dump |");
+				strResult = strResult.replace("|", "");
+				
+				// if this current Revision doesn't have the next rev as it's "revisions.next", break and repair the chain from this point onward
+				if (!strResult.equals(strNextRev))
+				{
+					//System.out.println("Found a broken chain. revisions.next: " + strResult + " not equal to next in sequence: " + strNextRev);
+					iIndexOfFirstBreak = i;
+					break;
+				}
+				
+			}
+			
+			// if there was a broken link found, generate the required "revise bus" commands to repair the breakage to the rev chain
+			if (iIndexOfFirstBreak != -1)
+			{
+				for (int i = iIndexOfFirstBreak; i < alNextRevList.size()-1; ++i)
+				{
+					String strCurrentRev = alNextRevList.get(i);
+					String strNextRev = alNextRevList.get(i+1);
+					
+					System.out.println("STEP 3.2 - Before Remove: " + strCurrentRev + "," + strNextRev);
+					strCurrentRev = removeZeros(strCurrentRev);
+					strNextRev = removeZeros(strNextRev);
+					
+					writer.println("revise bus '" + strType + "' '" + strName + "' '" + strCurrentRev + "' bus '" + strType + "' '" + strName + "' '" + strNextRev + "';");
+					writer.flush();
+				}
+			} else {
+				//System.out.println("Found no breaks in the revision chain. Moving to next Type|Name combination.");
+			}
+		}
+		
+		writer.close();
+	
+	}
+	
+	private String addZeros(String strRevision)
+	{
+		// split the version revision into its left and right components 
+		int iDecimalLocation = strRevision.indexOf(".");
+		String strLeftRevision = strRevision.substring(0, iDecimalLocation);
+		String strRightRevision = strRevision.substring(iDecimalLocation + 1);
+		
+		// pad both sides of version revision with leading zeroes
+		strLeftRevision = padZeros(strLeftRevision);
+		strRightRevision = padZeros(strRightRevision);
+		
+		// put revision back together
+		strRevision = strLeftRevision + "." + strRightRevision;
+
+		return strRevision;
+	}
+
+	private String padZeros(String strRevision)
+	{
+		if (strRevision.length() == 1)
+		{
+			strRevision = "000" + strRevision;
+		} else if (strRevision.length() == 2) {
+			strRevision = "00" + strRevision;
+		} else if (strRevision.length() == 3) {
+			strRevision = "0" + strRevision;
+		}
+		return strRevision;
+	}
+
+	private String removeZeros(String strRevision)
+	{
+		// split the version revision into its left and right components 
+		int iDecimalLocation = strRevision.indexOf(".");
+		String strLeftRevision = strRevision.substring(0, iDecimalLocation);
+		String strRightRevision = strRevision.substring(iDecimalLocation + 1);
+		
+		// remove leading zeroes from both sides of version revision
+		strLeftRevision = stripZeros(strLeftRevision);
+		strRightRevision = stripZeros(strRightRevision);
+		
+		// put revision back together
+		strRevision = strLeftRevision + "." + strRightRevision;
+
+		return strRevision;
+	}
+	
+	private String stripZeros(String strRevision)
+	{
+		if (strRevision.startsWith("000"))
+		{
+			strRevision = strRevision.replaceFirst("000", "");
+		} else if (strRevision.startsWith("00")) {
+			strRevision = strRevision.replaceFirst("00", "");
+		} else if (strRevision.startsWith("0")) {
+			strRevision = strRevision.replaceFirst("0", "");
+		}
+		return strRevision;
+	}
+
+	private void findDuplicatePDMObjects(Context context, String strOutputFileName)
+		throws Exception
+	{
+		// STEP ONE: Find all objects that have attribute[gapLegacyPDMIdentifier set to something
+		String strQueryCommand = "temp query bus * G-* * where 'format[gapLegacy].hasfile ~~ TRUE' select id format[gapLegacy].file.name dump ~";
+		String strObjectsList = MqlUtil.mqlCommand(context, strQueryCommand);
+		
+		// STEP TWO: Group the results by unique format[gapLegacy].file.name and collect the OIDs into a list if there are more than one with the same
+		String [] saObjectsList = strObjectsList.split("\n");
+		HashMap hmFileNameToOIDsList = new HashMap<String, ArrayList<String>>();
+		
+		for (int i = 0; i < saObjectsList.length; ++i)
+		{
+			String strNextLine = saObjectsList[i];
+			String [] saTokens = strNextLine.split("~");
+			String strOID = saTokens[3];
+			String strXMLFileName = saTokens[4];
+			
+			if (hmFileNameToOIDsList.containsKey(strXMLFileName))
+			{
+				// add this revision to the list
+				ArrayList<String> alExistingOIDs = (ArrayList<String>) hmFileNameToOIDsList.get(strXMLFileName);
+				alExistingOIDs.add(strOID);
+			} else {
+				ArrayList<String> alExistingOIDs = new ArrayList<String>();
+				alExistingOIDs.add(strOID);
+				hmFileNameToOIDsList.put(strXMLFileName, alExistingOIDs);
+			}
+		}
+		
+		// STEP THREE: For any Filename with more than one OID, see which of the OIDs have a file checked in that matches the gapLegacyPDMIdentifier attribute
+		ArrayList<String> alAllSetsOfObjects = new ArrayList<String>();
+		int iNumberWithNoFiles = 0;
+		int iNumberWithOneFile = 0;
+		int iNumberWithAllFiles = 0;
+		int iTotalNumberOfDups = 0;
+		
+		Set<String> sFileNameKeys = hmFileNameToOIDsList.keySet();
+		for (String strFileNameKey : sFileNameKeys)
+		{
+			ArrayList<String> alNextOIDList = (ArrayList<String>) hmFileNameToOIDsList.get(strFileNameKey);
+			
+			int iNumberWithoutFiles = 0;
+			
+			// only proceed if there is more than 1 OID
+			if (alNextOIDList.size() > 1)
+			{
+				iTotalNumberOfDups++;
+				String strAllOIDs = "";
+				
+				for (int i = 0; i < alNextOIDList.size(); ++i)
+				{
+					String strNextOID = alNextOIDList.get(i);
+					
+					String strInfo  = MqlUtil.mqlCommand(context, "print bus " + strNextOID + " select type name revision attribute[gapLegacyPDMIdentifier] dump ~");
+					String []saInfoTokens = strInfo.split("~");
+					
+					String strObjectType = saInfoTokens[0];
+					String strObjectName = saInfoTokens[1];
+					String strObjectRev = saInfoTokens[2];
+					// get the attribute of what the content file should be, gapLegacyPDMIdentifier
+					String strIdentifier = "";
+					if (saInfoTokens.length > 3)
+					{
+						strIdentifier  = saInfoTokens[3];
+					}		
+					
+					// get all file names that are checked in
+					String strCheckedIn  = MqlUtil.mqlCommand(context, "print bus " + strNextOID + " select format.file.name dump ~");
+					
+					// if a file isn't checked in that matches the identifier, advance the counter for missing files
+					System.out.println("Now checking if the file named: " + strIdentifier + " is found in the string: " + strCheckedIn);
+					if (!strCheckedIn.contains(strIdentifier))
+					{
+						iNumberWithoutFiles++;
+						strAllOIDs = strAllOIDs.concat(strIdentifier + "|**NoFile**|" + strObjectType + "|" + strObjectName + "|" + strObjectRev + "|" + strNextOID + "|" + strCheckedIn + "|");
+					} else {
+						strAllOIDs = strAllOIDs.concat(strIdentifier + "|**File**|" + strObjectType + "|" + strObjectName + "|" + strObjectRev + "|" + strNextOID + "|" + strCheckedIn + "|");
+					}
+				}
+				
+				alAllSetsOfObjects.add(strAllOIDs);
+				
+				// put these OIDs into categories, none with files, one with a file, and all with files
+				if (iNumberWithoutFiles == alNextOIDList.size())
+				{
+					iNumberWithNoFiles++;
+				} else if (iNumberWithoutFiles == alNextOIDList.size()-1) {
+					iNumberWithOneFile++;
+				} else if (iNumberWithoutFiles == 0) {
+					iNumberWithAllFiles++;
+				}				
+			}
+		}
+		
+		// STEP FOUR: Print out the results to a file
+		PrintWriter writer = new PrintWriter(strOutputFileName, "UTF-8");
+		
+		writer.println("Found " + iTotalNumberOfDups + " TOTAL sets of duplicate objects.\n");
+		
+		writer.println("Found " + iNumberWithNoFiles + " sets of duplicate objects with no files.");
+		writer.println("Found " + iNumberWithOneFile + " sets of duplicate objects with only one file.");
+		writer.println("Found " + iNumberWithAllFiles + " sets of duplicate objects with all object having files.\n");
+		writer.flush();
+		
+		for (String strNextObjectPair : alAllSetsOfObjects)
+		{
+			writer.println(strNextObjectPair);
+			writer.flush();
+		}
+		
+	}
+	
+	private void checkinFileMethod(Context context, String strOID, String strPath, String strFileName, String strFormat)
+		throws Exception
+	{
+		// Comment
+		String strComment = "File checked in that was previously missed in migration";
+		
+		// checkin the file
+    	String[] saArgs = {   strOID,                    // DOCUMENTS or its derived object - objectId to checkin
+    						  strPath,                   // the File Path where the file is located
+    			              strFileName,               // the File Name that needs to be checked in using the path
+    			              strFormat,                 // the File Format in which this file needs to be checked in
+    			              "STORE",                   // the store Name where this file should be checked in
+    			              "true",                    // unlock. This should be "true" to unlock the version object or "false"
+    			              "server",                  // a server key word to check in from the server
+    			              strComment                 // Comments about the file getting checked in
+                           };
+    	
+    	//System.out.println("Attempting to checkin file with version: objectAction: " + CommonDocument.OBJECT_ACTION_CHECKIN_WITH_VERSION + " fileName0: " + strFilePath + strFileName);
+    	
+    	JPO.invoke(context,                  // matrix context
+                "emxCommonDocument",         // program name
+                 null,                       // constructor arguments
+                 "checkinBus",               // method name
+                 saArgs,                     // method arguments
+                 null);                      // return class
+	}
+	
+}

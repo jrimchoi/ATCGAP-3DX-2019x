@@ -1,0 +1,629 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.HistoryService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIMenu;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets HistoryService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return HistorService implementation reference
+	 * @throws LSAException
+	 *             if operation fails
+	 */
+	private HistoryService getHistoryService(Context context) throws LSAException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			HistoryService historyService = (HistoryService) component.getService(HistoryService.class);
+			return historyService;
+		}
+		catch (ComponentException exception) {
+			throw new LSAException(exception);
+		}
+	}
+
+	// start code for History
+
+	/**
+	 * Method to get contents of History of particular key given
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of values for key
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getHistoryContents(Context context, String args[], String key) throws LSAException {
+		List keyList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strObjectKey = (String) mapObject.get(key);
+				keyList.add(strObjectKey);
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return keyList;
+	}
+
+	/**
+	 * Method to get Name Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Names
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getTableLSACommonHistoryColumnName(Context context, String args[]) throws LSAException {
+		List nameList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			Iterator objectListIterator = objectList.iterator();
+			Map<String, String> paramList = (Map<String, String>) programMap.get("paramList");
+			String strReportFormat = paramList.get("reportFormat");
+			int i = 0;
+			while (objectListIterator.hasNext()) {
+				Map mapObject = (Map) objectListIterator.next();
+				String strObjectName = (String) mapObject.get(DomainConstants.SELECT_NAME);
+				String strId = (String) mapObject.get(DomainConstants.SELECT_ID);
+				String strName = new String();
+				if (UIUtil.isNullOrEmpty(strId)) {
+					if (!Helper.isNullOrEmpty(strObjectName)) {
+						strName = new StringBuffer().append("<b>").append(strObjectName).append("</b>").toString();
+					}
+					else {
+
+					}
+				}
+				else {
+					DomainObject dobjType = DomainObject.newInstance(context, strId);
+					strName = dobjType.getInfo(context, DomainConstants.SELECT_TYPE);
+					if (Helper.isNullOrEmpty(strReportFormat)) {
+						strName = Helper.getObjectLink(context, strId, strObjectName);
+					}
+					else {
+						strName = strObjectName;
+					}
+					i++;
+				}
+				nameList.add(strName);
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return nameList;
+	}
+
+	/**
+	 * Method to get Time Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Time
+	 * @throws LSAException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public List getTableLSACommonHistoryColumnDate(Context context, String args[]) throws LSAException {
+		return getHistoryContents(context, args, "time");
+	}
+
+	/**
+	 * Method to get User Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Users
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getTableLSACommonHistoryColumnUser(Context context, String args[]) throws LSAException {
+		List userList = new StringList();
+		try {
+			List tempList = getHistoryContents(context, args, "user");
+
+			for (Object user : tempList) {
+				String strName = (String) user;
+				String strFullName = PersonUtil.getFullName(context, strName);
+				userList.add(strFullName);
+			}
+		}
+		catch (FrameworkException e) {
+			throw new LSAException(e);
+		}
+		return userList;
+	}
+
+	/**
+	 * Method to get Action Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Actions
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getTableLSACommonHistoryColumnAction(Context context, String args[]) throws LSAException {
+		List getActionList = getHistoryContents(context, args, "action");
+		if (Helper.isNullOrEmpty(getActionList)) {
+			return new StringList();
+		}
+		HistoryService historyService = getHistoryService(context);
+		List<String> actionList = historyService.trimCustomActionInList(getActionList);
+		List<String> i18ActionList = new StringList();
+
+		for (String action : actionList) {
+			StringBuilder propertyName = new StringBuilder("emxFramework.History.");
+			if (!Helper.isNullOrEmpty(action)) {
+				action = action.toLowerCase(Locale.getDefault());
+				if (action.contains(" ")) {
+					action = action.replace(" ", "_");
+				}
+				i18ActionList.add(Helper.getI18NString(context, Helper.StringResource.AEF, propertyName.append(action).toString()));
+			}
+			else {
+				i18ActionList.add(action);
+			}
+		}
+
+		return i18ActionList;
+	}
+
+	/**
+	 * Method to get State Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of States
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getTableLSACommonHistoryColumnState(Context context, String args[]) throws LSAException {
+		List keyList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String state = (String) mapObject.get(DomainConstants.SELECT_STATES);
+				String i18State = state;
+				String policy = (String) mapObject.get(DomainConstants.SELECT_POLICY);
+				if (!Helper.isNullOrEmpty(policy) && !Helper.isNullOrEmpty(state)) {
+					i18State = EnoviaResourceBundle.getStateI18NString(context, policy, state, context.getSession().getLanguage());
+					if (i18State.startsWith("emxFramework.")) {
+						i18State = state;
+					}
+				}
+				keyList.add(i18State);
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return keyList;
+
+	}
+
+	/**
+	 * Method to get Description Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Descriptions
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+
+	public List getTableLSACommonHistoryColumnDescription(Context context, String args[]) throws LSAException {
+		return getHistoryContents(context, args, DomainConstants.SELECT_DESCRIPTION);
+	}
+
+	private List<Map<String, String>> getTypeRelCardinialityPattern(Context context, String strObjectId) throws LSAException {
+		try {
+			List<Map<String, String>> mlTypeRelCardPattern = new ArrayList<>();
+			String strCardiniality = DomainConstants.EMPTY_STRING;
+			DomainObject dmoObject = null;
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				dmoObject = DomainObject.newInstance(context, strObjectId);
+				String strObjectType = dmoObject.getInfo(context, DomainConstants.SELECT_TYPE);
+				String strRelatedTypePattern = Helper.getProperty(context, "LSACommonFramework.ConsolidatedHistory.RelatedObjectsPattern");
+				List<String> slRelatedTypePattern = new StringList();
+				if (strRelatedTypePattern.contains(",")) {
+					slRelatedTypePattern = FrameworkUtil.split(strRelatedTypePattern, ",");
+				}
+				else {
+					slRelatedTypePattern.add(strRelatedTypePattern);
+				}
+				for (String strTypeRelCardPattern : slRelatedTypePattern) {
+					Map mpTypeRelCardPattern = new HashMap<>();
+					StringBuilder sbTypePattern = new StringBuilder();
+					StringBuilder sbRelPattern = new StringBuilder();
+					if (strTypeRelCardPattern.contains(":")) {
+						List<String> slTypeRelCardPattern = FrameworkUtil.split(strTypeRelCardPattern, ":");
+						for (String strType : slTypeRelCardPattern) {
+							if (!Helper.isNullOrEmpty(strType) && strObjectType.equals(PropertyUtil.getSchemaProperty(context, strType))) {
+								List<String> slTypeRelPattern = new StringList();
+								strTypeRelCardPattern = slTypeRelCardPattern.get(1);
+								slTypeRelCardPattern = FrameworkUtil.split(strTypeRelCardPattern, "#");
+								strCardiniality = slTypeRelCardPattern.get(1);
+								if (slTypeRelCardPattern.get(0).contains(";")) {
+									slTypeRelCardPattern = FrameworkUtil.split(slTypeRelCardPattern.get(0), ";");
+								}
+
+								for (String strTypeRelPattern : slTypeRelCardPattern) {
+									if (strTypeRelPattern.contains("|")) {
+										slTypeRelPattern = FrameworkUtil.split(strTypeRelPattern, "|");
+										sbTypePattern.append(PropertyUtil.getSchemaProperty(context, slTypeRelPattern.get(0))).append(",");
+										sbRelPattern.append(PropertyUtil.getSchemaProperty(context, slTypeRelPattern.get(1))).append(",");
+									}
+								}
+							}
+						}
+
+					}
+					if (!Helper.isNullOrEmpty(sbTypePattern.toString())) {
+						sbTypePattern.deleteCharAt(sbTypePattern.length() - 1);
+						sbRelPattern.deleteCharAt(sbRelPattern.length() - 1);
+						mpTypeRelCardPattern.put("Type-Pattern", sbTypePattern.toString());
+						mpTypeRelCardPattern.put("Rel-Pattern", sbRelPattern.toString());
+						mpTypeRelCardPattern.put("Card-Pattern", strCardiniality.toString());
+						mlTypeRelCardPattern.add(mpTypeRelCardPattern);
+					}
+				}
+			}
+
+			return mlTypeRelCardPattern;
+
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Method to get History of all the Parent Objects and their Related Objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds selected Filter Action and Search Filter Text in program
+	 *            map
+	 * @return MapList of Objects along containing History information
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getLSACommonHistoryTable(Context context, String args[]) throws LSAException {
+		try {
+			MapList mlist = new MapList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectID = (String) programMap.get("parentOID");
+			DomainObject dmoObject = DomainObject.newInstance(context, strObjectID);
+			List<Map<String, String>> mlTypeRelCardPattern = getTypeRelCardinialityPattern(context, strObjectID);
+			String strActionSelected = (String) programMap.get("LSACommonHistoryFilter");
+
+			if (Helper.isNullOrEmpty(strActionSelected)) {
+				strActionSelected = "All";
+			}
+
+			List<Map<?, ?>> mlObjInfo = QueryUtil.getInfo(context, new String[] { strObjectID },
+					Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_NAME, DomainObject.SELECT_TYPE));
+			Map objMap = mlObjInfo.get(0);
+			objMap.put(DomainObject.SELECT_LEVEL, Integer.toString(0));
+			mlist.add(objMap);
+
+			HistoryService historyService = getHistoryService(context);
+			for (Map mpTypeRelCardPattern : mlTypeRelCardPattern) {
+				List<Map<?, ?>> relObjList = historyService.getAllRelatedItems(context, dmoObject,
+						mpTypeRelCardPattern.get("Rel-Pattern").toString(), mpTypeRelCardPattern.get("Type-Pattern").toString(), mpTypeRelCardPattern
+								.get("Card-Pattern").toString());
+				mlist.addAll(relObjList);
+			}
+			return removeDuplicateds(mlist);
+
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	private MapList removeDuplicateds(MapList mlist) {
+		List<String> objIds = new ArrayList<>();
+		MapList mlNonDup = new MapList();
+		for (Object objMap : mlist) {
+			Map<String, String> map = (Map<String, String>) objMap;
+			String objId = map.get(DomainObject.SELECT_ID);
+			if (!objIds.contains(objId)) {
+				mlNonDup.add(map);
+				objIds.add(objId);
+			}
+		}
+		return mlNonDup;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getLSACommonHistory(Context context, String args[]) throws LSAException {
+		try {
+			MapList mlist = new MapList();
+
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectID = (String) programMap.get("objectId");
+			if (Helper.isNullOrEmpty(strObjectID)) {
+				return mlist;
+			}
+			String strActionSelected = (String) programMap.get("LSACommonHistoryFilter");
+			String strFilterSearch = (String) programMap.get("LSACommonHistorySearchFilter");
+
+			if (Helper.isNullOrEmpty(strActionSelected)) {
+				strActionSelected = "All";
+			}
+			HistoryService historyService = getHistoryService(context);
+			MapList tempList = historyService.getHistory(context, strObjectID, strActionSelected, strFilterSearch);
+			mlist.addAll(tempList);
+
+			return mlist;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * This method displays the possible values of Action to be selected by user
+	 * to filter the History.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            hold program map
+	 * @return Map of Actions
+	 * @throws LSAException
+	 *             if the operation fails
+	 */
+
+	public Map getLSACommonHistoryFilterRanges(Context context, String args[]) throws LSAException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			String strObjectID = (String) requestMap.get("parentOID");
+			DomainObject dmoComplaint = DomainObject.newInstance(context, strObjectID);
+			Map hmaplist = new HashMap();
+			hmaplist = UINavigatorUtil.getHistoryData(context, strObjectID);
+			List<String> actionArray = (List) hmaplist.get("action");
+			List<String> uniqueValueArray = new StringList();
+
+			for (String action : actionArray) {
+				if (!uniqueValueArray.contains(action)) {
+					uniqueValueArray.add(action);
+				}
+			}
+			StringList actionList = new StringList();
+			StringList displayChoices = new StringList();
+			actionList.add("All");
+			displayChoices.add(Helper.getI18NString(context, Helper.StringResource.LSA, "LSACommonFramework.Common.All"));
+
+			List<Map<String, String>> mlTypeRelCardPattern = getTypeRelCardinialityPattern(context, strObjectID);
+
+			HistoryService historyService = getHistoryService(context);
+			for (Map<String, String> mpTypeRelCardPattern : mlTypeRelCardPattern) {
+				List<Map<?, ?>> relObj = historyService.getAllRelatedItems(context, dmoComplaint, mpTypeRelCardPattern.get("Rel-Pattern").toString(),
+						mpTypeRelCardPattern.get("Type-Pattern").toString(), mpTypeRelCardPattern.get("Card-Pattern").toString());
+				for (Object relObjects : relObj) {
+					Map hmRel = (Map) relObjects;
+					String id = (String) hmRel.get(DomainConstants.SELECT_ID);
+					Map hmaplistRel = new HashMap();
+					hmaplistRel = UINavigatorUtil.getHistoryData(context, id);
+					List<String> actionArrayRel = (List) hmaplistRel.get("action");
+					List<String> getTrimList = historyService.trimCustomActionInList(actionArrayRel);
+					for (String action : getTrimList) {
+						if (!uniqueValueArray.contains(action)) {
+							uniqueValueArray.add(action);
+						}
+					}
+				}
+			}
+			for (Object action : uniqueValueArray) {
+				String getActionRel = (String) action;
+				actionList.add(getActionRel);
+				StringBuilder searchKey = new StringBuilder("emxFramework.History.");
+				if (getActionRel.contains(" ")) {
+					getActionRel = getActionRel.replace(" ", "_");
+				}
+				displayChoices.add(Helper.getI18NString(context, Helper.StringResource.AEF, searchKey.append(getActionRel).toString()));
+			}
+			Map rangeMap = new HashMap();
+			rangeMap.put("field_choices", actionList);
+			rangeMap.put("field_display_choices", displayChoices);
+
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * This method is used for displaying consolidated history of the object in
+	 * tab of a channel.It sets helpMarker in "LSACommonHistory" command href
+	 * and calls it as dynamic command. Type name of object is used to generate
+	 * help marker. The help marker will be the prefix
+	 * "emxHelpConsolidatedHistory" plus the type name of the object
+	 * 
+	 * @param context
+	 * @param args
+	 * @return MapList
+	 * @throws LSAException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getConsolidatedHistoryInChannel(Context context, String[] args) throws LSAException {
+		try {
+			MapList resultMapList = new MapList();
+			Map<String, Object> consolidatedHistoryCommand = getConsolidatedHistoryCommandMapWithHelpMarkerSet(context, args);
+			resultMapList.add(consolidatedHistoryCommand);
+			return resultMapList;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+
+	}
+
+	/**
+	 * * This method is used for displaying consolidated history of the object
+	 * from facet.It sets helpMarker in "LSACommonHistory" command href and
+	 * calls it as dynamic command. Type name of object is used to generate help
+	 * marker. The help marker will be the prefix "emxHelpConsolidatedHistory"
+	 * plus the type name of the object
+	 * 
+	 * @param context
+	 * @param args
+	 * @return Map
+	 * @throws LSAException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> getConsolidatedHistoryFromFacet(Context context, String[] args) throws LSAException {
+		try {
+			Map<String, Object> consolidatedHistoryCommand = getConsolidatedHistoryCommandMapWithHelpMarkerSet(context, args);
+			HashMap menuCommandMap = new HashMap<>();
+			MapList commandList = new MapList();
+			commandList.add(consolidatedHistoryCommand);
+			menuCommandMap.put("Children", commandList);
+			return menuCommandMap;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+
+	}
+
+	/**
+	 * This method sets helpMarker in "LSACommonHistory" command href and return
+	 * the command map.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 * @throws LSAException
+	 */
+	private Map<String, Object> getConsolidatedHistoryCommandMapWithHelpMarkerSet(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> hmpInput = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) hmpInput.get("requestMap");
+			Map<?, ?> paramMap = (Map<?, ?>) hmpInput.get("paramMap");
+			String objectId = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(requestMap)) {
+				objectId = (String) requestMap.get("objectId");
+			}
+			else if (!Helper.isNullOrEmpty(paramMap)) {
+				objectId = (String) paramMap.get("objectId");
+			}
+			String objectType = DomainConstants.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> objectMap = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainConstants.SELECT_TYPE));
+				if (!Helper.isNullOrEmpty(objectMap)) {
+					objectType = (String) objectMap.get(0).get(DomainConstants.SELECT_TYPE);
+				}
+			}
+			Map<String, Object> consolidatedHistoryCommand = UIMenu.getCommand(context, "LSACommonHistory");
+			StringBuilder updatedHref = new StringBuilder();
+			updatedHref.append(consolidatedHistoryCommand.get("href"));
+			updatedHref.append("&displayView=details&HelpMarker=emxHelpConsolidatedHistory");
+			if(objectType.contains(" ")){
+				objectType = objectType.replaceAll(" ", "_");
+			}
+			updatedHref.append(objectType);
+			consolidatedHistoryCommand.put("href", updatedHref.toString());
+			// get internationalized string for label and alt of command
+			consolidatedHistoryCommand.put("label",
+					Helper.getI18NString(context, Helper.StringResource.LSA, (String) consolidatedHistoryCommand.get("label")));
+			consolidatedHistoryCommand.put("alt",
+					Helper.getI18NString(context, Helper.StringResource.LSA, (String) consolidatedHistoryCommand.get("alt")));
+			return consolidatedHistoryCommand;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+}
+

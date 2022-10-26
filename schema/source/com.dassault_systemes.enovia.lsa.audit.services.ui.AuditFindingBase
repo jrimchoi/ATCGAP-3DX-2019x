@@ -1,0 +1,1397 @@
+/************************************************************************************************************
+ * /* AuditFindingBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditFindingBase program to handle Finding type
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.AuditUtil;
+import com.dassault_systemes.enovia.lsa.audit.services.AuditFindingService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * This method checks if any active Legal Hold Object is connected to
+	 * current document object & returns either 0 or 1 based on the result This
+	 * method runs on the delete check trigger of Delete Document.
+	 * 
+	 * @param context
+	 *            , ObjectId
+	 * @param args
+	 * @return int, send 0 if the method is successful, otherwise send 1 to
+	 *         block the trigger. @also, gives an alert message if there are any
+	 *         objects found.
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAutoNamed(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+
+		try {
+			ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+			// Get form info
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap mapRequest = (HashMap) programMap.get("requestMap");
+			HashMap formMap = (HashMap) programMap.get("formMap");
+			MapList formFieldList = (MapList) formMap.get("fields");
+			String parentOID = (String) paramMap.get("parentOID");
+			String relConnect = (String) paramMap.get("connect_rel");
+			String strSubSyscount = (String) paramMap.get("SUB_Count");
+			String strAuditSubSystem = "";
+
+			// Create autonamed object
+			String sNewObjId = FrameworkUtil.autoName(context, AuditConstants.REG_TYPE_AUDITFINDING, "", AuditConstants.REG_POLICY_FINDING, "");
+			DomainObject newObj = DomainObject.newInstance(context, sNewObjId);
+			newObj.openObject(context);
+			// set Audit SubSystem value
+
+			// set Audit SubSystem value starts here
+			String strAuditSubSystemTxt = "";
+			if (null != strSubSyscount && !"".equals(strSubSyscount)) {
+				int iSubSyscount = Integer.parseInt(strSubSyscount);
+				for (int i = 1; i <= iSubSyscount; i++) {
+					strAuditSubSystem = (String) paramMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM) + i);
+					if (null != strAuditSubSystem) {
+						if (null != strAuditSubSystemTxt && !"null".equals(strAuditSubSystemTxt) && !"".equals(strAuditSubSystemTxt)) {
+							strAuditSubSystemTxt += "," + strAuditSubSystem;
+						}
+						else {
+							strAuditSubSystemTxt = strAuditSubSystem;
+						}
+					}
+				}
+			}
+
+			newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strAuditSubSystemTxt);
+
+			// set Audit SubSystem value ends here
+			for (int i = 0; i < formFieldList.size(); i++) {
+				HashMap fieldMap = (HashMap) formFieldList.get(i);
+				String fieldName = (String) fieldMap.get("name");
+				// exclude subsystem as it returns a String[] value
+				if (fieldName.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM))) {
+					continue;
+				}
+
+				String fieldValue = (String) paramMap.get(fieldName);
+				if (fieldValue != null && !"".equals(fieldValue)) {
+					if ("description".equalsIgnoreCase(fieldName))
+						newObj.setDescription(context, fieldValue);
+					else
+						newObj.setAttributeValue(context, fieldName, fieldValue);
+				}
+			}
+
+			// Calling method to add Justification Value
+			updateRegulatoryRequirementOnCreate(context, args, sNewObjId);
+
+			// Check if there is a relationship passed as a parameter
+			// If so then we will connect
+
+			DomainObject parentObj = DomainObject.newInstance(context, parentOID);
+
+			// newObj.connect( context, new RelationshipType(""), boolean from,
+			// BusinessObject object)
+			newObj.connect(context, new RelationshipType(relConnect), false, parentObj);
+
+			newObj.closeObject(context, true);
+
+			// returnMap.put("objectId", sNewObjId);
+			String callback = "";
+			callback += "var objDetailsTree = getTopWindow().getWindowOpener().getTopWindow().objDetailsTree;";
+			callback += "var objSelectedNode = objDetailsTree.getSelectedNode();";
+			callback += "var strNodeID = objSelectedNode.nodeID;";
+			callback += "var url = \"../common/emxTree.jsp?mode=insert&objectId=" + sNewObjId + "&jsTreeID=\" + strNodeID;";
+			callback += "getTopWindow().getWindowOpener().getTopWindow().content.location.href=url;";
+			// returnMap.put("callback", callback);
+		}
+
+		catch (Exception ex) {
+			returnMap.put("Action", "Stop");
+			String exStr = ex.toString();
+
+			if (exStr.lastIndexOf("Exception:") >= 0)
+				exStr = exStr.substring(exStr.lastIndexOf("Exception:") + 10, exStr.length());
+
+			returnMap.put("Message", exStr);
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * Gets the repeat finding.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the repeat finding
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getRepeatFindingValue(Context context, String[] args) throws Exception {
+		StringBuffer strBufferOutput = new StringBuffer();
+		try {
+			HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) mapProgram.get("requestMap");
+			HashMap mapField = (HashMap) mapProgram.get("fieldMap");
+			Map mapSettings = (Map) mapField.get("settings");
+			String strObjectId = (String) mapRequest.get("objectId");
+			String sMode = (String) mapRequest.get("mode");// create/edit/search
+															// mode
+			String strAttrName = (String) mapSettings.get("Admin Type");
+			String sActualName = PropertyUtil.getSchemaProperty(strAttrName);
+			DomainObject doAuditObject;
+			String strRepeatFinding = "";
+			String strOptionRange = "";
+			if (strObjectId == null) {
+				strObjectId = "";
+			}
+
+			// Getting the attribute Ranges
+			StringList strRangesList = (StringList) ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}
+					.getAttributeChoices(context, args);
+			// Iterating the Range Values
+			Iterator itr = strRangesList.iterator();
+			// Adding the code for drop down box
+			if (null != sMode) {
+				if (strObjectId != null && !strObjectId.equals("")) {
+					doAuditObject = DomainObject.newInstance(context, strObjectId);
+					// Getting the Audit Follow Required value
+					strRepeatFinding = doAuditObject.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_REPEATFINDING));
+				}
+				strBufferOutput.append(" <select " + sActualName + " name='" + sActualName + "' id='" + sActualName
+						+ "' onChange=\"javascript:checkRepeatFinding()\">");
+				while (itr.hasNext()) {
+					strOptionRange = (String) itr.next();
+
+					String key = "emxFramework.Range.Audit_Repeat_Finding." + strOptionRange;
+					String strI18 = "";
+
+					if (strOptionRange.compareTo("") != 0)
+						strI18 = i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource",
+								context.getSession().getLanguage());
+
+					strBufferOutput.append("<option value ='" + strOptionRange + "'");
+					// Setting the existing Value in Edit screen
+					if (null != strRepeatFinding && strRepeatFinding.equals(strOptionRange)) {
+						strBufferOutput.append(" selected ");
+					}
+					strBufferOutput.append(">" + strI18 + "</option>");
+				}
+			}
+			else {
+				doAuditObject = DomainObject.newInstance(context, strObjectId);
+				// Getting the Audit Follow Required value
+				strRepeatFinding = doAuditObject.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_REPEATFINDING));
+				String key = "emxFramework.Range.Audit_Repeat_Finding." + strRepeatFinding;
+				strBufferOutput.append(
+						i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource", context.getSession().getLanguage()));
+
+			}
+
+		}
+		catch (Exception objException) {
+			objException.printStackTrace();
+			throw objException;
+		}
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * Update value. added method for updating the value in Edit mode
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public void UpdateValue(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings");
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String strObjectid = (String) paramMap.get("objectId");
+		DomainObject doObject = DomainObject.newInstance(context, strObjectid);
+		String strAttributeName = (String) settingsMap.get("Admin Type");
+		String strAttrActualName = PropertyUtil.getSchemaProperty(context, strAttributeName);
+		// if(strAttrActualName.equalsIgnoreCase())
+		String strNewValue = (String) paramMap.get("New Value");
+		if (strNewValue.equalsIgnoreCase("Yes")) {
+			doObject.setAttributeValue(context, strAttrActualName, "Yes");
+		}
+		else {
+			doObject.setAttributeValue(context, strAttrActualName, "No");
+		}
+
+	}
+
+	/**
+	 * Gets the regulatory requirement.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the regulatory requirement
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getRegulatoryRequirement(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap mapRequest = (HashMap) programMap.get("requestMap");
+		HashMap mapField = (HashMap) programMap.get("fieldMap");
+		Map mapSettings = (Map) mapField.get("settings");
+		String strattributename = (String) mapSettings.get("Admin Type");
+		String strObjectId = (String) mapRequest.get("objectId");
+		String strmode = (String) mapRequest.get("mode");
+		StringBuffer strBufferOutput = new StringBuffer();
+		String strPolicy = i18nNow.getI18nString("LQIAudit.Range.Policy", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strProcedure = i18nNow.getI18nString("LQIAudit.Range.Procedure", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strStandard = i18nNow.getI18nString("LQIAudit.Range.Standard", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strLaworRegulation = i18nNow.getI18nString("LQIAudit.Range.LaworRegulation", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strContractualRequirement = i18nNow.getI18nString("LQIAudit.Range.ContractualRequirement", "LQIAuditStringResource",
+				Locale.ENGLISH.getLanguage());
+		String strCodesofConduct = i18nNow.getI18nString("LQIAudit.Range.CodesofConduct", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strOther = i18nNow.getI18nString("LQIAudit.Range.Other", "LQIAuditStringResource", Locale.ENGLISH.getLanguage());
+		String strTypeLabel = i18nNow.getI18nString("LQIAudit.Common.Type", "LQIAuditStringResource", context.getLocale().toString());
+		String strNameLabel = i18nNow.getI18nString("LQIAudit.Common.Name", "LQIAuditStringResource", context.getLocale().toString());
+		String strReferenceLabel = i18nNow.getI18nString("LQIAudit.Common.Reference", "LQIAuditStringResource", context.getLocale().toString());
+		String strAddLabel = i18nNow.getI18nString("LQIAudit.Common.Add", "LQIAuditStringResource", context.getLocale().toString());
+		String strRemoveLabel = i18nNow.getI18nString("LQIAudit.Button.Remove", "LQIAuditStringResource", context.getLocale().toString());
+
+		StringList sListOptionrange = new StringList();
+		sListOptionrange.add(strPolicy);
+		sListOptionrange.add(strProcedure);
+		sListOptionrange.add(strStandard);
+		sListOptionrange.add(strLaworRegulation);
+		sListOptionrange.add(strContractualRequirement);
+		sListOptionrange.add(strCodesofConduct);
+		sListOptionrange.add(strOther);
+
+		Iterator itr = null;
+		List listTypes = new ArrayList();
+		List listNames = new ArrayList();
+		List listReferences = new ArrayList();
+
+		int iNextNum = 1;
+		try {
+			if (strmode != null && strmode.equalsIgnoreCase("edit")) {
+				// get the already stored values
+				if (null != strObjectId && !"".equals(strObjectId)) {
+					DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+					String strRegRequirement = doObject.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREGULATORYREQUIREMENTS));
+					String strSubstring = "";
+
+					if (null != strRegRequirement && !"".equals(strRegRequirement)) {
+						StringTokenizer strToken = new StringTokenizer(strRegRequirement, "|");
+						while (strToken.hasMoreTokens()) {
+							strSubstring = (String) strToken.nextToken();
+
+							if (!"".equals(strSubstring.trim())) {
+								listTypes.add(strSubstring.substring(0, strSubstring.indexOf(",")));
+								listNames.add(strSubstring.substring(strSubstring.indexOf(",") + 1, strSubstring.lastIndexOf(",")));
+								listReferences.add(strSubstring.substring(strSubstring.lastIndexOf(",") + 1));
+							}
+						}
+					}
+					else {
+						// should have default value to display HTML in create
+						listTypes.add("");
+						listNames.add("");
+						listReferences.add("");
+					}
+				}
+
+				String strOptionRange = "";
+
+				// creating the second row
+
+				String strTypeName = "";
+				String sDivName = "";
+				for (Iterator iter = listTypes.iterator(); iter.hasNext();) {
+					itr = sListOptionrange.iterator();
+					strTypeName = (String) iter.next();
+					if (iNextNum > 1) {
+						sDivName = "RR_" + iNextNum + "_Div";
+						// create big div to hold additional divs
+						if (iNextNum == 2) {
+							strBufferOutput.append("<div id=\"" + strattributename + "\">\n");
+						}
+						strBufferOutput.append("<div id=\"" + sDivName + "\">\n");
+					}
+
+					// creating the first row
+					strBufferOutput.append("<table>");
+					if (iNextNum == 1) {
+						strBufferOutput.append("<tr>");
+						strBufferOutput.append("<td>" + strTypeLabel + "</td>");
+						strBufferOutput.append("<td>" + strNameLabel + "</td>");
+						strBufferOutput.append("<td>" + strReferenceLabel + "</td>");
+						strBufferOutput.append("</tr>");
+					}
+					strBufferOutput.append("<tr>");
+					// makeing combobox
+					strBufferOutput.append("<td><select name=\"Type" + iNextNum + "\" >");
+					strBufferOutput.append("<option value ='" + "" + "'");
+					strBufferOutput.append(">" + "" + "</option>");
+					while (itr.hasNext()) {
+						strOptionRange = (String) itr.next();
+
+						String key = "emxFramework.Range.Audit_Regulatory_Requirements." + strOptionRange;
+						String strI18 = "";
+
+						if (strOptionRange.compareTo("") != 0)
+							strI18 = i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource",
+									context.getSession().getLanguage());
+
+						strBufferOutput.append("<option value ='" + strOptionRange + "'");
+						if (strTypeName.equalsIgnoreCase(strOptionRange)) {
+							strBufferOutput.append(" selected ");
+						}
+						strBufferOutput.append(">" + strI18 + "</option>");
+					}
+					strBufferOutput.append("</select></td>");
+
+					// strBufferOutput.append("<input type=\"hidden\"
+					// name=\""+${CLASS:AuditConstants}.ATTR_AUDITREGULATORYREQUIREMENTS
+					// +"\"
+					// id=\""+${CLASS:AuditConstants}.ATTR_AUDITREGULATORYREQUIREMENTS
+					// +"\" value=\"-\" >");
+
+					strBufferOutput.append("<td><input type=\"text\" name=\"Name" + iNextNum + "\" ");
+					if (!"".equals(strTypeName)) {
+						strBufferOutput.append(" value ='" + listNames.get(iNextNum - 1).toString() + "'");
+					}
+					strBufferOutput.append("></td>");
+					strBufferOutput.append("<td><input type=\"text\" name=\"Reference" + iNextNum + "\" ");
+					if (!"".equals(strTypeName)) {
+						strBufferOutput.append(" value ='" + listReferences.get(iNextNum - 1).toString() + "'");
+					}
+					strBufferOutput.append("></td>");
+					if (iNextNum == 1) {
+						strBufferOutput.append("<td><input type=\"button\" id=\"btnRequlatoryRequirement\" name=\"btnRequlatoryRequirement\" value=\""
+								+ strAddLabel + "\"");
+						strBufferOutput.append(" onclick=\"javascript:addRegulatoryRequirement()\"></td>");
+					}
+					else {
+						strBufferOutput.append("<td><input type=\"button\" value=\"" + strRemoveLabel + "\" onclick=\"javascript:removeDiv('"
+								+ sDivName + "');\"></td>");
+					}
+					strBufferOutput.append("</tr>");
+
+					strBufferOutput.append("</table>"); // table end
+
+					if (iNextNum > 1) {
+						strBufferOutput.append("</div>\n");
+					}
+					// increment incrementer
+					iNextNum++;
+				} // for ends here
+					// add div as default for all
+				if (listTypes.size() == 1) {
+					strBufferOutput.append("<div id=\"" + strattributename + "\">\n");
+				}
+				// creating Div and the hidden field for keeping count value
+				strBufferOutput.append("<input type=\"hidden\" id=\"count\" name=\"count\" value=\"" + (iNextNum - 1) + "\" />\n");
+				strBufferOutput.append("<input type=\"hidden\" name=\""
+						+ PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREGULATORYREQUIREMENTS) + "\" id=\""
+						+ PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREGULATORYREQUIREMENTS) + "\" value=\"-\" >");
+				strBufferOutput.append("</div>\n");
+			}
+			else // show in view only mode
+			{
+				strBufferOutput.append("<table>");
+				strBufferOutput.append("<tr>");
+				strBufferOutput.append("<td> " + strTypeLabel + "</td>");
+				strBufferOutput.append("<td> " + strNameLabel + "</td>");
+				strBufferOutput.append("<td> " + strReferenceLabel + "</td>");
+				strBufferOutput.append("</tr>");
+				String strSubstring = "";
+				String strRegRequirement = "";
+				if (null != strObjectId && !"".equals(strObjectId)) {
+					DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+					strRegRequirement = doObject.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREGULATORYREQUIREMENTS));
+				}
+
+				StringTokenizer strToken = new StringTokenizer(strRegRequirement, "|");
+				while (strToken.hasMoreTokens()) {
+					strSubstring = (String) strToken.nextToken();
+					if (!"".equals(strSubstring.trim())) {
+						String strType = strSubstring.substring(0, strSubstring.indexOf(","));
+						String key = "emxFramework.Range.Audit_Regulatory_Requirements." + strType;
+						String I18Type = i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource",
+								context.getSession().getLanguage());
+
+						String strName = strSubstring.substring(strSubstring.indexOf(",") + 1, strSubstring.lastIndexOf(","));
+						String strReference = strSubstring.substring(strSubstring.lastIndexOf(",") + 1);
+
+						strBufferOutput.append("<tr>");
+						strBufferOutput.append("<td>" + I18Type + "</td>");
+						strBufferOutput.append("<td>" + strName + "</td>");
+						strBufferOutput.append("<td>" + strReference + "</td>");
+						strBufferOutput.append("</tr>");
+					}
+				}
+				strBufferOutput.append("</table>");
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * It generates HTML text to display the Audit subsystem in create and edit
+	 * Finding screens
+	 * 
+	 * @param context
+	 * @param args
+	 * @return String
+	 * @throws Exception
+	 */
+	public String getFieldFindingSubSystem(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		StringBuffer strBufferOutput = new StringBuffer();
+		try {
+			HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) mapProgram.get(AuditConstants.REQUEST_MAP);
+			HashMap mapField = (HashMap) mapProgram.get(AuditConstants.FIELD_MAP);
+			Map mapSettings = (Map) mapField.get(AuditConstants.SETTINGS);
+			String strObjectId = (String) mapRequest.get(AuditConstants.OBJECT_ID);
+			String sMode = (String) mapRequest.get(AuditConstants.MODE);// create/edit/search
+			// mode
+			String sActualName = (String) mapSettings.get(AuditConstants.IW_ATTR_NAME);
+			String strParentOId = (String) mapRequest.get(AuditConstants.PARENT_OID);
+			DomainObject doAudit;
+			DomainObject doAuditObject;
+			String strAuditSubsystem = DomainConstants.EMPTY_STRING;
+			String strParentAuditSubsystem = DomainConstants.EMPTY_STRING;
+			String strOptionRange = DomainConstants.EMPTY_STRING;
+			Vector<String> vExistingValues = new Vector<String>();
+			// int iNextNum = 0;
+			StringList strRangesList = new StringList();
+			strRangesList.add(DomainConstants.EMPTY_STRING);
+			String strAuditId = DomainConstants.EMPTY_STRING;
+			String sSplitter = ",";
+			if (strObjectId == null) {
+				strObjectId = DomainConstants.EMPTY_STRING;
+			}
+			if (null != strParentOId) {
+				doAuditObject = DomainObject.newInstance(context, strParentOId);
+				strParentAuditSubsystem = doAuditObject.getAttributeValue(context, sActualName);
+			}
+			if (null != strParentAuditSubsystem) {
+				StringTokenizer stokAttrVal = new StringTokenizer(strParentAuditSubsystem, sSplitter);
+
+				// Get Vector for currently selected values
+				while (stokAttrVal.hasMoreTokens()) {
+					strRangesList.add(stokAttrVal.nextToken());
+				}
+			}
+			StringList sListObjSelects = new StringList(); // object selects
+			sListObjSelects.addElement(DomainConstants.SELECT_ID);
+			// Getting the attribute Ranges
+			Iterator itr = strRangesList.iterator();
+
+			// Adding the code for drop down box
+			if (null != sMode) {
+				if (!Helper.isNullOrEmpty(strObjectId)) {
+					List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+							Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT_FINDING, DomainObject.getAttributeSelect(sActualName)));
+					if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+						Map mpObjectInfo = lmObjectInfo.get(0);
+						if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+							String strTypeKindOfAuditFining = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFining)) {
+								// Getting the Audit isReaudit value
+								strAuditSubsystem = (String) mpObjectInfo.get(DomainObject.getAttributeSelect(sActualName));
+								doAuditObject = DomainObject.newInstance(context, strObjectId);
+								Map parentMap = doAuditObject.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS), false, sListObjSelects, null);
+
+								if (null != parentMap && parentMap.size() > 0) {
+									strRangesList = new StringList();
+									strRangesList.add(DomainConstants.EMPTY_STRING);
+									strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									doAudit = DomainObject.newInstance(context, new BusinessObject(strAuditId));
+									// strSelectedValue =
+									// doAudit.getAttributeValue(context,
+									// strAttributeName);
+									strParentAuditSubsystem = doAudit.getAttributeValue(context, sActualName);
+									if (null != strParentAuditSubsystem) {
+										StringTokenizer stokAttrVal = new StringTokenizer(strParentAuditSubsystem, sSplitter);
+
+										// Get Vector for currently selected
+										// values
+										while (stokAttrVal.hasMoreTokens()) {
+											strRangesList.add(stokAttrVal.nextToken());
+										}
+										itr = strRangesList.iterator();
+									}
+								}
+							}
+						}
+					}
+
+				}
+
+				// Tokenizers for attribute
+				if (null != strAuditSubsystem) {
+					StringTokenizer stokAttrValues = new StringTokenizer(strAuditSubsystem, sSplitter);
+					// Get Vector for currently selected values
+					while (stokAttrValues.hasMoreTokens()) {
+						vExistingValues.addElement(stokAttrValues.nextToken());
+					}
+					// iNextNum = vExistingValues.size() + 1;
+				}
+
+				String sInitialArrayString = DomainConstants.EMPTY_STRING;
+				String sSeperator = DomainConstants.EMPTY_STRING;
+
+				for (int iLoop = 0; iLoop < vExistingValues.size(); iLoop++) {
+					String strValue = (String) vExistingValues.get(iLoop);
+					sInitialArrayString += sSeperator + DomainConstants.EMPTY_STRING + strValue;
+					sSeperator = ",";
+				}
+				if (DomainConstants.EMPTY_STRING.equals(sInitialArrayString)) {
+					sInitialArrayString = "\"\"";
+				}
+				// making checkbox list for subsystem
+				int iIncrementer = 1;
+				while (itr.hasNext()) {
+					strOptionRange = (String) itr.next();
+
+					String key = "emxFramework.Range.Audit_Sub-System." + strOptionRange;
+					String strI18 = DomainConstants.EMPTY_STRING;
+					String keyWithSpacesReplaced = key.trim().replace(' ', '_');
+
+					if (strOptionRange != null && !strOptionRange.equals("")) {
+						strI18 = i18nNow.getI18nString(keyWithSpacesReplaced, "emxFrameworkStringResource", context.getSession().getLanguage());
+					}
+
+					if (strI18.equals(keyWithSpacesReplaced)) {
+						// this occurs when there is a user entered custom
+						// scope. Since it was user entered,
+						// there will not be a string resource property for it.
+						// So we will display the original
+						// value the user entered.
+						strI18 = strOptionRange;
+					}
+
+					if (!Helper.isNullOrEmpty(strOptionRange)) {
+						strBufferOutput.append("<input type=\"checkbox\" name='" + sActualName + iIncrementer + "' id='" + sActualName + iIncrementer
+								+ "' value ='" + strOptionRange + "'");
+						// Setting the existing Value in Edit screen
+						if (strAuditSubsystem.equals(strOptionRange) || vExistingValues.contains(strOptionRange)) {
+							strBufferOutput.append(" checked=checked ");
+						}
+						strBufferOutput.append(">" + strI18 + "</input></br>");
+						iIncrementer++;
+					}
+				}
+				strBufferOutput.append("<input type=\"hidden\" name='" + sActualName + "' id='" + sActualName + "' value=\"--\" />\n");
+				strBufferOutput.append("<input type=\"hidden\" id=\"SUB_Count\" name=\"SUB_Count\" value=\"" + (iIncrementer - 1) + "\" />\n");
+
+			}
+			else {
+				doAuditObject = DomainObject.newInstance(context, strObjectId);
+				// Getting the Audit Type value
+				strAuditSubsystem = doAuditObject.getAttributeValue(context, sActualName);
+
+				String[] split = strAuditSubsystem.split(",");
+
+				for (String str : split) {
+					String key = "emxFramework.Range.Audit_Sub-System." + str;
+					String keyWithSpacesReplaced = key.trim().replace(' ', '_');
+					String value = i18nNow.getI18nString(keyWithSpacesReplaced, "emxFrameworkStringResource", context.getSession().getLanguage());
+
+					if (keyWithSpacesReplaced.equals(value)) {
+						// this occurs when there is a user entered custom
+						// scope. Since it was user entered,
+						// there will not be a string resource property for it.
+						// So we will display the original
+						// value the user entered.
+						value = str;
+					}
+
+					if (strBufferOutput.length() == 0) {
+						strBufferOutput.append(value);
+					}
+					else {
+						strBufferOutput.append("," + value);
+					}
+
+				}
+
+			}
+		}
+		catch (Exception objException) {
+			objException.printStackTrace();
+			throw objException;
+		}
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * Updates the values for the attribute Regulatory Requirement Value is
+	 * formed as (type,name,reference) & its multiples seperated by seperaotr |
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws Exception
+	 */
+	public void updateRegulatoryRequirement(Context context, String[] args) throws Exception {
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap mapRequest = (HashMap) programMap.get("requestMap");
+			HashMap mapField = (HashMap) programMap.get("fieldMap");
+			Map mapSettings = (Map) mapField.get("settings");
+			String strattributename = (String) mapSettings.get("Admin Type");
+
+			String strObjectId = (String) paramMap.get("objectId");
+
+			// String strmode = (String)paramMap.get("mode");
+			String[] strTemp;
+			String strCount = "";
+			Object objCount = mapRequest.get("count");
+
+			if (objCount instanceof String) {
+				strCount = (String) mapRequest.get("count");
+			}
+			else {
+				strTemp = (String[]) mapRequest.get("count");
+				strCount = strTemp[0];
+			}
+
+			// it can't be blank
+			int iCount = Integer.parseInt(strCount);
+			StringBuffer strFinalValue = new StringBuffer();
+
+			String strType = "";
+			String strName = "";
+			String strReference = "";
+			// get the value and append it with seperator |
+			for (int i = 1; i <= iCount; i++) {
+				// get type selected
+				objCount = mapRequest.get("Type" + i);
+
+				if (null != objCount && !"".equals(objCount)) {
+					if (objCount instanceof String) {
+						strType = (String) mapRequest.get("Type" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Type" + i);
+						strType = strTemp[0];
+					}
+					// get type name
+					objCount = mapRequest.get("Name" + i);
+					if (objCount instanceof String) {
+						strName = (String) mapRequest.get("Name" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Name" + i);
+						strName = strTemp[0];
+					}
+					// get reference
+					objCount = mapRequest.get("Reference" + i);
+					if (objCount instanceof String) {
+						strReference = (String) mapRequest.get("Reference" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Reference" + i);
+						strReference = strTemp[0];
+					}
+
+					strFinalValue.append(strType + "," + strName + "," + strReference);
+					if (iCount > 1) {
+						strFinalValue.append("|");
+					}
+				}
+			}
+
+			// update the value if its not null & empty
+			if (null != strFinalValue && !strFinalValue.equals("")) {
+				DomainObject newObj = DomainObject.newInstance(context, strObjectId);
+				newObj.openObject(context);
+				newObj.setAttributeValue(context, strattributename, strFinalValue.toString());
+				newObj.closeObject(context, true);
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			System.err.println("Exception Occured..." + ex.toString());
+		}
+
+	}
+
+	/**
+	 * Updates the values for the attribute Regulatory Requirement on Create
+	 * Value is formed as (type,name,reference) & its multiples seperated by
+	 * seperaotr | This method is invoked by 'createAutoNamed'method
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws Exception
+	 */
+	public void updateRegulatoryRequirementOnCreate(Context context, String[] args, String strObjectId) throws Exception {
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+			// HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap mapRequest = (HashMap) programMap.get("requestMap");
+			String[] strTemp;
+			String strCount = "";
+			Object objCount = mapRequest.get("count");
+
+			if (objCount instanceof String) {
+				strCount = (String) mapRequest.get("count");
+			}
+			else {
+				strTemp = (String[]) mapRequest.get("count");
+				strCount = strTemp[0];
+			}
+
+			// it can't be blank
+			int iCount = Integer.parseInt(strCount);
+			StringBuffer strFinalValue = new StringBuffer();
+
+			String strType = "";
+			String strName = "";
+			String strReference = "";
+			// get the value and append it with seperator |
+			for (int i = 1; i <= iCount; i++) {
+				// get type selected
+				objCount = mapRequest.get("Type" + i);
+
+				if (null != objCount && !"".equals(objCount)) {
+					if (objCount instanceof String) {
+						strType = (String) mapRequest.get("Type" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Type" + i);
+						strType = strTemp[0];
+					}
+					// get type name
+					objCount = mapRequest.get("Name" + i);
+					if (objCount instanceof String) {
+						strName = (String) mapRequest.get("Name" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Name" + i);
+						strName = strTemp[0];
+					}
+					// get reference
+					objCount = mapRequest.get("Reference" + i);
+					if (objCount instanceof String) {
+						strReference = (String) mapRequest.get("Reference" + i);
+					}
+					else {
+						strTemp = (String[]) mapRequest.get("Reference" + i);
+						strReference = strTemp[0];
+					}
+
+					strFinalValue.append(strType + "," + strName + "," + strReference);
+					if (iCount > 1) {
+						strFinalValue.append("|");
+					}
+				}
+			}
+
+			// update the value if its not null & empty
+			if (null != strFinalValue && !strFinalValue.equals("")) {
+				DomainObject newObj = DomainObject.newInstance(context, strObjectId);
+				newObj.openObject(context);
+				newObj.setAttributeValue(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREGULATORYREQUIREMENTS),
+						strFinalValue.toString());
+				newObj.closeObject(context, true);
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			System.err.println("Exception Occured..." + ex.toString());
+		}
+
+	}
+
+	/**
+	 * This method is called as post process method for updating finding
+	 * attributes.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map updateFinding(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+
+		// Get form info
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		HashMap attrMap = new HashMap();
+
+		try {
+			ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+
+			String objectId = (String) ((String[]) paramMap.get("objectId"))[0];
+			String strSubSyscount = (String) paramMap.get("SUB_Count");
+			String strAuditFollowUpReqd = (String) paramMap.get("AuditFollowUpRequired");
+			String strAuditFollowUpThroughReAudit = (String) paramMap.get("AuditFollowUpThroughReAudit");
+			String strAuditReAuditValue = (String) paramMap.get("AuditReAudit");
+			String auditResolutionAssignedTo = (String) paramMap.get("AuditResolutionAssignedTo");
+			if (Helper.isNullOrEmpty(strAuditFollowUpReqd)) {
+				strAuditFollowUpReqd = DomainObject.EMPTY_STRING;
+			}
+			if (Helper.isNullOrEmpty(strAuditFollowUpThroughReAudit)) {
+				strAuditFollowUpThroughReAudit = DomainObject.EMPTY_STRING;
+			}
+			if (Helper.isNullOrEmpty(strAuditReAuditValue)) {
+				strAuditReAuditValue = DomainObject.EMPTY_STRING;
+			}
+			if (Helper.isNullOrEmpty(auditResolutionAssignedTo)) {
+				auditResolutionAssignedTo = DomainObject.EMPTY_STRING;
+			}
+
+			// patch up for class cast exception issue on sub-system with list
+			// box
+			String strAuditSubSystem;
+			DomainObject newObj = DomainObject.newInstance(context, objectId);
+
+			// Set Audit SubSystem value
+			String strAuditSubSystemTxt = "";
+			if (null != strSubSyscount && !"".equals(strSubSyscount)) {
+				int iSubSyscount = Integer.parseInt(strSubSyscount);
+				for (int i = 1; i <= iSubSyscount; i++) {
+					strAuditSubSystem = (String) paramMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM) + i);
+					if (null != strAuditSubSystem) {
+						if (null != strAuditSubSystemTxt && !"null".equals(strAuditSubSystemTxt) && !"".equals(strAuditSubSystemTxt)) {
+							strAuditSubSystemTxt += "," + strAuditSubSystem;
+						}
+						else {
+							strAuditSubSystemTxt = strAuditSubSystem;
+						}
+					}
+				}
+			}
+			attrMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITREAUDIT), strAuditReAuditValue);
+			attrMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM), strAuditSubSystemTxt);
+			attrMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AAUDITFOLLOWUPREQUIRED), strAuditFollowUpReqd);
+			attrMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITFOLLOWUPTHRUOGHREAUDIT), strAuditFollowUpThroughReAudit);
+			attrMap.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITRESOLUTIONASSIGNEDTO), auditResolutionAssignedTo);
+			newObj.setAttributeValues(context, attrMap);
+
+		}
+		catch (Exception ex) {
+			returnMap.put("Action", "Stop");
+			String exStr = ex.toString();
+
+			if (exStr.lastIndexOf("Exception:") >= 0)
+				exStr = exStr.substring(exStr.lastIndexOf("Exception:") + 10, exStr.length());
+
+			returnMap.put("Message", exStr);
+		}
+		return returnMap;
+
+	}
+
+	/**
+	 * Gets the field finding severity.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the field finding severity
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getFieldFindingSeverity(Context context, String[] args) throws Exception {
+		StringBuffer strBufferOutput = new StringBuffer();
+		try {
+			HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) mapProgram.get("requestMap");
+			HashMap mapField = (HashMap) mapProgram.get("fieldMap");
+			Map mapSettings = (Map) mapField.get("settings");
+			String strObjectId = (String) mapRequest.get("objectId");
+			String sMode = (String) mapRequest.get("mode");// create/edit/search
+															// mode
+			String strAttrName = (String) mapSettings.get("Admin Type");
+			String sActualName = PropertyUtil.getSchemaProperty(strAttrName);
+			DomainObject doAuditObject;
+			String strAuditSeverity = "";
+			String strOptionRange = "";
+			String[] sListOrderedRanges = new String[6];
+			sListOrderedRanges[0] = "";
+			String strOrderedOptionRange = "";
+			if (strObjectId == null) {
+				strObjectId = "";
+			}
+
+			// Getting the attribute Ranges
+			StringList strRangesList = (StringList) ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}
+					.getAttributeChoices(context, args);
+			// Iterating the Range Values to prepare the ordered list
+			Iterator rangeItr = strRangesList.iterator();
+			while (rangeItr.hasNext()) {
+				strOrderedOptionRange = (String) rangeItr.next();
+				if (AuditConstants.STR_COMMENT.equalsIgnoreCase(strOrderedOptionRange)) {
+					sListOrderedRanges[1] = strOrderedOptionRange;
+				}
+				if (AuditConstants.STR_MINOR.equalsIgnoreCase(strOrderedOptionRange)) {
+					sListOrderedRanges[2] = strOrderedOptionRange;
+				}
+				if (AuditConstants.STR_MAJOR.equalsIgnoreCase(strOrderedOptionRange)) {
+					sListOrderedRanges[3] = strOrderedOptionRange;
+				}
+				if (AuditConstants.STR_CRITICAL.equalsIgnoreCase(strOrderedOptionRange)) {
+					sListOrderedRanges[4] = strOrderedOptionRange;
+				}
+				if (AuditConstants.STR_IMMEDIATEACTIONREQUIRED.equalsIgnoreCase(strOrderedOptionRange)) {
+					sListOrderedRanges[5] = strOrderedOptionRange;
+				}
+			}
+			List<String> alListOrderedRanges = Arrays.asList(sListOrderedRanges);
+			// Iterating the Range Values
+			Iterator itr = alListOrderedRanges.iterator();
+			// Adding the code for drop down box
+			if (null != sMode) {
+				if (strObjectId != null && !strObjectId.equals("")) {
+					doAuditObject = DomainObject.newInstance(context, strObjectId);
+					// Getting the Audit Follow Required value
+					strAuditSeverity = doAuditObject.getAttributeValue(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITSEVERITY));
+				}
+				strBufferOutput.append(" <select " + sActualName + " name='" + sActualName + "' id='" + sActualName + "' >");
+				while (itr.hasNext()) {
+					strOptionRange = (String) itr.next();
+					String key = "emxFramework.Range.Audit_Severity." + strOptionRange;
+					String strI18 = "";
+
+					if (strOptionRange.compareTo("") != 0)
+						strI18 = i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource",
+								context.getSession().getLanguage());
+
+					strBufferOutput.append("<option value ='" + strOptionRange + "'");
+					// Setting the existing Value in Edit screen
+					if (strAuditSeverity.equals(strOptionRange)) {
+						strBufferOutput.append(" selected ");
+					}
+					strBufferOutput.append(">" + strI18 + "</option>");
+				}
+			}
+			else {
+				doAuditObject = DomainObject.newInstance(context, strObjectId);
+				// Getting the Audit Follow Required value
+				strAuditSeverity = doAuditObject.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITSEVERITY));
+				String key = "emxFramework.Range.Audit_Severity." + strAuditSeverity;
+				strBufferOutput.append(
+						i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource", context.getSession().getLanguage()));
+
+			}
+
+		}
+		catch (Exception objException) {
+			objException.printStackTrace();
+			throw objException;
+		}
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * This method connects the given Finding object with the selected document.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hashmap containing the selected documents id
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public HashMap connectSupportingDocument(Context context, String[] args) throws Exception {
+		HashMap hmReturnVal = new HashMap();
+		HashMap hmObjectIds = new HashMap();
+		boolean bContextPushed = false;
+		boolean bDuplicateObject = false;
+		try {
+			String strMessage = i18nNow.getI18nString("LQIAudit.Message.AlreadyConnected", "LQIAuditStringResource", context.getLocale().toString());
+			// Getting the object ids
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String[] strArrayFindingObjectId = (String[]) programMap.get("objectId");
+			String strFindingObjectId = strArrayFindingObjectId[0];
+			String[] strObjectId = (String[]) programMap.get("emxTableRowId");
+			String strURL = "";
+			String[] strTempObjectId = new String[10];
+			String strObjectIdofArray = "";
+			String strResultObjectId = "";
+			String strName = "";
+			String strFindingName = "";
+			String strExistingDocuments = "";
+			int icount = 0;
+			int i = 0;
+			Map element;
+			DomainObject doFinding = DomainObject.newInstance(context);
+
+			// Setting the attributes to be selected
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+
+			if (null != strFindingObjectId && !"".equals(strFindingObjectId)) {
+
+				doFinding = DomainObject.newInstance(context, strFindingObjectId);
+				strFindingName = (String) doFinding.getInfo(context, DomainConstants.SELECT_NAME);
+				// Getting the related Document Objects
+				MapList mlDocumentObject = doFinding.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT), "*", true, false, 1, sListSelects,
+						null, null, "", null, null, null);
+				// iterate through the Document to check whether the Ids are
+				// same.
+				if (null != mlDocumentObject && mlDocumentObject.size() > 0) {
+					for (Iterator iter = mlDocumentObject.iterator(); iter.hasNext();) {
+						// strExistingDocuments = "";
+						element = (Map) iter.next();
+						strResultObjectId = (String) element.get(DomainConstants.SELECT_ID);
+						strName = (String) element.get(DomainConstants.SELECT_NAME);
+						// putting the related object Ids into map for comparing
+						hmObjectIds.put("" + icount, strResultObjectId);
+						hmObjectIds.put(strResultObjectId, strName);
+						if (null != strExistingDocuments && !"null".equals(strExistingDocuments) && !"".equals(strExistingDocuments)) {
+							strExistingDocuments += "," + strName;
+						}
+						else {
+							strExistingDocuments = strName;
+						}
+
+						icount++;
+					}
+					hmReturnVal.put("Message", strFindingName + " and " + strExistingDocuments + " " + strMessage);
+					strURL = "javascript:getTopWindow().window.closeWindow();";
+					hmReturnVal.put("callback", strURL);
+				}
+
+			} // if ends
+			for (i = 0; i < strObjectId.length; i++) {
+				bDuplicateObject = false;
+
+				StringTokenizer strTokenizer = new StringTokenizer(strObjectId[i], "|");
+				strObjectIdofArray = strTokenizer.nextToken();
+
+				// strObjectIdofArray=strObjectId[i];
+				// Comparing the values
+				if (hmObjectIds.containsValue(strObjectIdofArray.trim()) || hmObjectIds.containsKey(strObjectIdofArray.trim())) {
+					bDuplicateObject = true;
+					strName = (String) hmObjectIds.get(strObjectIdofArray);
+					strTempObjectId[i] = strName;
+					hmReturnVal.put("" + i, strName);
+					hmReturnVal.put("Message", strFindingName + " and " + strExistingDocuments + " " + strMessage);
+					// strURL =
+					// "javascript:getTopWindow().window.closeWindow();";
+					hmReturnVal.put("callback", strURL);
+				}
+				else {
+					if (!bDuplicateObject) {
+						hmReturnVal = new HashMap();
+						bDuplicateObject = false;
+					}
+
+					DomainObject dostrObjectIdofArray = DomainObject.newInstance(context, strObjectIdofArray);
+					ContextUtil.pushContext(context);
+					bContextPushed = true;
+					// Connecting the objects
+					if (!strObjectIdofArray.equals(strFindingObjectId)) {
+						dostrObjectIdofArray.addToObject(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT)),
+								strFindingObjectId);
+					}
+					ContextUtil.popContext(context);
+					bContextPushed = false;
+					strURL = "javascript:getTopWindow().getWindowOpener().getTopWindow().refreshTablePage();javascript:getTopWindow().window.closeWindow();";
+					hmReturnVal.put("callback", strURL);
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+		return hmReturnVal;
+	}
+
+	/**
+	 * This method will Remove the selected object from table. ie it will
+	 * disconnect the object from the related object
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return void
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String removeDocumentsFromTable(Context context, String[] args) throws Exception {
+		String strSupportingDocId = "";
+		BusinessObject boSupportingDoc = null;
+		boolean bContextPushed = false;
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			String strFindingObjectId = (String) ((String[]) mapArgs.get("objectId"))[0];
+			DomainObject doObjectFinding = DomainObject.newInstance(context, strFindingObjectId);
+
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+			for (int i = 0; i < emxTableRowId.length; ++i) {
+				strSupportingDocId = emxTableRowId[i];
+				if (strSupportingDocId.indexOf("|") != -1) {
+					strSupportingDocId = strSupportingDocId.substring(strSupportingDocId.indexOf("|") + 1, strSupportingDocId.length());
+				}
+				// creating business Object for Supporting Docs
+				boSupportingDoc = new BusinessObject(strSupportingDocId);
+				// creating the relationship type
+				RelationshipType relType = new RelationshipType(
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT));
+
+				if (!bContextPushed) {
+					ContextUtil.pushContext(context);
+					bContextPushed = true;
+				}
+				// removing the Supporting Docs from Finding Object
+				doObjectFinding.disconnect(context, relType, false, boSupportingDoc);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			context.abort();
+
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+	}
+
+	/**
+	 * This method is to check for Create Request Access
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if user has required Roles
+	 */
+	public boolean showCreateFinding(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			return AuditUtil.hasAccessOnAudit(context, strObjectId);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionReviseFinding(Context context, String[] args) throws AuditException {
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String[] sFindingId = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			if(!Helper.isNullOrEmpty(sFindingId) && !Helper.isNullOrEmpty(sFindingId[0])) {
+				DomainObject findingDomObj = DomainObject.newInstance(context, sFindingId[0]);
+	            findingDomObj.reviseObject(context, false);
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+		} catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	
+	/**
+	 * Gets AuditFindingService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return AuditFindingService implementation reference
+	 * @throws AuditException
+	 *             if operation fails
+	 */
+	private static AuditFindingService getAuditFindingService(Context context) throws AuditException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAAUDCoreComponent");
+			AuditFindingService service = (AuditFindingService) LSAQICCore.getService(AuditFindingService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMyFindings(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String findingFilterRevision = ((String) programMap.get(AuditConstants.QIC_FINDING_REVISION_FILTER));
+			String findingFilterState = (String) programMap.get(AuditConstants.QIC_FINDING_STATE_FILTER);
+			String whereExpression="";
+			if(AuditConstants.QIC_CURRENT_REVISION.equalsIgnoreCase(findingFilterRevision)) {
+				whereExpression="revision==last";
+			}
+			if(!Helper.isNullOrEmpty(whereExpression) && !AuditConstants.FILTER_VALUE_ALL_FINDINGS.equalsIgnoreCase(findingFilterState)) {
+				whereExpression+=" && ";
+			}
+			if(AuditConstants.FILTER_VALUE_ALL_OPEN.equalsIgnoreCase(findingFilterState)) {
+				whereExpression+="current==Open";
+			}
+			if(AuditConstants.FILTER_VALUE_ALL_RESOLUTION.equalsIgnoreCase(findingFilterState)) {
+				whereExpression+="current==Resolution";
+			}
+			if(AuditConstants.FILTER_VALUE_ALL_VERIFY.equalsIgnoreCase(findingFilterState)) {
+				whereExpression+="current==Verify";
+			}
+			if(AuditConstants.FILTER_VALUE_ALL_CLOSED.equalsIgnoreCase(findingFilterState)) {
+				whereExpression+="current==Closed";
+			}
+			
+			
+			AuditFindingService auditFindingService = getAuditFindingService(context);
+			return new MapList( auditFindingService.getFindings(context,  whereExpression));
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+	
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditFindings(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String findingFilterRevision = ((String) programMap.get(AuditConstants.QIC_FINDING_REVISION_FILTER));
+			String auditId=(String) programMap.get(AuditConstants.OBJECT_ID);
+			String whereExpression="";
+			String AUDIT_FINDING_RELATIONSHIP=PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS);
+			if(AuditConstants.QIC_CURRENT_REVISION.equalsIgnoreCase(findingFilterRevision)) {
+				whereExpression=" && revision==last";
+			}
+			whereExpression="to["+AUDIT_FINDING_RELATIONSHIP+"].from.id=="+auditId+whereExpression;
+			
+			AuditFindingService auditFindingService = getAuditFindingService(context);
+			return new MapList( auditFindingService.getFindings(context,  whereExpression));
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+}
+

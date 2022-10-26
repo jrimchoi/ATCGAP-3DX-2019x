@@ -1,0 +1,207 @@
+import matrix.db.*;
+import java.util.*;
+import com.matrixone.apps.domain.util.*;
+import com.matrixone.MCADIntegration.server.*;
+import com.matrixone.MCADIntegration.server.beans.*;
+import com.matrixone.MCADIntegration.utils.*;
+import com.matrixone.apps.domain.util.i18nNow;
+
+/**
+ * @author SJ7
+ */
+public class ${CLASSNAME}
+{
+	private List<String> navigationContext = Arrays.asList(
+			"ctxMsoi_Navigation_Background",
+			"ctxMsoi_Navigation_FileLocked",
+			"ctxMsoi_Navigation_FileUnlocked",
+			"ctxMsoi_Navigation_Folder",
+			"ctxMsoi_Navigation_MultiFile",
+			"ctxMsoi_Navigation_MultipleSelection",
+			"ctxMsoi_Navigation_NoFiles"
+			);
+	private List<String> searchResultsContext = Arrays.asList(
+			"ctxMsoi_SearchResults_FileLocked",
+			"ctxMsoi_SearchResults_FileUnlocked",
+			"ctxMsoi_SearchResults_MultiFile",
+			"ctxMsoi_SearchResults_MultipleResults",
+			"ctxMsoi_SearchResults_NoFiles",
+			"ctxMsoi_SearchResults_Projects"
+			);
+	private List<String> revisionsContext = Arrays.asList(
+			"ctxMsoi_Revisions_VersionLocked",
+			"ctxMsoi_Revisions_VersionUnLocked",
+			"ctxMsoi_Revisions_OlderVersion"
+			);
+	private List<String> outlookContext = Arrays.asList(
+			"ctxMsoi_Outlook_Decision"
+			);
+	private String clientLanguage = "en";
+	private Context context = null;
+	private List<String> commandList = new ArrayList<String>();
+	private String delimeter = ",";
+	private String commandPrefix = "ctxMsoiCmd_";
+	private String commandDetails = "";
+
+	public  ${CLASSNAME} ()
+	{
+	}
+
+	public ${CLASSNAME} (Context context, String[] args) throws Exception
+	{
+		if (!context.isConnected())
+		{
+			MCADServerException.createException("not supported no desktop client", null);
+		}
+	}
+
+	public int mxMain(Context context, String []args)  throws Exception
+	{  
+		return 0;
+	}
+
+	/**
+	 * @param context
+	 * @return
+	 */
+	//SJ7+
+	public String getContextMenu(Context dbContext, String[] args)
+	{
+		String returnValue = "<?xml version=\"1.0\" encoding=\"UTF-8\" ?><CommandsConfiguration>";
+
+		try
+		{
+			context = dbContext;
+
+			if(args[0] != null && !args[0].isEmpty())
+				clientLanguage = args[0];
+
+			returnValue += "<Contexts>";
+			returnValue += getAllMenuCommands(navigationContext);
+			returnValue += getAllMenuCommands(searchResultsContext);
+			returnValue += getAllMenuCommands(revisionsContext);
+			returnValue += getAllMenuCommands(outlookContext);
+			returnValue += "</Contexts>";
+			returnValue += "<CommandsList>" + commandDetails + "</CommandsList>";
+		}
+		catch (Exception e)
+		{
+			System.out.println("Inside getContextMenu - Exception : \r\n ");
+			System.out.println(e);
+		}
+
+		returnValue += "</CommandsConfiguration>";
+
+		return returnValue;
+	}
+
+	private String getAllMenuCommands(List<String> menuContext)
+	{
+		String returnValue = "";
+		String[] tempSplit;
+		String[] menuSplit = menuContext.get(0).split("_");
+		returnValue += "<Context Name=\"" + menuSplit[1].trim() + "\"><Groups>";
+
+		for (String menuName : menuContext) 
+		{
+			tempSplit = menuName.split("_");
+			returnValue += "<Group Name=\"" + tempSplit[2].trim() + "\">";
+			String[] getCommandFromMenuResponse = getCommandFromMenu(menuName.trim());
+			returnValue += "<Commands>" + getCommandFromMenuResponse[0] + "</Commands></Group>";
+			commandDetails += getCommandFromMenuResponse[1];
+		}
+
+		returnValue += "</Groups></Context>";
+
+		return returnValue;
+	}
+
+	private String[] getCommandFromMenu(String menuName)
+	{
+		String[] returnValue = new String[]{"", ""};
+		String mqlPrintMenu = "print menu $1 select command dump";
+		try
+		{
+			String output = MqlUtil.mqlCommand(context, mqlPrintMenu, menuName);
+
+			String[] commandtemp;
+			String[] commandArray = output.split(delimeter);
+
+			for(int i = 0; i < commandArray.length; i++)
+			{
+				try
+				{ 
+					if(commandArray[i].trim().contains(commandPrefix))
+					{
+						commandtemp = commandArray[i].split(commandPrefix);
+						returnValue[0] += "<Command Name=\"" + commandtemp[1].trim() + "\"/>";
+
+						if (!commandList.contains(commandArray[i]))
+						{
+							commandList.add(commandArray[i]);
+							returnValue[1] += getCommandDetails(commandArray[i]);
+						}
+						else 
+							continue;
+					}
+					else
+					{
+						System.out.println("Invalid Command - " + commandArray[i]);
+						continue;
+					}
+				}
+				catch(Exception Ex)
+				{
+					System.out.println("Inside getCommandFromMenu - Exception : \r\n ");
+					System.out.println(Ex);
+					continue;
+				}
+			}
+		}
+		catch (Exception e)
+		{
+			System.out.println("Inside getCommandFromMenu - Exception : \r\n ");
+			System.out.println(e);
+		}
+
+		return returnValue;
+	}
+	
+	private String getCommandDetails(String command)
+	{
+		String returnValue = "";
+		String mqlPrintCommand = "print command $1 select $2 $3 dump";
+		
+		try
+		{
+			String output = MqlUtil.mqlCommand(context, mqlPrintCommand, command, "setting.name", "setting.value");
+
+			String[] settingtemp = output.split(delimeter);
+			String[] commandtemp = command.split(commandPrefix);
+
+			String translatedCommand = i18nNow.getI18nString("emxMSF.Command.ctxMsoiCmd_" + commandtemp[1].trim(),"emxMSFStringResource", clientLanguage);
+			returnValue += "<CommandDetails Name=\"" + commandtemp[1].trim() + "\" DisplayName=\"" + translatedCommand + "\" ";
+
+			returnValue += settingtemp[2] + "=\"" + settingtemp[5] + "\" " + settingtemp[0] + "=\"" + settingtemp[3] + "\" "+ settingtemp[1] + "=\""+ settingtemp[4] + "\">";
+
+			if(settingtemp[4].contains("true"))
+			{
+				String[] subCommandDetails = getCommandFromMenu(command + "Menu");
+				returnValue += "<SubCommands>" + subCommandDetails[0] + "</SubCommands></CommandDetails>" ;
+				returnValue += subCommandDetails[1];
+			}
+			else
+			{
+				returnValue += "</CommandDetails>";
+			}
+		}
+		catch (Exception e)
+		{
+			System.out.println("Inside getCommandDetails - Exception : \r\n ");
+			System.out.println(e);
+		}
+
+		return returnValue;
+	}
+}
+

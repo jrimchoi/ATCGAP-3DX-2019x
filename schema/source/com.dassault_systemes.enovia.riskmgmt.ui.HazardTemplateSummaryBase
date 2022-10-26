@@ -1,0 +1,393 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.HazardTemplate;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames, DomainConstants {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Gets the list of All Hazard Templates from the organization of context
+	 * user user
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @return MapList containing the ids of Hazard Template objects
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllHazardTemplates(Context context, String[] args) throws RiskMgmtException {
+		return getHazardTemplateSummary(context, null);
+	}
+
+	/**
+	 * Gets the list of active Hazard Templates from the organization of context
+	 * user user
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @return MapList containing ids of Hazard Template objects
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAtiveHazardTemplates(Context context, String[] args) throws RiskMgmtException {
+		final String STATE_HAZARD_TEMPLATE_ACTIVE = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_HAZARD_TEMPLATE.toString(),
+				SYM_STATE_ACTIVE.toString());
+		return getHazardTemplateSummary(context, STATE_HAZARD_TEMPLATE_ACTIVE);
+	}
+
+	/**
+	 * Gets the list of inactive Hazard Templates from the organization of
+	 * context user
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @return MapList containing the ids of Hazard Template objects
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInActiveHazardTemplates(Context context, String[] args) throws RiskMgmtException {
+		final String STATE_HAZARD_TEMPLATE_INACTIVE = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_HAZARD_TEMPLATE.toString(),
+				SYM_STATE_INACTIVE.toString());
+		return getHazardTemplateSummary(context, STATE_HAZARD_TEMPLATE_INACTIVE);
+	}
+
+	/**
+	 * Gets the list of all Hazard Templates based on the selectState value
+	 * passed.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param selectState
+	 *            value based on filter selected on UI
+	 * @return MapList containing the id of Hazard Template objects
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	private MapList getHazardTemplateSummary(Context context, String selectState) throws RiskMgmtException {
+		final String STATE_HAZARD_TEMPLATE_INACTIVE = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_HAZARD_TEMPLATE.toString(),
+				SYM_STATE_INACTIVE.toString());
+		final String STATE_HAZARD_TEMPLATE_ACTIVE = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_HAZARD_TEMPLATE.toString(),
+				SYM_STATE_ACTIVE.toString());
+		try {
+			StringBuilder sbBusWhere = new StringBuilder();
+			List<Map<?, ?>> hazardTemplateSummary = new ArrayList<Map<?, ?>>();
+			if (!RiskMgmtUtil.isNullOrEmpty(selectState)) {
+				sbBusWhere.append(CURRENT);
+				sbBusWhere.append(EQUAL_TO);
+				sbBusWhere.append(SINGLE_QUOTE);
+				if ((STATE_HAZARD_TEMPLATE_INACTIVE).equals(selectState)) {
+					sbBusWhere.append(STATE_HAZARD_TEMPLATE_INACTIVE);
+				}
+				else if ((STATE_HAZARD_TEMPLATE_ACTIVE).equals(selectState)) {
+					sbBusWhere.append(STATE_HAZARD_TEMPLATE_ACTIVE);
+				}
+				sbBusWhere.append(SINGLE_QUOTE);
+			}
+			hazardTemplateSummary = HazardMgmtUtil.getHazardTemplates(context, sbBusWhere.toString());
+			return new MapList(hazardTemplateSummary);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before Deleting Hazard Template(s).If logged-in user is not
+	 * the owner of Hazard Template or if selected Hazard Template object is not
+	 * in Inactive state then JavaScript function is called to show appropriate
+	 * error message otherwise Javascript function is called to delete hazard
+	 * templates.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String preChecksForDeleteHazardTemplate(Context context, String[] args) throws RiskMgmtException {
+		final String STATE_INACTIVE = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_HAZARD_TEMPLATE.toString(), SYM_STATE_INACTIVE.toString());
+		try {
+			StringBuilder sbSuccessHazardTemplateIds = new StringBuilder();
+			ArrayList<String> alFailedHazardTemplateIds = new ArrayList<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			StringBuilder sbRowIds = new StringBuilder();
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strHazarTemplatedId = rowId.getObjectId();
+					if (!RiskMgmtUtil.isNullOrEmpty(strHazarTemplatedId)) {
+						List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazarTemplatedId },
+								RiskMgmtUtil.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+						for (Map mpHazardInfo : lmHazardInfo) {
+							String strName = (String) mpHazardInfo.get(DomainConstants.SELECT_NAME);
+							String strState = (String) mpHazardInfo.get(DomainConstants.SELECT_CURRENT);
+							String strOwner = (String) mpHazardInfo.get(DomainConstants.SELECT_OWNER);
+
+							if (!RiskMgmtUtil.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_INACTIVE)
+									&& (context.getUser().equalsIgnoreCase(strOwner))) {
+								sbSuccessHazardTemplateIds.append(strHazarTemplatedId);
+								sbSuccessHazardTemplateIds.append(COMMA);
+								sbRowIds.append(rowId.getLevel());
+								sbRowIds.append(PIPE);
+
+							}
+							else {
+								alFailedHazardTemplateIds.add(strName);
+							}
+						}
+					}
+				}
+			}
+			if (!alFailedHazardTemplateIds.isEmpty()) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE, "RiskMgmt.Hazard.Message.CannotDeleteTemplateError"));
+				sbReturn.append('\n');
+				sbReturn.append(alFailedHazardTemplateIds.toString());
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_SHOW_ERROR_MSG, sbReturn.toString());
+			}
+			if (sbSuccessHazardTemplateIds.length() > 1 && sbRowIds.length() > 1) {
+				sbSuccessHazardTemplateIds.deleteCharAt(sbSuccessHazardTemplateIds.length() - 1);
+				sbRowIds.deleteCharAt(sbRowIds.length() - 1);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_ACTION_PRE_DELETE_HAZARD_TEMPLATE,
+					sbSuccessHazardTemplateIds.toString(), sbRowIds.toString());
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * To delete Hazard Templates.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            hold input arguments.
+	 * @return JavaScript function to refresh the calling frame.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionDeleteHazardTemplates(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrFrameName = (String[]) programMap.get(FRAME_NAME);
+			String strFrameName = !RiskMgmtUtil.isNullOrEmpty(arrFrameName)
+					? !RiskMgmtUtil.isNullOrEmpty(arrFrameName[0]) && !STRING_NULL.equals(arrFrameName[0]) ? arrFrameName[0] : FRAME_DETAILS_DISPLAY
+					: FRAME_DETAILS_DISPLAY;
+			String[] strHazardTemplateIds = (String[]) programMap.get(HAZARD_TEMPLATE_IDS);
+			String[] strRowIds = (String[]) programMap.get(ROW_IDS);
+			StringBuilder xmlMessage = new StringBuilder();
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardTemplateIds) && !RiskMgmtUtil.isNullOrEmpty(strHazardTemplateIds[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(strRowIds) && !RiskMgmtUtil.isNullOrEmpty(strRowIds[1])) {
+				List<String> hazardTemplateIdsToBeDeleted = RiskMgmtUtil.getListFromString(strHazardTemplateIds[0], COMMA);
+				if (!RiskMgmtUtil.isNullOrEmpty(hazardTemplateIdsToBeDeleted)) {
+					for (String strHazardTemplateId : hazardTemplateIdsToBeDeleted) {
+						HazardTemplate hazardTemplate = new HazardTemplate(strHazardTemplateId);
+						hazardTemplate.delete(context);
+					}
+				}
+				List<String> rowIdsTobeRemoved = RiskMgmtUtil.getListFromString(strRowIds[1], PIPE);
+				if (!RiskMgmtUtil.isNullOrEmpty(rowIdsTobeRemoved)) {
+					xmlMessage.append("<mxRoot>");
+					for (String strLevel : rowIdsTobeRemoved) {
+						StringBuilder partialXML = new StringBuilder();
+						String message = DomainConstants.EMPTY_STRING;
+						partialXML.append("<item id=\"");
+						partialXML.append(strLevel);
+						partialXML.append("\" />");
+						xmlMessage.append("<action refresh=\"true\" fromRMB=\"\"><![CDATA[remove]]></action>");
+						xmlMessage.append(partialXML);
+						xmlMessage.append("<message><![CDATA[" + message + "]]></message>");
+					}
+					xmlMessage.append("</mxRoot>");
+				}
+			}
+			final String findAndReplace = FrameworkUtil.findAndReplace(xmlMessage.toString(), "\"", "\\\"");
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.TRUE, FUNCTION_REMOVE_ROW_FROM_SUMMARY_TABLE, findAndReplace,
+					strFrameName);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method copy of Hazard Template
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            hold input arguments.
+	 * @return StringList
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createHazardTemplateCopy(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<String, String> returnMap = new HashMap<String, String>();
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String description = (String) programMap.get(FIELD_DESCRIPTION);
+			String title = (String) programMap.get(FIELD_TITLE);
+			String parentObjId = (String) programMap.get(OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(parentObjId) && !RiskMgmtUtil.isNullOrEmpty(title)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(parentObjId);
+				Map<String, String> attributeMap = new HashMap<>();
+				attributeMap.put(SYM_ATTR_TITLE.get(context), title);
+				String id = hazardTemplate.clone(context, description, attributeMap);
+				returnMap.put(DomainConstants.SELECT_ID, id);
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method gets the Description of the Hazard Template
+	 * 
+	 * 
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @return description of hazard template
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getFormCreateHazardTemplateFieldDescription(Context context, String[] args) throws RiskMgmtException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) programMap.get(REQUEST_MAP);
+			String objectId = (String) requestMap.get(OBJECT_ID);
+			String description = DomainConstants.EMPTY_STRING;
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(objectId);
+				description = hazardTemplate.getDescription(context);
+			}
+			return description;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method gets the title of the Hazard Template
+	 * 
+	 * 
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @return String title of hazard template
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getFormCreateHazardTemplateFieldTitle(Context context, String[] args) throws RiskMgmtException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) programMap.get(REQUEST_MAP);
+			String objectId = (String) requestMap.get(OBJECT_ID);
+			String title = DomainConstants.EMPTY_STRING;
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(objectId);
+				title = hazardTemplate.getAttributeValue(context, SYM_ATTR_TITLE.get(context));
+			}
+			return title;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method is written as Field Type of Description is program in
+	 * CreateHazardTemplateCopy Form. The Description field is updated at the
+	 * time of creation of copy in the clone api
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public void updateFormCreateHazardTemplateFieldDescription(Context context, String[] args) throws RiskMgmtException {
+		/* do nothing */
+	}
+
+	/**
+	 * This method is written as Field Type of Title is program in
+	 * CreateHazardTemplateCopy Form. The title field is updated at the time of
+	 * creation of copy in the clone api
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public void updateFormCreateHazardTemplateFieldTitle(Context context, String[] args) throws RiskMgmtException {
+		/* do nothing */
+	}
+
+	public boolean canViewCommandRiskMgmtHazardTemplateEdit(Context context, String[] args) throws RiskMgmtException {
+		boolean canView = true;
+		try {
+			HashMap<?, ?> programMap = JPO.unpackArgs(args);
+			if (!RiskMgmtUtil.isNullOrEmpty(programMap)) {
+				if (!programMap.containsKey(SELECTED_PROGRAM_LABEL)) {
+					canView = false;
+				}
+				else {
+					String label = (String) programMap.get(SELECTED_PROGRAM_LABEL);
+					if (!RiskMgmtUtil.isNullOrEmpty(label) && label.contains(ACTIVE_HAZARD_TEMPLATE)) {
+						canView = false;
+					}
+				}
+			}
+			return canView;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

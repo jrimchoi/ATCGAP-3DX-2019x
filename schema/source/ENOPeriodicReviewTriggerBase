@@ -1,0 +1,430 @@
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewConstants;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewException;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewServiceUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewUtil;
+import com.dassault_systemes.enovia.periodicreview.service.PeriodicReviewService;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.MqlNoticeUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Action Trigger on promoting Document from Review to Approved state Method
+	 * to update LRD and NRD of Object
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return 0 on success
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public int updatePeriodicReviewDates(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			ContextUtil.startTransaction(context, true);
+			String strObjectId = args[0];
+			periodicReview.updatePeriodicReviewDates(context, strObjectId, "");
+			ContextUtil.commitTransaction(context);
+			return 0;
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Action Trigger on modifying attribute Periodic Review Interval Method to
+	 * update NRD of Object
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return 0 on success
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public int updatePRI(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			ContextUtil.startTransaction(context, true);
+			String strObjectId = args[0];
+			String strAttrValue = args[1];
+			periodicReview.updatePRI(context, strObjectId, strAttrValue);
+			ContextUtil.commitTransaction(context);
+			return 0;
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Action Trigger on modifying attribute Periodic Review Enabled Method to
+	 * update Review Dates
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return 0 on success
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public int updateReviewDatesOnChangedPRE(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			ContextUtil.startTransaction(context, true);
+			String strObjectId = args[0];
+			String strAttrValue = args[1];
+			switch (strAttrValue) {
+			case PeriodicReviewConstants.YES:
+				periodicReview.updatePeriodicReviewEnable(context, strObjectId, Boolean.TRUE);
+				break;
+			case PeriodicReviewConstants.NO:
+				periodicReview.updatePeriodicReviewEnable(context, strObjectId, Boolean.FALSE);
+				break;
+			}
+
+			ContextUtil.commitTransaction(context);
+			return 0;
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Check Trigger on promoting Document from Review to Approved state Method
+	 * to check if SME is connected or not
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return 0 on success
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public int checkSMEConnected(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			String strRelPattern = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			String strAttrPeridocReviewEnabled = PropertyUtil.getSchemaProperty(context,
+					PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_ENABLED);
+			String strObjectId = args[0];
+			final String PERIODIC_REVIEW_STRING_RESOURCE = args[1];
+			final String ERROR_MESSAGE = args[2];
+			StringList slObjectSelect = new StringList();
+			StringBuilder sbSelect = new StringBuilder();
+			sbSelect.append("from[").append(strRelPattern).append("].to.id");
+			slObjectSelect.add(sbSelect.toString());
+			slObjectSelect.add(DomainObject.getAttributeSelect(strAttrPeridocReviewEnabled));
+			Map infoMap = PeriodicReviewUtil.getInfo(context, strObjectId, slObjectSelect);
+			String strPRE = (String) infoMap.get(DomainObject.getAttributeSelect(strAttrPeridocReviewEnabled));
+			String strSME = DomainConstants.EMPTY_STRING;
+			if (null != infoMap.get(sbSelect.toString()))
+				strSME = (String) infoMap.get(DomainObject.getAttributeSelect(strAttrPeridocReviewEnabled));
+			if (PeriodicReviewConstants.YES.equals(strPRE) && UIUtil.isNullOrEmpty(strSME)) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(), ERROR_MESSAGE);
+				throw new PeriodicReviewException(strMessage);
+
+			}
+			ContextUtil.commitTransaction(context);
+			return 0;
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new PeriodicReviewException(e);
+		}
+	}
+	
+	public int checkIfMemberListIsConnectedAsSME(Context context,String args[]) throws PeriodicReviewException
+	{
+		try {
+			String strObjectId = args[0];		//Member List
+
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map periodicReviewData=PeriodicReviewUtil.getTypePoliciesForPeriodicReviewMode(context, "");
+				
+			String strTypePattern="";
+			
+			for(Object strType:periodicReviewData.keySet())
+				strTypePattern+=strType+",";
+
+			StringList objSelects=new StringList();
+			objSelects.add(DomainConstants.SELECT_TO_ID);
+			
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			List<Map> mlRelatedObjects=periodicService.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePattern, objSelects, "");
+			
+			if(mlRelatedObjects!=null && !mlRelatedObjects.isEmpty())
+			{
+				String	strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),"enoPeriodicReview.Error.Msg.MemberListIsConnectedAsSME");
+				${CLASS:emxContextUtil}.mqlError(context, strMessage); 
+				return 1;
+			}
+
+		return 0;
+		} catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	public int checkIfMemberListIsConnectedAsSMENoMembercanbeAdded(Context context,String args[]) throws PeriodicReviewException
+	{
+		try {
+			String strObjectId = args[0];		//Member List
+
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map periodicReviewData=PeriodicReviewUtil.getTypePoliciesForPeriodicReviewMode(context, "");
+				
+			String strTypePattern="";
+			
+			for(Object strType:periodicReviewData.keySet())
+				strTypePattern+=strType+",";
+
+			StringList objSelects=new StringList();
+			objSelects.add(DomainConstants.SELECT_TO_ID);
+			
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			List<Map> mlRelatedObjects=periodicService.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePattern, objSelects, "");
+			
+			if(mlRelatedObjects!=null && !mlRelatedObjects.isEmpty())
+			{
+				String	strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),"enoPeriodicReview.Error.Msg.MemberListIsConnectedAsSMESoSMECannotBeAdded");
+				${CLASS:emxContextUtil}.mqlError(context, strMessage); 
+				return 1;
+	}
+	
+			return 0;
+		} catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	public int connectedMemberListNewSMEAdditionAction(Context context,String args[]) throws PeriodicReviewException
+	{
+		try {
+			String strRelSubjectMatterExpert = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strRelAttributeProjectRole = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PROJECT_ROLE);
+			String strRoleSubjectMatterExpert = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT);
+			String strRoleLeader = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+			
+			String strFromObjectId = args[0];		
+			String strToObjectId = args[1];		
+			
+			Person personObj=new Person();
+			personObj.setId(strToObjectId);
+			
+			if(!personObj.isKindOf(context, strTypePerson) || !personObj.hasRole(context, strRoleSubjectMatterExpert)||!personObj.hasRole(context, strRoleLeader))
+				return 0;
+						
+			DomainObject dobjMemberList = DomainObject.newInstance(context, strFromObjectId);
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map periodicReviewData=PeriodicReviewUtil.getTypePoliciesForPeriodicReviewMode(context, "");
+				
+			String strTypePattern="";
+			
+			for(Object strType:periodicReviewData.keySet())
+				strTypePattern+=strType+",";
+
+			StringList objSelects=new StringList();
+			objSelects.add(DomainConstants.SELECT_ID);
+			
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			List<Map> mlRelatedObjects=periodicService.getPeriodicReviewRelatedData(context, strFromObjectId, sSMEAssignmentRole, strTypePattern, objSelects, "");
+			
+			if(mlRelatedObjects!=null && !mlRelatedObjects.isEmpty())
+			{
+				MapList mlSMEMembers=periodicService.getSMEMembersOfMemberList(context, dobjMemberList);
+				
+				for(Map mpRelObj:mlRelatedObjects)
+				{
+					String relObjId=mpRelObj.get(DomainConstants.SELECT_ID).toString();
+					List<Map> mlSMEs=periodicService.getPeriodicReviewRelatedData(context, relObjId, new StringList(PeriodicReviewConstants.SMEROLE_ASSIGNED), strTypePerson, objSelects, "");
+					if(mlSMEs!=null && mlSMEs.size()==mlSMEMembers.size()-1)
+					{
+						DomainRelationship dr=DomainRelationship.connect(context, DomainObject.newInstance(context,relObjId),strRelSubjectMatterExpert, DomainObject.newInstance(context,strToObjectId));
+						dr.setAttributeValue(context, strRelAttributeProjectRole, PeriodicReviewConstants.SMEROLE_ASSIGNED);
+					}
+					else
+						periodicService.createMultipleOwnershipForSME(context, relObjId, strToObjectId);
+				}
+			}
+			
+			return 0;
+			
+		} catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	
+	public int connectedMemberListSMERemovalAction(Context context,String args[]) throws PeriodicReviewException
+	{
+		try {
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strRoleSubjectMatterExpert = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT);
+			String strRoleLeader = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+		
+			String strFromObjectId = args[0];		//Member List
+			String strToObjectId = args[1];			//Person
+			
+			Person personObj=new Person();
+			personObj.setId(strToObjectId);
+			
+			if(!personObj.isKindOf(context, strTypePerson) && !personObj.hasRole(context, strRoleSubjectMatterExpert)&& !personObj.hasRole(context, strRoleLeader))
+				return 0;
+
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map periodicReviewData=PeriodicReviewUtil.getTypePoliciesForPeriodicReviewMode(context, "");
+				
+			String strTypePattern="";
+			
+			for(Object strType:periodicReviewData.keySet())
+				strTypePattern+=strType+",";
+
+			StringList objSelects=new StringList();
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainRelationship.SELECT_ID);
+			
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			List<Map> mlRelatedObjects=periodicService.getPeriodicReviewRelatedData(context, strFromObjectId, sSMEAssignmentRole, strTypePattern, objSelects, "");
+			
+			if(mlRelatedObjects!=null && !mlRelatedObjects.isEmpty())
+			{
+				for(Map mpRelObj:mlRelatedObjects)
+				{
+					String relObjId=mpRelObj.get(DomainConstants.SELECT_ID).toString();
+					List<Map> mlDoc=periodicService.getPeriodicReviewRelatedData(context, relObjId, new StringList(PeriodicReviewConstants.SMEROLE_ASSIGNED), strTypePerson, objSelects, DomainConstants.SELECT_ID+"=="+strToObjectId);
+
+					if(mlDoc!=null && !mlDoc.isEmpty())
+						DomainRelationship.disconnect(context,mlDoc.get(0).get(DomainRelationship.SELECT_ID).toString());
+					else
+						periodicService.deleteMultipleOwnershipForSME(context, relObjId, strToObjectId);
+				}
+			}
+			
+			return 0;
+			
+		} catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	
+	public int checkIfConnectedMemberListIsHavingAtleastOneSME(Context context,String args[]) throws PeriodicReviewException
+	{
+		try {
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strRoleSubjectMatterExpert = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT);
+			String strRoleLeader = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+
+			
+			String strFromObjectId = args[0];		//Member List
+			String strToObjectId = args[1];		
+
+			DomainObject dobjPerson = DomainObject.newInstance(context, strToObjectId);
+			
+			Person personObj=new Person();
+			personObj.setId(strToObjectId);
+		
+			if(!personObj.isKindOf(context, strTypePerson) && !personObj.hasRole(context, strRoleSubjectMatterExpert)&& !personObj.hasRole(context, strRoleLeader))
+				return 0;
+			
+			DomainObject dobjMemberList = DomainObject.newInstance(context, strFromObjectId);
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map periodicReviewData=PeriodicReviewUtil.getTypePoliciesForPeriodicReviewMode(context, "");
+				
+			String strTypePattern="";
+			
+			for(Object strType:periodicReviewData.keySet())
+				strTypePattern+=strType+",";
+
+			StringList objSelects=new StringList();
+			objSelects.add(DomainConstants.SELECT_TO_ID);
+			
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			StringList sSMETempAssigneeRole=new StringList();
+			sSMETempAssigneeRole.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+			
+			List<Map> mlRelatedObjects=periodicService.getPeriodicReviewRelatedData(context, strFromObjectId, sSMEAssignmentRole, strTypePattern, objSelects, "");
+			
+			if(mlRelatedObjects!=null && !mlRelatedObjects.isEmpty())
+			{
+				MapList mlSMEMembers=periodicService.getSMEMembersOfMemberList(context, dobjMemberList);
+				
+				if (mlSMEMembers==null || mlSMEMembers.size()<=1)
+				{
+					String	strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),"enoPeriodicReview.Error.Msg.MemberListOneSMEMember");
+					${CLASS:emxContextUtil}.mqlError(context, strMessage); 
+					return 1;
+				}
+				
+				for(Map mpRelObj:mlRelatedObjects)
+				{
+					String relObjId=mpRelObj.get(DomainConstants.SELECT_ID).toString();
+				
+					List<Map> mlDoc=periodicService.getPeriodicReviewRelatedData(context, relObjId, sSMETempAssigneeRole, strTypePerson, objSelects, DomainConstants.SELECT_ID+"=="+strToObjectId);
+	
+					if(mlDoc!=null && !mlDoc.isEmpty())
+					{
+						String	strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),"enoPeriodicReview.Error.Msg.RemovedMemberIsTemporaryAssignee");
+						${CLASS:emxContextUtil}.mqlError(context, strMessage); 
+						return 1;
+					}
+				}
+			}
+			
+			return 0;
+		} catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	
+	public void checkIfSubjectMatterExpertIsConnected(Context context, String args[]) throws PeriodicReviewException {
+		try {
+
+			String strObjectId = args[0];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strPeriodicReviewEnable=dObj.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_ENABLED));
+			String strRel = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			boolean hasRelatedObject = dObj.hasRelatedObjects(context, strRel, true);
+			if (!PeriodicReviewUtil.isNullOrEmpty(strPeriodicReviewEnable) && strPeriodicReviewEnable.equals(PeriodicReviewConstants.YES) && !hasRelatedObject) {
+				String strMsg = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),"enoPeriodicReview.Error.Msg.SubjectMatterExpertNotConnected");
+				throw new Exception(strMsg);
+			}
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+}
+

@@ -1,0 +1,85 @@
+/*
+ *  emxTeamContent.java
+ *
+ * Copyright (c) 1992-2016 Dassault Systemes.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+import matrix.db.*;
+import matrix.util.StringList;
+
+import java.lang.*;
+import java.util.HashMap;
+import java.util.Map;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+/**
+ * @version AEF Rossini - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxTeamContentBase}
+{
+
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since AEF Rossini
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+      super(context, args);
+    }
+    /* getFolderContentIds - This method is used to get content ids in the folder
+    * @param context the eMatrix <code>Context</code> object
+    * @param args holds the following input arguments:
+    *        objectId is in the paramList
+    * Due to performance reasons when used in a configurable table, this method return only folder content ids.
+    * @return MapList
+    * @throws Exception if the operation fails
+    * @since Team 10-7-SP1
+    */
+    @com.matrixone.apps.framework.ui.ProgramCallable
+ 	public MapList getFolderContentIds(Context context, String[] args) throws Exception {
+ 	   MapList contentMapList = new MapList();
+ 	   Map programMap = (HashMap) JPO.unpackArgs(args);
+ 	   String folderObjectId = (String)programMap.get("objectId");
+ 	   DomainObject domainObject = DomainObject.newInstance(context,folderObjectId);
+
+ 	   StringList  selectTypeStmts = new StringList(3);
+ 	   				selectTypeStmts.add(DomainConstants.SELECT_ID);
+ 	   				selectTypeStmts.add(DomainConstants.SELECT_TYPE);
+ 	   				selectTypeStmts.add(DomainConstants.SELECT_NAME);
+ 					selectTypeStmts.add(DomainConstants.SELECT_OWNER); 
+ 					selectTypeStmts.add(DomainConstants.SELECT_CURRENT);
+ 			 
+ 					
+         String relationshipPattern = DomainObject.RELATIONSHIP_VAULTED_DOCUMENTS+","+ DomainConstants.RELATIONSHIP_VAULTED_OBJECTS_REV2;
+ 		//Removed "&& revision ~~ last" for bug 352726 in the where clause
+         // ENGMASA : Added && revision ~~ last" where clause to display only latest revisions under workspace folder
+ 		contentMapList = domainObject.getRelatedObjects(context,
+ 		                                                 relationshipPattern,
+ 		                                                 "*",
+ 		                                                 selectTypeStmts,
+ 		                                                 null,
+ 		                                                 false,
+ 		                                                 true,
+ 		                                                 (short)1,
+ 		                                                 "current.access[read] == TRUE && revision ~~ last",
+ 		                                                 null,
+ 		                                                 0,
+ 		                                                 null,
+ 		                                                 null,
+ 		                                                 null);
+
+ 		return contentMapList;
+   }
+}
+

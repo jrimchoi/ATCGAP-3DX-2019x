@@ -1,0 +1,285 @@
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.Vector;
+
+import com.dassault_systemes.enox.common.services.itf.def.ENOXConfiguratorFactory;
+import com.dassault_systemes.enox.common.services.itf.def.IENOXConfigurator;
+import com.matrixone.MCADIntegration.server.ups.ENOIEFUPSConstant;
+
+import matrix.db.Attribute;
+import matrix.db.AttributeList;
+import matrix.db.AttributeType;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * @author YDE1
+	 * 
+	 * 
+	 * @param args[0] = integration name
+	 * 
+	 * @param args[1] = cad origin
+	 * 
+	 * @param args[2] = gco name
+	 * 
+	 * @param args[3] = gco type derived from MCADInteg-UPSGlobalConfig type
+	 * 
+	 * @param args[4] = gco revision
+	 * 
+	 * @param args[5] = LRD disable , Boolean value true/false (default will be
+	 * false)
+	 * 
+	 * @param args[6] = show in parameterization for GCO configuration, Boolean
+	 * value true/false (default will be true)
+	 * 
+	 * @exception Error while setting the parameter:- Parameter Name
+	 */
+
+	public void registerIntegration(Context context, String[] args) throws Exception {
+
+		try {
+
+			if (null != args) {
+				if (args.length < 5)
+					throw new Exception(
+							"Following arguments has to be specified : \n 1. integrationName \n 2. cadOrigin \n 3. gcoName \n 4. gcoType \n 5. gcoRevision \n & optionally \n 6. lrdDisable (Optional) - which is default to 'false' \n 7. showInParameterization (Optional)- which is default to 'true'");
+
+				String integrationName = args[0];
+				String cadOrigin = args[1];
+				String gcoName = args[2];
+				String gcoType = args[3];
+				String gcoRevision = args[4];
+				String lrdDisable = "false";
+				String showInParameterization = "true";
+				if (args.length > 5) {
+					lrdDisable = args[5];
+				}
+				if (args.length > 6) {
+					showInParameterization = args[6];
+				}
+
+				// ENOXConfigurator configurator = new
+				// ENOXConfigurator(context);
+
+				IENOXConfigurator configurator = null;
+				configurator = ENOXConfiguratorFactory.getConfigurator(context);
+				configurator.registerIntegration(context, integrationName, gcoType, gcoName, gcoRevision, cadOrigin,
+						lrdDisable, showInParameterization);
+			} else {
+				throw new Exception(
+						"Following arguments has to be specified : \n 1. integrationName \n 2. cadOrigin \n 3. gcoName \n 4. gcoType \n 5. gcoRevision \n & optionally \n 6. lrdDisable (Optional) - which is default to 'false' \n 7. showInParameterization (Optional)- which is default to 'true'");
+			}
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+	/**
+	 * 
+	 * @param args[0] = integration name
+	 * 
+	 * @param args[1] = cad origin
+	 * 
+	 * @param args[2] = gco name
+	 * 
+	 * @param args[3] = gco type derived from MCADInteg-UPSGlobalConfig type
+	 * 
+	 * @param args[4] = gco revision
+	 * 
+	 * @param args[5] = LRD disable , Boolean value true/false (default will be
+	 * false)
+	 * 
+	 * @param args[6] = show in parameterization for GCO configuration, Boolean
+	 * value true/false (default will be true)
+	 * 
+	 * @exception Error while setting the parameter:- Parameter Name
+	 */
+	
+	private static final String MCADInteg_CADToMxAttribMapping = "MCADInteg-CADToMxAttribMapping";
+	private static final String MCADInteg_MxToCADAttribMapping = "MCADInteg-MxToCADAttribMapping";
+	private static final String MCADInteg_CADToMxRelAttribMapping = "MCADInteg-CADToMxRelAttribMapping";
+	private static final String MCADInteg_MxToCADRelAttribMapping = "MCADInteg-MxToCADRelAttribMapping";
+
+	private static final String Cust_MCADInteg_CADToMxAttribMapping = "Cust-MCADInteg-CADToMxAttribMapping";
+	private static final String Cust_MCADInteg_MxToCADAttribMapping = "Cust-MCADInteg-MxToCADAttribMapping";
+	private static final String Cust_MCADInteg_CADToMxRelAttribMapping = "Cust-MCADInteg-CADToMxRelAttribMapping";
+	private static final String Cust_MCADInteg_MxToCADRelAttribMapping = "Cust-MCADInteg-MxToCADRelAttribMapping";
+	
+	private static final Map<String, String> ootbToCustomAttributeMapping = init();
+	
+	private static Map<String, String> init() {
+		Map<String, String> ootbToCustomAttributeMapping = new HashMap<>();
+		ootbToCustomAttributeMapping.put(MCADInteg_CADToMxAttribMapping, Cust_MCADInteg_CADToMxAttribMapping);
+		ootbToCustomAttributeMapping.put(MCADInteg_MxToCADAttribMapping, Cust_MCADInteg_MxToCADAttribMapping);
+		ootbToCustomAttributeMapping.put(MCADInteg_CADToMxRelAttribMapping, Cust_MCADInteg_CADToMxRelAttribMapping);
+		ootbToCustomAttributeMapping.put(MCADInteg_MxToCADRelAttribMapping, Cust_MCADInteg_MxToCADRelAttribMapping);
+		return ootbToCustomAttributeMapping;
+	}
+	public void copyConfiguredAttributes(Context context, String[] args) throws Exception {
+		
+		try {
+			
+			if (null != args) {
+				if (args.length < 6)
+					throw new Exception(
+							"Following arguments has to be specified : \n 1. fromGCOType \n 2. fromGCOName \n 3. fromGCORevision \n 4. "
+							+ "toGCOType \n 5. toGCOName \n& 6. toGCORevision \n");
+				
+				String fromGCOType = args[0];
+				String fromGCOName = args[1];
+				String fromGCORevision = args[2];
+				
+				String toGCOType = args[3];
+				String toGCOName = args[4];
+				String toGCORevision = args[5];
+				
+				BusinessObject fromGCOObject = new BusinessObject(fromGCOType, fromGCOName, fromGCORevision, "");
+				BusinessObject toGCOObject = new BusinessObject(toGCOType, toGCOName, toGCORevision, "");
+				
+				if(fromGCOObject.exists(context))
+				{
+					StringList stringAttributeList = new StringList();
+					stringAttributeList.add(MCADInteg_CADToMxAttribMapping);
+					stringAttributeList.add(MCADInteg_MxToCADAttribMapping);
+					stringAttributeList.add(MCADInteg_CADToMxRelAttribMapping);
+					stringAttributeList.add(MCADInteg_MxToCADRelAttribMapping);
+					
+					AttributeList fromObjAttributes = fromGCOObject.getAttributes(context, stringAttributeList);
+					AttributeList toObjAttributes = toGCOObject.getAttributes(context, stringAttributeList);
+					
+					Iterator<Attribute> fromObjItr = fromObjAttributes.iterator();
+					
+					Map<String, String> attributeNameValueMap = new HashMap<>();
+					while(fromObjItr.hasNext())
+					{
+						Attribute fromAttribute = fromObjItr.next();
+						String fromAttributeName = fromAttribute.getName();
+						String fromAttributeValue = fromAttribute.getValue();
+						
+						Iterator<Attribute> toObjItr = toObjAttributes.iterator();
+						while(toObjItr.hasNext())
+						{
+							Attribute toAttribute = toObjItr.next();
+							String toAttributeName = toAttribute.getName();
+							String toAttributeValue = toAttribute.getValue();
+							
+							//search for right attribute
+							if(fromAttributeName.equals(toAttributeName))
+							{
+								//compare values of both attributes and prepare list of additional attributes from fromAttributeValue
+								Set<String> fromAttributeList = getSetFromString(fromAttributeValue, "\n");
+								Set<String> toAttributeList = getSetFromString(toAttributeValue, "\n");
+								
+								//get additional attributes from fromAttributeList
+								Set<String> additionalAttributeList = getAdditionalAttributes(fromAttributeList, toAttributeList);
+								
+								//Add additional attributes to toAttributeList
+								toAttributeList.addAll(additionalAttributeList);
+								
+								//get String from Vector
+								String attributeValue = getStringFromSet(additionalAttributeList, "\n");
+								String custAttributeName = ootbToCustomAttributeMapping.get(toAttributeName);
+								attributeNameValueMap.put(custAttributeName, attributeValue);
+								
+							}
+						}
+					}
+					
+					System.out.println("attributeNameValueMap: " + attributeNameValueMap);
+					//now get the attributelist from Map and set it on the the object
+					AttributeList attributeList = getAttributesListFromMap(attributeNameValueMap);
+					
+					toGCOObject.setAttributes(context, attributeList);
+				}
+			} else {
+				throw new Exception(
+						"Following arguments has to be specified : \n 1. fromGCOName \n 2. fromGCOType \n 3. fromGCORevision \n 4. "
+							+ "toGCOName \n 5. toGCOType \n& 6. toGCORevision");
+			}
+			
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+	
+	private String getStringFromSet(Set<String> inputList, String token) 
+	{
+		StringBuffer strBuff = new StringBuffer();
+
+		for(String key : inputList)
+		{
+			strBuff.append(key).append(token);
+		}
+		int index = strBuff.lastIndexOf(token);
+		if(index != -1)
+			strBuff.deleteCharAt(index);
+
+		return strBuff.toString();
+	}
+	
+	private AttributeList getAttributesListFromMap(Map<String, String> attributeNameValMap)
+    {
+        AttributeList attributeList    = new AttributeList(attributeNameValMap.size());
+
+        Set<String> attributeNames       = attributeNameValMap.keySet();
+        for(String attrName : attributeNames)
+        {
+            String attrVal = attributeNameValMap.get(attrName);
+
+			Attribute attribute = new Attribute(new AttributeType(attrName), attrVal);
+            attributeList.addElement(attribute);
+        }
+
+        return attributeList;
+    }
+	
+	private Set<String> getAdditionalAttributes(Set<String> fromAttributeList, Set<String> toAttributeList) {
+		
+		Set<String> additionalAttributeList = new HashSet<>();
+		for(String fromAttribute : fromAttributeList)
+		{
+			if(!toAttributeList.contains(fromAttribute))
+			{
+				additionalAttributeList.add(fromAttribute);
+			}
+		}
+		return additionalAttributeList;
+	}
+	/**
+	 * method      : createVectorFromString
+	 *
+	 * description : Parse the input string with given delimiter, and add
+	 *               each string to the vector
+	 *
+	 * access      : private
+	 *
+	 * @param inputString  string   input name
+	 * @param token string   input value
+	 * @param v     Vector   vector to be filled with the parsed strings
+	 */
+	private Set<String> getSetFromString(String inputString, String token)
+	{
+		Set<String> v = new HashSet<>();
+		java.util.StringTokenizer st = new java.util.StringTokenizer(inputString,token);
+		while (st.hasMoreTokens())
+		{
+			String entry = st.nextToken();
+			entry = entry.trim();
+			v.add(entry);
+		}
+		
+		return v;
+	}
+
+}
+

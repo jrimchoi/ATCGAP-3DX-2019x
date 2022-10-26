@@ -1,0 +1,1867 @@
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.changeaction.factory.ChangeActionFactory;
+import com.dassault_systemes.enovia.changeaction.interfaces.IECMConfigurationDataSchema;
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.dcl.service.DCLLifecycleService;
+import com.dassault_systemes.enovia.dcl.service.DocumentLibraryService;
+import com.dassault_systemes.enovia.dcl.service.EffectivityImplementationService;
+import com.dassault_systemes.enovia.dcl.service.TrainingService;
+import com.dassault_systemes.enovia.enterprisechangemgt.admin.ECMAdmin;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeManagement;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeOrder;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewConstants;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewNotificationUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewServiceUtil;
+import com.dassault_systemes.enovia.periodicreview.service.PeriodicReviewService;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectList;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.RelationshipType;
+import matrix.db.User;
+import matrix.util.MatrixException;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+/**
+ * 
+ */
+
+public class ${CLASSNAME}  {
+
+	/**
+	 * Check trigger to check if files are checked out.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds document objectId.
+	 * args[1] holds document Type.
+	 * args[2] holds document Name.
+	 * args[3] holds document Revision.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkForCheckoutFiles(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<4)
+		{
+			throw new IllegalArgumentException();
+		}
+		String strDocId = args[0];
+		StringBuilder stringBuilder = new StringBuilder();
+		stringBuilder.append("('");
+		stringBuilder.append(CommonDocument.SELECT_LOCKED);
+		stringBuilder.append("') == 'TRUE'");
+		String strWhere = stringBuilder.toString();
+		try
+		{
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getActiveVersionDocuments(context,strDocId,strWhere);
+			if (mlDocuments != null && !mlDocuments.isEmpty()) {
+				String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.FilesAreCheckedOut", new String[] { args[1],
+						args[2], args[3] }, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Check trigger to check if files file is checked in.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds document objectId.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkIfFileisCheckedIn(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strDocId = args[0];
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlConnectedDocuments = lifecycleService.getActiveVersionDocuments(context,strDocId,"");
+			if (DCLUtil.isNullOrEmpty(mlConnectedDocuments)) {
+				String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.NoFileCheckIn",null,  null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	
+	/**
+	 * Check Trigger to check document state.If document is in 
+	 * Approved or Released state then prevent it from deletion.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the document id.	 * 
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkDocumentForDelete(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			DomainObject dom = DomainObject.newInstance(context, args[0]);
+			String strPolicy = dom.getInfo(context, DomainConstants.SELECT_POLICY);
+			String strTemplatePolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			if(strPolicy.equals(PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS))){
+				String strError = new ${CLASS:ENODCLDocumentUI}().checkDeleteDocuments(context, new String[] {args[0]});
+				if(strError != null && !strError.isEmpty()){
+					throw new DCLException(strError);
+				}
+			}else if(strPolicy.equals(strTemplatePolicy)){
+				String strError = new ${CLASS:ENODCLTemplateUI}().checkDeleteTempates(context, new String[]{args[0]});
+				if(strError != null && !strError.isEmpty()){
+					throw new DCLException(strError);
+				}
+			}else if(strPolicy.equals(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_Version))){
+
+				ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+				cdService.checkFileDelete(context, dom);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Check trigger to check the Document and CA state while promoting document. 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the document objectId.
+	 * args[1] holds the document current state.
+	 * args[2] holds the document required state.
+	 * args[3] holds the CA required state.
+	 * args[4] and args[5]holds the error message.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkDocumentAndCAState(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<6)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strDocId = args[0];
+			StringList slSelect = new StringList(DomainConstants.SELECT_ID);
+			slSelect.addElement(DomainConstants.SELECT_CURRENT);
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			Map<?,?> mapCA = lifecycleService.getRelatedCA(context, strDocId,slSelect,null);
+			String strMessage = DomainConstants.EMPTY_STRING;
+			if(mapCA != null && !mapCA.isEmpty())
+			{
+				String strDocumentCurrentState = args[1];
+				String strDocumentRequiredState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, args[2]);
+				String strCACurrentSate = (String)mapCA.get(DomainConstants.SELECT_CURRENT);
+				String strCARequiredState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CA, args[3]);
+				if (strDocumentCurrentState.equalsIgnoreCase(strDocumentRequiredState)) {
+					if (!strCACurrentSate.equalsIgnoreCase(strCARequiredState)) {
+						strMessage = MessageUtil
+								.getMessage(context, null, args[4], null, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+						throw new DCLException(strMessage);
+					}
+				}
+			}
+			else
+			{
+				strMessage = MessageUtil.getMessage(context, null,args[5],null, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	/**
+	 * This method is used to make document effective if its effective date is reached and 
+	 * complete the change action when last document gets effective.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds nothing.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void completeChangeAction(Context context, String[] args) throws DCLException
+	{
+		DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+		lifecycleService.completeChangeAction(context);
+	}
+
+/**
+	 * This method is used to make document effective if its effective date is
+	 * reached and try to complete the change order when last document gets
+	 * effective.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds nothing.
+	 * @throws DCLException
+	 *             if operation fails.
+	 * @exclude
+	 */
+	public void completeChangeOrder(Context context, String[] args) throws DCLException {
+		DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+		lifecycleService.completeChangeAction(context);
+	}
+
+
+	/**
+	 * This method is use to promote previous revision of the document to Superseded state 
+	 * when next revision moves to Released state.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the document objectId.
+	 * args[1] holds the document target state.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void promotePreviousRevision(Context context,String[] args) throws DCLException
+	{
+		if(args==null || args.length<2)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strDocId = args[0];
+			if(!UIUtil.isNullOrEmpty(strDocId))
+			{
+				DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+				lifecycleService.promotePreviousRevision(context, strDocId);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}	
+	/**
+	 * This method is used to block the demote event on document object.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the document current state.
+	 * args[1] holds the document required state.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkDocumentState(Context context,String[] args) throws DCLException
+	{
+		if(args==null || args.length<2)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strDocumentCurrentState = args[0];
+			String strDocumentApprovedState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+					DCLConstants.SYMBOLIC_STATE_APPROVED);
+			String strDocumentReleasedState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+					DCLConstants.SYMBOLIC_STATE_RELEASED);
+			String strAttrEffectiveDate =PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.BlockDemote",
+					new String[] { strDocumentCurrentState }, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+			if (strDocumentCurrentState.equals(strDocumentApprovedState)) {
+				String strObjectId=args[1];
+				String strEffectiveDate=DCLUtil.getInfo(context, strObjectId, DomainObject.getAttributeSelect(strAttrEffectiveDate));
+				if(UIUtil.isNotNullAndNotEmpty(strEffectiveDate))
+					throw new DCLException(strMessage);
+			}
+			else if(strDocumentCurrentState.equals(strDocumentReleasedState))
+				throw new DCLException(strMessage);
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * This method is use to auto promote documents connected with CA
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the CA objectId.
+	 * args[1] holds the document required state.
+	 * args[2] holds the document target state.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void promoteConnectedItems(Context context,String[] args) throws DCLException
+	{
+		if(args==null || args.length<3)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strCAId = args[0];
+			String strSymbolicDocState = args[1];
+			String strDocState = DCLUtil.getStateName(context,DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,strSymbolicDocState);
+			String strDocTargetState = DCLUtil.getStateName(context,DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,args[2]);
+			StringList slObjectSelects=new StringList();
+			slObjectSelects.add(DomainConstants.SELECT_ID);
+			slObjectSelects.add(DomainConstants.SELECT_CURRENT);
+
+			Map<?, ?> mapDocument = null;
+			String strDocId = null;
+
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getCARelatedDocuments(context,strCAId,slObjectSelects,null,strSymbolicDocState);
+			DomainObject doObjDocument = null;
+			if(mlDocuments!=null && !mlDocuments.isEmpty())
+			{
+				for (Object object : mlDocuments)
+				{
+					mapDocument = (Map<?,?>)object;
+					strDocId = ((List)mapDocument.get(DomainConstants.SELECT_ID)).get(0).toString();
+					doObjDocument = DomainObject.newInstance(context,strDocId);
+					String strCurrentState = doObjDocument.getInfo(context, DomainObject.SELECT_CURRENT);
+					if (strDocState.equals(strCurrentState)) {
+						try{
+							doObjDocument.setState(context, strDocTargetState);
+						}
+						catch(Exception ex){
+							throw new DCLException(ex.getLocalizedMessage());
+						}
+					}
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Check trigger to check all CAs connected to Change Order are complete before promoting CO to complete
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CO Id.
+	 * args[1] holds the strPropertyKey.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void checkCAComplete(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<2)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strCOId = args[0];
+			String strPropertyKey     = args[1];
+			String strCAState = null;
+			Map<?, ?> mapCA = null;
+
+			String STATE_CA_COMPLETE = DCLUtil.getStateName(context,  DCLConstants.SYMBOLIC_POLICY_CA,  DCLConstants.SYMBOLIC_STATE_COMPLETE);
+
+			//${CLASS:enoECMChangeActionBase} changeAction = new ${CLASS:enoECMChangeActionBase}(context, args);
+			ChangeOrder co = new ChangeOrder(strCOId);
+			MapList mlCA = co.getChangeActions(context);
+			String strMessage = DomainConstants.EMPTY_STRING;
+			if(!mlCA.isEmpty())
+			{
+				for (Object object : mlCA)
+				{
+					mapCA = (Map<?,?>)object;
+					strCAState = (String)mapCA.get(DomainConstants.SELECT_CURRENT);
+					if (!STATE_CA_COMPLETE.equalsIgnoreCase(strCAState)) {
+						strMessage = MessageUtil.getMessage(context, null, strPropertyKey, null, null, context.getLocale(),
+								DCLConstants.DCL_STRING_RESOURCE);
+						throw new DCLException(strMessage);
+					}
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Check trigger prevent manual promotion of CA from Approved state
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CA Id.
+	 * args[1] holds the strSuiteKey.
+	 * args[2] holds the strPropertyKey.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void preventPromotionOfCAFromApproved(Context context,String []args) throws DCLException
+	{
+		if(args==null || args.length<2)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strCAId  = args[0];
+			String strPropertyKey     = args[1];
+			String STATE_APPROVED = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+					DCLConstants.SYMBOLIC_STATE_APPROVED);
+
+			StringBuilder sbWhere = new StringBuilder();
+			sbWhere.append(DomainConstants.SELECT_CURRENT);
+			sbWhere.append("== const \"");
+			sbWhere.append(STATE_APPROVED);
+			sbWhere.append("\"");
+
+			StringList slSelect = new StringList(DomainConstants.SELECT_ID);
+
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getCARelatedDocuments(context,strCAId, slSelect,null,sbWhere.toString());
+
+			if (!mlDocuments.isEmpty()) {
+				String strMessage = MessageUtil.getMessage(context, null, strPropertyKey, null, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Check trigger  to send Notification To CO Owner for completing the route after all CAs gets complete
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CA Id.
+	 * args[1] holds CA required state.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void sendNotificationToCOOwner(Context context,String []args) throws DCLException
+	{
+		int iResult = 0;
+		if(args==null || args.length<2)
+		{
+			throw new IllegalArgumentException();
+		}
+		try
+		{
+			String strCAId = args[0];
+			String strCARequiredState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CA, args[1]);
+
+			Map<?,?> mapCA = null;
+			String strCACurrentState = DomainConstants.EMPTY_STRING;
+			StringBuilder stringBuilder = new StringBuilder();
+			stringBuilder.append("relationship[");
+			stringBuilder.append(PropertyUtil.getSchemaProperty(context, DCLConstants.RELATIONSHIP_CHANGE_ACTION));
+			stringBuilder.append("].from.id");
+			StringList slObjectSelect = new StringList(stringBuilder.toString());
+
+			Map<?,?> mapCO = DCLUtil.getInfo(context, strCAId, slObjectSelect);
+			String strCOId = (String) mapCO.get("relationship[" + PropertyUtil.getSchemaProperty(context, DCLConstants.RELATIONSHIP_CHANGE_ACTION)
+					+ "].from.id");
+
+			ChangeOrder co = new ChangeOrder(strCOId);
+			MapList mlCA = co.getChangeActions(context);
+
+			for (Object object : mlCA) {
+				mapCA = (Map<?,?>)object;
+				strCACurrentState = (String)mapCA.get(DomainConstants.SELECT_CURRENT);
+				if(!strCACurrentState.equalsIgnoreCase(strCARequiredState))
+				{
+					iResult++;
+					break;
+				}
+			}
+			if(iResult==0)
+			{
+				DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+				lifecycleService.sendNotificationToCompleteRoute(context, strCOId);
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Check trigger on CA create relationship for validating if Document have atleast one file checked in before getting connected as affected items.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the strSuiteKey.
+	 * args[1] holds the strPropertyKey.
+	 * args[2] holds document Id.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void validateAffectedItems(Context context,String []args) throws Exception
+	{
+		if(args==null || args.length<3)
+		{
+			throw new IllegalArgumentException();
+		}
+		String strResourceKey  = args[0];
+		String strPropertyKey     = args[1];
+		String strDocId     = args[2];
+		String strTypeControlledDocument = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+		StringList slObjectSelects = new StringList();
+		slObjectSelects.add("type.kindof["+strTypeControlledDocument+"]");
+		Map mInfo= DCLUtil.getInfo(context, strDocId, slObjectSelects);
+		String strType= (String) mInfo.get("type.kindof["+strTypeControlledDocument+"]");
+		String strRelChangeAffectedItem = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM);
+		String strAttributeRequestedChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+		if(strType.equalsIgnoreCase(DCLConstants.TRUE))
+		{
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+
+			MapList mlFiles= lifecycleService.getActiveVersionDocuments(context, strDocId, null);
+			if(mlFiles.isEmpty())
+			{
+				String strErrMsg = EnoviaResourceBundle.getProperty(context, strResourceKey.trim(), context.getLocale(), strPropertyKey.trim());
+				throw new DCLException(strErrMsg);
+			}
+			DomainObject dObjDoc = DomainObject.newInstance(context, strDocId);
+			StringList slSelects=new StringList();
+			slSelects.add(DomainConstants.SELECT_CURRENT);
+			slSelects.add(DomainConstants.SELECT_TYPE);
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			slSelects.add("to["+strRelChangeAffectedItem+"].attribute["+strAttributeRequestedChange+"].value");
+			MapList mldocInfo = DomainObject.getInfo(context, new String[]{strDocId}, slSelects);
+			for(Object object : mldocInfo)
+			{
+				Map mpDocInfo = (Map)object;
+				String strCurrentState = (String) (mpDocInfo.get(DomainConstants.SELECT_CURRENT));
+				String strRequestedChange = (String) mpDocInfo.get("to[" + strRelChangeAffectedItem + "].attribute[" + strAttributeRequestedChange
+						+ "].value");
+				StringList slRequestedChange = new StringList();
+				if(UIUtil.isNotNullAndNotEmpty(strRequestedChange) && strRequestedChange.contains("\7")) {
+					slRequestedChange = FrameworkUtil.split(strRequestedChange,"\7");;
+				}
+				else
+				{
+					slRequestedChange.add(strRequestedChange);
+				}
+				String STATE_DOC_RELEASED = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+						DCLConstants.SYMBOLIC_STATE_RELEASED);
+				String STATE_DOC_SUPERSEDED = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+						DCLConstants.SYMBOLIC_STATE_SUPERSEDED);
+				String STATE_DOC_OBSOLETE = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+						DCLConstants.SYMBOLIC_STATE_OBSOLETE);
+
+				if (strCurrentState.equals(STATE_DOC_RELEASED) && UIUtil.isNotNullAndNotEmpty(strRequestedChange)
+						&& slRequestedChange.contains("For Revise")) {
+					String strErrMsg = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.ErrorForReviseChangeOrder", new String[] {
+							(String) mpDocInfo.get(DomainConstants.SELECT_TYPE), (String) mpDocInfo.get(DomainConstants.SELECT_NAME),
+							(String) mpDocInfo.get(DomainConstants.SELECT_REVISION) }, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strErrMsg);
+				}
+				else if (strCurrentState.equals(STATE_DOC_SUPERSEDED) && UIUtil.isNotNullAndNotEmpty(strRequestedChange)
+						&& slRequestedChange.contains("For Obsolescence")) {
+					String strErrMsg = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.ErrorForObsolescenceChangeOrder",
+							new String[] {(String) mpDocInfo.get(DomainConstants.SELECT_TYPE),(String) mpDocInfo.get(DomainConstants.SELECT_NAME),
+									(String) mpDocInfo.get(DomainConstants.SELECT_REVISION) }, null, context.getLocale(),
+							DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strErrMsg);
+				}
+				else if (strCurrentState.equals(STATE_DOC_OBSOLETE)) {
+					String strErrMsg = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.ErrorForObsoleteDocument", new String[] {
+							(String) mpDocInfo.get(DomainConstants.SELECT_TYPE), (String) mpDocInfo.get(DomainConstants.SELECT_NAME),
+							(String) mpDocInfo.get(DomainConstants.SELECT_REVISION) }, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strErrMsg);
+				}
+			}
+		}	
+	}     
+	/**
+	 * To Check whether the Document Effectivity reached or not 
+	 * 			if not, Document can not be promoted
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args contains Document objectId.
+	 * @throws DCLException if Effective date not reached.
+	 * @exclude
+	 */
+	public int checkEffectiveDateOnDocument(Context context, String[] args) throws Exception {
+		try {
+			String strDocId = args[0];
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			lifecycleService.isEffectiveDateOnDocumentValidToReleased(context, strDocId);
+			return 0;
+		}
+		catch (Exception e) {
+			System.out.println("Message : " + e.getMessage());
+			MqlUtil.mqlCommand(context, "notice $1", e.getLocalizedMessage());
+			return 1;
+		}
+
+	}
+	/**
+	 * This method is use to auto demote documents conencted with CA
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds the CA objectId.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void demoteCARelatedDocuments(Context context,String []args) throws Exception
+	{	
+		String strAttributeRequestedChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+		String strCAId=args[0];
+		StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+		DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+		List<Map> mlDocuments = lifecycleService.getCARelatedDocuments(context,strCAId,slObjSelect,null,null);
+		String strDocId = DomainConstants.EMPTY_STRING;
+		if(null!=mlDocuments && !mlDocuments.isEmpty())
+		{
+			for (Map mapDocument : mlDocuments)
+			{
+				strDocId = ((List)mapDocument.get(DomainConstants.SELECT_ID)).get(0).toString();
+				DomainObject doObjDocument  = DomainObject.newInstance(context,strDocId);
+				String strRequestChange = (String)mapDocument.get(strAttributeRequestedChange);
+				if (strRequestChange.equalsIgnoreCase(DCLConstants.FOR_RELEASE) || strRequestChange.equalsIgnoreCase(DCLConstants.FOR_OBSOLESCENCE)) {
+					doObjDocument.demote(context);
+				}
+			}
+		}
+	}
+
+	public int deletePDFAndUploadNativeFilesInNewRevision(Context context, String args[]) throws DCLException{
+		{
+			try
+			{
+				if ( args == null || args.length == 0)
+				{
+					throw new IllegalArgumentException();
+				}
+				String strObjectId = args[0];
+				String strRelationChangeAffectedItem = PropertyUtil.getSchemaProperty(context,
+						DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM);
+				String strRelationActiveVersion = PropertyUtil
+						.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_ActiveVersion);
+				String strAttributeRequestedChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+
+				StringList selects = new StringList();
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].to.last.from[" + strRelationActiveVersion + "].to.id");
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].to.last.from[" + strRelationActiveVersion + "].to.revision");
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].to.last.from[" + strRelationActiveVersion + "].to.name");
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].to.last.from[" + strRelationActiveVersion + "].to.originated");
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].to.last.from[" + strRelationActiveVersion
+						+ "].to.attribute[Title].value");
+				selects.addElement("from[" + strRelationChangeAffectedItem + "].attribute[" + strAttributeRequestedChange + "]");
+
+				BusinessObjectWithSelectList busWithSelectList = BusinessObject.getSelectBusinessObjectData(context, new String[] { strObjectId },
+						selects);
+
+				for (int i = 0; i < busWithSelectList.size(); i++) {
+
+					BusinessObjectWithSelect busObjectWithSelect = (BusinessObjectWithSelect) busWithSelectList.elementAt(i);
+					String strRequestedChange = busObjectWithSelect.getSelectData("from[" + strRelationChangeAffectedItem + "].attribute["
+							+ strAttributeRequestedChange + "]");
+					if(!strRequestedChange.equals("For Revise"))
+						break;
+					StringList ids = (StringList) busObjectWithSelect.getSelectDataList("from[" + strRelationChangeAffectedItem + "].to.last.from["
+							+ strRelationActiveVersion + "].to.id");
+					StringList names = (StringList) busObjectWithSelect.getSelectDataList("from[" + strRelationChangeAffectedItem + "].to.last.from["
+							+ strRelationActiveVersion + "].to.name");
+					StringList title = (StringList) busObjectWithSelect.getSelectDataList("from[" + strRelationChangeAffectedItem + "].to.last.from["
+							+ strRelationActiveVersion + "].to.attribute[Title].value");
+
+					for (int j=0; j<names.size(); ++j) {
+
+						String id   = (String)ids.elementAt(j);
+						String attrtitle = (String) title.elementAt(j);
+
+						DomainObject verObj = DomainObject.newInstance(context);
+						verObj.setId(id);
+
+
+						//check for pdf version
+						if(attrtitle.contains(".pdf"))
+							delete(context, title, attrtitle, verObj);
+					}
+
+				}
+			} 
+			catch (Exception ex) 
+			{
+				throw new DCLException(ex.getMessage());
+
+			}
+
+		}
+		return 0;
+	}
+
+	private void delete(Context context, StringList slTitleList, String attrTitle, DomainObject verObj) throws DCLException{
+		try {
+			int count = 0;
+			attrTitle = attrTitle.substring(0,attrTitle.lastIndexOf("."));
+			for(int i=0 ; i<slTitleList.size() ; i++){
+				String strTitleWithoutExtension = slTitleList.get(i).toString().substring(0,slTitleList.get(i).toString().lastIndexOf("."));
+				if(strTitleWithoutExtension.equals(attrTitle))
+					count++;
+			}
+
+			if(count > 1){
+				verObj.deleteObject(context);
+			}
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public int checkIfDocumentIsImplemented(Context context, String[] strObjectId) throws Exception {
+		try{
+			String strImplDateAttr=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE);
+			DomainObject dObj=DomainObject.newInstance(context, strObjectId[0]);
+			String strDocName=dObj.getInfo(context, DomainConstants.SELECT_NAME);
+			EffectivityImplementationService effectivityService= DCLServiceUtil.getEffectivityImplementationService(context);
+			List<Map> mlImplOrg= effectivityService.getAllImplementingOrganization(context, strObjectId[0]);
+			List<String> slImplOrgList = new StringList();
+			for(Map<?,?> mp:mlImplOrg){
+				String strImplDate=(String)mp.get("attribute["+strImplDateAttr+"].value");
+				String strImplOrgName = (String) mp.get(DomainConstants.SELECT_NAME);
+				if(DCLUtil.isNullOrEmpty(strImplDate)){
+					slImplOrgList.add(strImplOrgName);
+				}
+			}
+			if (!DCLUtil.isNullOrEmpty(slImplOrgList)) {
+				String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.OrgNotImplemented", new String[] {
+						strDocName, slImplOrgList.toString() }, null, context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strMessage);		
+				}
+			return 0;
+		}
+		catch (Exception e) {
+			MqlUtil.mqlCommand(context, "notice $1", e.getLocalizedMessage());
+			return 1;
+		}
+	}
+	/**
+	 * Check trigger to block CO and CR completion if CONTROLLED DOCUMENTS are
+	 * connected as Candidate Item
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            [0] holds the Object Id.
+	 * @throws DCLException
+	 *             if operation fails.
+	 * @exclude
+	 */
+	public void checkForConnectedCandidateItems(Context context, String[] args) throws Exception {
+
+		try {
+			String strObjectId = args[0];
+			String strTypeControlledDocument = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			String strRelCandidateItem = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CANDIDATE_AFFECTED_ITEM);
+			StringList slObjectSelects = new StringList();
+			slObjectSelects.add("from[" + strRelCandidateItem + "].to.id");
+			slObjectSelects.add("from[" + strRelCandidateItem + "].to.name");
+			Map<String, String> mInfo = DCLUtil.getInfo(context, strObjectId, slObjectSelects);
+			String sObjectId = mInfo.get("from[" + strRelCandidateItem + "].to.id");
+			String sObjectName = mInfo.get("from[" + strRelCandidateItem + "].to.name");
+			List<String> slObjectId = FrameworkUtil.split(sObjectId, ",");
+			List<String> slObjectName = FrameworkUtil.split(sObjectName, ",");
+			List<String> slConnectedControlledDocuments = new StringList();
+			for (int i = 0; i < slObjectId.size(); i++) {
+				if (DomainObject.newInstance(context, slObjectId.get(i)).isKindOf(context, strTypeControlledDocument)) {
+					slConnectedControlledDocuments.add(slObjectName.get(i));
+				}
+			}
+
+			if (!slConnectedControlledDocuments.isEmpty()) {
+			String strAlertMessage=DCLUtil.getMessageWithSubstituteMessageArgs(context,
+			"enoDocumentControl.Alert.ErrorForCOAndCRCompletion",new String[] { slConnectedControlledDocuments.toString() },context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+			throw new DCLException(strAlertMessage);
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * clear comments on tasks while approving/abstaining task (InboxTask Review
+	 * PromoteAction)
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            String array of command lien args.
+	 * @throws DCLException
+	 */
+	public void clearApprovalAndAbstainTaskComments(Context context, String args[]) throws DCLException {
+		try {
+			if (args == null || args.length == 0) {
+				throw new IllegalArgumentException();
+			}
+			String strShowCommentsForTaskApproval = EnoviaResourceBundle.getProperty(context, "emxComponents.Routes.ShowCommentsForTaskApproval");
+			if (strShowCommentsForTaskApproval.equals(DCLConstants.FALSE)) {
+				String APPROVE = "Approve";
+				String ABSTAIN = "Abstain";
+				String strRouteActionAttr = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+				String strApprovalStatusAttr = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_ApprovalStatus);
+				String strComments = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Comments);
+				StringList strRouteAttrList = new StringList("attribute[" + strRouteActionAttr + "].value");
+				strRouteAttrList.add("attribute[" + strApprovalStatusAttr + "].value");
+				String strTaskId = args[0];
+				DomainObject taskObj = DomainObject.newInstance(context, strTaskId);
+				Map routeAttrMap = taskObj.getInfo(context, strRouteAttrList);
+				String strRouteAction = (String) routeAttrMap.get("attribute[" + strRouteActionAttr + "].value");
+				String strApprovalStatus = (String) routeAttrMap.get("attribute[" + strApprovalStatusAttr + "].value");
+				if (strRouteAction.equals(APPROVE)) {
+					if (strApprovalStatus.equals(APPROVE) || strApprovalStatus.equals(ABSTAIN)) {
+						taskObj.setAttributeValue(context, strComments, DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public int grantReadOwnershipToExternalImplOrgsAndTrainees(Context context, String args[]) throws DCLException {
+		try {
+			if (args == null || args.length == 0) {
+				throw new IllegalArgumentException();
+			}
+			StringList orgList = new StringList();
+			StringList traineeList = new StringList();
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			String strImplOrg = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTING_ORGANIZATION);
+			String strTrainee = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_TRAINEE);
+			DomainObject dobj = DomainObject.newInstance(context, args[0]);
+			StringList relSelects = new StringList("to[" + strImplOrg + "].from.id");
+			relSelects.add("to[" + strTrainee + "].from.id");
+			relSelects.add("to[" + strTrainee + "].from.name");
+			relSelects.add("to[" + strImplOrg + "].from.name");
+
+			MapList ml = DomainObject.getInfo(context, new String[] { args[0] }, relSelects);
+			for (Object object : ml) {
+				Map map = (Map) object;
+				String strImplOrgList = (String) map.get("to[" + strImplOrg + "].from.id");
+				if (UIUtil.isNotNullAndNotEmpty(strImplOrgList))
+					orgList = FrameworkUtil.split(strImplOrgList, "\7");
+				for (Object str : orgList) {
+					String strOrgId = (String) str;
+					service.grantAccesToTraineeAndImplOrg(context, args[0], strOrgId);
+				}
+				String strTraineeList = (String) map.get("to[" + strTrainee + "].from.id");
+				if (UIUtil.isNotNullAndNotEmpty(strTraineeList))
+					traineeList = FrameworkUtil.split(strTraineeList, "\7");
+				for (Object str : traineeList) {
+					String strTraineeId = (String) str;
+					service.grantAccesToTraineeAndImplOrg(context, args[0], strTraineeId);
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void createRouteOnChangeAction(Context context, String[] args) throws DCLException {
+		if (args == null || args.length < 2) {
+			throw new IllegalArgumentException();
+		}
+		try {
+            Boolean isExists=false;
+			String strCAId = args[0];
+			String strRouteName = DomainConstants.EMPTY_STRING;
+			Map routeNodeMap = null;
+			HashMap routeObjectRelAttrMap = null;
+			HashMap routeAttrMap = null;
+			String StrTypeRoute = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_ROUTE);
+			String strCAPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CA);
+			String strInApprovalState = DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CA, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			Route routeObj = (Route) DomainObject.newInstance(context, StrTypeRoute); // object
+																						// route
+			DomainObject dobj = DomainObject.newInstance(context, strCAId);
+			String changeObjectName = (String) dobj.getInfo(context, DomainConstants.SELECT_NAME);
+			String changeObjectOwner = (String) dobj.getInfo(context, DomainConstants.SELECT_OWNER);
+			String sAttrRouteCompletionAction = PropertyUtil.getSchemaProperty(context, "attribute_RouteCompletionAction");
+			String sAttrRouteBasePurpose = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+			String sAttrRestartUponTaskRejection = PropertyUtil.getSchemaProperty(context, "attribute_AutoStopOnRejection");
+
+			String strSeniorTechnicalAssigneeId = dobj.getInfo(context,
+					"from[" + PropertyUtil.getSchemaProperty(context, DCLConstants.RELATIONSHIP_SENIOR_TECHNICAL_ASSIGNEE) + "].to.id");
+			if (!DCLUtil.isNullOrEmpty(strSeniorTechnicalAssigneeId)) {
+				// Change Route Action Attribute to Approve
+				StringList objProductSelects = new StringList();
+				objProductSelects.add(DomainObject.SELECT_ID);
+				objProductSelects.add(DomainObject.SELECT_NAME);
+
+				StringList relProductSelects = new StringList(1);
+				relProductSelects.add(DCLConstants.ID_CONNECTION);
+
+		List<Map> mlRoute=	dobj.getRelatedObjects(context, DomainObject.RELATIONSHIP_OBJECT_ROUTE, DomainObject.TYPE_ROUTE, objProductSelects,
+						relProductSelects, false, true, (short) 1, null, null, (short) 0);
+			for(Map mp:mlRoute){
+				Route routeObjForTechAssignee = (Route) DomainObject.newInstance(context, StrTypeRoute);
+					routeObjForTechAssignee.setId((String)mp.get(DomainObject.SELECT_ID));
+					String strName=(String)mp.get(DomainObject.SELECT_NAME);
+
+					if(strName.contains("In_Approval_ForAssignee")){
+					 isExists=true;
+				 }
+			}
+			if(isExists==false){
+				String sProductionVault = PropertyUtil.getSchemaProperty(context, "vault_eServiceProduction");
+
+				// create Route Object id
+					String sRouteId = FrameworkUtil.autoName(context,DCLConstants.SYMBOLIC_TYPE_ROUTE, DomainConstants.EMPTY_STRING, DCLConstants.SYMBOLIC_POLICY_ROUTE, sProductionVault);
+				// create Route object
+				routeObj.setId(sRouteId);
+				// rename change object object name
+				strRouteName = routeObj.getInfo(context, DomainConstants.SELECT_NAME);
+				// Change the Route Name by appending Context Change Object Name
+					strRouteName = "Route_"+strRouteName+ "_" +changeObjectName + "_"+ "In_Approval_ForAssignee";
+				// set new name to Route object
+				routeObj.setName(context, strRouteName);
+
+				// HashMap to carry all the attribute values to be set
+				routeObjectRelAttrMap = new HashMap();
+
+				routeObjectRelAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_BASE_STATE,
+						FrameworkUtil.reverseLookupStateName(context, strCAPolicy, strInApprovalState));
+				routeObjectRelAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_BASE_POLICY,
+						FrameworkUtil.getAliasForAdmin(context, "Policy", strCAPolicy, false));
+				routeObjectRelAttrMap.put(sAttrRouteBasePurpose, "Standard");
+				routeObj.open(context);
+				routeObj.setDescription(context, MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.CARouteDescrption", null, null,
+						context.getLocale(), DCLConstants.DCL_STRING_RESOURCE));
+				// set Route Completion Action
+				routeObj.setAttributeValue(context, sAttrRouteCompletionAction, "Promote Connected Object");
+				routeObj.setAttributeValue(context, sAttrRestartUponTaskRejection, "Immediate"); // IR-118894
+				// set the all the relationships from created route object
+				RelationshipType relationshipType = new RelationshipType(DomainObject.RELATIONSHIP_OBJECT_ROUTE);
+				DomainRelationship newRel = routeObj.addFromObject(context, relationshipType, strCAId);
+				String[] selPersons = { strSeniorTechnicalAssigneeId };
+				routeObj.AddMembers(context, selPersons);
+
+				
+
+				// get all the tasks in the route
+					MapList routeNodeList = routeObj.getRelatedObjects(context, DomainObject.RELATIONSHIP_ROUTE_NODE, DomainConstants.QUERY_WILDCARD, objProductSelects,
+						relProductSelects, false, true, (short) 1, null, null, (short) 0);
+				Iterator itrRouteNodeList = routeNodeList.iterator();
+				while (itrRouteNodeList.hasNext()) {
+					routeNodeMap = (Map) itrRouteNodeList.next();
+						DomainRelationship routeNodeId = new DomainRelationship((String) routeNodeMap.get(DCLConstants.ID_CONNECTION));
+					// attribute map for Route node relationship
+					routeAttrMap = new HashMap();
+					routeAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_ACTION, "Approve");
+					routeAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_SEQUENCE, "1");
+					routeNodeId.setAttributeValues(context, routeAttrMap);
+				}
+
+				// to start route
+				routeObj.promote(context);
+				// UPDATE OBJECT ROUTE ATTRIBUTES.
+				newRel.setAttributeValues(context, routeObjectRelAttrMap);
+				if (DCLConstants.USER_AGENT.equals(routeObj.getOwner(context).getName()) && !DCLUtil.isNullOrEmpty(changeObjectOwner)) {
+					routeObj.setId(sRouteId);
+					routeObj.setOwner(context, changeObjectOwner);
+				}
+
+				routeObj.addToObject(context, new RelationshipType(DomainConstants.RELATIONSHIP_PROJECT_ROUTE),
+						DomainObject.newInstance(context, PersonUtil.getPersonObjectID(context, changeObjectOwner)).getId(context)); // Added
+																																		// For
+																																		// IR-337468
+			}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Trigger on QSD promote from Preliminary -> In Work - checks if CA is connected & if yes then if it is in In Work state or not
+	 * @param context
+	 * @param args
+	 * @throws DCLException
+	 */
+	public void checkConnectedChangeActionState(Context context, String[] args) throws DCLException {
+		try {
+			String strObjectId = args[0]; // Doc object Id
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			String strCAPolicy = PropertyUtil.getSchemaProperty(context, args[1]);
+			String strInWorkState = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY , strCAPolicy, args[2]);
+			String strInApprovalState = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY , strCAPolicy, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			List<Map> CAInfoList = cdService.getConnectedCA(context, strObjectId, true, true);
+			if(CAInfoList.isEmpty()){
+				String strMsgNoCAAttached = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), args[3]);
+				throw new DCLException(strMsgNoCAAttached);
+			}
+			for (Map map : CAInfoList) {
+				String strCACurrent = (String) map.get(DomainRelationship.SELECT_CURRENT);
+				if (!(strInWorkState.equals(strCACurrent)||strInApprovalState.equals(strCACurrent))) {
+					String strMsgCANotinInWork = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), args[4]);
+					throw new DCLException(strMsgCANotinInWork);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * trigger on QSD promote from InWork -> InApproval - promotes connected Change Action to InApproval state
+	 * @param context
+	 * @param args
+	 * 1.ObjectId, 2. QSD target state i.e. In Approval, 3. CA current state i.e. InWork
+	 * @throws DCLException
+	 */
+	public void promoteConnectedChangeAction(Context context, String[] args) throws DCLException {
+		try {
+			boolean flagValidCAFound = false;
+			int temp = 0;
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			String strQSDPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			String strDocTargetState = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY , strQSDPolicy, args[1]);
+			String strDocReleasedState = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY , strQSDPolicy, DCLConstants.SYMBOLIC_STATE_RELEASED);
+			String strCAPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CA);
+			String strCACompleteState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strCAPolicy, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			String strCArequiredState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strCAPolicy, args[2]);
+			List<Map> mlCAInfo = cdService.getConnectedCA(context, args[0], true, true);
+			String strCAId = DomainConstants.EMPTY_STRING;
+			DomainObject CAObj = null;
+			for(Map mapCA : mlCAInfo){
+				strCAId = mapCA.get(DomainObject.SELECT_ID).toString();
+				String strCurrent = mapCA.get(DomainObject.SELECT_CURRENT).toString();
+				if(! strCACompleteState.equalsIgnoreCase(strCurrent) && strCArequiredState.equalsIgnoreCase(strCurrent)){
+					flagValidCAFound = true;
+					break;
+				}
+			}
+			if(flagValidCAFound){
+				StringList slObjectSelects = new StringList();
+				slObjectSelects.add(DomainObject.SELECT_ID);
+				slObjectSelects.add(DomainObject.SELECT_CURRENT);
+				if(UIUtil.isNotNullAndNotEmpty(strCAId))
+					CAObj = DomainObject.newInstance(context, strCAId);
+				//get all Proposed & Realized changes from CA ( i.e. all Affected & Implemented Items)
+				List<Map> mlDocList = cdService.getProposedFromChangeAction(context, strCAId, slObjectSelects);
+				mlDocList.addAll( cdService.getRealizedFromChangeAction(context, strCAId, slObjectSelects));
+				Map<String,String> mapObj=null;
+				for(Object obj : mlDocList) {
+					mapObj=new HashMap<>();
+					Map docMap = (Map)obj;
+					String strDocState = ((List) docMap.get(DomainObject.SELECT_CURRENT)).get(0).toString();
+					if(!strDocTargetState.equalsIgnoreCase(strDocState) && !strDocReleasedState.equalsIgnoreCase(strDocState) ){
+						temp = 1;
+					}
+				}
+				if (temp == 0) {
+					// To promote Change Action to InApproval if all its
+					// Affected Items are promoted to InApproval
+					try {
+						//using Super User context if owner of Affected Item != owner of CA
+						User caOwner = CAObj.getOwner(context);
+						ContextUtil.pushContext(context, caOwner.getName(), null, null);
+						CAObj.promote(context);
+					} catch (Exception e) {
+						throw new DCLException(e.getLocalizedMessage());
+					}
+					finally {
+						try {
+							ContextUtil.popContext(context);
+						} catch (Exception ex) {
+							throw new DCLException(ex.getLocalizedMessage());
+						}
+					}
+					
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+		
+
+	public void checkIfAllControlledDocumentsInReleasedState(Context context, String[] strObjectId) throws DCLException {
+		try {
+
+			String strQSDPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			String strReleasedState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strQSDPolicy, DCLConstants.SYMBOLIC_STATE_RELEASED);
+			String strRelChangeAction = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ACTION);
+			String strTypeCA = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CA);
+			String strCOId = strObjectId[0];
+			StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+			String strAttributeReqChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+			String strRequestedChange = ChangeConstants.SELECT_ATTRIBUTE_REQUESTED_CHANGE;
+			slObjSelect.add(DomainObject.SELECT_TYPE);
+
+			DomainObject dObjCo = DomainObject.newInstance(context, strCOId);
+			ChangeManagement coObj = new ChangeOrder(strCOId);
+			List<Map> mlCA = coObj.getChangeActions(context);
+			
+			for (Map map : mlCA) {
+				String strCAId = (String) map.get(DomainObject.SELECT_ID);
+				DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+				MapList mlDocuments = lifecycleService.getCARelatedDocuments(context, strCAId, slObjSelect, null, null);
+				if (null != mlDocuments && !mlDocuments.isEmpty()) {
+					for (Object object : mlDocuments) {
+						Map<?, ?> mapDocument = (Map<?, ?>) object;
+						String strDocId = ((List) mapDocument.get(DomainConstants.SELECT_ID)).get(0).toString();
+						String stReasonForChange=(String) mapDocument.get(strAttributeReqChange);
+						if(stReasonForChange.equals(DCLConstants.FOR_REVISE) || stReasonForChange.equals(DCLConstants.FOR_RELEASE) ){
+
+							if (!PolicyUtil.checkState(context, strDocId,strReleasedState, PolicyUtil.GE)) {
+								String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+										"enoDocumentControl.Alert.Msg.CanNotImplementAsNotAllQSDReleased");
+								throw new DCLException(strMessage);
+							}
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	public void checkAffectedItemState(Context context, String[] args) throws DCLException {
+		try {
+			String strQSDPolicy=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			String strPriliminaryState=PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strQSDPolicy, DCLConstants.SYMBOLIC_STATE_PRELIMINARY);
+			String strCAId = args[0];
+			StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+			String strAttributeReqChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getCARelatedDocuments(context, strCAId, slObjSelect,  null, null);
+			if (null != mlDocuments && !mlDocuments.isEmpty()) {
+				for (Object object : mlDocuments) {
+					Map<?,?> mapDocument = (Map<?, ?>) object;
+					String strDocId = ((List) mapDocument.get(DomainConstants.SELECT_ID)).get(0).toString();
+					String stReasonForChange=(String)mapDocument.get(strAttributeReqChange);
+					if(stReasonForChange.equals(DCLConstants.FOR_RELEASE) || stReasonForChange.equals(DCLConstants.FOR_REVISE) ){
+						DomainObject doObjDocument = DomainObject.newInstance(context, strDocId);
+						String strDocState=doObjDocument.getInfo(context, DomainObject.SELECT_CURRENT);
+						if (!strDocState.equals(strPriliminaryState)) {
+							String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+									args[1]);
+							throw new DCLException(strMessage);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void promoteControlledDocumentToApproved(Context context, String[] strObjectId) throws DCLException {
+		try {
+
+			String strQSDPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			String strInApprovalState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strQSDPolicy, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			String strCAId = strObjectId[0];
+			StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+			StringList slRelSelect = new StringList();
+			String strAttributeReqChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+			String strRequestedChange = ChangeConstants.SELECT_ATTRIBUTE_REQUESTED_CHANGE;
+			slRelSelect.addElement(strRequestedChange);
+
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getCARelatedDocuments(context, strCAId, slObjSelect, slRelSelect, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			ChangeAction caObj = new ChangeAction(strCAId);
+			if (null != mlDocuments && !mlDocuments.isEmpty()) {
+				for (Object object : mlDocuments) {
+					Map<?, ?> mapDocument = (Map<?, ?>) object;
+					String strDocId = ((List) mapDocument.get(DomainConstants.SELECT_ID)).get(0).toString();
+					String stReasonForChange=mapDocument.get(strAttributeReqChange).toString();
+					if(stReasonForChange.equals(DCLConstants.FOR_RELEASE) || stReasonForChange.equals(DCLConstants.FOR_REVISE) ){
+						DomainObject doObjDocument = DomainObject.newInstance(context, strDocId);
+						String strDocState = doObjDocument.getInfo(context, DomainObject.SELECT_CURRENT);
+						if (strDocState.equals(strInApprovalState)) {
+							// To promote Connected Controlled Document to
+							// Approved State
+							doObjDocument.promote(context);
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void demoteCheckForConnectedChangeActionsInWork(Context context, String[] args) throws DCLException {
+		try {
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			String strCAPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CA);
+			String strCAInWorkState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strCAPolicy, DCLConstants.SYMBOLIC_STATE_IN_WORK);
+			List<Map> mlCo = cdService.getConnectedCA(context, args[0], true, true);
+			for (Map map : mlCo) {
+				String strCAId = (String) map.get(DomainObject.SELECT_ID);
+				DomainObject CAObj = DomainObject.newInstance(context, strCAId);
+				String strCAState = CAObj.getInfo(context, DomainObject.SELECT_CURRENT);
+				if (!strCAInWorkState.equals(strCAState)) {
+					String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							args[1]);
+					throw new DCLException(strMessage);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	
+	//Revise the Controlled Document On Promotion of the CA for lifecycle changes
+	public int reviseConnectedControlledDocuments(Context context, String[] args) throws Exception {
+		try {
+			/*if (args == null || args.length < 1) {
+				throw (new IllegalArgumentException());
+			}
+			String strId = DomainConstants.EMPTY_STRING;
+			String strType = DomainConstants.EMPTY_STRING;
+			String strName = DomainConstants.EMPTY_STRING;
+			String strCurrent = DomainConstants.EMPTY_STRING;
+			String strRevision = DomainConstants.EMPTY_STRING;
+			String strAttrRC = DomainConstants.EMPTY_STRING;
+			String strWhere = DomainConstants.EMPTY_STRING;
+			String strPolicy = DomainConstants.EMPTY_STRING;
+			String strLatestRevCurrent = DomainConstants.EMPTY_STRING;
+			String strLatestRevision = DomainConstants.EMPTY_STRING;
+			String strLatestRevisionId = DomainConstants.EMPTY_STRING;
+			String strObjectStateName = DomainConstants.EMPTY_STRING;
+			RelationshipType relType = null;
+			Map tempMap = null;
+			Map mapTemp = null;
+			boolean bSpec = true;
+			String nonCDMTypes = EnoviaResourceBundle.getProperty(context, "EnterpriseChangeMgt.Integration.NonCDMTypes");
+			StringList typeList = new StringList();
+			String typeSpec = DomainConstants.EMPTY_STRING;
+			String LastestRevId = DomainConstants.EMPTY_STRING;
+			String strQSDType = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+			String strQSDPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			HashMap latestRevisionMap = new HashMap();
+			String strObjId = args[0];
+			DomainObject dObj = new DomainObject(strObjId);
+
+			ChangeUtil changeUtil = new ChangeUtil();
+			StringList slNameList = new StringList();
+			StringList slBusSelect = new StringList(4);
+			slBusSelect.addElement(DomainObject.SELECT_ID);
+			slBusSelect.addElement(DomainObject.SELECT_TYPE);
+			slBusSelect.addElement(DomainObject.SELECT_NAME);
+			slBusSelect.addElement(DomainObject.SELECT_CURRENT);
+			slBusSelect.addElement(DomainObject.SELECT_REVISION);
+			slBusSelect.addElement(DomainObject.SELECT_POLICY);
+
+			ChangeAction changeAction = new ChangeAction(strObjId);
+
+			StringList slRelSelect = new StringList();
+			String strRequestedChange = ChangeConstants.SELECT_ATTRIBUTE_REQUESTED_CHANGE;
+			slRelSelect.addElement(strRequestedChange);
+
+			// Getting all the connected objects of context object
+			MapList mlRelatedObjects = dObj.getRelatedObjects(context, ChangeConstants.RELATIONSHIP_CHANGE_AFFECTED_ITEM,strQSDType , slBusSelect,
+					slRelSelect, false, true, (short) 1, DomainConstants.EMPTY_STRING, DomainConstants.EMPTY_STRING, 0);
+
+			Iterator i = mlRelatedObjects.iterator();
+
+			DomainObject domObj =DomainObject.newInstance(context);
+
+			// Iterating all the Affected Items Objects
+			while (i.hasNext()) {
+				mapTemp = (Map) i.next();
+				// Fetching all the values
+				strId = (String) mapTemp.get(DomainObject.SELECT_ID);
+				strType = (String) mapTemp.get(DomainObject.SELECT_TYPE);
+				strName = (String) mapTemp.get(DomainObject.SELECT_NAME);
+				strCurrent = (String) mapTemp.get(DomainObject.SELECT_CURRENT);
+				strRevision = (String) mapTemp.get(DomainObject.SELECT_REVISION);
+				strAttrRC = (String) mapTemp.get(ChangeConstants.SELECT_ATTRIBUTE_REQUESTED_CHANGE);
+				strPolicy = (String) mapTemp.get(DomainObject.SELECT_POLICY);
+
+				strObjectStateName =PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strQSDPolicy, DCLConstants.SYMBOLIC_STATE_RELEASED);
+
+				// Checking if the object is "For Revise" and state is Release
+				if (strAttrRC.equalsIgnoreCase(ChangeConstants.FOR_REVISE) && strCurrent.equalsIgnoreCase(strObjectStateName)) {
+					strWhere = "name == '" + strName + "' && revision == last";
+					dObj.setId(strId);
+
+					// Considering only one Latest Revision with that Name
+					LastestRevId = dObj.getInfo(context, "last.id");
+
+					dObj.setId(LastestRevId);
+
+					tempMap = dObj.getInfo(context, slBusSelect);
+					// Checking for the current state and revision of the object
+					strLatestRevCurrent = (String) tempMap.get(DomainObject.SELECT_CURRENT);
+					strLatestRevision = (String) tempMap.get(DomainObject.SELECT_REVISION);
+
+					// Check if latest revision exists and which is not released
+					// in the system
+					if (!strRevision.equalsIgnoreCase(strLatestRevision)
+							&& changeUtil.checkObjState(context, LastestRevId, strObjectStateName, ChangeConstants.LT) == 0) {
+						// Getting the latest revision of object, if already
+						// connected in Implemented Items
+						dObj=DomainObject.newInstance(context, strObjId);
+						MapList mlImplementedItems = dObj.getRelatedObjects(context, ChangeConstants.RELATIONSHIP_IMPLEMENTED_ITEM, DomainConstants.QUERY_WILDCARD, slBusSelect,
+								null, false, true, (short) 1, strWhere, DomainObject.EMPTY_STRING, 0);
+
+						if (mlImplementedItems.size() == 0) {
+							// Connecting to Change Action object if latest
+							// revision is not connected as Implemented Item
+							changeAction.connectImplementedItems(context, new StringList(LastestRevId));
+						}
+					}
+					else {
+						domObj.setId(strId);
+
+						if (UIUtil.isNotNullAndNotEmpty(nonCDMTypes))
+							typeList = FrameworkUtil.split(nonCDMTypes, DCLConstants.COMMA);
+						// Modified for IR-264331 start
+						if (domObj.isKindOf(context, CommonDocument.TYPE_DOCUMENTS)) {
+							Iterator itr = typeList.iterator();
+							while (itr.hasNext()) {
+								typeSpec = (String) itr.next();
+								typeSpec = PropertyUtil.getSchemaProperty(context, typeSpec);
+								if (domObj.isKindOf(context, typeSpec)) {
+									bSpec = false;
+									break;
+								}
+							}
+						}
+
+						if (domObj.isKindOf(context, CommonDocument.TYPE_DOCUMENTS) && bSpec) {
+							CommonDocument docItem = new CommonDocument(domObj);
+							docItem.revise(context, false);
+						}
+						else {
+							domObj.reviseObject(context, false);
+						}
+
+						
+						// Selecting the latest revision business id
+						strLatestRevisionId = (String) domObj.getInfo(context, "last.id");
+						relType = new RelationshipType(ChangeConstants.RELATIONSHIP_IMPLEMENTED_ITEM);
+						// Adding the above latest revision object to
+						// Implemented Item of CA
+						changeAction.connectImplementedItems(context, new StringList(strLatestRevisionId));
+						latestRevisionMap.put(strId, strLatestRevisionId);
+					}
+				}
+			}
+*/
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+
+		return 0;
+	}
+	
+	//Check for CA InWork to InApproval promotion 
+	public void checkForControlledDocumentsInWorkState(Context context, String[] strArgs) throws DCLException {
+		try {
+
+			String strPriliminaryState =DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_PRELIMINARY);
+			String strAttributeRequestedChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+			String strCAId = strArgs[0];
+			StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+
+			DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+			MapList mlDocuments = lifecycleService.getCARelatedDocuments(context, strCAId, slObjSelect, null, null);
+			if (null != mlDocuments && !mlDocuments.isEmpty()) {
+				for (Object object : mlDocuments) {
+					Map<?, ?> mapDocument = (Map<?, ?>) object;
+					String strDocId = ((List) mapDocument.get(DomainObject.SELECT_ID)).get(0).toString();
+					String stReasonForChange=(String)mapDocument.get(strAttributeRequestedChange);
+					if(!stReasonForChange.equals(DCLConstants.FOR_OBSOLESCENCE)) {
+						DomainObject doObjDocument = DomainObject.newInstance(context, strDocId);
+						String strDocState = doObjDocument.getInfo(context, DomainObject.SELECT_CURRENT);
+						if (strDocState.equals(strPriliminaryState)) {
+								String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+										"enoDocumentControl.Alert.Msg.QSDNotInInWorkState");
+								throw new DCLException(strMessage);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	//Check for CA Complete state fro GA mode
+		public void checkIfConnectedChangeActionCompleted(Context context, String[] strObjectId) throws DCLException {
+			try {
+				ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+				String strCACompleteState=DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CA, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+				List<Map> mlCA = cdService.getConnectedCA(context, strObjectId[0], true, true);
+				for (Map map : mlCA) {
+					String strCAId = map.get(DomainRelationship.SELECT_ID).toString();
+//					DomainObject CAObj = DomainObject.newInstance(context, strCAId);
+					String strCAState = map.get(DomainRelationship.SELECT_CURRENT).toString();
+					if (!strCACompleteState.equals(strCAState)) {
+						String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Alert.Msg.promoteChangeActionToCompleteStateToPromoteQSD");
+						throw new DCLException(strMessage);				
+					}
+				}
+			}
+			catch (Exception e) {
+				throw new DCLException(e.getLocalizedMessage());
+			}
+		}
+		
+		//Check for CO Approved state for LA mode
+				public void checkIfConnectedChangeOrderApproved(Context context, String[] strObjectId) throws DCLException {
+					try {
+						String strCOPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_FASTTRACK_CHANGE);
+			String strCOApprovedState=PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY , strCOPolicy, DCLConstants.SYMBOLIC_STATE_APPROVED);
+						List<Map> mlCO = new MapList();
+						String strAttrEffectivityOption = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+
+						String strAffectedItem = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM);
+						String strImplementedItem = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTED_ITEM);
+						String strRelChangeAction = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ACTION);
+
+						
+							DomainObject doDoc = DomainObject.newInstance(context, strObjectId[0]);
+							StringList slObjSelects = new StringList(3);
+							slObjSelects.add(DomainObject.SELECT_NAME);
+							slObjSelects.add(DomainObject.SELECT_ID);
+							slObjSelects.add(DomainObject.SELECT_TYPE);
+							slObjSelects.add(DomainObject.SELECT_DESCRIPTION);
+							slObjSelects.add(DomainObject.getAttributeSelect(strAttrEffectivityOption));
+
+							StringBuilder sbCOAffectedItemTypeSelect = new StringBuilder();
+							sbCOAffectedItemTypeSelect.append("from[");
+							sbCOAffectedItemTypeSelect.append(strRelChangeAction).append("].to.from[").append(strAffectedItem).append("].to.id");
+							slObjSelects.add(sbCOAffectedItemTypeSelect.toString());
+
+							StringBuilder sbCOImplementedItemTypeSelect = new StringBuilder();
+							sbCOImplementedItemTypeSelect.append("from[");
+							sbCOImplementedItemTypeSelect.append(strRelChangeAction).append("].to.from[").append(strImplementedItem).append("].to.id");
+							slObjSelects.add(sbCOImplementedItemTypeSelect.toString());
+
+							StringList slRelSelects = new StringList(1);
+							slRelSelects.add(DomainRelationship.SELECT_NAME);
+							slRelSelects.add(DomainRelationship.SELECT_ID);
+							slRelSelects.add(DomainRelationship.SELECT_FROM_ID);
+							slRelSelects.add(DomainRelationship.SELECT_TO_NAME);
+							slRelSelects.add(DomainRelationship.SELECT_TO_ID);
+							slRelSelects.add("to.description");
+
+			String strTypePattern = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ACTION) + DCLConstants.COMMA
+									+ PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+							String strRelPattern = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_ACTION);
+
+							Pattern pIncludeType = new Pattern(PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER));
+							
+			strRelPattern += DCLConstants.COMMA + PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_AFFECTED_ITEM);
+							
+			strRelPattern += DCLConstants.COMMA + PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_IMPLEMENTED_ITEM);
+							
+							mlCO = doDoc.getRelatedObjects(context, // Context
+									strRelPattern, // relationshipPattern
+									strTypePattern, // typePattern
+									slObjSelects, // objectSelects
+									slRelSelects, // relationshipSelects
+									true, // getTo
+									false, // getFrom
+									(short) 2, // recurseToLevel
+									null, // objectWhere
+									null, // relationshipWhere
+									(short) 0, // limit
+									false, // checkHidden
+									true, // preventDuplicates
+									(short) 0, // pageSize
+									pIncludeType, // includeType
+									null, // includeRelationship
+									null, // includeMap
+									null // relKeyPrefix
+									);
+						
+
+						for (Map map : mlCO) {
+							String strCoId = (String) map.get(DomainObject.SELECT_ID);
+							DomainObject CAObj = DomainObject.newInstance(context, strCoId);
+							String strCoState = CAObj.getInfo(context, DomainObject.SELECT_CURRENT);
+							if (!strCOApprovedState.equals(strCoState)) {
+								String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+										"enoDocumentControl.Alert.Msg.promoteChangeOrderToApprovedStateToPromoteQSD");
+								throw new DCLException(strMessage);				
+							}
+						}
+					}
+					catch (Exception e) {
+						throw new DCLException(e.getLocalizedMessage());
+					}
+				}
+					//Check for CA Complete state to prevent manual promotion to Superseded And Obsolete state
+	public void checkForChangeActionCompleteState(Context context, String[] args) throws DCLException {
+		try {
+			String strApprovedState =DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_APPROVED);
+			String strReleasedState =DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_RELEASED);
+			String strSupersededState =DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_SUPERSEDED);
+			String strCompleteState =DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CA, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			String strRequestedChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_REQUESTED_CHANGE);
+			StringList slObjSelect = new StringList(DomainConstants.SELECT_ID);
+			slObjSelect.add(DomainConstants.SELECT_CURRENT);
+			DomainObject doObj=DomainObject.newInstance(context, args[0]);
+			String strDocState=doObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			String strLatestVersionDocId = doObj.getInfo(context, DomainConstants.SELECT_LAST_ID);
+			String strLatestVersionDocState = DomainObject.newInstance(context, strLatestVersionDocId).getInfo(context, DomainObject.SELECT_CURRENT);
+			String strRequiredReasonForChange=DomainConstants.EMPTY_STRING;
+			String strMessage =DomainConstants.EMPTY_STRING;
+			Boolean hasCA=false;
+			if(strDocState.equals(strReleasedState))
+				strRequiredReasonForChange=DCLConstants.FOR_REVISE;
+			else if(strDocState.equals(strSupersededState))
+				strRequiredReasonForChange=DCLConstants.FOR_OBSOLESCENCE;
+
+
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> ConnectCAList = cdService.getConnectedCA(context, args[0], true, true);
+			for (Map map : ConnectCAList) {
+				String strCAId = (String) map.get(DomainObject.SELECT_ID);
+				DomainObject CAObj = DomainObject.newInstance(context, strCAId);
+				String strCAState = (String) map.get(DomainObject.SELECT_CURRENT);
+				DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+				MapList mlDocuments = lifecycleService.getCARelatedDocuments(context, strCAId, slObjSelect,  null, null);
+				if (null != mlDocuments && !mlDocuments.isEmpty()) {
+					for (Object object : mlDocuments) {
+						Map<?,?> mapDocument = (Map<?, ?>) object;
+						String strDocId = ((List) mapDocument.get(DomainObject.SELECT_ID)).get(0).toString();
+						String strReasonForChangeForDocument=(String)mapDocument.get(strRequestedChange);
+						if(args[0].equals(strDocId)&&strReleasedState.equalsIgnoreCase(strDocState)&&DCLConstants.FOR_OBSOLESCENCE.equalsIgnoreCase(strReasonForChangeForDocument)&&strCompleteState.equalsIgnoreCase(strCAState))
+							hasCA=true;
+						if(args[0].equals(strDocId)&&(strRequiredReasonForChange.equals(strReasonForChangeForDocument) )){
+							hasCA=true;
+							if(!strCAState.equals(strCompleteState)){
+								if(strReleasedState.equalsIgnoreCase(strDocState))
+									strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+											"enoDocumentControl.Alert.Msg.ChangeActionForReviseIsNotComplete");
+								else if(strDocState.equals(strSupersededState))
+									strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+											"enoDocumentControl.Alert.Msg.ChangeActionForObsolescenceIsNotComplete");
+								throw new DCLException(strMessage);
+							}
+							else if(strReleasedState.equalsIgnoreCase(strDocState) && strApprovedState.equalsIgnoreCase(strLatestVersionDocState)) {
+								strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+										"enoDocumentControl.Alert.Msg.LatestRevisionIsNotReleased");
+							throw new DCLException(strMessage);
+							}
+						}
+					}
+				}
+				
+			}
+			if((hasCA.toString()).equals(DCLConstants.FALSE)){
+				if(strDocState.equals(strReleasedState))
+					strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Alert.Msg.ChangeActionForReviseNotConnected");
+				else if(strDocState.equals(strSupersededState))
+					strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Alert.Msg.ChangeActionForObsolescenceNotConnected");
+				throw new DCLException(strMessage);
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}	
+
+	/**
+	 * Trigger on promotion of Controlled Document to released state - to promote Change Order to
+	 * Complete in LA & implemented in GA mode
+	 * 
+	 * @param context
+	 * @param strArgs
+	 * @throws DCLException
+	 */
+	public void promoteConnectedChangeOrder(Context context, String[] strArgs) throws DCLException {
+		try {
+			ControlledDocumentService cdService = DCLServiceUtil.getControlledDocumentService(context);
+			final String STR_TYPE_CHANGE_ORDER = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String strRequiredCOState=DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_FASTTRACK_CHANGE, strArgs[1]);
+			List<Map> maplistCODetails = cdService.getConnectedCO(context, strArgs[0], true, true);
+
+			for (Map map : maplistCODetails) {
+				String strChangeType = (String) map.get(DomainObject.SELECT_TYPE);
+				//getConnectedCO() returns CA as well as CO
+				if(STR_TYPE_CHANGE_ORDER.equalsIgnoreCase(strChangeType)) {
+					String strCoId = (String) map.get(DomainObject.SELECT_ID);
+					DomainObject ObjCO = DomainObject.newInstance(context, strCoId);
+					String strCoState = ObjCO.getInfo(context, DomainObject.SELECT_CURRENT);
+					if (strRequiredCOState.equals(strCoState)) {
+						if(checkForLastAffectedItem(context, strCoId)){
+							// to promote Change Order to Implemented state
+							try {
+								ContextUtil.pushContext(context, DCLConstants.USER_AGENT, null, null);
+								ObjCO.promote(context);
+							}
+							catch(Exception ex)
+							{
+								ex.printStackTrace();
+								throw new DCLException(ex);
+							}
+							finally {
+								try {
+									ContextUtil.popContext(context);
+								}
+								catch (FrameworkException e) {
+									throw new DCLException(e);
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean checkForLastAffectedItem(Context context, String strCOId) throws DCLException{
+		try{
+			DCLLifecycleService lifecycleService=DCLServiceUtil.getDCLLifecycleService(context);
+			IECMConfigurationDataSchema cfgDataSchemaServices = ChangeActionFactory.CreateChangeActionFactory().getDataSchemaInterface();
+			String strCDPolicy=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			StringList slBusSelect=new StringList();
+			slBusSelect.add(DomainObject.SELECT_TYPE);
+			slBusSelect.add(DomainObject.SELECT_NAME);
+			slBusSelect.add(DomainObject.SELECT_ID);
+			slBusSelect.add(DomainObject.SELECT_CURRENT);
+			slBusSelect.add(DomainObject.SELECT_POLICY);
+			StringList slRelSelect=new StringList();
+			ChangeOrder co = new ChangeOrder(strCOId);
+			List<Map> mlCAList = co.getChangeActions(context);
+			for(Map mapCA:mlCAList){
+				String strCAId=(String)mapCA.get(DomainObject.SELECT_ID);
+					List<Map> mlAfftectedItem=lifecycleService.getCARelatedDocuments(context, strCAId, slBusSelect, slRelSelect, null);
+					for(Map mpDoc:mlAfftectedItem){
+						String	strObjectStateName =DomainObject.EMPTY_STRING;
+						String strPolicy=((List)mpDoc.get(DomainObject.SELECT_POLICY)).get(0).toString();
+						strObjectStateName= cfgDataSchemaServices.getECMReleaseFromPolicy(context, strPolicy);
+						if(strPolicy.equals(strCDPolicy)||DCLUtil.isNullOrEmpty(strObjectStateName))
+							strObjectStateName=DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_RELEASED);
+						
+						if(PolicyUtil.checkState(context, ((List)mpDoc.get(DomainObject.SELECT_ID)).get(0).toString(),strObjectStateName, PolicyUtil.LT))
+							return false;	
+					}
+			}
+		}
+		catch (Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return true;
+	}
+
+	/**
+	 * Trigger on promotion of Controlled Document to InApproval state - to remove any existing trainees if training is disabled
+	 * 
+	 * @param context
+	 * @param strArgs
+	 * @throws DCLException
+	 */
+	public void removeTraineesIfTrainingDisabled(Context context, String[] strArgs) throws DCLException {
+		try {
+			Boolean isTrainingEnabled = Boolean.FALSE;
+			TrainingService trainingService = DCLServiceUtil.getTraineeService(context);
+			String strDocumentObjectId = strArgs[0];
+			String attributeTrainingEnabled = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_ENABLED);
+			DomainObject documentObject = DomainObject.newInstance(context, strDocumentObjectId);
+			String strTrainingEnabled = documentObject.getAttributeValue(context, attributeTrainingEnabled);
+			isTrainingEnabled = (DCLConstants.YES.equalsIgnoreCase(strTrainingEnabled)) ? Boolean.TRUE : Boolean.FALSE;
+			if(!isTrainingEnabled){
+				MapList traineeInfoList = trainingService.getAllTrainees(context, strDocumentObjectId);
+				if(traineeInfoList.size() > 0){
+					//trainingService.removeMembers(context, slRelOID, slUserIdList, strObjectID);
+				}
+			}
+				
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	public void copyTemplateLibraries(Context context, String[] strArgs) throws MatrixException {
+	
+		try {
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			String strDocumentObjectId = strArgs[0];
+			DomainObject documentObject = DomainObject.newInstance(context, strDocumentObjectId);
+			String strRevision=documentObject.getInfo(context, DomainConstants.SELECT_REVISION);
+			BusinessObjectList sourceObjectDORevisions = documentObject.getRevisions(context);
+			String firstRevisionObjectId="";
+			if ( sourceObjectDORevisions.size() > 0 ){
+				BusinessObject firstRevision =  (BusinessObject) sourceObjectDORevisions.elementAt(0);
+				if( firstRevision != null && firstRevision.exists(context) ){
+					DomainObject firstRevisionDO = new DomainObject(firstRevision);
+					firstRevisionObjectId =  firstRevisionDO.getInfo(context,DomainObject.SELECT_ID);
+				}
+			}
+			
+			if(strDocumentObjectId.equals(firstRevisionObjectId))
+			{
+				libService.copyLibrariesFromTemplateToDocument(context,documentObject);
+			}    
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+	public void disconnectPreviousRevisionLibraries(Context context, String[] strArgs) throws DCLException {
+		
+		try {
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			String strDocumentObjectId = strArgs[0];
+			
+			DomainObject documentObject = DomainObject.newInstance(context, strDocumentObjectId);
+			if(documentObject.getPreviousRevision(context)!=null)
+			{
+				BusinessObject dobj= documentObject.getPreviousRevision(context);
+				if(dobj.exists(context))
+				libService.disocnnectLibraries(context,dobj.getObjectId(context)); 
+			}
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+	
+	public void setEffectiveDateOnDocument(Context context, String[] strArgs) throws DCLException {
+		
+		try {
+			
+			String strDocumentObjectId = strArgs[0];
+			String  strAttrEffectiveDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+			DomainObject documentObject = DomainObject.newInstance(context, strDocumentObjectId);
+			Date currentDate=new Date();
+			SimpleDateFormat sdf= new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.ENGLISH);
+			String strEffectiveDate=sdf.format(currentDate);
+			documentObject.setAttributeValue(context, strAttrEffectiveDate, strEffectiveDate);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+
+	public void sendNotificationToSMEOnDocumentRelease(Context context, String[] strArgs) throws DCLException 
+	{
+		String strDocId = strArgs[0];
+		
+		String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		
+		try
+		{
+		PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+		String curPersonId=PersonUtil.getPersonObjectID(context, context.getUser());
+		
+		String strMemberListId=periodicService.getSMEIfMemberList(context, strDocId);
+		 
+		 if(!"".equals(strMemberListId))
+		 {
+			 String strSub="enoPeriodicReview.Notification.MemberList.PendingReviewAssigned.Subject";
+			 String strBody="enoPeriodicReview.Notification.MemberList.PendingReviewAssigned.Body";
+			 
+			 periodicService.sendNotificationToMembersOfMemberList(context,strDocId,strMemberListId,curPersonId,strSub,strBody);
+		 }
+		 else
+		 {
+			StringList slRole = new StringList();
+			slRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			StringList slSelect = new StringList();
+			slSelect.add(DomainConstants.SELECT_NAME);
+			
+			List<Map> mlRelatedData = periodicService.getPeriodicReviewRelatedData(context, strDocId, slRole, strTypePerson, slSelect, null);
+			if(!mlRelatedData.isEmpty()) {
+				new PeriodicReviewNotificationUtil().sendNotficationToUser(context, strDocId,
+					(String) ((Map<?, ?>) mlRelatedData.get(0)).get(DomainConstants.SELECT_NAME),
+					"enoPeriodicReview.Notification.PendingReviewAssigned.Subject", "enoPeriodicReview.Notification.PendingReviewAssigned.Body", null);
+			}
+		}
+		}
+		catch(Exception ex)
+		{
+			throw new DCLException(ex);
+		}
+	}
+	
+	
+public void checkIfChangeIsConnected(Context context, String[] strArgs) throws DCLException {
+		
+		try {
+			
+			String strDocumentObjectId = strArgs[0];
+    		ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+    		List lChange = documentService.getConnectedChange(context, strDocumentObjectId);
+    		if(null!=lChange&&!lChange.isEmpty()){
+    			String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.CanNotDemoteWhenConnectedToChange", null, null, context.getLocale(),
+						DCLConstants.DCL_STRING_RESOURCE);
+				throw new DCLException(strMessage);    			
+    		}
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+
+}
+

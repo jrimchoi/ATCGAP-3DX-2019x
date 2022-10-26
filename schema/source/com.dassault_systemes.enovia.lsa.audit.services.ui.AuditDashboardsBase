@@ -1,0 +1,422 @@
+/************************************************************************************************************
+ * /* AuditDashboardsBase
+ **
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ **
+ *
+ * 
+ * Author Date Description
+ * 
+ * SCT 11-APR-2008 AuditDashboardsBase program to handle Audit Dashboards.
+ * 
+ * 
+ ************************************************************************************************************/
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * The <code>${CLASSNAME}</code> class contains methods for Audit dashboars.
+ *
+ * @version AEF 10.6.3.0 - Copyright(c) 2003, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} {
+
+	/**** for Activity and Activity taks objects ***/
+
+	/**
+	 * Constructor.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.5.0.0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * This method is executed if a specific method is not specified.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return an integer: 0 for success and non-zero for failure
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10-5
+	 */
+	public int mxMain(Context context, String[] args) throws Exception {
+		if (true) {
+			throw new Exception("Must specify method on AuditDashboards invocation");
+		}
+		return 0;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getNumberOfDeliverables(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String numOfDeliv = (String) ((Map) relBusObjPageList.get(i)).get("NumOfDeliv");
+			columnValues.add(numOfDeliv);
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getTotalNumberOfFindings(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// System.out.println(programMap.toString());
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			Map relAudit = (Map) relBusObjPageList.get(i);
+
+			String relAuditObjectId = (String) relAudit.get("id");
+			MapList mlFindings = getRelatedFindings(context, relAuditObjectId);
+			columnValues.add(String.valueOf(mlFindings.size()));
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Gets the findings severity score for the Audit Dashboard table.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the findings severity score
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Vector<String> getFindingsSeverityScore(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// System.out.println(programMap.toString());
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			Map relAudit = (Map) relBusObjPageList.get(i);
+
+			String relAuditObjectId = (String) relAudit.get("id");
+			MapList mlFindings = getRelatedFindings(context, relAuditObjectId);
+			int iTotalSeverityScore = 0;
+
+			for (int j = 0; j < mlFindings.size(); j++) {
+
+				Map mFindings = (Map) mlFindings.get(j);
+				// String sSeverity = (String)
+				// mFindings.get(AuditConstants.select_attribute_ATTR_IW_SEVERITYRANKING);
+				String sSeverity = (String) mFindings
+						.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_IW_SEVERITYRANKING) + "]");
+				if (null != sSeverity && !(sSeverity.equals(""))) {
+
+					int iSeverity = Integer.parseInt(sSeverity);
+					iTotalSeverityScore = iTotalSeverityScore + iSeverity;
+				}
+			}
+
+			columnValues.add(String.valueOf(iTotalSeverityScore));
+
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Gets the average severity score for the Audit Dashboard table.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the average severity score
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Vector<String> getAverageSeverityScore(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// System.out.println(programMap.toString());
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			Map relAudit = (Map) relBusObjPageList.get(i);
+
+			String relAuditObjectId = (String) relAudit.get("id");
+			MapList mlFindings = getRelatedFindings(context, relAuditObjectId);
+			int findings = mlFindings.size();
+			int iTotalSeverityScore = 0;
+
+			for (int j = 0; j < mlFindings.size(); j++) {
+
+				Map mFindings = (Map) mlFindings.get(j);
+				// String sSeverity = (String)
+				// mFindings.get(AuditConstants.select_attribute_ATTR_IW_SEVERITYRANKING);
+				String sSeverity = (String) mFindings
+						.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_IW_SEVERITYRANKING) + "]");
+				if (null != sSeverity && !(sSeverity.equals(""))) {
+
+					int iSeverity = Integer.parseInt(sSeverity);
+					iTotalSeverityScore = iTotalSeverityScore + iSeverity;
+				}
+			}
+			if (iTotalSeverityScore != 0 && findings != 0) {
+				columnValues.add(String.valueOf(iTotalSeverityScore / findings));
+			}
+			else {
+				columnValues.add(String.valueOf(0));
+			}
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Gets the total number of unresolved findings for the Audit Dashboard
+	 * table.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the total number of unresolved findings
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Vector<String> getTotalNumberOfUnresolvedFindings(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// System.out.println(programMap.toString());
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			Map relAudit = (Map) relBusObjPageList.get(i);
+
+			String relAuditObjectId = (String) relAudit.get("id");
+			MapList mlFindings = getRelatedFindings(context, relAuditObjectId);
+			int iUnresolvedFindings = 0;
+
+			for (int j = 0; j < mlFindings.size(); j++) {
+
+				Map mFindings = (Map) mlFindings.get(j);
+				String sCurrent = (String) mFindings.get(DomainConstants.SELECT_CURRENT);
+				if (!sCurrent.equals("Closed"))
+					iUnresolvedFindings++;
+
+			}
+
+			columnValues.add(String.valueOf(iUnresolvedFindings));
+
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Gets the related findings for the Audit Dashboard table..
+	 * 
+	 * @param context
+	 *            the context
+	 * @param objectId
+	 *            the object id
+	 * 
+	 * @return the related findings
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static MapList getRelatedFindings(Context context, String objectId) throws Exception {
+
+		// MapList returnMapList = null;
+
+		DomainObject projectObj = DomainObject.newInstance(context, objectId);
+		StringList objSelects = new StringList(); // object selects
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		StringList relSelects = new StringList(); // object selects
+
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		objSelects.addElement(DomainConstants.SELECT_CURRENT);
+		objSelects.addElement(DomainConstants.SELECT_NAME);
+		relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		// Get a list of all phases for this project
+		return projectObj.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+				PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING), objSelects, relSelects, false, true, (short) 1, "",
+				"");
+
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getNumberOfDeliverablesCompleteAndWaived(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String numOfDelivCompAndWaived = (String) ((Map) relBusObjPageList.get(i)).get("NumOfDelivCompleteAndWaived");
+			columnValues.add(numOfDelivCompAndWaived);
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getNumberOfDeliverablesComplete(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String numOfDelivCompAndWaived = (String) ((Map) relBusObjPageList.get(i)).get("NumOfDelivComplete");
+			columnValues.add(numOfDelivCompAndWaived);
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getPercentageCompleteAndWaived(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String pctComplete = (String) ((Map) relBusObjPageList.get(i)).get("PercentOfDelivCompleteAndWaived");
+			columnValues.add(pctComplete);
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getPercentageComplete(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String pctComplete = (String) ((Map) relBusObjPageList.get(i)).get("PercentOfDelivComplete");
+			columnValues.add(pctComplete);
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method is called from a UI table.
+	 *
+	 * @param context
+	 *            context of the current user.
+	 * @param args
+	 *            list of arguments need for this jpo function.
+	 * @return Vector of strings with column values
+	 * @throws Exception
+	 *             if any error occurs.
+	 */
+	public static Vector<String> getDeliverableCycleTime(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector<String> columnValues = new Vector<String>(relBusObjPageList.size());
+
+		for (int i = 0; i < relBusObjPageList.size(); i++) {
+			String avgCycleTime = (String) ((Map) relBusObjPageList.get(i)).get("AvgCycleTimeOfDeliv");
+			columnValues.add(avgCycleTime);
+		}
+
+		return columnValues;
+	}
+
+}
+

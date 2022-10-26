@@ -1,0 +1,352 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+		super();
+	}
+	
+	private ComplaintProductEvaluationService getComplaintProductEvaluationService(Context context) throws TicketException {
+		try {
+			Component component = ComponentFactory.getInstance(context,
+					TicketConstants.TICKET_CORE_COMPONENT);
+			return (ComplaintProductEvaluationService) component.getService(ComplaintProductEvaluationService.class);
+		} catch (ComponentException exception) {
+			throw new TicketException(exception);
+		}
+	}
+
+	/**
+	 * Gets ReviewRouteService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ReviewRouteService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private ReviewRouteService getReviewRouteService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			return (ReviewRouteService) component.getService(ReviewRouteService.class);
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Check trigger to validate Investigation details.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int : 0 for success full execution.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int populateInvestigationRequired(Context context, String[] args) throws ComplaintException {
+		String strComplaintInvestigationId = args[0];
+		String strComplaintInvestigationType = args[1];
+		String strComplaintInvRequired = args[2];
+		String strComplaintInvMethods = args[3];
+		String strResultsCode = args[4];
+		String strConclusionCode = args[5];
+		String strComplaintInvestigationRationale = args[6];
+		try {
+			if (!Helper.isNullOrEmpty(strComplaintInvestigationId)) {
+				String strErrorMessage = DomainConstants.EMPTY_STRING;
+				Map<?, ?> attributeMap = TicketUtil.getAttributeValues(context, strComplaintInvestigationId);
+				String strComplaintInvRequiredValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context, strComplaintInvRequired));
+				if (strComplaintInvRequiredValue.equalsIgnoreCase("Yes")) {
+					String strComplaintInvMethodsValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context, strComplaintInvMethods));
+					String strResultsCodeValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context, strResultsCode));
+					String strConclusionCodeValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context, strConclusionCode));
+					DomainObject investigationObject=DomainObject.newInstance(context, strComplaintInvestigationId);
+					String connectedObject=investigationObject.getInfo(context, "to[Complaint Investigation].from.type");
+					String type=PropertyUtil.getSchemaProperty(context,TicketConstants.SYMBOLIC_TYPE_NCR);
+					if(!Helper.isNullOrEmpty(connectedObject)&&connectedObject.equalsIgnoreCase(type))
+					{
+						strComplaintInvestigationType="Investigation";
+					}
+					if (Helper.isNullOrEmpty(strComplaintInvMethodsValue)) {
+						strErrorMessage = MessageUtil.getMessage(context, null, "PQC.Complaint.Complaint.CannotPromoteComplaintInvestigationMethods",
+								new String[] { strComplaintInvestigationType }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+						MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+						return 1;
+					}
+					if (Helper.isNullOrEmpty(strResultsCodeValue)) {
+						strErrorMessage = MessageUtil.getMessage(context, null,
+								"PQC.Complaint.Complaint.CannotPromoteComplaintInvestigationResultCode",
+								new String[] { strComplaintInvestigationType }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+						MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+						return 1;
+					}
+					if (Helper.isNullOrEmpty(strConclusionCodeValue)) {
+						strErrorMessage = MessageUtil.getMessage(context, null,
+								"PQC.Complaint.Complaint.CannotPromoteComplaintInvestigationConclusionCode",
+								new String[] { strComplaintInvestigationType }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+						MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+						return 1;
+					}
+				}
+				String strComplaintInvestigationRationaleValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context,
+						strComplaintInvestigationRationale));
+				if (Helper.isNullOrEmpty(strComplaintInvestigationRationaleValue)) {
+					strErrorMessage = Helper.getI18NString(context, Helper.StringResource.COLS,
+							"FTComplaints.Complaint.YouMustEnterInvestigationRationale");
+					MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+					return 1;
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+		return 0;
+	}
+
+	/**
+	 * Check trigger to validate Completion date.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int : 0 for success full execution.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int populateInvestigationCompletionDate(Context context, String[] args) throws ComplaintException {
+		String strComplaintInvestigationId = args[0];
+		String strComplaintInvestigationType = args[1];
+		String strComplaintInvCompletionDate = args[2];
+		try {
+			if (!Helper.isNullOrEmpty(strComplaintInvestigationId)) {
+				Map<?, ?> attributeMap = TicketUtil.getAttributeValues(context, strComplaintInvestigationId);
+				String strComplaintInvCompletionDateValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context,
+						strComplaintInvCompletionDate));
+				if (Helper.isNullOrEmpty(strComplaintInvCompletionDateValue)) {
+					String strErrorMessage = MessageUtil.getMessage(context, null,
+							"PQC.Complaint.Complaint.CannotPromoteComplaintInvestigationCloseDate", new String[] { strComplaintInvestigationType },
+							null, context.getLocale(), Helper.StringResource.COLS.toString());
+					MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+					return 1;
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+		return 0;
+	}
+
+	/**
+	 * Check trigger to validate Investigator details.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int : 0 for success full execution.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int populateInvestigatorField(Context context, String[] args) throws ComplaintException {
+		String strComplaintInvestigationId = args[0];
+		String strComplaintInvestigationType = args[1];
+		String strComplaintInvestigator = args[2];
+		try {
+			if (!Helper.isNullOrEmpty(strComplaintInvestigationId)) {
+				Map<?, ?> attributeMap = TicketUtil.getAttributeValues(context, strComplaintInvestigationId);
+				String strComplaintInvestigatorValue = (String) attributeMap.get(PropertyUtil.getSchemaProperty(context, strComplaintInvestigator));
+				if (Helper.isNullOrEmpty(strComplaintInvestigatorValue)) {
+					String strErrorMessage = MessageUtil.getMessage(context, null, "PQC.Complaint.Complaint.CannotPromoteComplaintInvestigator",
+							new String[] { strComplaintInvestigationType }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+					MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+					return 1;
+				}
+			}
+			return 0;
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Check trigger to validate Returns and Fulfillments objects.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int : 0 for success full execution.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int validateForReturnAndFulfillmentObjectsCompletion(Context context, String[] args) throws ComplaintException {
+		String strComplaintInvestigationId = args[0];
+		String strComplaintInvestigationType = args[1];
+		String strTypeComplaintProductReturn = args[2];
+		String strTypeComplaintProductFulfillment = args[3];
+		String strRelComplaintProductReturn = args[4];
+		String strRelComplaintProductFulfillment = args[5];
+		String strStateInProcess = args[6];
+		try {
+			if (!Helper.isNullOrEmpty(strComplaintInvestigationId)) {
+				String strSelect = "to[" + PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION)
+						+ "].from.id";
+				List<Map<?, ?>> mlComplaint = QueryUtil.getInfo(context, new String[] { strComplaintInvestigationId }, new StringList(strSelect));
+				String strComplaintId = DomainConstants.EMPTY_STRING;
+				for (Map<?, ?> map : mlComplaint) {
+					strComplaintId = (String) map.get(strSelect);
+				}
+				if (!Helper.isNullOrEmpty(strComplaintId)) {
+					DomainObject doObjComplaint = DomainObject.newInstance(context, strComplaintId);
+					if (Helper.getTypeKindOf(context, doObjComplaint, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_TICKETS).containsValue(Boolean.TRUE)) {
+
+						String relationshipPattern = strRelComplaintProductReturn + "," + strRelComplaintProductFulfillment;
+						String typePattern = strTypeComplaintProductReturn + "," + strTypeComplaintProductFulfillment;
+
+						StringList slObjectSelect = new StringList(DomainConstants.SELECT_ID);
+						slObjectSelect.addElement(DomainConstants.SELECT_CURRENT);
+
+						strStateInProcess = FrameworkUtil.lookupStateName(context,
+								PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD), strStateInProcess);
+						String objectWhere = DomainConstants.SELECT_CURRENT + "=='" + strStateInProcess + "'";
+
+						List<Map<?, ?>> mlObject = QueryUtil.getRelatedObjects(context, doObjComplaint, relationshipPattern, typePattern,
+								slObjectSelect, new StringList(DomainConstants.SELECT_RELATIONSHIP_ID), false, true, (short) 0, objectWhere, null);
+						if (mlObject.size() > 0) {
+							String strErrorMessage = MessageUtil.getMessage(context, null,
+									"PQC.Complaint.Complaint.CannotPromoteReturnsAndFulfillments", new String[] { strComplaintInvestigationType },
+									null, context.getLocale(), Helper.StringResource.COLS.toString());
+							MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+							return 1;
+						}
+
+					}
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+		return 0;
+	}
+
+	/**
+	 * This method is used to update the value of "Complaint Investigator" and
+	 * "Complaint Investigation Closed Date"on change of
+	 * "Complaint Investigation Required" value and promote the Complaint
+	 * Investigation to complete state.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            contains objectID and new attribute value.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void updateAndPromoteComplaintInvestigation(Context context, String[] args) throws ComplaintException {
+		try {
+			String strCIObjectId = args[0];
+			String strInvRequiredValue = args[1];
+			String strCurrentState = args[2];
+			String strRouteBaseState = args[3];
+			String strStateComplete = args[4];
+			final String ATTRIBUTE_ROUTE_BASE_PURPOSE = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose"));
+			final String ATTRIBUTE_NC_CLOSURE_TYPE = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_NCClosureType"));
+			final String RELATIONSHIP_COMPALINT_INVESTIGATION= PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+			if (strInvRequiredValue.trim().equalsIgnoreCase("No")) {
+				DomainObject doObjComplaintInvestigation = DomainObject.newInstance(context, strCIObjectId);
+				StringBuilder strNCInfoClause= new StringBuilder();
+				strNCInfoClause.append("to[").append(RELATIONSHIP_COMPALINT_INVESTIGATION).append("].from.").append(ATTRIBUTE_NC_CLOSURE_TYPE);
+				String connectedNCInfo=doObjComplaintInvestigation.getInfo(context,strNCInfoClause.toString());
+				if (!Helper.isNullOrEmpty(connectedNCInfo)) {
+					Helper.mqlError(context, Helper.StringResource.COLS, "COLS.Complaint.Complaint.NCClosureTypeSet");
+					throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS, "COLS.Complaint.Complaint.NCClosureTypeSet"));
+				}
+				String strPersonName = TicketUtil.getLoginPersonName(context);
+				String strNoInvestigationDate = TicketUtil.getTodaysDate(context);
+				strNoInvestigationDate = strNoInvestigationDate.substring(0, 10);
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATOR), strPersonName);
+				attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_CLOSED_DATE),
+						strNoInvestigationDate);
+				TicketUtil.setAttributeValues(context, strCIObjectId, attributeMap);
+
+				if (TicketConstants.STATE_REVIEW.equalsIgnoreCase(strCurrentState)) {
+					StringBuffer strBusWhere = new StringBuffer();
+					strBusWhere.append(ATTRIBUTE_ROUTE_BASE_PURPOSE).append(" == Approval").append(" && current!=Complete");
+					ReviewRouteService reviewRouteService = getReviewRouteService(context);
+					List<Map<?, ?>> mapListRoute = reviewRouteService.getReviewRoutes(context, doObjComplaintInvestigation,
+							Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), strBusWhere.toString(),
+							strRouteBaseState);
+					if (!mapListRoute.isEmpty()) {
+						String strRouteId = DomainConstants.EMPTY_STRING;
+						String[] arrRouteIds = new String[mapListRoute.size()];
+						DomainObject doObjRoute = null;
+						int i = 0;
+						for (Map<?, ?> mapRoutes : mapListRoute) {
+							strRouteId = (String) mapRoutes.get(DomainConstants.SELECT_ID);
+							doObjRoute = DomainObject.newInstance(context, strRouteId);
+							doObjRoute.setOwner(context, context.getUser());
+							arrRouteIds[i] = strRouteId;
+							i++;
+						}
+						TicketUtil.deleteObjects(context, arrRouteIds);
+					}
+				}
+				ComplaintProductEvaluationService complaintProductEvaluationService = getComplaintProductEvaluationService(context);
+				complaintProductEvaluationService.promoteComplaintProductEvaluation(context, TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE, strCIObjectId);
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	public void setComplaintInvestigationAttributes(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintInvestigationId = args[0];
+			if (!Helper.isNullOrEmpty(strComplaintInvestigationId)) {
+				HashMap<String, String> attributeMap = new HashMap<String, String>();
+				attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_CLOSED_DATE),
+						DomainConstants.EMPTY_STRING);
+				TicketUtil.setAttributeValues(context, strComplaintInvestigationId, attributeMap);
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+
+	}
+}
+

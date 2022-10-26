@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ds:services xmlns:ds="http://www.3ds.com/enovia/e6wv2"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://www.3ds.com/enovia/e6wv2 servicesv2.xsd">
+
+    <ds:service name="images">
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.image.ImageService" function="getImages" returnedData="idsAndData"/>
+            <ds:updatejpo classname="com.dassault_systemes.enovia.image.ImageService" function="updateImage"/>
+        </ds:data>
+
+        <ds:field name="transientPrimaryImage" includeByDefault="always"><ds:selectable expression="attribute[Primary Image]" type="bus" format="transient"/></ds:field>
+        <ds:field name="transientImageNames" includeByDefault="always"><ds:selectable expression="format[generic].file.name" type="bus" multivalue="true" format="transient"/></ds:field>
+        <ds:field name="transientImageFileids" includeByDefault="always"><ds:selectable expression="format[generic].file.fileid" type="bus" multivalue="true" format="transient"/></ds:field>
+        <ds:field name="transientFiles"><ds:selectable  type="key" format="transient"/></ds:field>
+        <ds:field name="transientFilesizes"><ds:selectable  type="key" format="transient"/></ds:field>
+
+        <ds:field name="collabspace"><ds:selectable expression="project" type="bus"/></ds:field>
+        <ds:field name="originated"><ds:selectable expression="originated" type="bus" format="utc"/></ds:field>
+        <ds:field name="modified" includeByDefault="no"><ds:selectable expression="modified" type="bus" format="utc"/></ds:field>
+        <ds:field name="hasModifyAccess" includeByDefault="no"><ds:selectable expression="current.access[modify,checkin]" type="bus"/></ds:field>
+        <ds:field name="hasDeleteAccess" includeByDefault="no"><ds:selectable expression="current.access[delete]" type="bus"/></ds:field>
+
+        <ds:field name="primaryImage"><ds:selectable expression="attribute[Primary Image]" type="bus"/></ds:field>
+        <ds:field name="imageSize"><ds:selectable type="key"/></ds:field>
+        <ds:field name="imageFileSize"><ds:selectable type="key"/></ds:field>
+        <ds:field name="primaryImageURL">
+          <!-- imageSize should be passed as a URL parameter. -->
+          <ds:fieldjpo classname="com.dassault_systemes.enovia.image.ImageService" function="getImageURL">
+              <ds:arg arg-name="defaultImageSize" arg-value="thumbnail"/>                                
+              <ds:arg arg-name="filenameElement" arg-value="transientPrimaryImage"/>                                
+          </ds:fieldjpo>
+        </ds:field>
+        <ds:field name="parentId" includeByDefault="never"><ds:selectable type="key"/></ds:field>
+        <ds:field name="fcsReceipt" includeByDefault="never"><ds:selectable type="key"/></ds:field>
+        <ds:field name="fcsReceiptFiles" includeByDefault="never"><ds:selectable type="key"/></ds:field>
+        <ds:field name="primaryImageActualFileName" includeByDefault="never" description="optionally used when the file name in the receipt does not correspond to the one wanted in the MCS.
+                  This should contain the name of the file checked in to the FCS which will be renamed to match the PrimaryImage value.">                   
+                  <ds:selectable type="key" format="transient"/>
+        </ds:field>
+        <ds:field name="replacePrimary" includeByDefault="never" description="only for update."><ds:selectable type="key"/></ds:field>
+
+        <ds:subservice name="secondaryImages" includeByDefault="no">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.image.ImageService" function="getSecondaryImages" returnedData="idsAndData">
+                  <ds:arg arg-name="filenameElement" arg-value="imageName"/>      
+                </ds:jpo>
+            </ds:data>
+            <ds:field name="imageName" description="only for get."><ds:selectable type="key"/></ds:field>
+            <ds:field name="imageSize" description="only for get."><ds:selectable type="key"/></ds:field>
+            <ds:field name="imageFileSize" description="only for get."><ds:selectable type="key"/></ds:field>
+            <ds:field name="imageURL" description="only for get.">
+              <!-- imageSize should be passed as a URL parameter. -->
+              <ds:fieldjpo classname="com.dassault_systemes.enovia.image.ImageService" function="getImageURL">
+                  <ds:arg arg-name="defaultImageSize" arg-value="thumbnail"/>                                
+                  <ds:arg arg-name="filenameElement" arg-value="imageName"/>      
+                  <ds:arg arg-name="relateddataKey" arg-value="secondaryImages"/>      
+              </ds:fieldjpo>
+            </ds:field>
+            <ds:field name="imageActualFileName" includeByDefault="never" description="optionally used when the file name in the receipt does not correspond to the one wanted in the MCS.
+                  This should contain the name of the file checked in to the FCS which will be renamed to match ImageName value.">                   
+                  <ds:selectable type="key" format="transient"/>
+            </ds:field>
+        </ds:subservice>
+
+        <ds:subservice name="parents" includeByDefault="no">
+            <ds:data>
+                <ds:expand relationshipPattern="Image Holder" getFrom="true"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.image.ImageService" function="updateParent"/>
+            </ds:data>
+            <ds:field name="type"><ds:selectable expression="type" type="bus" format="type"/></ds:field>
+            <ds:field name="name"><ds:selectable expression="name" type="bus" /></ds:field>
+        </ds:subservice>
+
+        <ds:subservice name="CheckinTicket" includeByDefault="never">
+            <ds:data csrf="false">
+                <ds:updatejpo classname="com.dassault_systemes.enovia.image.ImageService" function="requestCheckinTicket">
+                    <ds:arg arg-name="action" arg-value="checkin"/>
+                    <ds:arg arg-name="level" arg-value="file-level"/>
+                </ds:updatejpo>
+            </ds:data>
+	        
+	        <ds:field name="ticketURL"><ds:selectable type="key"/></ds:field>
+            <ds:field name="ticket"><ds:selectable type="key"/></ds:field>
+            <ds:field name="ticketparamname"><ds:selectable type="key"/></ds:field>
+        </ds:subservice>
+
+    </ds:service>
+
+</ds:services>
+

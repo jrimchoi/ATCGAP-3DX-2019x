@@ -1,0 +1,353 @@
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+import java.util.Map.Entry;
+
+import com.dassault_systemes.enovia.changeaction.factory.ChangeActionFactory;
+import com.dassault_systemes.enovia.changeaction.interfaces.IChangeAction;
+import com.dassault_systemes.enovia.changeaction.interfaces.IChangeActionServices;
+import com.dassault_systemes.enovia.changeaction.interfaces.IRealizedChange;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.Pattern;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static String AUTO_COMPLTE_TASK_COMMENT = "This task is Auto Completed. No Action required as the task is now complete: Inbox Task IT-";
+	public static final String RELATIONSHIP_CHANGE_ACTION = PropertyUtil.getSchemaProperty("relationship_ChangeAction");
+	/**
+	 * this method return Spec owners full name to get it mapped in MS word
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getOwnerFullName(Context context, String args[]) throws Exception
+	{
+		 HashMap programMap         = (HashMap) JPO.unpackArgs(args);
+         String  strObjectId     = (String) programMap.get("objectId");
+		DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+		// get originator
+		String strOriginator = doObj.getInfo(context, DomainObject.SELECT_OWNER);
+		// get full name
+		strOriginator = PersonUtil.getFullName(context, strOriginator);
+		return strOriginator;
+	}
+	/**
+	 * this method return creation date
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getCreationDate(Context context, String args[]) throws Exception
+	{
+		 HashMap programMap         = (HashMap) JPO.unpackArgs(args);
+        String  strObjectId     = (String) programMap.get("objectId");
+		DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+		SimpleDateFormat sdfDateFormat = new SimpleDateFormat("MMM dd-yyyy hh:mm:ss a", Locale.US);
+		
+		// get originator
+		String strCreationDate = doObj.getInfo(context, DomainObject.SELECT_ORIGINATED);
+		//System.out.println(strCreationDate);
+		Date dCreationDate = eMatrixDateFormat.getJavaDate(strCreationDate);
+		// get full name
+		strCreationDate = sdfDateFormat.format(dCreationDate);//System.out.println(strCreationDate);
+		return strCreationDate;
+	}
+	
+	//getApprovers
+	/**
+	 * this method returns approvers list for GAP Specifications
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getApprovers(Context context, String args[]) throws Exception
+	{
+		//return "Common soon";
+		 HashMap programMap         = (HashMap) JPO.unpackArgs(args);
+         String  strObjectId     = (String) programMap.get("objectId");
+         DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+         StringBuffer sbApproversList = new StringBuffer();
+         // get all CA and CO connected to it
+         BusinessObject busObj = new BusinessObject(strObjectId) ;
+			List lBusoBject = new ArrayList(); 
+			lBusoBject.add(busObj);
+			try {
+ 		String physicalId = doObj.getInfo(context, "physicalid");
+ 		List<String> lObjectId = new ArrayList();
+ 		lObjectId.add(physicalId);
+ 		 StringList stlObjectSelects=new StringList();
+ 		  stlObjectSelects.addElement(DomainObject.SELECT_ID);
+ 			stlObjectSelects.addElement(DomainObject.SELECT_CURRENT);
+
+ 			ChangeActionFactory factory = new ChangeActionFactory();
+ 			IChangeActionServices changeAction = factory.CreateChangeActionFactory();
+
+ 		//Map<String,Map<IChangeAction,List<IOperation>>> mapPrposedOperationAndCa = changeAction.getProposedOperationAndChangeActionFromIdList(context,lObjectId);
+ 			Map<String, Map<IChangeAction, List<IRealizedChange>>> mapRealizedAndCaLinked = changeAction.getRealizedAndCaFromListObjects(context, lBusoBject, false, true, true);
+
+ 			for(Entry<String, Map<IChangeAction,List<IRealizedChange>>> mapOutput : mapRealizedAndCaLinked.entrySet()){
+ 				for(Entry<IChangeAction,List<IRealizedChange>> mapOutput2: mapOutput.getValue().entrySet()){
+ 					
+ 					IChangeAction iChangeAction = mapOutput2.getKey();
+
+ 					if(iChangeAction!= null){
+
+ 						BusinessObject busChangeAction =  iChangeAction.getCaBusinessObject();
+ 						String strChangeActionID = busChangeAction.getObjectId();
+
+ 						DomainObject domChangeAction = new DomainObject(strChangeActionID);
+
+ 						String strRequestedChange = new ChangeAction().getReaquestedChangeForRealizedFromChangeAction(context, strObjectId, strChangeActionID);
+ 						//System.out.println(mapCAInfo.get("name") + " -- >strRequestedChange : "+strRequestedChange);
+ 						// if any obsolescence CA found then ignore
+ 						if ("For Release".equals(strRequestedChange))
+ 						{
+ 							sbApproversList = getCAApporvers(context, mapOutput2.getKey().getCaBusinessObject().getObjectId(), sbApproversList);
+ 						}
+ 					}
+
+ 				}
+ 			}
+ 		}
+ 			catch (Exception exp)
+ 			{
+ 				return exp.getMessage();
+ 			}
+         return sbApproversList.toString();
+	}
+	/**
+	 * this method return Change action description on pdf generation
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getChangeDescription(Context context, String args[]) throws Exception	
+	{
+		HashMap programMap         = (HashMap) JPO.unpackArgs(args);
+        String  strObjectId     = (String) programMap.get("objectId");
+        DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+        StringBuffer sbChangeDescription = new StringBuffer();
+        // get all CA and CO connected to it
+        BusinessObject busObj = new BusinessObject(strObjectId) ;
+			List lBusoBject = new ArrayList(); 
+			lBusoBject.add(busObj);
+			try {
+		String physicalId = doObj.getInfo(context, "physicalid");
+		List<String> lObjectId = new ArrayList();
+		lObjectId.add(physicalId);
+		 StringList stlObjectSelects=new StringList();
+		  stlObjectSelects.addElement(DomainObject.SELECT_ID);
+			stlObjectSelects.addElement(DomainObject.SELECT_CURRENT);
+
+
+			ChangeActionFactory factory = new ChangeActionFactory();
+			IChangeActionServices changeAction = factory.CreateChangeActionFactory();
+
+		//Map<String,Map<IChangeAction,List<IOperation>>> mapPrposedOperationAndCa = changeAction.getProposedOperationAndChangeActionFromIdList(context,lObjectId);
+			Map<String, Map<IChangeAction, List<IRealizedChange>>> mapRealizedAndCaLinked = changeAction.getRealizedAndCaFromListObjects(context, lBusoBject, false, true, true);
+			
+
+			for(Entry<String, Map<IChangeAction,List<IRealizedChange>>> mapOutput : mapRealizedAndCaLinked.entrySet()){
+				for(Entry<IChangeAction,List<IRealizedChange>> mapOutput2: mapOutput.getValue().entrySet()){
+					
+					IChangeAction iChangeAction = mapOutput2.getKey();
+					if(iChangeAction!= null){
+
+						BusinessObject busChangeAction =  iChangeAction.getCaBusinessObject();
+						String strChangeActionID = busChangeAction.getObjectId();
+						DomainObject domChangeAction = new DomainObject(strChangeActionID);
+
+						String strDesc = domChangeAction.getInfo(context, DomainObject.SELECT_DESCRIPTION);
+
+						String strRequestedChange = new ChangeAction().getReaquestedChangeForRealizedFromChangeAction(context, strObjectId, strChangeActionID);
+						//System.out.println(mapCAInfo.get("name") + " -- >strRequestedChange : "+strRequestedChange);
+						// if any obsolescence CA found then ignore
+						if ("For Release".equals(strRequestedChange))
+						{
+							//sbApproversList = getCAApporvers(context, mapOutput2.getKey().getCaBusinessObject().getObjectId(), sbApproversList);
+							if (sbChangeDescription.length()>0)
+								sbChangeDescription.append("\n");
+							sbChangeDescription.append(strDesc);
+						}
+					}
+
+				}
+			}
+		}
+			catch (Exception exp)
+			{
+				return exp.getMessage();
+			}
+		return sbChangeDescription.toString();
+	}
+	public static void mxMain(Context context, String[] args) {
+		try {
+			getCAApporvers(context, "56A228C20000165C5EBA9DD4000011B2", new StringBuffer());
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	/**
+	 * this method append CA approvers list as well appends connected COs approvers
+	 * @author ENGMASA
+	 * @param context
+	 * @param strChangeActionId
+	 * @param sbApproversList
+	 * @return
+	 * @throws Exception
+	 */
+	public static StringBuffer getCAApporvers(Context context, String strChangeActionId, StringBuffer sbApproversList) throws Exception
+	{
+		DomainObject doCA = DomainObject.newInstance(context, strChangeActionId);
+		// update route approvers from CA
+	    sbApproversList = getRouteApporvers(context, strChangeActionId, sbApproversList);
+	    
+	    // get CO if connected to CA
+        StringList objSelects = new StringList();
+        objSelects.addElement(DomainObject.SELECT_ID);
+        //need to include Type as a selectable if we need to filter by Type
+        objSelects.addElement(DomainObject.SELECT_TYPE);
+        Map mp = new HashMap();
+        MapList mapList=doCA.getRelatedObjects(context,
+				  RELATIONSHIP_CHANGE_ACTION,
+				  DomainObject.QUERY_WILDCARD,
+				  objSelects,
+				  new StringList(DomainRelationship.SELECT_ID),
+				  true,
+				  false,
+				  (short) 2,
+				  null, null, (short) 0);
+      
+        Iterator mapItr = mapList.iterator();
+        while(mapItr.hasNext())
+		 {
+		     Map mpMap = (Map)mapItr.next();
+		     String strCHangeId = (String) mpMap.get(DomainObject.SELECT_ID);
+		     // updat route approvers from Co/CR
+			 sbApproversList = getRouteApporvers(context, strCHangeId, sbApproversList);
+		 }//System.out.println("CA : "+sbApproversList);
+		return sbApproversList;
+	}
+	/**
+	 * this method reads route approvers for change id
+	 * @author ENGMASA
+	 * @param context
+	 * @param strChangeId
+	 * @param sbApproversList
+	 * @return
+	 * @throws Exception
+	 */
+	public static StringBuffer getRouteApporvers(Context context, String strChangeId, StringBuffer sbApproversList) throws Exception
+	{
+		DomainObject doChngObj = DomainObject.newInstance(context, strChangeId);
+		MapList stateRouteList = doChngObj.getApprovalsInfo(context);
+		String strChangeNumber = doChngObj.getInfo(context, DomainObject.SELECT_NAME);
+		Iterator mapItr = stateRouteList.iterator();
+		 Route routeObj = (Route)DomainObject.newInstance(context, DomainObject.TYPE_ROUTE);
+		
+		    String sRouteName = DomainObject.EMPTY_STRING;
+		    String sRouteStatus = DomainObject.EMPTY_STRING;
+		    String sPersonName             = DomainObject.EMPTY_STRING;
+		    String routeNodeStatus         = DomainObject.EMPTY_STRING;
+		    String routeNodeComments       = DomainObject.EMPTY_STRING;
+		    SelectList objSelects  = new SelectList();
+		     objSelects.addElement(Route.SELECT_COMMENTS);
+		     objSelects.addElement(Route.SELECT_APPROVAL_STATUS);
+		     objSelects.addElement(Route.SELECT_ID);
+		     objSelects.addElement(DomainObject.SELECT_CURRENT);
+		     objSelects.addElement("from["+DomainObject.RELATIONSHIP_PROJECT_TASK+"].to.name");
+		     List<Map<String, String>>  mpListOfTasks = new MapList ();
+		     boolean bIsFirstTask = true;
+		    
+		 while(mapItr.hasNext())
+		 {
+		     Map stateRouteMap = (Map)mapItr.next();
+
+		   boolean hasRoutes = false;
+		   // Check for State Name and Ad Hoc routes
+		   String sStateName = (String)stateRouteMap.get(DomainObject.SELECT_NAME);
+		  // Check for Routes
+			  Vector routes = new Vector();
+			  // consider only approval route
+			 if (sStateName != null && sStateName.equals("In Approval")) {
+			         routes = (Vector)stateRouteMap.get(DomainObject.KEY_ROUTES);
+			     if((routes.size() >0)) {
+			    	 for (int rteCnt = 0; rteCnt < routes.size(); rteCnt++)
+			    	 {
+			    		String sRouteId = (String)routes.get(rteCnt);
+			    		if(sRouteId != null && !"null".equals(sRouteId) && !"".equals(sRouteId))
+			            {
+			               routeObj.setId(sRouteId);
+			               sRouteName = routeObj.getInfo(context, DomainObject.SELECT_NAME);
+			               
+			               sRouteStatus = routeObj.getAttributeValue(context,PropertyUtil.getSchemaProperty(context,"attribute_RouteStatus"));
+			               // only if it is finished and ignore stopped routes
+			               if ("Finished".equals(sRouteStatus))
+			               {
+				               mpListOfTasks = routeObj.getRouteTasks(context, objSelects, null, DomainObject.EMPTY_STRING, false);
+				               // AUTO_COMPLTE_TASK_COMMENT
+				               for(Map<String,String> actionTask : mpListOfTasks)
+								{
+									String state = (String)actionTask.get(DomainObject.SELECT_CURRENT);
+									String strComment = (String)actionTask.get(Route.SELECT_COMMENTS);
+									String strApprovalStatus = (String)actionTask.get(Route.SELECT_APPROVAL_STATUS);
+									// ignore auto completed tasks
+									if(state.equalsIgnoreCase("Complete") && !strComment.startsWith(AUTO_COMPLTE_TASK_COMMENT) && "Approve".equals(strApprovalStatus)) {
+										if (bIsFirstTask)
+										{
+											if (sbApproversList.length()>0)
+												sbApproversList.append("\n");
+											 sbApproversList.append(strChangeNumber);
+												sbApproversList.append(": ");
+												bIsFirstTask = false;
+										}
+										String strUser = (String)actionTask.get("from["+DomainObject.RELATIONSHIP_PROJECT_TASK+"].to.name");
+										// get email address
+										//String strEmail = PersonUtil.getEmail(context, strUser);
+										// get full name
+										strUser = PersonUtil.getFullName(context, strUser);
+										
+										//if (sbApproversList.length()>0)
+										//	sbApproversList.append(";\n");
+										//String strEmailAdd = "<B><A HREF=\"mailto:" + strEmail + "\">" + strUser
+								       //         + "</A></B>";
+										sbApproversList.append(strUser);sbApproversList.append(";    ");
+									}
+								}
+			               }
+			            }
+			    	 }
+			     }
+			 }
+		 }
+		return sbApproversList;
+	}
+}
+

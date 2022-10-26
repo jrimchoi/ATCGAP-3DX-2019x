@@ -1,0 +1,273 @@
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.DocumentLibraryService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} 
+{
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> addDocumentToDocumentFamily(Context context,String args[]) throws Exception
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId[]=(String[])programMap.get(DCConstants.OBJECTID);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList sListDocFamilyIds=new StringList();
+			Map<String,String> mReturnMap=new HashMap<String,String>();
+			for(String strRowIds:strTableRowIds)
+			{
+				try {
+					String strRowId=strRowIds;
+					TableRowId tableRowId=new TableRowId(strRowId);
+					String strDocFamilyObjectId=tableRowId.getObjectId();
+					sListDocFamilyIds.add(strDocFamilyObjectId);
+
+
+				} catch (Exception e) {
+					throw new DCLException(e.getMessage()); 
+				}
+			}
+			String strArrDocFamilyIds[]=new String[sListDocFamilyIds.size()];
+			for(int i=0;i<sListDocFamilyIds.size();i++)
+			{
+				strArrDocFamilyIds[i]=(String) sListDocFamilyIds.get(i);
+			}
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			libService.connectDocumentToDocumentFamilies(context,strObjectId[0],strArrDocFamilyIds);
+
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshTemplateLibraires",DCLUtil.isOneSearchEnabled(context)));
+			return mReturnMap;
+
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> addDocumentsToDocumentFamilyFromTable(Context context,String args[]) throws Exception
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strDocumentIds[] =  (String[])programMap.get("documentIds");
+			StringList sListDocFamilyIds=new StringList();
+			Map<String,String> mReturnMap=new HashMap<String,String>();
+			List<String> slDocIds=FrameworkUtil.split(strDocumentIds[0],",");
+			for(String strRowIds:strTableRowIds)
+			{
+				try {
+					String strRowId=strRowIds;
+					TableRowId tableRowId=new TableRowId(strRowId);
+					String strDocFamilyObjectId=tableRowId.getObjectId();
+					sListDocFamilyIds.add(strDocFamilyObjectId);
+
+				} catch (Exception e) {
+					throw new DCLException(e.getMessage()); 
+				}
+			}
+			
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			libService.connectDocumentToDocumentFamilies(context,slDocIds,sListDocFamilyIds);
+
+			String strMessage = EnoviaResourceBundle.getProperty(context,DCLConstants.DCL_STRING_RESOURCE,context.getLocale(),"enoDocumentCommon.Alert.Msg.LibAdded");
+			
+			DomainObject dobj=DomainObject.newInstance(context, slDocIds.get(0));
+			String policy=dobj.getInfo(context, DomainObject.SELECT_POLICY);
+			if(policy.equals(PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE)))
+				strMessage = EnoviaResourceBundle.getProperty(context,DCLConstants.DCL_STRING_RESOURCE,context.getLocale(),"enoDocumentCommon.Alert.Msg.LibAddedToTemplate");
+			
+mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessageAndCloseWindow",strMessage,DCLUtil.isOneSearchEnabled(context)));
+			return mReturnMap;
+
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public List<String> excludeConnectedLibraryIds(Context context,String args[]) throws DCLException
+	{
+		try{
+
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			StringList slExcludeList = new StringList();
+
+			StringList slObject = new StringList();
+			slObject.add(DomainObject.SELECT_NAME);
+			slObject.add(DomainObject.SELECT_ID);
+
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			List<Map> mlLibraries=libService.getRelatedLibraries(context,strObjectId);
+			
+			for(Object obj : mlLibraries){
+				Map map = (Map) obj;
+				String strFromID = (String) map.get(DomainObject.SELECT_ID);
+				slExcludeList.add(strFromID);  			   
+			}
+			return slExcludeList;
+		}
+		catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getRelatedLibraries(Context context,    String args[]) throws DCLException
+	{
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			List<Map> mlLibraries=libService.getRelatedLibraries(context,strObjectId);
+			
+			// To disable the libraires from the template on document
+//			String strRelTemplateToDocument=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_TEMPLATE_TO_DOCUMENT);
+//			StringBuilder strRelDocumentTemplate = new StringBuilder(64).append("to[").append(strRelTemplateToDocument).append("].from.id");
+//			String strTemplate=DomainObject.newInstance(context, strObjectId).getInfo(context, strRelDocumentTemplate.toString());
+//			if(UIUtil.isNotNullAndNotEmpty(strTemplate))
+//			{
+//				List<Map> mlTemplLibraries=libService.getRelatedLibraries(context,strTemplate);
+//				List<String> slTemplateLib=new StringList();
+//				for(Map mTempLib:mlTemplLibraries)
+//				{
+//					slTemplateLib.add((String)mTempLib.get(DomainObject.SELECT_ID));
+//				}
+//				for(Map mLib:mlLibraries)
+//				{
+//					String strLibId=(String)mLib.get(DomainObject.SELECT_ID);
+//					if(slTemplateLib.contains(strLibId)){
+//						mLib.put("disableSelection","true");
+//					}
+//					
+//				}
+//			}
+			
+			
+			return mlLibraries;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	public boolean accessForLibraryCentral(Context context,    String args[]) throws DCLException
+	{
+		try{
+			boolean bLBC = FrameworkUtil.isSuiteRegistered(context, "appVersionLibraryCentral", false, null, null);
+			if(bLBC){
+				try{
+//					DCLUtil.checkLicenseReserved(context);
+//					ComponentsUtil.checkLicenseReserved(context, "ENO_LBC_TP");
+					return true;
+				}catch(Exception e){
+					return false; 
+				}
+			}
+			else
+				return false;
+		
+		}  catch(Exception exception){
+			throw new DCLException(exception.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeDocumentFromDocumentFamily(Context context,    String args[]) throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList sListDocFamilyIds=new StringList();
+			Map<String,String> mReturnMap=new HashMap<String,String>();
+			for(String strRowIds:strTableRowIds)
+			{
+				try {
+					String strRowId=strRowIds;
+					TableRowId tableRowId=new TableRowId(strRowId);
+					String strDocFamilyObjectId=tableRowId.getRelationshipId();
+					sListDocFamilyIds.add(strDocFamilyObjectId);
+
+
+				} catch (Exception e) {
+					throw new DCLException(e.getMessage()); 
+				}
+			}
+			String strArrDocFamilyIds[]=new String[sListDocFamilyIds.size()];
+			for(int i=0;i<sListDocFamilyIds.size();i++)
+			{
+				strArrDocFamilyIds[i]=(String) sListDocFamilyIds.get(i);
+			}
+			DocumentLibraryService libService=DCLServiceUtil.getLibraryService(context);
+			libService.disconnect(context,strArrDocFamilyIds);
+			
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshLibraires"));
+			return mReturnMap;
+
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	public boolean checkDocumentCreatedFromTemplate(Context context, String args[]) throws DCLException{
+		 try {
+			Map programMap = JPO.unpackArgs(args);
+			 String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+				String strRelTemplateToDocument =PropertyUtil.getSchemaProperty(context,
+							DCLConstants.SYMBOLIC_RELATIONSHIP_TEMPLATE_TO_DOCUMENT);
+					StringBuilder strRelDocumentTemplate = new StringBuilder(64).append("to[").append(strRelTemplateToDocument).append("].from.id");
+					String strTemplate=DomainObject.newInstance(context,strObjectId).getInfo(context, strRelDocumentTemplate.toString());
+					if(UIUtil.isNotNullAndNotEmpty(strTemplate))
+					{
+						return false;
+					}
+					return true;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		 
+	}
+
+	  @com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+      public Map preProcessAddDocumentsToLibrary(Context context, String args[]) throws DCLException{
+   	   try {
+   		   Map mReturnMap = new HashMap<>();
+   		   String docId = DomainConstants.EMPTY_STRING;
+   		   StringBuilder sbObjectId = new StringBuilder();
+   		   Map programMap = JPO.unpackArgs(args);
+   		   String[] emxTableRowId = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+   		   for(String TableRowId : emxTableRowId){
+   			   TableRowId tr = new TableRowId(TableRowId);
+   				docId = tr.getObjectId();
+   				sbObjectId.append(docId).append(",");
+   		   }
+   		   sbObjectId.deleteCharAt(sbObjectId.length()-1);
+   		   mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,DCLUtil.encodeFunctionForJavaScript(context, false,"preProcessAddDocumentsToLibrary",XSSUtil.encodeForJavaScript(context, sbObjectId.toString())));
+   		   return mReturnMap;
+   	   } catch (Exception e) {
+   		   throw new DCLException(e.getLocalizedMessage());
+   	   }
+      }
+}
+
+

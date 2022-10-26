@@ -1,0 +1,337 @@
+/*
+ ** ${CLASSNAME}
+ **
+ ** Copyright (c) 2018 Design Rule LTD. All Rights Reserved.
+ ** This program contains proprietary and trade secret information of
+ ** Design Rule LTD.
+ ** Copyright notice is precautionary only and does not evidence any actual
+ ** or intended publication of such program
+ */
+
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import matrix.db.Attribute;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.FileList;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.Pattern;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.DebugUtil;
+import com.matrixone.apps.domain.util.FrameworkProperties;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+/**
+ * The <code>gapChangeActionDefinitionBase</code> class contains promote triggers for the following types:
+ *
+ *     CAD Drawing, CAD Model, and Drawing Print.
+ *
+ * @version 1.0 S FRY - Copyright (c) 2018, Design Rule LTD.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxDomainObject}
+{
+
+
+    /**
+     * Constructor.
+     *
+     * @param context the eMatrix <code>Context</code> object.
+     * @param args holds no arguments.
+     * @throws Exception if the operation fails.
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+        super(context, args);
+    }
+
+    /**
+     * This method is executed if a specific method is not specified.
+     *
+     * @param context the eMatrix <code>Context</code> object.
+     * @param args holds no arguments.
+     * @return int.
+     * @throws Exception if the operation fails.
+     * @since AEF 9.5.0.0.
+     */
+
+    public int mxMain(Context context, String[] args)
+        throws Exception
+    {
+        if (true)
+        {
+            throw new Exception("must specify method on gapChangeActionDefinition invocation");
+        }
+        return 0;
+    }
+	
+	/**
+	 * @param text Text to test
+	 * @param pattern (Wildcard) pattern to test
+	 * @return True if the text matches the wildcard pattern
+	 */
+	public static boolean match(String text, String pattern)
+	{
+	  return text.matches(pattern.replace("?", ".?").replace("*", ".*?"));
+	}
+	
+		public static String getLeftString(String st,int length)
+	{
+		int stringlength=st.length();
+
+		if(stringlength<=length){
+			return st;
+		}
+
+		return st.substring(0, length);
+	}
+	
+	/** returns true if data is null, else it returns false.
+	 * @param data any string
+	 * @return boolean
+	 */
+
+	private boolean isNullOrBlank(String data) {
+		return ((data == null || "null".equals(data)) ? 0 : data.trim().length()) == 0;
+	}   
+
+  /**
+   * Checks that an CA is connected when the object is promoted.
+   * Allows the promotion of the object when the object is connected to a change action
+   * @param context the eMatrix <code>Context</code> object.
+   * @param args holds following input arguments:
+   *     0 = Object ID
+   *     1 = Objects State
+   *     2 = Valid states to execute script on
+   * @return int 0-success 1-failure.
+   * @throws Exception if the operation fails.
+   */
+  public int ensureCAConnected(Context context, String[] args)
+                    throws Exception
+  {
+		
+		//System.out.println("Running Method: gapChangeActionDefinitionBase:ensureCAConnected");
+	
+		String sObjectId = args[0];
+		//System.out.println("NOTE: sObjectId =" + sObjectId );
+		String sState = args[1];
+		//System.out.println("NOTE: sState =" + sState );
+		String sType = args[3];
+		//System.out.println("NOTE: sType =" + sType );
+
+		StringList sCASelectList = new StringList(2);
+		sCASelectList.add(DomainConstants.SELECT_ID); 
+		String sProposedChangeActionId = "";
+		String sRealizedChangeActionId = "";
+		String phyid="";
+		String sTitle="";
+		boolean bValidStateToRun = Boolean.FALSE;
+		boolean bValidTypeToRun = Boolean.FALSE;
+				
+		try{	
+
+			String[] sValidStates = args[2].split(",");
+			//System.out.println("NOTE: sValidStates = " + String.join(", ", sValidStates));
+			
+			String[] sValidTypes = args[4].split(",");
+			//System.out.println("NOTE: sValidTypes = " + String.join(", ", sValidTypes));
+		
+			for (String sValidState: sValidStates)
+			{
+			  //System.out.println("NOTE: Checking if State = " + sValidState);
+				if(sValidState.equals(sState)) {
+					//System.out.println("NOTE: State found so continuing..." ); 
+					bValidStateToRun = Boolean.TRUE;
+					break;
+				}
+			}
+			
+			for (String sValidType: sValidTypes)
+			{
+			  //System.out.println("NOTE: Checking if Type = " + sValidType);
+				if(sValidType.equals(sType)) {
+					//System.out.println("NOTE: Type found so executing check" ); 
+					bValidTypeToRun = Boolean.TRUE;
+					break;
+				}
+			}
+
+			if ( bValidStateToRun == Boolean.TRUE )	{
+				if ( bValidTypeToRun == Boolean.TRUE ) {
+					Map ProposedCAData = com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil.getChangeObjectsInProposed(context,sCASelectList,new String[]{sObjectId},1);
+					MapList ProposedCAList = (MapList)ProposedCAData.get(args[0]);        	
+					
+					for(int i =0;i<ProposedCAList.size();i++){
+						Map hmap = (Map)ProposedCAList.get(i);
+						sProposedChangeActionId = (String)hmap.get("id");	        		
+					}
+					
+					Map RealizedCAData = com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil.getChangeObjectsInRealized(context,sCASelectList,new String[]{sObjectId},1);
+					MapList RealizedCAList = (MapList)RealizedCAData.get(args[0]);        	
+					
+					for(int i =0;i<RealizedCAList.size();i++){
+						Map hmapx = (Map)RealizedCAList.get(i);
+						sRealizedChangeActionId = (String)hmapx.get("id");	        		
+					}
+					
+					//System.out.println("NOTE: ProposedCAList Count=" + ProposedCAList.size());
+					//System.out.println("NOTE: RealizedCAList Count=" + RealizedCAList.size());
+					
+					if(ProposedCAList.size() > 0 ) {
+						//System.out.println("PASS!!");
+						//System.out.println("NOTE: sProposedChangeActionId=" + sProposedChangeActionId);
+						//System.out.println("NOTE: sRealizedChangeActionId=" + sRealizedChangeActionId);
+						return 0;
+					} else {
+						
+						String strMessage = "Currently this Drawing is not linked to a Change Action" + System.getProperty("line.separator") + "All Drawings must be approved using a Change Action. Therefore promotion is not allowed.";
+						
+						//System.out.println("FAIL!!" + strMessage);
+
+						${CLASS:emxContextUtil}.mqlNotice(context,strMessage);
+						return 1;						
+						
+					}
+				} else {
+					//System.out.println("NOTE: skipping validation checks for type '" + sType + "'");
+					return 0;
+				}
+			} else {
+				//System.out.println("NOTE: skipping validation checks for state '" + sState + "'");
+				return 0;
+			}
+				 
+		} catch(Exception e)
+		{
+		   e.printStackTrace();
+		   throw (e);
+		}
+            
+   }
+
+
+
+  /**
+   * Checks that a CA is not connected when the object is demoted.
+   * Allows the demotion of the object when the object is not connected to a change action
+   * @param context the eMatrix <code>Context</code> object.
+   * @param args holds following input arguments:
+   *     0 = Object ID
+   *     1 = Objects State
+   *     2 = Valid states to execute script on
+   * @return int 0-success 1-failure.
+   * @throws Exception if the operation fails.
+   */
+  public int ensureCAIsNotConnected(Context context, String[] args)
+                    throws Exception
+  {
+		
+		//System.out.println("Running Method: gapChangeActionDefinitionBase:ensureCAIsNotConnected");
+	
+		String sObjectId = args[0];
+		//System.out.println("NOTE: sObjectId =" + sObjectId );
+		String sState = args[1];
+		//System.out.println("NOTE: sState =" + sState );
+		String sType = args[3];
+		//System.out.println("NOTE: sType =" + sType );
+
+		StringList sCASelectList = new StringList(2);
+		sCASelectList.add(DomainConstants.SELECT_ID); 
+		String sProposedChangeActionId = "";
+		String sRealizedChangeActionId = "";
+		String phyid="";
+		String sTitle="";
+		boolean bValidStateToRun = Boolean.FALSE;
+		boolean bValidTypeToRun = Boolean.FALSE;
+				
+		try{	
+			
+			String[] sValidStates = args[2].split(",");
+			//System.out.println("NOTE: sValidStates = " + String.join(", ", sValidStates));
+			
+			String[] sValidTypes = args[4].split(",");
+			//System.out.println("NOTE: sValidTypes = " + String.join(", ", sValidTypes));
+		
+			for (String sValidState: sValidStates)
+			{
+			  //System.out.println("NOTE: Checking if State = " + sValidState);
+				if(sValidState.equals(sState)) {
+					//System.out.println("NOTE: State found so continuing..." ); 
+					bValidStateToRun = Boolean.TRUE;
+					break;
+				}
+			}
+						
+			if ( bValidStateToRun == Boolean.TRUE )	{
+				Map ProposedCAData = com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil.getChangeObjectsInProposed(context,sCASelectList,new String[]{sObjectId},1);
+				MapList ProposedCAList = (MapList)ProposedCAData.get(args[0]);        	
+				
+				for(int i =0;i<ProposedCAList.size();i++){
+					Map hmap = (Map)ProposedCAList.get(i);
+					sProposedChangeActionId = (String)hmap.get("id");	        		
+				}
+
+				//System.out.println("NOTE: ProposedCAList Count=" + ProposedCAList.size());
+				
+				if(ProposedCAList.size() > 0 ) {
+					//System.out.println("NOTE: sProposedChangeActionId=" + sProposedChangeActionId);
+					
+					String sCAStateCmd = "print bus " + sProposedChangeActionId + " select current dump;";
+					String sCAState = null;
+					sCAState = MqlUtil.mqlCommand(context,sCAStateCmd,false);
+					
+					//System.out.println("NOTE: sCAState=" + sCAState);
+					
+					//Check CA lifecycle state is Prepare or In Work
+					if(sCAState.equals("Prepare") || sCAState.equals("In Work")) {
+						//System.out.println("PASS!! CA is on allowed state " + sCAState);
+						return 0;
+					} else {
+						String strMessage = "Currently this object is linked to a Change Action at the state of '" + sCAState + "'. Therefore demotion is not allowed.";
+						
+						//System.out.println("FAIL!!" + strMessage);				
+						${CLASS:emxContextUtil}.mqlNotice(context,strMessage);
+						return 1;						
+					}
+
+				} else {
+					//System.out.println("PASS!!");
+					return 0;						
+				}
+
+			} else {
+				//System.out.println("NOTE: skipping validation checks for state '" + sState + "'");
+				return 0;
+			}
+				 
+		} catch(Exception e)
+		{
+		   e.printStackTrace();
+		   throw (e);
+		}
+            
+   }
+
+}
+

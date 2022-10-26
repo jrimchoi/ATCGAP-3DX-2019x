@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<processview basekey="NCR.ProcessSteps" registeredsuite="LQINCR">
+  <referenceview>
+    <href><![CDATA[../LQINCR/NCRPSRV.jsp]]></href>
+  </referenceview>
+  <steps policy="policy_NCRRecord" program="com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps" type="type_NCR">
+
+        <step sequence="1" state="state_Create" title="Identify" type="state" validatetask ="true">
+            <description>Subtitle_Identify</description>
+            <prereqs>
+                <prereq sequence="1" accessmethod="showTaskIfUserHasModifyAccess" title="CaptureNCDetails" type="" tasktype="Mandatory">
+                    <action>
+                        <href><![CDATA[${COMMON_DIR}/emxForm.jsp?form=ProcessStepDynamicEditForm&formHeader=LQINCR.EditNCR.Header&HelpMarker=&mode=edit&close=true&findMxLink=false&postProcessJPO=com.dassault_systemes.enovia.lsa.ncr.services.ui.NCR:checkMandatoryFieldsFormPQCNCRBasicInfo&TargetLocation=slidein&slideinWidth=350&suiteKey=LQINCR&emxSuiteDirectory=NCR&StringResourceFileId=LQINCRStringResource&RegisteredSuite=LQINCR&formName=PQCNCRBasicInfo&fieldName=Description,attribute_NCRCategory,attribute_NCRNCType,attribute_NCRDefectType,attribute_NCRSiteFound,attribute_NCRFunctionalArea,attribute_NCRProcess,Originated,attribute_NCRSupplier,attribute_NCRSupplierLocation,attribute_NCRSupplierLot,InvestigationRequired,Severity,SectionHeader1]]></href>
+                        <image><![CDATA[${COMMON_DIR}/images/iconActionEdit.png]]></image>
+						<label><![CDATA[EditNC]]></label>
+                        <accessmask><![CDATA[modify]]></accessmask>
+                    </action>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.trigger.NCR:checkIfNCMandatoryFieldsFilled</select>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq sequence="2" accessmethod="showTaskIfUserHasModifyFromConnectAccess" title="DefineImpactedItems" type="" tasktype="Mandatory">
+                    <action>
+                        <href><![CDATA[command_PQCNCRImpactedItemsAdd]]></href>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCNCRImpactedItems]]></href>
+                        <label><![CDATA[Impacted_Items_List]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallProductControl_2.png]]></image>
+                    </view>
+					<validations>
+                        <validation>
+                            <select admintype="rel"><![CDATA[Impacted Item,from]]></select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+				<prereq sequence="3" title="AddProductContainmentDetails" tasktype="Optional" datamethod="getProductControlForEdit">
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCNCRProductControl]]></href>
+                        <label><![CDATA[Control_Item]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallProductControl_2.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfAllProductControlsMandFieldsFilled</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq sequence="4" title="ReferenceDocumentation" type="" tasktype="Optional">
+                    <action>
+                        <href><![CDATA[command_ProcessStepAddReferenceDocument@command_APPAddExistingDocumentActionLink]]></href>
+						<accessmask><![CDATA[modify]]></accessmask>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_APPReferenceDocumentsTreeCategory]]></href>
+                        <label><![CDATA[Reference_Docs_List]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallDocument.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="rel"><![CDATA[Reference Document,from]]></select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq sequence="5" title="SubmitforReview" type="" tasktype="Mandatory">
+                    <action>
+                        <href><![CDATA[command_PQCNCRPromote]]></href>
+						<accessmask><![CDATA[promote]]></accessmask>
+                    </action>
+                    <validations>
+                        <validation>
+                            <select>current</select>
+                            <value admintype="state">state_Review</value>
+                        </validation>
+                    </validations>
+                </prereq>
+            </prereqs>
+        </step>
+
+		<step sequence="2" state="state_Review" title="Review" type="" validatetask ="true">
+            <description>Subtitle_Review_Evaluation</description>
+			<prereqs>
+                <prereq accessmethod="showAcceptNCRAction" sequence="1" title="AcceptNC" type="" tasktype="Dependency" dependencytitle="AcceptNCDependencyTitle">
+                    <action>
+                        <href><![CDATA[command_PQCNCRAccept]]></href>
+                    </action>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.trigger.NCR:checkIfNCAccepted</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfInvestigationRequired" sequence="2" title="AddProductDispositionDetails" type="" tasktype="Mandatory" datamethod="getProductControlForDispositionEdit">
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCNCRProductControl]]></href>
+                        <label><![CDATA[Control_Item]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallProductControl_2.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfAllProductControlsMandDispositionFieldsFilled</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+				<prereq filtermethod="showTaskIfInvestigationRequired" sequence="3" tasktype="Route" datamethod="getProductControlForRoute"/>
+            </prereqs>
+        </step>
+		
+		<step sequence="3" state="state_Review"  title="Investigate" type="state" validatetask ="true">
+            <description>Subtitle_Investigate</description>
+            <prereqs>
+                <prereq filtermethod="showTaskIfUserHasModifyAccess" sequence="1" title="AssignPeople" type="" tasktype="Optional">
+                    <action>
+                        <href><![CDATA[command_ACTCreateNewSummary]]></href>
+						<label><![CDATA[Add]]></label>
+						<image><![CDATA[${COMMON_DIR}/images/iconAddTrainee.png]]></image>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_ACTSummary]]></href>
+                        <label><![CDATA[Action_Tasks_List]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallTask.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.trigger.NCR:checkIfActionTasksAssigned</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfUserHasModifyAccess" sequence="2" title="AssignReviewers" type="" tasktype="Optional">
+                    <action>
+                        <href><![CDATA[command_TicketMgmtAssigneesAddExisting]]></href>
+						<label><![CDATA[Add]]></label>
+						<image><![CDATA[${COMMON_DIR}/images/iconAddTrainee.png]]></image>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_TicketMgmtAssignees]]></href>
+                        <label><![CDATA[Asignees_List]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallTask.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.trigger.NCR:checkIfAssigneeAdded</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfUserHasModifyAccess" sequence="3" title="ExternalUsers" type="" tasktype="Optional">
+                    <action>
+                        <href><![CDATA[command_ContactsAddExisting]]></href>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_Contacts]]></href>
+                        <label><![CDATA[Contacts_List]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallPerson.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="rel"><![CDATA[Contact,from]]></select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq sequence="4" title="CaptureInvestigation" type="" tasktype="Mandatory" datamethod="getComplaintInvestigationDecision">
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCInvestigationView]]></href>
+                        <label><![CDATA[Investigation_View]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallInvestigation.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfInvestigationResultsCaptured</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfInvestigationRequired" sequence="5" title="ReviewInvestigation" type="" tasktype="Mandatory" datamethod="getComplaintInvestigation">
+                    <action>
+                        <href><![CDATA[command_LPQSendToReviewProductEvaluation]]></href>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCInvestigationView]]></href>
+                        <label><![CDATA[Investigation_View]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallInvestigation.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfInvestigationBeyondInProcess</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfNCClosureTypeNotSet" sequence="6" title="IdentifyNCClosureType" type="" tasktype="Optional" datamethod="getNCClosureTypeForEdit">
+                </prereq>
+                <prereq tasktype="Route" sequence="7" datamethod="getInvestigationForRoute"/>
+               <prereq filtermethod="showTaskIfInvestigationRequired" sequence="8" title="CompleteInvestigation" type="" tasktype="Mandatory" datamethod="getComplaintInvestigation">
+                    <action>
+                        <href><![CDATA[command_LPQCompleteProductEvaluation]]></href>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCInvestigationView]]></href>
+						<label><![CDATA[Investigation_View]]></label>
+                        <image><![CDATA[${COMMON_DIR}/images/iconSmallInvestigation.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfInvestigationComplete</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfNCClosureTypeCAPA" accessmethod="showDataSourceAction" sequence="9" title="InitiateCAPAProcess" type="" tasktype="Dependency" dependencytitle="CAPADataSourceDepedencyTitle" >
+                    <action>
+                        <href><![CDATA[command_QICCPRCreateFromRelatedCAPATable@command_QICAddToExistingFromRelatedCAPATable]]></href>
+                        <accessmask><![CDATA[modify]]></accessmask>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_QICRelatedCAPATreeCategory]]></href>
+                        <image><![CDATA[../common/images/I_CAPA.png]]></image>
+                        <label><![CDATA[Related_CAPA]]></label>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:isDataSourceInitiated</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+				<prereq filtermethod="showTaskIfNCClosureTypeChange" accessmethod="showDataSourceAction" sequence="10" title="InitiateChangeProcess" type="" tasktype="Dependency" dependencytitle="ChangeDataSourceDepedencyTitle">
+                    <action>
+					  <launchers>
+						<launcher name="create">
+						  <image><![CDATA[../common/images/iconActionCreate.png]]></image>
+						  <label><![CDATA[Create]]></label>
+						  <inputs type="radio">
+							<input name="createco">
+							  <href>command_PQCNCAddToNewChange</href>
+							  <image><![CDATA[${COMMON_DIR}/images/iconSmallChangeOrder.png]]></image>
+							  <label><![CDATA[CreateNewChangeOrder]]></label>
+							</input>
+							<input name="createcr">
+							  <href>command_PQCNCAddToNewChangeRequest</href>
+							  <image><![CDATA[${COMMON_DIR}/images/iconSmallChangeRequest.png]]></image>
+							  <label><![CDATA[CreateNewChangeRequest]]></label>
+							</input>
+						  </inputs>
+						</launcher>
+						<launcher name="addexisting">
+						  <label><![CDATA[AddExisting]]></label>
+						  <image><![CDATA[${COMMON_DIR}/images/iconActionAdd.png]]></image>
+						  <inputs type="radio">
+							<input name="addexistingco">
+							  <href>command_PQCNCAddToExistingChange</href>
+							  <image><![CDATA[${COMMON_DIR}/images/iconSmallChangeOrder.png]]></image>
+							  <label><![CDATA[AddExistingChangeOrder]]></label>
+							</input>
+							<input name="addexistingcr">
+							  <href>command_PQCNCAddToExistingChangeRequest</href>
+							  <image><![CDATA[${COMMON_DIR}/images/iconSmallChangeRequest.png]]></image>
+							  <label><![CDATA[AddExistingChangeRequest]]></label>
+							</input>
+						  </inputs>
+						</launcher>
+					  </launchers>
+                    </action>
+                    <view objectId="self">
+                        <href><![CDATA[command_PQCNCChangeManagement]]></href>
+                        <image><![CDATA[../common/images/iconChange.png]]></image>
+                        <label><![CDATA[Related_Change]]></label>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:isDataSourceInitiated</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfCAPA" sequence="11" title="CAPACompletionStatus" type="" tasktype="Mandatory" >
+                    <view objectId="self">
+						<href>command_QICRelatedCAPATreeCategory</href>
+						<label><![CDATA[Related_CAPA]]></label>
+						<image><![CDATA[../common/images/I_CAPA.png]]></image>
+					</view> 
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfAssociatedCAPAComplete</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+                <prereq filtermethod="showTaskIfChange" sequence="12" title="ChangeCompletionStatus" type="" tasktype="Mandatory" >
+                    <view objectId="self">
+						<href>command_PQCNCChangeManagement</href>
+						<label><![CDATA[Related_Change]]></label>
+						<image><![CDATA[../common/images/iconChange.png]]></image>
+                    </view>
+                    <validations>
+                        <validation>
+                            <select admintype="method">com.dassault_systemes.enovia.lsa.ncr.services.ui.NCRProcessSteps:checkIfAssociatedChangeComplete</select>
+                            <value/>
+                        </validation>
+                    </validations>
+                </prereq>
+            </prereqs>
+        </step>
+
+		<step sequence="4" filtermethod="showStepIfNCNotInvalid" state="state_Review" title="Close" type="state" validatetask ="true">
+            <description>Subtitle_CloseNC</description>
+            <prereqs>
+                <prereq sequence="1" tasktype="Route" />
+                <prereq sequence="2" title="CloseNC" type="" taskType="Mandatory" datamethod="showCloseNCAction">
+                    <validations>
+                        <validation>
+                            <select>current</select>
+                            <value admintype="state">state_Closed</value>
+                        </validation>
+                    </validations>
+                </prereq>
+            </prereqs>
+        </step>
+		
+		<step sequence="5" filtermethod="showStepIfNCInvalid" state="state_Invalid" targetstate="state_Invalid" title="Invalidate" type="state" stopped="true">
+            <description>Subtitle_Invalidate</description>
+            <prereqs>
+                <prereq sequence="1" title="InvalidateNC" type="" tasktype="Mandatory">
+                    <validations>
+                        <validation>
+                            <select>current</select>
+                            <value admintype="state">state_Invalid</value>
+                        </validation>
+                    </validations>
+                </prereq>
+            </prereqs>
+        </step>
+
+  </steps>
+</processview>
+
+

@@ -1,0 +1,61 @@
+var params = proc.declareParameters(["type", "select"], ["label", "where", "orderby", "limit", "dump", "format", "view","labelAbort"]);
+
+var ok = true;
+
+var cmd = "query flattablerow $1";
+params.addVar(type);
+
+if (view) {
+    if (["master", "detail", "view"].indexOf(view) >= 0)
+        cmd += " " + view;
+    else {
+        proc.write(label, null, "view " + view + " not supported");
+        ok = false;
+    }
+}
+
+if (where)
+    cmd += " where" + params.addVar(where);
+
+if (orderby) {
+    var orderbys = JSON.parse(orderby);
+    for (var i = 0; i < orderbys.length; i++)
+        cmd += " orderby" + params.addVar(orderbys[i]);
+}
+    
+if (limit)
+    cmd += " limit" + params.addVar(limit);
+    
+cmd += " select" + params.addVars(JSON.parse(select));
+
+if (dump)
+	cmd += " dump" + params.addVar(dump);
+
+if (format) {
+    switch (format) {
+        case "tcl":
+            cmd += " tcl";
+            break;
+        case "json":
+            cmd += " json";
+            break;
+        case "txt":
+            break;
+        default:
+            proc.write(label, null, "format " + format + " not supported");
+            ok = false;
+    }
+}
+else {
+   cmd += " tcl";
+}
+
+if (ok) {
+    mql.startTransaction(false);
+    mql.execute(label, cmd, params);
+	if (labelAbort)
+		mql.abortTransaction(null, true, labelAbort);
+	else
+		mql.abortTransaction(); 
+}
+

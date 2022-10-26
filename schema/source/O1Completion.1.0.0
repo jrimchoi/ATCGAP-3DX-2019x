@@ -1,0 +1,62 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"},
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},{name:"SEL_PROD_SYS", type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                    [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var ExpandPrimitives     = Java.type("com.dassault_systemes.completion.service.ExpandPrimitives");
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var System = Java.type("java.lang.System");
+var navSets = [RSC];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+	
+	var O1CompletionID = "O1";
+	
+	var UserDefCompletionStop = System.getenv().get("UserDefCompletionStop");
+	var completionID="";
+	var primitiveName="";
+	if (UserDefCompletionStop != null)
+	{
+		var UserDefCompletionStopTab = UserDefCompletionStop.split("|");
+		completionID = UserDefCompletionStopTab[0];
+		primitiveName = UserDefCompletionStopTab[1];
+	}
+	
+	while (true)
+	{
+		///////////////////////////////////////
+		// 1- RSC = RSC + SmartCompletionSystem->Resource(SEL_PROD_SYS)
+		///////////////////////////////////////
+		var navMode = [true, false, false, false]; // [Ref/Ref (scope), Occ/Occ (with), Occ/Occ (where), Occ/Port/Occ (Who)]
+		var SmartCompletionSysRscTimer = new DebugTimer(context, 0, "RSC = RSC + SmartCompletionSystem->Resource(SEL_PROD_SYS)", true);
+		var RSCfromSmartCompletion = NavigationPrimitives.navigateFromSystemToResource(context, SEL_PROD_SYS, navMode);
+		RSC = RSC.merge(RSCfromSmartCompletion);
+		SmartCompletionSysRscTimer.complete();
+		if (completionID.equalsIgnoreCase(O1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionSystemResourcePrimitiveName)) break;
+	
+		///////////////////////////////////////
+		// 2- RSC = RSC + ExpandAll(RSC)
+		///////////////////////////////////////
+		var ExpandRscTimer = new DebugTimer(context, 0, "RSC = RSC + ExpandAll(RSC)", true);
+		var resExpandRsc = ExpandPrimitives.expandMultiRoot(context, RSC, 0);
+		RSC = RSC.merge(resExpandRsc);
+		ExpandRscTimer.complete();
+		break;
+	}
+	
+	///////////////////////////////////////
+	// 3- Open(PRD,PRCS,PROD_SYS,RSC)
+	///////////////////////////////////////
+    outputData.add("Product", PRD);
+    outputData.add("Process", PRCS);
+    outputData.add("System", PROD_SYS);
+    outputData.add("WorkPlan", WK_PL);
+    outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

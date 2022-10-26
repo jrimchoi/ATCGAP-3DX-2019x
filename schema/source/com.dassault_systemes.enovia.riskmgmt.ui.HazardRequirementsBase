@@ -1,0 +1,371 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws RiskMgmtException {
+		super();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getDesignProjects(Context context, String[] args) throws RiskMgmtException {
+		try {
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map requestValueMap = (Map) programMap.get("RequestValuesMap");
+			String[] objIdArr = (String[]) requestValueMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(objIdArr) && !RiskMgmtUtil.isNullOrEmpty(objIdArr[0])) {
+				String hazardId = objIdArr[0];
+				Hazard hazard = new Hazard(hazardId);
+				HazardContext hazardContext = hazard.getProductContext(context);
+				returnMap = HazardMgmtUtil.getDesignProjects(context, hazardContext);
+				if (!RiskMgmtUtil.isNullOrEmpty(returnMap)) {
+					for (Map mpDesignProjects : returnMap) {
+						mpDesignProjects.put(RiskMgmtConstants.DISABLE_SELECTION, RiskMgmtConstants.TRUE);
+					}
+
+				}
+			}
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getDesignProjectRequirementsExpansion(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String REL_SPECIFICATION_STRUCTURE = SYM_REL_SPECIFICATION_STRUCTURE.get(context);
+			final String REL_SUB_REQUIREMENT = SYM_REL_REQUIREMENT_BREAKDOWN.get(context);
+			final String REL_DERIVED_REQUIREMENT = SYM_REL_DERIVED_REQUIREMENT.get(context);
+
+			List<Map<?, ?>> returnMap = new ArrayList<Map<?, ?>>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				DomainObject domainObject = DomainObject.newInstance(context, objectId);
+				Map<String, Boolean> typeInfoMap = RiskMgmtUtil.getTypeKindOf(context, domainObject, SYM_TYPE_DESIGN_PROJECT.toString(),
+						SYM_TYPE_REQUIREMENT.toString(), SYM_TYPE_SOFTWAREREQUIREMENTSPECIFICATION.toString(), SYM_TYPE_CHAPTER.toString(),
+						SYM_TYPE_CONTROLLED_FOLDER.toString());
+
+				StringList slBusSelect = RiskMgmtUtil.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_TYPE,
+						SYM_TYPE_REQUIREMENT.getKindOfExpr(context), SYM_TYPE_SOFTWAREREQUIREMENTSPECIFICATION.getKindOfExpr(context),
+						SYM_TYPE_DOCUMENTS.getKindOfExpr(context));
+
+				if (typeInfoMap.get(SYM_TYPE_DESIGN_PROJECT.get(context))) {
+					returnMap = getDesignInputDHFFolders(context, domainObject);
+				}
+				else if (typeInfoMap.get(SYM_TYPE_CONTROLLED_FOLDER.get(context))) {
+					StringBuilder sbRelPattern = new StringBuilder();
+					sbRelPattern.append(DomainConstants.RELATIONSHIP_SUB_VAULTS);
+					sbRelPattern.append(RiskMgmtConstants.COMMA);
+					sbRelPattern.append(DomainConstants.RELATIONSHIP_VAULTED_OBJECTS_REV2);
+
+					StringList actualIncludeTypeList = getDIIncludeTypeList(context);
+					StringBuilder sbTypePattern = new StringBuilder();
+					sbTypePattern.append(SYM_TYPE_CONTROLLED_FOLDER.get(context));
+					for (Object object : actualIncludeTypeList) {
+						sbTypePattern.append(RiskMgmtConstants.COMMA);
+						sbTypePattern.append((String) object);
+					}
+
+					returnMap = QueryUtil.getRelatedObjects(context, domainObject, sbRelPattern.toString(), sbTypePattern.toString(), slBusSelect,
+							null, false, true, (short) 1, null, null);
+
+					returnMap = filterUnwantedObjectEntries(context, returnMap);
+				}
+				else if (typeInfoMap.get(SYM_TYPE_SOFTWAREREQUIREMENTSPECIFICATION.get(context)) || typeInfoMap.get(SYM_TYPE_REQUIREMENT.get(context))
+						|| typeInfoMap.get(SYM_TYPE_CHAPTER.get(context))) {
+					StringBuilder sbRelPattern = new StringBuilder();
+					sbRelPattern.append(REL_SPECIFICATION_STRUCTURE);
+					sbRelPattern.append(RiskMgmtConstants.COMMA);
+					sbRelPattern.append(REL_SUB_REQUIREMENT);
+					sbRelPattern.append(RiskMgmtConstants.COMMA);
+					sbRelPattern.append(REL_DERIVED_REQUIREMENT);
+					StringBuilder sbTypePattern = new StringBuilder();
+					sbTypePattern.append(SYM_TYPE_REQUIREMENT.get(context));
+					sbTypePattern.append(RiskMgmtConstants.COMMA);
+					sbTypePattern.append(SYM_TYPE_CHAPTER.get(context));
+					returnMap = QueryUtil.getRelatedObjects(context, domainObject, sbRelPattern.toString(), sbTypePattern.toString(), slBusSelect,
+							null, false, true, (short) 1, null, null);
+				}
+			}
+
+			String isKindOfRequirement = DomainConstants.EMPTY_STRING;
+			String iskindOfReqSpec = DomainConstants.EMPTY_STRING;
+			String iskindOfDocuments = DomainConstants.EMPTY_STRING;
+
+			for (Map map : returnMap) {
+				if (!RiskMgmtUtil.isNullOrEmpty(map)) {
+					isKindOfRequirement = (String) map.get(SYM_TYPE_REQUIREMENT.getKindOfExpr(context));
+					iskindOfReqSpec = (String) map.get(SYM_TYPE_SOFTWAREREQUIREMENTSPECIFICATION.getKindOfExpr(context));
+					iskindOfDocuments = (String) map.get(SYM_TYPE_DOCUMENTS.getKindOfExpr(context));
+
+					map.put(RiskMgmtConstants.DISABLE_SELECTION, RiskMgmtConstants.TRUE);
+					if ((RiskMgmtConstants.TRUE.equalsIgnoreCase(isKindOfRequirement)) || (RiskMgmtConstants.TRUE.equalsIgnoreCase(iskindOfDocuments)
+							&& RiskMgmtConstants.FALSE.equalsIgnoreCase(iskindOfReqSpec))) {
+						map.put(RiskMgmtConstants.DISABLE_SELECTION, RiskMgmtConstants.FALSE);
+					}
+				}
+			}
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private StringList getDIIncludeTypeList(Context context) throws RiskMgmtException {
+		try {
+			StringList actualIncludeTypeList = new StringList();
+
+			String strIncludeTypes = RiskMgmtUtil.getProperty(context, "RiskMgmt.DHFTraceability.DesigInput.IncludeTypes");
+			if (!RiskMgmtUtil.isNullOrEmpty(strIncludeTypes)) {
+				StringList symbolicIncludeTypeList = FrameworkUtil.split(strIncludeTypes, RiskMgmtConstants.COMMA);
+				for (Object object : symbolicIncludeTypeList) {
+					actualIncludeTypeList.add(PropertyUtil.getSchemaProperty(context, (String) object));
+				}
+			}
+
+			return actualIncludeTypeList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private List<Map<?, ?>> filterUnwantedObjectEntries(Context context, List<Map<?, ?>> lmObjects) throws RiskMgmtException {
+		try {
+			if (!RiskMgmtUtil.isNullOrEmpty(lmObjects)) {
+				String strExcludeTypes = RiskMgmtUtil.getProperty(context, "RiskMgmt.DHFTraceability.DesigInput.ExcludeTypes");
+
+				StringList excludeTypeList = new StringList();
+
+				if (!RiskMgmtUtil.isNullOrEmpty(strExcludeTypes)) {
+					StringList symbolicExcludeTypeList = FrameworkUtil.split(strExcludeTypes, RiskMgmtConstants.COMMA);
+					for (Object object : symbolicExcludeTypeList) {
+						excludeTypeList.add(PropertyUtil.getSchemaProperty(context, (String) object));
+					}
+
+					Iterator<Map<?, ?>> iterator = lmObjects.iterator();
+					while (iterator.hasNext()) {
+						Map map = iterator.next();
+						String type = (String) map.get(DomainConstants.SELECT_TYPE);
+						if (excludeTypeList.contains(type)) {
+							iterator.remove();
+						}
+					}
+				}
+			}
+			return lmObjects;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	static MapList getDesignInputDHFFolders(Context context, DomainObject project) throws RiskMgmtException {
+		try {
+			final String TYPE_CONTROLLED_FOLDER = SYM_TYPE_CONTROLLED_FOLDER.get(context);
+			final String RELATIONSHIP_DATA_VAULTS = SYM_REL_PROJECT_VAULTS.get(context);
+			final String RELATIONSHIP_LINKED_FOLDERS = SYM_REL_LINKED_FOLDERS.get(context);
+			final String ATTRIBUTE_DOCUMENT_CLASSIFICATION = SYM_ATTR_DOCUMENT_CLASSIFICATION.get(context);
+			final String SELECT_DOCUMENT_CLASSIFICATION = DomainObject.getAttributeSelect(ATTRIBUTE_DOCUMENT_CLASSIFICATION);
+			final String STATE_SUPERCEDED = RiskMgmtUtil.getActualStateName(context, SYMBOLIC_POLICY_CONTROLLED_FOLDER, SYMBOLIC_STATE_SUPERCEDED);
+			StringList relSelect = new StringList(1);
+			relSelect.add(DomainRelationship.SELECT_ID);
+
+			String relWhere = null;
+			String relPattern = new StringBuilder(RELATIONSHIP_DATA_VAULTS).append(",").append(RELATIONSHIP_LINKED_FOLDERS).toString();
+
+			StringList busSelect = new StringList(2);
+			busSelect.add(DomainObject.SELECT_ID);
+			busSelect.add(DomainObject.SELECT_TYPE);
+			busSelect.add(SELECT_DOCUMENT_CLASSIFICATION);
+			StringBuilder sbBusWhere = new StringBuilder(128);
+			sbBusWhere.append('(').append(DomainConstants.SELECT_CURRENT).append(" != '").append(STATE_SUPERCEDED).append('\'').append("&& ")
+					.append(SELECT_DOCUMENT_CLASSIFICATION).append(" == \'").append(DOCUMENT_CLASSIFICATION_RANGE_DESIGN_INPUT).append("\')");
+			return project.getRelatedObjects(context, relPattern, TYPE_CONTROLLED_FOLDER, busSelect, relSelect, false, true, (short) 1,
+					sbBusWhere.toString(), relWhere, 0);
+		}
+		catch (Exception exception) {
+			throw new RiskMgmtException(exception);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionAddRequirements(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String[] tableRowIds = (String[]) programMap.get(RiskMgmtConstants.EMX_TABLE_ROW_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				List<String> listRequirementIds = new ArrayList<String>(tableRowIds.length);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					listRequirementIds.add(rowId.getObjectId());
+				}
+				String[] selectedRequirementIds = listRequirementIds.toArray(new String[listRequirementIds.size()]);
+				if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])
+						&& !RiskMgmtUtil.isAnyNullOrEmpty(selectedRequirementIds)) {
+					Hazard hazard = new Hazard(arrHazardId[0]);
+					hazard.addRequirements(context, selectedRequirementIds);
+				}
+			}
+			else {
+				String errorMessage = RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE,
+						"RiskMgmt.Hazard.Message.SelectRequirementError");
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, RiskMgmtConstants.FUNCTION_SHOW_ERROR_MSG, errorMessage);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, RiskMgmtConstants.REFRESH_OPENER);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionRemoveRequirements(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRiskId = (String[]) programMap.get(RiskMgmtConstants.PARENT_OID);
+			String[] tableRowIds = (String[]) programMap.get(RiskMgmtConstants.EMX_TABLE_ROW_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				List<String> listRequirementRelIds = new ArrayList<String>(tableRowIds.length);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					listRequirementRelIds.add(rowId.getRelationshipId());
+				}
+				String[] requirementRelIds = listRequirementRelIds.toArray(new String[listRequirementRelIds.size()]);
+				if (!RiskMgmtUtil.isNullOrEmpty(arrRiskId) && !RiskMgmtUtil.isNullOrEmpty(arrRiskId[0]) && !RiskMgmtUtil.isNullOrEmpty(requirementRelIds)) {
+					Hazard hazard = new Hazard(arrRiskId[0]);
+					hazard.removeRequirements(context, requirementRelIds);
+				}
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, RiskMgmtConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean canViewTableRiskMgmtHazardRequirementsSummaryColumnActiveEC(Context context, String[] args) throws RiskMgmtException {
+		boolean canView = false;
+		try {
+			String strIncludeTypes = RiskMgmtUtil.getProperty(context, "RiskMgmt.DHFTraceability.DesigInput.IncludeTypes");
+			StringList symbolicIncludeTypeList = FrameworkUtil.split(strIncludeTypes, RiskMgmtConstants.COMMA);
+
+			String strExcludeTypes = RiskMgmtUtil.getProperty(context, "RiskMgmt.DHFTraceability.DesigInput.ExcludeTypes");
+			StringList symbolicExcludeTypeList = FrameworkUtil.split(strExcludeTypes, RiskMgmtConstants.COMMA);
+
+			if (isTRMProductInstalled(context) && !RiskMgmtUtil.isNullOrEmpty(symbolicIncludeTypeList)
+					&& (symbolicIncludeTypeList.contains(RiskMgmtConstants.SYMBOLIC_type_SoftwareRequirementSpecification) || symbolicIncludeTypeList
+							.contains(RiskMgmtConstants.SYMBOLIC_type_DOCUMENTS) && (RiskMgmtUtil.isNullOrEmpty(symbolicExcludeTypeList)
+									|| !symbolicExcludeTypeList.contains(RiskMgmtConstants.SYMBOLIC_type_SoftwareRequirementSpecification)))) {
+				canView = true;
+			}
+
+			return canView;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private boolean isTRMProductInstalled(Context context) throws RiskMgmtException {
+		try {
+			return RiskMgmtUtil.isProductInstalled(context, RiskMgmtConstants.APP_VERSION_TRM);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public List getTableRiskMgmtHazardRequirementsSummaryColumnRevision(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			HashMap paramList = (HashMap) programMap.get(RiskMgmtConstants.PARAM_LIST);
+			String exportFormat = DomainConstants.EMPTY_STRING;
+			if (!RiskMgmtUtil.isNullOrEmpty(paramList)) {
+				exportFormat = (String) paramList.get(RiskMgmtConstants.EXPORT_FORMAT);
+			}
+
+			List lstHigherRevExists = new Vector();
+			if (!RiskMgmtUtil.isNullOrEmpty(objList)) {
+
+				// Reading the tooltip from property file.
+				String strTooltipHigherRevExists = RiskMgmtUtil.getI18NString(context, RISK_MGMT_STRING_RESOURCE,
+						"RiskMgmt.Hazard.Message.HigherRevExists");
+				String strIcon = RiskMgmtUtil.getProperty(context, "emxComponents.HigherRevisionImage");
+
+				StringBuilder sbHigherRevisionIconTag = new StringBuilder("&#160;");
+				sbHigherRevisionIconTag.append("<img src=\"../common/images/").append(strIcon).append("\" border=\"0\"  align=\"baseline\" ");
+				sbHigherRevisionIconTag.append("TITLE=\" ").append(strTooltipHigherRevExists).append("\"/>");
+
+				String revision = DomainConstants.EMPTY_STRING;
+				String majorId = DomainConstants.EMPTY_STRING;
+				String lastMajorId = DomainConstants.EMPTY_STRING;
+				for (Object object : objList) {
+					Map map = (Map) object;
+					revision = (String) map.get(DomainConstants.SELECT_REVISION);
+					majorId = (String) map.get(RiskMgmtConstants.MAJOR_ID);
+					lastMajorId = (String) map.get(RiskMgmtConstants.MAJOR_ID_LAST_MAJOR_ID);
+
+					if (!RiskMgmtUtil.isNullOrEmpty(majorId) && !majorId.equals(lastMajorId) && RiskMgmtUtil.isNullOrEmpty(exportFormat)) {
+						lstHigherRevExists.add((new StringBuilder(revision)).append(sbHigherRevisionIconTag.toString()).toString());
+					}
+					else {
+						lstHigherRevExists.add(revision);
+					}
+				}
+			}
+
+			return lstHigherRevExists;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

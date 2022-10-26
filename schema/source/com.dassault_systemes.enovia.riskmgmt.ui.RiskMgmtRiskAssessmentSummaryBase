@@ -1,0 +1,417 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRisk;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtTableBase} {
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	public Vector getName(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SELECT_NAME);
+	}
+
+	public Vector getType(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SELECT_TYPE);
+	}
+
+	public Vector getTitle(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SYM_ATTR_TITLE.get(context));
+	}
+
+	public Vector getState(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SELECT_CURRENT);
+	}
+
+	public Vector getInitialSeverity(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, FIELD_INITIAL_SEVERITY);
+	}
+
+	public Vector getInitialOccurence(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, FIELD_INITIAL_OCCURENCE);
+	}
+
+	public Vector getInitialRPN(Context context, String[] args) throws RiskMgmtException {
+		return getRPNColumnValues(context, args, false);
+	}
+
+	public Vector getFinalSeverity(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, FIELD_FINAL_SEVERITY);
+	}
+
+	public Vector getFinalOccurence(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, FIELD_FINAL_OCCURENCE);
+	}
+
+	public Vector getFinalRPN(Context context, String[] args) throws RiskMgmtException {
+		return getRPNColumnValues(context, args, true);
+	}
+
+	public Vector getImpactType(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SYM_ATTR_RISK_IMPACT_TYPE.get(context));
+	}
+
+	public Vector getHazardType(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SYM_ATTR_RISK_HAZARD_TYPE.get(context));
+	}
+
+	public Vector getDescription(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SELECT_DESCRIPTION);
+	}
+
+	public Vector getAssociatedTask(Context context, String[] args) throws RiskMgmtException {
+		return getAssociatedTaskColumnValues(context, args);
+	}
+
+	public Vector getAssociatedAttachment(Context context, String[] args) throws RiskMgmtException {
+		return getAssociatedAttachmentColumnValues(context, args);
+	}
+
+	public Vector getOwner(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, SELECT_OWNER);
+	}
+
+	public Vector getComments(Context context, String[] args) throws RiskMgmtException {
+		return retrieveColumnValues(context, args, FIELD_CURRENT_STATUS);
+	}
+
+	private Vector getRPNColumnValues(Context context, String[] args, boolean isCurrent) throws RiskMgmtException {
+		try {
+			Map paramMap = (HashMap) JPO.unpackArgs(args);
+			MapList relBusObjPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(relBusObjPageList.size());
+			Map<?, ?> paramList = (Map) paramMap.get(PARAM_LIST);
+			boolean isCSVExport = false;
+			String reportFormat = (String) paramList.get(REPORT_FORMAT);
+			if (CSV.equalsIgnoreCase(reportFormat)) {
+				isCSVExport = true;
+			}
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				Map<String, String> objDetails = (HashMap<String, String>) relBusObjPageList.get(i);
+				String rpn = isCurrent ? objDetails.get(FIELD_FINAL_RPN) : objDetails.get(FIELD_INITIAL_RPN);
+				String occIndex = isCurrent ? objDetails.get(FIELD_FINAL_OCCURENCE) : objDetails.get(FIELD_INITIAL_OCCURENCE);
+				String sevIndex = isCurrent ? objDetails.get(FIELD_FINAL_SEVERITY) : objDetails.get(FIELD_INITIAL_SEVERITY);
+				if (!RiskMgmtUtil.isNullOrEmpty(objDetails.keySet())) {
+					if (isCSVExport) {
+						if(!RiskMgmtUtil.isNull(rpn) ) {
+							columnValues.addElement(rpn);
+						} else {
+							columnValues.addElement(DomainConstants.EMPTY_STRING);
+						}
+					}
+					else {
+						columnValues.addElement(RiskMgmtUtil.getRPNDiv(context, occIndex, sevIndex, rpn));
+					}
+				}
+				else {
+
+					columnValues.addElement(EMPTY_STRING);
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	// start changes by FZ8
+	private Vector getAssociatedTaskColumnValues(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> paramMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(objPageList.size());
+
+			for (int i = 0; i < objPageList.size(); i++) {
+				Map<String, String> objDetails = (HashMap<String, String>) objPageList.get(i);
+				String strRiskId = objDetails.get(DomainConstants.SELECT_ID);
+				if (!RiskMgmtUtil.isNullOrEmpty(strRiskId)) {
+					String strTaskId = new String();
+					String strTaskOwner = new String();
+					ManagedRisk risk = new ManagedRisk(strRiskId);
+					List<Map<?, ?>> returnMap = risk.getTasks(context,
+							RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER),
+							RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID), null);
+					for (Map<?, ?> taskMap : returnMap) {
+						strTaskId = (String) taskMap.get(DomainConstants.SELECT_ID);
+						strTaskOwner = (String) taskMap.get(DomainConstants.SELECT_OWNER);
+						if (!RiskMgmtUtil.isNullOrEmpty(strTaskOwner) && strTaskOwner.equalsIgnoreCase(context.getUser())) {
+							break;
+						}
+					}
+					if (!RiskMgmtUtil.isNullOrEmpty(strTaskId) && !RiskMgmtUtil.isNullOrEmpty(strTaskOwner)
+							&& strTaskOwner.equalsIgnoreCase(context.getUser())) {
+						StringBuilder sbImage = new StringBuilder();
+						sbImage.append("<img src=\"../common/images/iconSmallTask.gif\" border=\"0");
+						sbImage.append("\" alt=\"");
+						sbImage.append(XSSUtil.encodeForHTML(context, strTaskOwner));
+						sbImage.append("\" title=\"");
+						sbImage.append(XSSUtil.encodeForHTML(context, strTaskOwner));
+						sbImage.append("\"/>");
+
+						StringBuilder sbHref = new StringBuilder();
+						sbHref.append("<a href=\"javascript:showModalDialog('../common/emxTree.jsp?mode=insert");
+						sbHref.append("&amp;objectId=");
+						sbHref.append(XSSUtil.encodeForHTML(context, strTaskId));
+						sbHref.append("','','', true, 'popup')\">");
+						sbHref.append(sbImage);
+						sbHref.append("</a>");
+						columnValues.add(sbHref.toString());
+					}
+					else {
+						columnValues.add(EMPTY_STRING);
+					}
+				}
+			}
+
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private Vector getAssociatedAttachmentColumnValues(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> paramMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objPageList = (MapList) paramMap.get(OBJECT_LIST);
+			Vector columnValues = new Vector(objPageList.size());
+
+			for (int i = 0; i < objPageList.size(); i++) {
+				Map<String, String> objDetails = (HashMap<String, String>) objPageList.get(i);
+				String strRiskId = objDetails.get(DomainConstants.SELECT_ID);
+				if (!RiskMgmtUtil.isNullOrEmpty(strRiskId)) {
+					DomainObject dmoRisk = DomainObject.newInstance(context, strRiskId);
+					String strIcon = new String();
+					String strToolTip = "";
+					if (RiskMgmtUtil.countConnectionsWithRel(context, dmoRisk, SYM_REL_REFERENCE_DOCUMENT.toString(), "from") > 0) {
+						strIcon = "iconSmallDocumentAttachment";
+					}
+					else {
+						strIcon = "utilTreeLineNodeClosedSBDisabled";
+						strToolTip = "Attach Documents";
+					}
+					StringBuilder sbIconAttachement = new StringBuilder();
+					sbIconAttachement.append("<img src=\"../common/images/");
+					sbIconAttachement.append(strIcon);
+					sbIconAttachement.append(".gif\" border=\"0\" alt=\"");
+					sbIconAttachement.append(strToolTip);
+					sbIconAttachement.append("\" title=\"");
+					sbIconAttachement.append(strToolTip);
+					sbIconAttachement.append("\"/>");
+
+					StringBuilder sbHrefMaker = new StringBuilder();
+					sbHrefMaker
+							.append("../common/emxIndentedTable.jsp?program=emxCommonDocumentUI:getDocuments&amp;table=APPDocumentSummary&amp;selection=multiple&amp;sortColumnName=Name&amp;sortDirection=ascending&amp;toolbar=ProductDocumentSummaryToolBar&amp;header=emxProduct.Menu.Documents&amp;HelpMarker=emxhelprefdoclist&amp;freezePane=Name&amp;suiteKey=ProductLine");
+					sbHrefMaker.append("&amp;objectId=");
+					sbHrefMaker.append(XSSUtil.encodeForHTML(context, strRiskId));
+
+					StringBuilder sbLinkMaker = new StringBuilder();
+					sbLinkMaker.append("<a href=\"javascript:showModalDialog('");
+					sbLinkMaker.append(sbHrefMaker.toString());
+					sbLinkMaker.append("', '', '', true, 'Medium')\"  class='object'>");
+					sbLinkMaker.append(sbIconAttachement.toString());
+					sbLinkMaker.append("</a>");
+					columnValues.add(sbLinkMaker.toString());
+				}
+				else {
+					columnValues.add(EMPTY_STRING);
+				}
+			}
+			return columnValues;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	// end changes by FZ8
+
+	public List<String> getTableRiskMgmtRiskAssessmentSummaryColumnOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(OBJECT_LIST);
+			List<String> vcOwner = new Vector<String>();
+			Map<?, ?> paramList = (Map) programMap.get(PARAM_LIST);
+			boolean isCSVExport = false;
+			String reportFormat = (String) paramList.get(REPORT_FORMAT);
+			if (CSV.equalsIgnoreCase(reportFormat)) {
+				isCSVExport = true;
+			}
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map<?, ?> riskMap = (Map<?, ?>) obj;
+					String strRiskId = (String) riskMap.get(DomainConstants.SELECT_ID);
+					List<Map<?, ?>> ownerListMap = QueryUtil.getInfo(context, new String[] { strRiskId },
+							RiskMgmtUtil.stringList(DomainConstants.SELECT_OWNER));
+					String strRsikOwnerHyperLink = getOwnerHyperlink(context, strRiskId);
+					if (!RiskMgmtUtil.isNullOrEmpty(ownerListMap)) {
+						Map ownerMap = ownerListMap.get(0);
+						if (!RiskMgmtUtil.isNullOrEmpty(ownerMap)) {
+							String hazardOwner = ownerMap.get(DomainConstants.SELECT_OWNER).toString();
+							if (!RiskMgmtUtil.isNullOrEmpty(hazardOwner)) {
+								if (isCSVExport) {
+									vcOwner.add(hazardOwner);
+								}
+								else {
+									vcOwner.add(strRsikOwnerHyperLink);
+								}
+							}
+							else {
+								vcOwner.add(DomainConstants.EMPTY_STRING);
+							}
+						}
+						else {
+							vcOwner.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+					else {
+						vcOwner.add(DomainConstants.EMPTY_STRING);
+					}
+
+				}
+			}
+			return vcOwner;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private static String getOwnerHyperlink(Context context, String objectId) throws RiskMgmtException {
+		try {
+			String strOwnerHyperLink = new String();
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> objectListMap = DomainObject.getInfo(context, new String[] { objectId },
+						RiskMgmtUtil.stringList(DomainConstants.SELECT_OWNER));
+				String strOwner = new String();
+				for (Map<?, ?> objectMap : objectListMap) {
+					strOwner = (String) objectMap.get(DomainConstants.SELECT_OWNER);
+				}
+				if (!RiskMgmtUtil.isNullOrEmpty(strOwner)) {
+					String strOwnerId = PersonUtil.getPersonObjectID(context, strOwner);
+					String ownerFullName = PersonUtil.getFullName(context, strOwner);
+					strOwnerHyperLink = getPropertiesPageHyperLink(context, strOwnerId, ownerFullName);
+				}
+			}
+			return strOwnerHyperLink;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private static String getPropertiesPageHyperLink(Context context, String objectId, String objectName) throws RiskMgmtException {
+		String strHyperlink = new String();
+		if (!RiskMgmtUtil.isNullOrEmpty(objectId) && !RiskMgmtUtil.isNullOrEmpty(objectName)) {
+			StringBuilder sbHref = new StringBuilder();
+			sbHref.append("<a href=\"javascript:showModalDialog('../common/emxTree.jsp?mode=insert");
+			sbHref.append("&amp;objectId=");
+			sbHref.append(XSSUtil.encodeForHTML(context, objectId));
+			sbHref.append("'");
+			sbHref.append(",'','', true, 'popup')\">");
+			sbHref.append(XSSUtil.encodeForHTML(context, objectName));
+			sbHref.append("</a>");
+			strHyperlink = sbHref.toString();
+		}
+		return strHyperlink;
+	}
+
+	public StringList hasAccessForEdit(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String STATE_CONTROLLED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), "state_Controlled");
+			StringList slReturn = new StringList();
+			Map<?, ?> hmProgram = JPO.unpackArgs(args);
+			MapList mlColumnObjects = (MapList) hmProgram.get(OBJECT_LIST);
+			for (Object omColumnObjects : mlColumnObjects) {
+				Map<?, ?> columnObject = (Map<?, ?>) omColumnObjects;
+				String columnObjectId = (String) columnObject.get(DomainConstants.SELECT_ID);
+
+				List<Map<?, ?>> parentObjMap = DomainObject.getInfo(context, new String[] { columnObjectId },
+						RiskMgmtUtil.stringList(DomainConstants.SELECT_TYPE, DomainConstants.SELECT_CURRENT));
+				String strState = (String) parentObjMap.get(0).get(DomainConstants.SELECT_CURRENT);
+				if (strState.equals(STATE_CONTROLLED)) {
+					slReturn.add(Boolean.toString(false));
+				}
+				else {
+					slReturn.add(Boolean.toString(true));
+				}
+			}
+			return slReturn;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	public void updateTableRiskMgmtRiskAssessmentSummaryColumnOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> mpParamMap = (HashMap<?, ?>) programMap.get(PARAM_MAP);
+			String strRiskId = (String) mpParamMap.get(OBJECT_ID);
+			String strNewVal = (String) mpParamMap.get(NEW_VALUE);
+			ManagedRisk risk = new ManagedRisk(strRiskId);
+			risk.setOwner(context, strNewVal);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String submitTableRiskMgmtRiskAssessmentSummaryColumnOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String name = DomainConstants.EMPTY_STRING;
+			String fullName = DomainConstants.EMPTY_STRING;
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] fieldNameActual = (String[]) inputMap.get(FIELD_NAME_ACTUAL);
+			String personId = ((String[]) inputMap.get(EMX_TABLE_ROW_ID))[0];
+			if (FrameworkUtil.split(personId, "|").size() > 1) {
+				EmxTableRowId folderRowId = new EmxTableRowId(personId);
+				personId = folderRowId.getObjectId();
+			}
+
+			List<Map<?, ?>> personInfoList = DomainObject.getInfo(context, new String[] { personId },
+					RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME));
+			if (!RiskMgmtUtil.isNullOrEmpty(personInfoList)) {
+				name = (String) personInfoList.get(0).get(DomainConstants.SELECT_NAME);
+				if (!RiskMgmtUtil.isNullOrEmpty(name)) {
+					fullName = PersonUtil.getFullName(context, name);
+					if (RiskMgmtUtil.isNullOrEmpty(fullName)) {
+						fullName = name;
+					}
+				}
+			}
+
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, false, "setStructureBrowserCellValue", fieldNameActual[0], name, fullName,
+					personId);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+}
+

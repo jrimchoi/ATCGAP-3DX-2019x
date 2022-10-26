@@ -1,0 +1,573 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants.Action;
+import com.dassault_systemes.enovia.lsa.ticket.TicketException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangePolicyState;
+import com.dassault_systemes.enovia.lsa.ticket.services.MyComplaintWorkQueueService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws TicketException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws TicketException {
+		super();
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws TicketException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new TicketException(exception);
+		}
+	}
+
+	/**
+	 * Gets MyComplaintWorkQueueService implementation reference
+	 * 
+	 * @param context
+	 * @return
+	 * @throws TicketException
+	 */
+	private MyComplaintWorkQueueService getMyComplaintWorkQueueService(Context context) throws TicketException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = (MyComplaintWorkQueueService) component
+					.getService(MyComplaintWorkQueueService.class);
+			return myComplaintWorkQueueService;
+
+		}
+		catch (ComponentException exception) {
+			throw new TicketException(exception);
+		}
+	}
+
+	/**
+	 * Accept Complaint Tickets
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws TicketException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAccept(Context context, String[] args) throws TicketException {
+		DomainObject dmoNewOwner = null;
+		StringBuffer sbTransferReason = new StringBuffer();
+		ArrayList<Object> arrTicketIds = new ArrayList<Object>();
+		try {
+
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strOrgTableRowIds = (String[]) mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+			dmoNewOwner = PersonUtil.getPersonObject(context);
+
+			sbTransferReason.append(Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.AcceptComplaint1"));
+			sbTransferReason.append(" ");
+			sbTransferReason.append(dmoNewOwner.getName());
+			sbTransferReason.append(" ");
+			sbTransferReason.append(Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.AcceptComplaint2"));
+
+			for (String strRowId : strOrgTableRowIds) {
+				EmxTableRowId tr = new EmxTableRowId(strRowId);
+				arrTicketIds.add(tr.getObjectId());
+			}
+
+			context.setCustomData("transferReason", sbTransferReason.toString());
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.transferOwnership(context, dmoNewOwner, sbTransferReason.toString(),Action.ACCEPT,
+					arrTicketIds.toArray(new String[arrTicketIds.size()]));
+
+			//TODO
+//			if (TicketUtil.checkUserRoles(context, dmoNewOwner, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+//				MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+////				myComplaintWorkQueueService.setComplaintsAsAssigned(context, arrTicketIds.toArray(new String[arrTicketIds.size()]));
+//			}
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue");
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Delete Complaint Tickets
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws TicketException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionDelete(Context context, String[] args) throws TicketException {
+
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<Object> arrSuccessComplaintTicketIds = new ArrayList<Object>();
+		ArrayList<Object> arrFailedComplaintTickets = new ArrayList<Object>();
+
+		try {
+			String strTicketState = DomainConstants.EMPTY_STRING;
+			String strTicketName = DomainConstants.EMPTY_STRING;
+			String strCreateState = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+
+			if (TicketUtil.checkAERGLicenseAssigned(context) || TicketUtil.checkCOLSLicenseAssigned(context)) {
+				Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+				String[] strOrgTableRowIds = (String[]) mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+				String strTicketId = new String();
+				for (String strRowId : strOrgTableRowIds) {
+					EmxTableRowId tr = new EmxTableRowId(strRowId);
+					strTicketId = tr.getObjectId();
+					List<Map<?, ?>> mlTicket = QueryUtil.getInfo(context, new String[] { strTicketId },
+							Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_NAME, DomainConstants.SELECT_TYPE));
+					for (Object oTicket : mlTicket) {
+						Map<?, ?> mTicket = (Map<?, ?>) oTicket;
+						strTicketState = (String) mTicket.get(DomainConstants.SELECT_CURRENT);
+						strTicketName = (String) mTicket.get(DomainConstants.SELECT_NAME);
+						Map<String, Boolean> typeMap = Helper.getTypeKindOf(context, DomainObject.newInstance(context,strTicketId), new String[] {TicketConstants.SYMBOLIC_TYPE_COMPLAINT_TICKETS});
+						if(typeMap.containsValue(Boolean.valueOf(false))){
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForWrongTypeSelection");
+						}
+//TODO
+//						if (strTicketState.equalsIgnoreCase(strCreateState) && (TicketUtil.isOwnerOrAssignee(context, strTicketId)
+//								|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)))
+//							arrSuccessComplaintTicketIds.add(strTicketId);
+//						else
+//							arrFailedComplaintTickets.add(strTicketName); 
+						if (strTicketState.equalsIgnoreCase(strCreateState) && DomainObject.newInstance(context,strTicketId).checkAccess(context, (short)AccessConstants.cDelete))
+						{
+							arrSuccessComplaintTicketIds.add(strTicketId);
+						}
+						else
+						{
+							arrFailedComplaintTickets.add(strTicketName);
+						}
+					}
+				}
+				if (arrFailedComplaintTickets.size() > 0) {
+					sbReturn.append(Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.Error.CanNotDeleted"));
+					sbReturn.append("\n");
+					sbReturn.append(arrFailedComplaintTickets.toString());
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionShowAlertMessage", sbReturn.toString());
+				}
+				else if (arrSuccessComplaintTicketIds.size() > 0)
+					TicketUtil.deleteObjects(context, arrSuccessComplaintTicketIds.toArray(new String[arrSuccessComplaintTicketIds.size()]));
+			}
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue");
+	}
+
+	/**
+	 * Sets the new owner for the complaint ticket and for all its associated
+	 * events and investigation objects as well.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws TicketException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionTransferOwnership(Context context, String[] args) throws TicketException {
+//TODO
+		String strTicketId = new String();
+		StringList slTicketIds = null;
+		DomainObject dmoNewOwner = null;
+		String strReturn = new String();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+
+			String[] strAssignedFilterValue = (String[]) programMap.get(TicketConstants.ASSIGNED_FILTER_COMMAND);
+
+			if (!Helper.isNullOrEmpty(strAssignedFilterValue) && strAssignedFilterValue[0].equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED)) {
+
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferComplaintOwnership");
+			}
+			else if (!Helper.isNullOrEmpty(strAssignedFilterValue) && strAssignedFilterValue[0].equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED)
+					&& (Helper.hasRoles(context, "role_ComplaintInvestigator"))) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferOwnershipUnassignedFilter");
+			}
+			else {
+				String[] arrTicketIds = (String[]) programMap.get(TicketConstants.ROWIDS);
+				strTicketId = arrTicketIds[0];
+
+				String[] arrNewOwnerOID = (String[]) programMap.get(TicketConstants.FIELD_NEW_OWNER_OID);
+				String[] arrTransferReason = (String[]) programMap.get(TicketConstants.FIELD_TRANSFER_REASON);
+				String strTransferReason = arrTransferReason[0];
+
+				context.setCustomData("transferReason", strTransferReason);
+				ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+
+				if (!Helper.isNullOrEmpty(strTicketId)) {
+					if (strTicketId.contains(TicketConstants.COMMA)) {
+						slTicketIds = FrameworkUtil.split(strTicketId, TicketConstants.COMMA);
+						for (int i = 0; i < slTicketIds.size(); i++) {
+							strTicketId = (String) slTicketIds.get(i);
+
+//							if (TicketUtil.isOwnerOrAssignee(context, strTicketId)
+//									|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+							if (DomainObject.newInstance(context, strTicketId).checkAccess(context, (short)AccessConstants.cChangeOwner)) {
+								dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+								complaintTicketService.transferOwnership(context, dmoNewOwner, strTransferReason, Action.TRANSFER,strTicketId);
+								strReturn = Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue");
+							}
+							else {
+								return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferOwnershipNotOwner");
+							}
+						}
+					}
+					else {
+//						if (TicketUtil.isOwnerOrAssignee(context, strTicketId)
+//								|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+						if (DomainObject.newInstance(context, strTicketId).checkAccess(context, (short)AccessConstants.cChangeOwner)) {
+							dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+							complaintTicketService.transferOwnership(context, dmoNewOwner, strTransferReason, Action.TRANSFER,strTicketId);
+							strReturn = Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue");
+						}
+						else {
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForTransferOwnershipNotOwner");
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new TicketException(e);
+		}
+		return strReturn;
+	}
+
+	/**
+	 * Submit To Review / In Process for selected complaint tickets.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws TicketException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSubmitToReview(Context context, String[] args) throws TicketException {
+
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<Object> arrSuccessTicketIds = new ArrayList<Object>();
+		ArrayList<Object> arrFailedTickets = new ArrayList<Object>();
+		DomainObject doTicket = null;
+		String strTicketName = new String();
+		String strTicketId = new String();
+
+		try {
+
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String[] strTicketIds = (String[]) mapProgram.get(TicketConstants.EMX_TABLE_ROW_ID);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+
+			for (String strRowId : strTicketIds) {
+				EmxTableRowId tr = new EmxTableRowId(strRowId);
+				strTicketId = tr.getObjectId();
+				doTicket = DomainObject.newInstance(context, strTicketId);
+				strTicketName = doTicket.getInfo(context, DomainConstants.SELECT_NAME);
+//TODO
+//				if (TicketUtil.isOriginator(context, strTicketId) || TicketUtil.isOwnerOrAssignee(context, strTicketId)
+//						|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)) {
+				if (DomainObject.newInstance(context, strTicketId).checkAccess(context, (short)AccessConstants.cPromote)) {
+					arrSuccessTicketIds.add(strTicketId);
+				}
+				else
+					arrFailedTickets.add(strTicketName);
+			}
+			if (arrFailedTickets.size() > 0) {
+				sbReturn.append(
+						Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.Error.CanNotSubmitForProcessing"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedTickets.toString());
+
+				MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+			}
+			else if (arrSuccessTicketIds.size() > 0)
+				complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.INPROCESS,
+						Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "PQC.Complaint.Message.TrnsfReason.InProcess"),
+						arrSuccessTicketIds.toArray(new String[arrSuccessTicketIds.size()]));
+			sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue"));
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+		return sbReturn.toString();
+
+	}
+
+	/**
+	 * Action for Closing selected Complaint Ticket(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws TicketException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionClose(Context context, String[] args) throws TicketException {
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<Object> arrSuccessTicketIds = new ArrayList<Object>();
+		ArrayList<Object> arrFailedTickets = new ArrayList<Object>();
+		DomainObject doTicket = null;
+		String strTicketName = new String();
+
+		try {
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String strReasonForClosure = ((String[]) mapProgram.get(TicketConstants.COMMENTS))[0];
+			String strTicketIds = ((String[]) mapProgram.get(TicketConstants.ROWIDS))[0];
+
+			if (!Helper.isNullOrEmpty(strTicketIds)) {
+				StringList slTicketIds = FrameworkUtil.split(strTicketIds, TicketConstants.COMMA);
+				for (Object obj : slTicketIds) {
+					String strTicketId = (String) obj;
+					doTicket = DomainObject.newInstance(context, strTicketId);
+					strTicketName = doTicket.getInfo(context, DomainConstants.SELECT_NAME);
+//TODO
+//					if (Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+//							|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+					if (doTicket.checkAccess(context, (short)AccessConstants.cPromote)) {
+						arrSuccessTicketIds.add(strTicketId);
+					}
+					else
+						arrFailedTickets.add(strTicketName);
+				}
+			}
+			if (arrFailedTickets.size() > 0) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.Error.CanNotClosed"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedTickets.toString());
+
+				MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+			}
+			else if (arrSuccessTicketIds.size() > 0)
+				complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.CLOSED, strReasonForClosure,
+						arrSuccessTicketIds.toArray(new String[arrSuccessTicketIds.size()]));
+			sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue"));
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+		return sbReturn.toString();
+
+	}
+
+	/**
+	 * Action for Invalidating selected Complaint Ticket(s)
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws TicketException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionInvalidate(Context context, String[] args) throws TicketException {
+		StringBuffer sbReturn = new StringBuffer();
+		ArrayList<Object> arrSuccessTicketIds = new ArrayList<Object>();
+		ArrayList<Object> arrFailedTickets = new ArrayList<Object>();
+		DomainObject doTicket = null;
+		String strTicketName = new String();
+		try {
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+			Map<?, ?> mapProgram = JPO.unpackArgs(args);
+			String strTicketIds = ((String[]) mapProgram.get(TicketConstants.ROWIDS))[0];
+			String[] strInvalidateRationale = ((String[]) mapProgram.get(TicketConstants.COMMENTS));
+			StringList ticketIds = FrameworkUtil.split(strTicketIds, ",");
+			List<String> unassignedTickets = myComplaintWorkQueueService.getUnAssignedComplaints(context,
+					(String[]) ticketIds.toArray(new String[ticketIds.size()]));
+
+			if ((!unassignedTickets.isEmpty()) && Helper.hasRoles(context, "role_ComplaintInvestigator")) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.TicketMgmt,
+						"TicketMgmt.Message.Error.Invalidiate.SelectedUnassignedComplaint");
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionShowAlertMessage", strErrorMessage);
+			}
+
+			if (!Helper.isNullOrEmpty(strTicketIds)) {
+				StringList slTicketIds = FrameworkUtil.split(strTicketIds, TicketConstants.COMMA);
+				for (Object obj : slTicketIds) {
+					String strTicketId = (String) obj;
+					doTicket = DomainObject.newInstance(context, strTicketId);
+					strTicketName = doTicket.getInfo(context, DomainConstants.SELECT_NAME);
+//TODO
+//					if (TicketUtil.isOwnerOrAssignee(context, strTicketId) || Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER)
+//							|| Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+					if (doTicket.checkAccess(context, (short)AccessConstants.cPromote)) {
+						arrSuccessTicketIds.add(strTicketId);
+					}
+					else
+						arrFailedTickets.add(strTicketName);
+				}
+			}
+			if (arrFailedTickets.size() > 0) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.TicketMgmt, "TicketMgmt.Message.Error.CanNotInvalidate"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedTickets.toString());
+
+				MqlUtil.mqlCommand(context, "notice $1", sbReturn.toString());
+			}
+			else if (arrSuccessTicketIds.size() > 0) {
+				complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.INVALID, strInvalidateRationale[0],
+						arrSuccessTicketIds.toArray(new String[arrSuccessTicketIds.size()]));
+				sbReturn.append(Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshMyComplaintTicketWorkQueue"));
+			}
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+		return sbReturn.toString();
+
+	}
+
+	/**
+	 * Access Function for Command TicketMgmtWorkQueueSubmitToReview of filter
+	 * active and create only
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show TicketMgmtWorkQueueSubmitToReview command
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	public Boolean showCommandTicketMgmtWorkQueueSubmitToReview(Context context, String[] args) throws TicketException {
+		Boolean showCommand = new Boolean(false);
+
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String PQCCPTActiveFilter = (String) programMap.get("PQCCPTActiveFilter");
+			String PQCCPTCreateFilter = (String) programMap.get("PQCCPTCreateFilter");
+			String PQCESRCreateFilter = (String) programMap.get("PQCESRCreateFilter");
+			String PQCINQCreateFilter = (String) programMap.get("PQCINQCreateFilter");
+			if (Helper.hasRoles(context,"role_QualityManager")) {
+				if ((!Helper.isNullOrEmpty(PQCCPTCreateFilter) && (PQCCPTCreateFilter.equalsIgnoreCase(TicketConstants.FILTER_CREATE)))
+						|| (!Helper.isNullOrEmpty(PQCESRCreateFilter) && (PQCESRCreateFilter.equalsIgnoreCase(TicketConstants.FILTER_CREATE))
+								|| (!Helper.isNullOrEmpty(PQCINQCreateFilter)
+										&& (PQCINQCreateFilter.equalsIgnoreCase(TicketConstants.FILTER_CREATE))))) {
+
+					showCommand = true;
+				}
+				else {
+					showCommand = false;
+				}
+			}
+			else if (Helper.hasRoles(context, "role_ComplaintInvestigator")) {
+				showCommand = false;
+			}
+			else if (!Helper.isNullOrEmpty(PQCCPTActiveFilter) && PQCCPTActiveFilter.equalsIgnoreCase(TicketConstants.FILTER_CLOSED)) {
+				showCommand = false;
+			}
+			else {
+				showCommand = true;
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on TicketMgmtWorkQueueAccept command. Method to display
+	 * the show Accept Complaints command in WorkQueue table depending upon
+	 * filter value
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws TicketException
+	 *             if operation fails
+	 */
+	public Boolean showAcceptTickets(Context context, String[] args) throws TicketException {
+		Boolean showFilter = new Boolean(false);
+		try {
+
+			Map<?, ?> mapProgram = (Map<?, ?>) JPO.unpackArgs(args);
+			String strCPTFilterValue = (String) mapProgram.get(TicketConstants.ACTIVE_FILTER_COMMAND);
+			String strESRFilterValue = (String) mapProgram.get(TicketConstants.ESR_ACTIVE_FILTER_COMMAND);
+			String strINQFilterValue = (String) mapProgram.get(TicketConstants.INQ_ACTIVE_FILTER_COMMAND);
+
+			String strAssignedFilterValue = null;
+			
+			if(!Helper.isNullOrEmpty(strCPTFilterValue))
+				strAssignedFilterValue = strCPTFilterValue;
+			else if(!Helper.isNullOrEmpty(strESRFilterValue))
+				strAssignedFilterValue = strESRFilterValue;
+			else if(!Helper.isNullOrEmpty(strINQFilterValue))
+				strAssignedFilterValue = strINQFilterValue;
+			
+			if (!Helper.isNullOrEmpty(strAssignedFilterValue) && (strAssignedFilterValue.equalsIgnoreCase(TicketConstants.FILTER_UNASSIGNED)))
+				showFilter = true;
+
+			return showFilter;
+		}
+		catch (Exception e) {
+			throw new TicketException(e.getLocalizedMessage());
+		}
+	}
+}
+

@@ -1,0 +1,501 @@
+/*
+* Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+* contains proprietary and trade secret information of Dassault Systemes.
+* Copyright notice is precautionary only and does not evidence any actual or
+* intended publication of such program.
+*/
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.dassault_systemes.enovia.geographyconfiguration.EmxTableRowId;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfiguration;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfigurationException;
+import com.dassault_systemes.enovia.geographyconfiguration.Helper;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.StringUtil;
+import com.matrixone.apps.framework.ui.UITableIndented;
+import com.matrixone.jdom.Element;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * UI Service JPO for managing Region related UI
+ */
+public class ${CLASSNAME} {
+
+	private final static GeographyConfiguration	geographyConfiguration			= GeographyConfiguration.getInstance();
+	private static String						RELATIONSHIP_SYMBOLIC_SUBREGION	= "relationship_SubRegion";
+	private final static String					TYPE_SYMBOLIC_REGION			= "type_Region";
+	private final static String					POLICY_SYMBOLIC_REGION			= "policy_Region";
+	private final static String					STATE_SYMBOLIC_EXISTS			= "state_Exists";
+
+	/**
+	 * Removes country from region using ExecutePostActions
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param removeMap
+	 *            Map containing Regions as keys and List if Country Ids as
+	 *            values for removal from corresponding Region
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 */
+	private void removeCountryFromRegion(Context context, Map<DomainObject, List<String>> removeMap) throws GeographyConfigurationException {
+		try {
+			for (Map.Entry<DomainObject, List<String>> e : removeMap.entrySet()) {
+				geographyConfiguration.removeCountriesFromRegion(context, e.getKey(), e.getValue());
+			}
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Removes country from region using ExecutePostActions
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param removeMap
+	 *            Map containing Regions as keys and List if Language Ids as
+	 *            values for removal from corresponding Region
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 */
+	private void removeLanguageFromRegion(Context context, Map<DomainObject, List<String>> removeMap) throws GeographyConfigurationException {
+		try {
+			for (Map.Entry<DomainObject, List<String>> removeSet : removeMap.entrySet()) {
+				geographyConfiguration.removeLanguagesFromRegion(context, removeSet.getKey(), removeSet.getValue());
+			}
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Region constructor
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 * @since 10.0.0.0
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws GeographyConfigurationException {
+		super();
+	}
+
+	/**
+	 * Gets the MapList containing all the Regions. This method is deprecated
+	 * and will be removed once LRA removed all it's reference to this method.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments.
+	 * @return a MapList containing all the Regions.
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 * @deprecated done by VI5
+	 */
+	@Deprecated
+	public MapList getTableLRARegions(Context context, String[] args) throws GeographyConfigurationException {
+		return getTableGEORegions(context, args);
+	}
+
+	/**
+	 * Gets the MapList containing all the Regions.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments.
+	 * @return a MapList containing all the Regions.
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+
+			final String REL_SUBREGION = PropertyUtil.getSchemaProperty(context, RELATIONSHIP_SYMBOLIC_SUBREGION);
+			StringBuffer strWhereExpression = new StringBuffer(85);
+			strWhereExpression.append("to[" + REL_SUBREGION + "]==False");
+			List<Map<String, String>> regions = geographyConfiguration.getRegions(context, null, strWhereExpression.toString());
+			MapList regionList = new MapList(regions);
+			return regionList;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the default value for Type column of region table This method is
+	 * deprecated and will be removed once LRA removed all it's reference to
+	 * this method.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return map of default values with key Default_AddNewRow
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 * @deprecated done by VI5
+	 */
+	@Deprecated
+	public Map<String, String> getDefaultTableLRARegions(Context context, String[] args) throws GeographyConfigurationException {
+		return getDefaultTableGEORegions(context, args);
+	}
+
+	/**
+	 * Gets the default value for Type column of region table
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return map of default values with key Default_AddNewRow
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	public Map<String, String> getDefaultTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			final String TYPE_REGION = PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_REGION);
+			Map<String, String> regionType = new HashMap<String, String>();
+			//IR-216084V6R2014 k3d - type translation to browser lang -Start
+			String sType_Region_Translated = EnoviaResourceBundle.getTypeI18NString(context, TYPE_REGION, context.getSession().getLanguage());
+			regionType.put("Default_AddNewRow", sType_Region_Translated);
+			//IR-216084V6R2014 k3d - End
+			return regionType;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the default value for State column of region table
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return map of default values with key Default_AddNewRow
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	public Map<String, String> getDefaultStateTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			final String POLICY_REGION = PropertyUtil.getSchemaProperty(context, POLICY_SYMBOLIC_REGION);
+			final String STATE_EXISTS = PropertyUtil.getSchemaProperty(context, "policy", POLICY_REGION, STATE_SYMBOLIC_EXISTS);
+			// IR-216084V6R2014 - added by k3d for translation - Start
+			String sState_Exists_Transalted = EnoviaResourceBundle.getStateI18NString(context,POLICY_REGION,STATE_EXISTS,context.getSession().getLanguage());
+			// IR-216084V6R2014 - End
+			Map<String, String> regionState = new HashMap<String, String>();
+			// IR-216084V6R2014 - modified by k3d for translation - Start
+			regionState.put("Default_AddNewRow", sState_Exists_Transalted);
+			// IR-216084V6R2014 - End
+			return regionState;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Saves rows for Region creation This method is deprecated and will be
+	 * removed once LRA removed all it's reference to this method.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 * @deprecated done by VI5
+	 */
+	@Deprecated
+	public Map saveRowsTableLRARegions(Context context, String[] args) throws GeographyConfigurationException {
+		return saveRowsTableGEORegions(context, args);
+	}
+
+	/**
+	 * Saves rows for Region creation
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map saveRowsTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			final String REL_SUBREGION = PropertyUtil.getSchemaProperty(context, RELATIONSHIP_SYMBOLIC_SUBREGION);
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Element rootElement = (Element) programMap.get("contextData");
+			String parentId = (String) programMap.get("parentOID");
+			DomainObject regionObj = new DomainObject(parentId);
+			Map<?, ?> regionMap = null;
+			Map<?, ?> newRegion = null;
+			String newRegionName = "";
+			if (Helper.isNullOrEmpty(parentId) || regionObj.isKindOf(context, PropertyUtil.getSchemaProperty(context, TYPE_SYMBOLIC_REGION))) {
+				MapList chgRowsMapList = UITableIndented.getChangedRowsMapFromElement(context, rootElement);
+				StringList existingRegions = new StringList(chgRowsMapList.size());
+				for (Object obj : chgRowsMapList) {
+					regionMap = (Map<?, ?>) obj;
+					newRegion = (Map<?, ?>) regionMap.get("columns");
+					newRegionName = (String) newRegion.get("Name");
+					if (geographyConfiguration.doesRegionExist(context, newRegionName)) {
+						existingRegions.add(newRegionName);
+					}
+				}
+				String regionsExist = StringUtil.join(existingRegions, ", ");
+				StringBuilder message = new StringBuilder(Helper.getI18NString(context, "GeographyConfiguration.Message.RegionAlreadyExists"));
+				message.append(regionsExist);
+				if (existingRegions.size() > 0) {
+					throw new GeographyConfigurationException(message.toString());
+				}
+				ContextUtil.startTransaction(context, true);
+				try {
+					Map returnMaps = new HashMap();
+					MapList changedRowsMapList = new MapList();
+					for (Object obj : chgRowsMapList) {
+						regionMap = (Map<?, ?>) obj;
+						newRegion = (Map<?, ?>) regionMap.get("columns");
+						newRegionName = (String) newRegion.get("Name");
+						String newRegionDescription = (String) newRegion.get("Desc");
+						Map returnMap = new HashMap();
+						DomainObject region = geographyConfiguration.createRegion(context, newRegionName, newRegionDescription);
+						if (!parentId.equalsIgnoreCase("")) {
+							DomainRelationship.connect(context, parentId, REL_SUBREGION, region.getId(context), false);
+						}
+						returnMap.put("markup", "new");
+						returnMap.put("oid", region.getId(context));
+						returnMap.put("columns", newRegion);
+						returnMap.put("rowId", regionMap.get("rowId"));
+						changedRowsMapList.add(returnMap);
+					}
+					returnMaps.put("Action", "success");
+					returnMaps.put("changedRows", changedRowsMapList);
+					ContextUtil.commitTransaction(context);
+					return returnMaps;
+				}
+				catch (Exception le) {
+					ContextUtil.abortTransaction(context);
+					throw le;
+				}
+			}
+			else {
+
+				Map errorMap = new HashMap();
+				errorMap.put("Action", "ERROR");
+				String errorMsg = Helper.getI18NString(context, "GeographyConfiguration.Message.CreateSubRegionErrorMsg");
+				errorMap.put("Message", errorMsg);
+				return errorMap;
+			}
+
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Removes rows for Region deletion This method is deprecated and will be
+	 * removed once LRA removed all it's reference to this method.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions
+	 * @throws GeographyConfigurationException
+	 * @deprecated done by VI5
+	 */
+	@Deprecated
+	public String actionDeleteRowsTableLRARegions(Context context, String[] args) throws GeographyConfigurationException {
+		return actionDeleteRowsTableGEORegions(context, args);
+	}
+
+	/**
+	 * Removes rows for Region deletion
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions
+	 * @throws GeographyConfigurationException
+	 */
+	@com.dassault_systemes.enovia.geographyconfiguration.ExecuteCallable
+	public String actionDeleteRowsTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] objList = (String[]) programMap.get("emxTableRowId");
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(objList);
+			List<String> idList = new ArrayList<String>();
+			for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+				idList.add(emxTableRowId.getObjectId());
+			}
+			final String TYPE_REGION = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Region);
+			if (!Helper.isAllKindOfType(context, idList, TYPE_REGION)) {
+				return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectRegionsOnly");
+			}
+			geographyConfiguration.deleteRegion(context, idList);
+			return Helper.encodeFunctionForJavaScript(context, false, "removeRowsUnderRegionsFromStructureBrowser", StringUtil.join(objList, ";"));
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Removes countries and languages from region using ExecutePostActions This
+	 * method is deprecated and will be removed once LRA removed all it's
+	 * reference to this method.
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions call
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 * @deprecated done by VI5
+	 */
+	@Deprecated
+	public String actionRemoveSelectedFromRegionTableLRARegions(Context context, String[] args) throws GeographyConfigurationException {
+		return actionRemoveSelectedFromRegionTableGEORegions(context, args);
+	}
+
+	/**
+	 * Removes countries and languages from region using ExecutePostActions
+	 *
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds input arguments
+	 * @return method name for post actions call
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails
+	 */
+	@com.dassault_systemes.enovia.geographyconfiguration.ExecuteCallable
+	public String actionRemoveSelectedFromRegionTableGEORegions(Context context, String[] args) throws GeographyConfigurationException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			boolean countries = false;
+			boolean languages = false;
+			String[] emxTableRowIdsArray = (String[]) programMap.get("emxTableRowId");
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowIdsArray);
+			Set<String> regionIds = new HashSet<String>();
+			List<String> idRows = new ArrayList<String>();
+			for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+				regionIds.add(emxTableRowId.getParentObjectId());
+				idRows.add(emxTableRowId.getObjectId());
+			}
+			final String TYPE_COUNTRY = PropertyUtil.getSchemaProperty(context, "type_Country");
+			final String TYPE_LANGUAGE = PropertyUtil.getSchemaProperty(context, "type_Language");
+			Map<DomainObject, List<String>> removeCountriesMap = new HashMap<DomainObject, List<String>>();
+			Map<DomainObject, List<String>> removeLanguagesMap = new HashMap<DomainObject, List<String>>();
+			for (String regionId : regionIds) {
+				List<String> countryIds = new ArrayList<String>();
+				List<String> languageIds = new ArrayList<String>();
+				for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+					if (regionId.equalsIgnoreCase(emxTableRowId.getParentObjectId())) {
+						if (Helper.isAllKindOfType(context, new StringList(emxTableRowId.getObjectId()), TYPE_COUNTRY)) {
+							countryIds.add(emxTableRowId.getObjectId());
+						}
+						else if (Helper.isAllKindOfType(context, new StringList(emxTableRowId.getObjectId()), TYPE_LANGUAGE)) {
+							languageIds.add(emxTableRowId.getObjectId());
+						}
+						else {
+							return Helper.encodeFunctionForJavaScript(context, false, "alertPleaseSelectCountriesOrLanguagesOnly");
+						}
+					}
+				}
+				countries = !countryIds.isEmpty();
+				removeCountriesMap.put(DomainObject.newInstance(context, regionId), countryIds);
+				languages = !languageIds.isEmpty();
+				removeLanguagesMap.put(DomainObject.newInstance(context, regionId), languageIds);
+			}
+			ContextUtil.startTransaction(context, true);
+			try {
+				if (countries) {
+					removeCountryFromRegion(context, removeCountriesMap);
+				}
+				if (languages) {
+					removeLanguageFromRegion(context, removeLanguagesMap);
+				}
+				ContextUtil.commitTransaction(context);
+			}
+			catch (Exception le) {
+				ContextUtil.abortTransaction(context);
+				throw le;
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, "removeRowsUnderRegionsFromStructureBrowser",
+					StringUtil.join(emxTableRowIdsArray, ";"));
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+	/**
+	 * Gets the region range values for Range function
+	 *
+	 * @param context
+	 *            ENOVIA context object
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map <?, ?> containing the return range Map
+	 * @throws GeographyConfigurationException
+	 *             if the operation fails.
+	 */
+	@Deprecated
+	public Map<?, ?> getRegionRanges(matrix.db.Context context, String[] args) throws GeographyConfigurationException {
+		List<Map<String, String>> regionsList = new ArrayList<Map<String, String>>();
+		StringList regionIds = new StringList("");
+		StringList regionNames = new StringList("");
+		try {
+
+			regionsList = geographyConfiguration.getRegions(context, null, "");
+			for (Object objMap : regionsList) {
+				Map<?, ?> refMap = (Map<?, ?>) objMap;
+				regionIds.add((String) refMap.get(DomainConstants.SELECT_ID));
+				regionNames.add((String) refMap.get(DomainConstants.SELECT_NAME));
+			}
+			HashMap<String, StringList> rangeMap = new HashMap<String, StringList>();
+			rangeMap.put("field_choices", regionIds);
+			rangeMap.put("field_display_choices", regionNames);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new GeographyConfigurationException(e);
+		}
+	}
+
+}
+

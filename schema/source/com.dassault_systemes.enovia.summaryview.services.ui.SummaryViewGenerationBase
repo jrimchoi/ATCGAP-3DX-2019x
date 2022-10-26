@@ -1,0 +1,1456 @@
+
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
+import java.util.Vector;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.Source;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import javax.xml.transform.stream.StreamSource;
+
+import matrix.db.AttributeType;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import org.w3c.dom.Attr;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+import com.dassault_systemes.enovia.summaryview.EmxTableRowId;
+import com.dassault_systemes.enovia.summaryview.Helper;
+import com.dassault_systemes.enovia.summaryview.QueryUtil;
+import com.dassault_systemes.enovia.summaryview.SummaryViewException;
+import com.dassault_systemes.enovia.summaryview.SummaryViewExecuteCallable;
+import com.dassault_systemes.enovia.summaryview.SummaryViewGeneration;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.UOMUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UIFormCommon;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UITableCommon;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+/**
+ * 
+ * This class generates Summary View in HTML format provided - A web form
+ * defined in database for specific type will be used as input to this class.
+ * Web form will define form fields and tables that are required to be part of
+ * HTML Summary Report
+ * 
+ * Copyright (c) 2014-2018, Dassault Systemes, Inc.
+ */
+public class ${CLASSNAME} {
+
+	private static final String	FORMAT						= "format";
+	private static String		SUMMARY_REPORT_PDF_XSL		= null;
+	private static final String	NAME2						= "Name";
+	private static final String	ATTRIBUTE					= "Attribute";
+	private static final String	NA							= "NA";
+	private static final String	GROUP						= "Group";
+	private static final String	SUMMARY_REPORT_HTML			= "SummaryReport.html";
+	private static final String	SECTION						= "Section";
+	private static final String	UNDEFINED					= "Undefined";
+	private static final String	VALUE						= "Value";
+	private static final String	HEADER2						= "Header";
+	private static final String	ROWS						= "Rows";
+	private static final String	COLUMNS						= "columns";
+	private static final String	EXPAND_FUNCTION				= "Expand Function";
+	private static final String	EXPAND_PROGRAM				= "Expand Program";
+	private static final String	SECTION_HEADING				= "Section Heading";
+	private static final String	TABLE						= "table";
+	private static final String	FORM						= "form";
+	private static final String	FIELDS						= "fields";
+	private static final String	REGISTERED_SUITE			= "Registered Suite";
+	private static final String	SETTINGS					= "settings";
+	private static final String	LABEL						= "label";
+	private static final String	NAME						= "name";
+	private static final String	HEADER						= "header";
+	private static final String	FORM_HASH_MAP				= "formHashMap";
+	private static final String	SHOW_HTML_REPORT			= "showHTMLReport";
+	private static final String	TYPE						= "type";
+	private static final String	ARR_OBJECT_ID_DI			= "arrObjectIdDI";
+	private static String		SUMMARY_REPORT_HTML_XSL		= null;
+	private static String		EMAIL_SUBJECT				= null;
+	private static final String	PAGE						= "Page";
+	private static final String	REPORT						= "Report";
+	private static final String	SUMMARY_REPORT_XML			= "SummaryReport.xml";
+	private Integer				GROUP_LINE_COUNT			= 0;
+	private Integer				PDF_REPORT_PAGE_LINE_COUNT	= 0;
+	private int					LINE_COUNTERFORPAGE			= 0;
+	private int					GROUP_COUNTER				= 1;
+	private Element				sectionElement				= null;
+	private Element				PageElement					= null;
+	private Element				rootReportElement			= null;
+	private Element				groupElementExist			= null;
+	private String				randonGroupNumber			= "0";
+	private Integer				COLUMN_COUNT				= 0;
+	private int					COLUMN_COUNTER				= 1;
+	private List<String>		FORM_NAME					= new ArrayList<>();
+	private List<Element>		SECTION_ELEMENT				= new ArrayList<>();
+	final String				PDF_FILE_NAME				= "SummaryReport.pdf";
+	final String				HTML_FILE_NAME				= SUMMARY_REPORT_HTML;
+	private Integer				USER_COLUMN_COUNT			= 0;
+	private static final String	ADDITIONAL_PARAMETERS		= "Additional Parameters";
+	private static final String	LOAD_HTML_REPORT			= "loadHTMLReport";
+	private long				NUMBER						= 0;
+
+	/**
+	 * Constructor.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	@SummaryViewExecuteCallable
+	public String loadSummaryView(Context context, String[] args) throws SummaryViewException {
+		String[] arrObjectIdDI = getObjectId(context, args);
+		Helper.ensureNotEmpty(arrObjectIdDI, ARR_OBJECT_ID_DI);
+		String strObjectId = arrObjectIdDI[1];
+		return Helper.encodeFunctionForJavaScript(context, false, LOAD_HTML_REPORT, strObjectId);
+	}
+
+	/**
+	 * This method builds forms and tables to be included in final Summary
+	 * Report
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds arguments
+	 * @return String - that calls javascript function to render UI
+	 * @throws summaryviewException
+	 *             if the operation fails
+	 */
+	@SummaryViewExecuteCallable
+	public String showSummaryView(Context context, String[] args) throws SummaryViewException {
+		try {
+			NUMBER = (long) Math.floor(Math.random() * 9000000000L) + 1000000000L;
+			new File(context.createWorkspace() + File.separator + NUMBER).mkdir();
+			PDF_REPORT_PAGE_LINE_COUNT = Integer.valueOf(Helper.getProperty(context, "SummaryView.LinesPerPage.PDF"));
+			USER_COLUMN_COUNT = Integer.valueOf(Helper.getProperty(context, "SummaryView.ColumnsInTable.View"));
+			COLUMN_COUNT = Integer.valueOf(USER_COLUMN_COUNT);
+			LINE_COUNTERFORPAGE = 0;
+			GROUP_LINE_COUNT = Integer.valueOf(Helper.getProperty(context, "SummaryView.GroupLineCount"));
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("SummaryViewWebAppPath");
+			File config = new File(emxTableRowId[0] + File.separator + ".." + File.separator + "common" + File.separator + "fop.xml");
+			// Fetching object Id, either from a table or from a Properties page
+			String[] arrObjectIdDI = getObjectId(context, args);
+			Helper.ensureNotEmpty(arrObjectIdDI, ARR_OBJECT_ID_DI);
+			String strObjectId = arrObjectIdDI[1];
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strTypeName = dObj.getInfo(context, DomainConstants.SELECT_TYPE);
+			String strSymbolicTypeName = FrameworkUtil.getAliasForAdmin(context, TYPE, strTypeName, true);
+
+			EMAIL_SUBJECT = getEmailSubject(context, strSymbolicTypeName);
+
+			String htmlXSLPageOblectName = getHTMLXSLPageObjectName(context, strSymbolicTypeName);
+			SUMMARY_REPORT_HTML_XSL = htmlXSLPageOblectName;
+			String pdfXSLPageObjectName = getPDFXSLPageObjectName(context, strSymbolicTypeName);
+			SUMMARY_REPORT_PDF_XSL = pdfXSLPageObjectName;
+			// Fetching main form details
+			String strSymbolicFormName =getFormNameforType(context,strTypeName);
+			Document doc = getDocumentBuilderFactory();
+			rootReportElement = doc.createElement(REPORT);
+			doc.appendChild(rootReportElement);
+			PageElement = null;
+			createHeader(context, dObj, strTypeName, doc);
+			String strFormName = PropertyUtil.getSchemaProperty(context, strSymbolicFormName);
+			FORM_NAME.add(strFormName);
+			createFormSupport(context, args, strObjectId, dObj, strSymbolicFormName, doc, strFormName, programMap, null);
+			String htmlXSLContent = getContentForPageObject(context, SUMMARY_REPORT_HTML_XSL);
+			// Transforming document
+			StringBuilder sbHTMLContent = createHTMLWithPageObject(context, doc, htmlXSLContent);
+			String strPath = createPDFWithPageObject(context, transformIntoXML(context, doc), config);
+			String pdfPath = strPath + File.separator + PDF_FILE_NAME;
+			String htmlPath = strPath + File.separator + HTML_FILE_NAME;
+			File htmlFile = new File(strPath + File.separator + HTML_FILE_NAME);
+			try (BufferedWriter bwr = new BufferedWriter(new FileWriter(htmlFile))) {
+				StringBuilder returnHtml = new StringBuilder();
+				returnHtml.append(sbHTMLContent.toString());
+				returnHtml.append("<script>");
+				returnHtml.append("document.getElementById('SaveAsPDF').hidden=true;");
+				returnHtml.append("document.getElementById('Email').hidden=true;");
+				returnHtml.append("document.getElementById('SaveAsHTML').hidden=true;");
+				returnHtml.append("document.getElementById('Print').hidden=true;");
+				returnHtml.append("</script>");
+				bwr.write(returnHtml.toString());
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, SHOW_HTML_REPORT, sbHTMLContent.toString(), pdfPath, htmlPath, EMAIL_SUBJECT,
+					strObjectId);
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private String getContentForPageObject(Context context, String pageObjectName) throws SummaryViewException {
+		try {
+			return MqlUtil.mqlCommand(context, "print page $1 select $2 $3", new String[] { pageObjectName, "content", "dump" });
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private String getEmailSubject(Context context, String strSymbolicTypeName) throws SummaryViewException {
+		try {
+			String subject = Helper.getProperty(context, "SummaryView." + strSymbolicTypeName + ".Email.Subject");
+			if (Helper.isNullOrEmpty(subject)) {
+				return Helper.getProperty(context, "SummaryView.Email.Subject");
+			}
+			return subject;
+		}
+		catch (Exception e) {
+			return Helper.getProperty(context, "SummaryView.Email.Subject");
+		}
+	}
+
+	private String getPDFXSLPageObjectName(Context context, String strSymbolicTypeName) throws SummaryViewException {
+		try {
+			String pageName = Helper.getProperty(context, "SummaryView." + strSymbolicTypeName + ".XSL.PDF.Name");
+			if (Helper.isNullOrEmpty(pageName)) {
+				return Helper.getProperty(context, "SummaryView.XSL.PDF.Name");
+			}
+			return pageName;
+		}
+		catch (Exception e) {
+			return Helper.getProperty(context, "SummaryView.XSL.PDF.Name");
+		}
+	}
+
+	private String getHTMLXSLPageObjectName(Context context, String strSymbolicTypeName) throws SummaryViewException {
+		try {
+			String pageName = Helper.getProperty(context, "SummaryView." + strSymbolicTypeName + ".XSL.HTML.Name");
+			if (Helper.isNullOrEmpty(pageName)) {
+				return Helper.getProperty(context, "SummaryView.XSL.HTML.Name");
+			}
+			return pageName;
+		}
+		catch (Exception e) {
+			return Helper.getProperty(context, "SummaryView.XSL.HTML.Name");
+		}
+	}
+
+	private void createFormSupport(Context context, String[] args, String strObjectId, DomainObject dObj, String strSymbolicFormName, Document doc,
+			String strFormName, Map<?, ?> programMap, String strSectionHeader) throws SummaryViewException {
+		Map<?, ?> formHashMap = UIFormCommon.getForm(context, strFormName);
+		Helper.ensureNotNull(formHashMap, FORM_HASH_MAP);
+		MapList mList = (MapList) formHashMap.get(FIELDS);
+		if (Helper.isNullOrEmpty(mList)) {
+			throw new SummaryViewException("Could not find form definition - " + strSymbolicFormName + ".");
+		}
+		// Forming Sections
+		createReportSections(context, args, strObjectId, dObj, mList, doc, programMap, strSectionHeader);
+	}
+
+	private void createHeader(Context context, DomainObject dObj, String strTypeName, Document doc) throws SummaryViewException {
+		try {
+			StringBuilder reportHeader = new StringBuilder();
+			reportHeader.append(EnoviaResourceBundle.getTypeI18NString(context, strTypeName, context.getSession().getLanguage()));
+			reportHeader.append(" ");
+			reportHeader.append(dObj.getInfo(context, DomainConstants.SELECT_NAME));
+			reportHeader.append(" ");
+			reportHeader.append(dObj.getInfo(context, DomainConstants.SELECT_REVISION));
+			Helper.getProperty(context, "SummaryView.XSL.HTML.Name");
+			reportHeader.append(" : " + getFormHeaderforType(context, strTypeName));
+			// set "header" attribute to Section element
+			createAttribute(doc, rootReportElement, HEADER, reportHeader.toString());
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * Creates all the section for the Report.
+	 * 
+	 * @param context
+	 * @param args
+	 * @param strObjectId
+	 * @param dObj
+	 * @param mList
+	 * @param doc
+	 * @throws SummaryViewException
+	 */
+	private void createReportSections(Context context, String[] args, String strObjectId, DomainObject dObj, MapList mList, Document doc,
+			Map<?, ?> programMap, String strSectionHeader) throws SummaryViewException {
+		try {
+			if (Helper.isNullOrEmpty(strSectionHeader)) {
+				strSectionHeader = DomainConstants.EMPTY_STRING;
+			}
+			String strTypeOfSection = DomainConstants.EMPTY_STRING;
+			Element sectionTableElement = null;
+			String strFormName = DomainConstants.EMPTY_STRING;
+			for (Object attributeMap : mList) {
+				SECTION_ELEMENT.clear();
+				Map<?, ?> map = (Map<?, ?>) attributeMap;
+				String strName = (String) map.get(NAME);
+				String strLabel = (String) map.get(LABEL);
+				Map<?, ?> mapOfSettings = (Map<?, ?>) map.get(SETTINGS);
+				if (null == mapOfSettings || mapOfSettings.size() == 0) {
+					throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.Error.FieldType"));
+				}
+				String strRegisteredSuite = (String) mapOfSettings.get(REGISTERED_SUITE);
+				if (!Helper.isNullOrEmpty(strLabel) && !Helper.isNullOrEmpty(strRegisteredSuite)) {
+					strLabel = getProductSpecificI18NString(context, strRegisteredSuite, strLabel);
+				}
+				boolean hasAccess = checkAccess(context, dObj, mapOfSettings);
+				if (hasAccess) {
+					strTypeOfSection = (String) mapOfSettings.get(TYPE);
+					if (strName.contains(SECTION_HEADING)) {
+						strSectionHeader = strLabel;
+						strFormName = (String) mapOfSettings.get(FORM);
+					}
+
+					if (!Helper.isNullOrEmpty(strTypeOfSection) && strTypeOfSection.equals(TABLE)) {
+						USER_COLUMN_COUNT = Integer.valueOf(Helper.getProperty(context, "SummaryView.ColumnsInTable.View"));
+						COLUMN_COUNT = Integer.valueOf(USER_COLUMN_COUNT);
+
+						buildTypeTable(context, strObjectId, doc, strTypeOfSection, sectionTableElement, strName, strLabel, mapOfSettings,
+								strSectionHeader, programMap);
+					}
+					else {
+						if (Helper.isNullOrEmpty(strFormName)) {
+							buildTypeForm(context, args, dObj, doc, strSectionHeader, strTypeOfSection, map, strName, strLabel, programMap);
+						}
+						else {
+							// set GROUP_COUNTER to value higher than
+							// GROUP_LINE_COUNT so that the form details are
+							// added to next form group
+							GROUP_COUNTER = GROUP_LINE_COUNT + 1;
+							FORM_NAME.add(strFormName);
+							String strSymbolicFormName = FrameworkUtil.getAliasForAdmin(context, TYPE, strFormName, true);
+							createSection(strTypeOfSection, doc, strSectionHeader);
+							createFormSupport(context, args, strObjectId, dObj, strSymbolicFormName, doc, strFormName, programMap, strSectionHeader);
+							strSectionHeader = DomainConstants.EMPTY_STRING;
+							strFormName = DomainConstants.EMPTY_STRING;
+							FORM_NAME.remove(FORM_NAME.size() - 1);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private Element buildTypeTable(Context context, String strObjectId, Document doc, String strTypeOfSection, Element sectionTableElement,
+			String strName, String strLabel, Map<?, ?> mapOfSettings, String strSectionHeader, Map<?, ?> programMap) throws SummaryViewException {
+		try {
+			if (strName.contains(SECTION_HEADING)) {
+				sectionTableElement = createSection(strTypeOfSection, doc, strLabel);
+			}
+
+			buildTable(context, strObjectId, doc, mapOfSettings, sectionTableElement, strSectionHeader, programMap);
+			return sectionTableElement;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private void buildTypeForm(Context context, String[] args, DomainObject dObj, Document doc, String strSectionHeader, String strTypeOfSection,
+			Map<?, ?> map, String strName, String strLabel, Map<?, ?> programMap) throws SummaryViewException {
+		if (strName.contains(SECTION_HEADING)) {
+			createSection(strTypeOfSection, doc, strLabel);
+		}
+		else {
+			buildForm(context, args, dObj, doc, strSectionHeader, map, programMap);
+		}
+	}
+
+	private void buildTable(Context context, String strObjectId, Document doc, Map<?, ?> mapOfSettings, Element sectionTableElement,
+			String strSectionHeader, Map<?, ?> programMap) throws SummaryViewException {
+		try {
+			String strTableName;
+			strTableName = (String) mapOfSettings.get(TABLE);
+			String strProgramName = (String) mapOfSettings.get(EXPAND_PROGRAM);
+			String strFunctionName = (String) mapOfSettings.get(EXPAND_FUNCTION);
+			String strAdditionalParameter = (String) mapOfSettings.get(ADDITIONAL_PARAMETERS);
+			List<String> slParameter = FrameworkUtil.split(strAdditionalParameter, ",");
+			// strFunctionName
+			if (Helper.isNullOrEmpty(strTableName)) {
+				throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.TableNameNullOrEmpty"));
+			}
+			if (Helper.isNullOrEmpty(strProgramName)) {
+				throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.ProgramNameNullOrEmpty"));
+			}
+			if (Helper.isNullOrEmpty(strFunctionName)) {
+				throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.FunctionNameNullOrEmpty"));
+			}
+			else {
+				// Reading table provided in settings
+				Map<?, ?> mTableInfo = UITableCommon.getTable(context, strTableName);
+				Map<String, String> parameterMap = new HashMap<>();
+				parameterMap.put("objectId", strObjectId);
+				for (Iterator<?> iterator = mapOfSettings.keySet().iterator(); iterator.hasNext();) {
+					Object objKey = iterator.next();
+					String strValue = (String) mapOfSettings.get(objKey);
+					parameterMap.put(objKey.toString(), strValue);
+				}
+
+				if (!slParameter.isEmpty()) {
+					for (String strParameter : slParameter) {
+						List<String> slParamterValue = FrameworkUtil.split(strParameter, ":");
+						String strKey = slParamterValue.get(0);
+						String strValue = DomainObject.EMPTY_STRING;
+						strValue = slParamterValue.get(1);
+						parameterMap.put(strKey, strValue);
+					}
+				}
+
+				String[] computedArgs = JPO.packArgs(parameterMap);
+				// build table content
+				List<Map<?, ?>> lmObjectMap = JPO.invoke(context, strProgramName, computedArgs, strFunctionName, computedArgs, ArrayList.class);
+				createTable(context, doc, sectionTableElement, strSectionHeader, mTableInfo, lmObjectMap, programMap);
+			}
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private void createTable(Context context, Document doc, Element sectionTableElement, String strSectionHeader, Map<?, ?> mTableInfo,
+			List<Map<?, ?>> lmObjectMap, Map<?, ?> programMap) throws SummaryViewException {
+		try {
+			MapList mListTable = (MapList) mTableInfo.get(COLUMNS);
+			SECTION_ELEMENT.clear();
+			int length = mListTable.size();
+			if (length % COLUMN_COUNT == 1) {
+				COLUMN_COUNT = USER_COLUMN_COUNT + 1;
+			}
+			else {
+				COLUMN_COUNT = USER_COLUMN_COUNT;
+			}
+			Element rowHeaderElement = doc.createElement(ROWS);
+			SECTION_ELEMENT.add(sectionTableElement);
+			sectionTableElement.appendChild(rowHeaderElement);
+			String header = sectionTableElement.getAttribute(HEADER);
+			DomainObject dObj = new DomainObject();
+			COLUMN_COUNTER = 1;
+			int column_counter_for_section_creation = 1;
+			int rowCount = 0, j = 0, lineCounterforTable = 0, k = 0;
+			int column = 0;
+			for (Object mColumn : mListTable) {
+				column++;
+				rowCount++;
+				lineCounterforTable++;
+				Map<?, ?> map = (Map<?, ?>) mColumn;
+				Map<?, ?> mapOfSettings = (Map<?, ?>) map.get(SETTINGS);
+				String strColumnName = (String) map.get(LABEL);
+				String strI18NLabel = DomainConstants.EMPTY_STRING;
+				String strRegisteredSuite = (String) mapOfSettings.get(REGISTERED_SUITE);
+				boolean hasAccess = checkAccess(context, dObj, mapOfSettings);
+				if (!Helper.isNullOrEmpty(strColumnName)) {
+					strI18NLabel = getProductSpecificI18NString(context, strRegisteredSuite, strColumnName);
+				}
+				column_counter_for_section_creation = fieldAccess(doc, rowHeaderElement, column_counter_for_section_creation, strI18NLabel, hasAccess);
+				int Length = mListTable.size();
+				if (lineCounterforTable == COLUMN_COUNT || rowCount == Length) {
+					int columnCountToInsert = 1;
+					int multiplier = rowCount / COLUMN_COUNT;
+					if (rowCount % COLUMN_COUNT == 0) {
+
+						columnCountToInsert = (multiplier - 1) * COLUMN_COUNT + 1;
+					}
+					else {
+						columnCountToInsert = multiplier * COLUMN_COUNT + 1;
+					}
+					lineCounterforTable = 0;
+					sectionTableElement = SECTION_ELEMENT.get(k);
+					k++;
+					for (Map<?, ?> objInfo : lmObjectMap) {
+						// Added to check if Map is for Expand Multi Level then
+						// no row to be added
+						if (!objInfo.containsKey("expandMultiLevelsJPO")) {
+							lineCounterforTable = 0;
+							j = 0;
+							COLUMN_COUNTER = 1;
+							sectionTableElement = createPage(context, doc, sectionTableElement, strSectionHeader, mTableInfo, columnCountToInsert);
+							Element rowDataElement = doc.createElement(ROWS);
+							sectionTableElement.appendChild(rowDataElement);
+							int insert_data_row_count = 1;
+
+							lineCounterforTable = buildContent(context, doc, mListTable, j, lineCounterforTable, column, Length, objInfo,
+									rowDataElement, insert_data_row_count, programMap);
+							LINE_COUNTERFORPAGE++;
+						}
+
+					}
+				}
+				if (column_counter_for_section_creation > COLUMN_COUNT && rowCount < Length) {
+					if (LINE_COUNTERFORPAGE > PDF_REPORT_PAGE_LINE_COUNT) {
+						LINE_COUNTERFORPAGE = 0;
+						PageElement = doc.createElement(PAGE);
+						rootReportElement.appendChild(PageElement);
+					}
+					COLUMN_COUNTER = 1;
+					column_counter_for_section_creation = 1;
+					sectionElement = doc.createElement(SECTION);
+					PageElement.appendChild(sectionElement);
+					createAttribute(doc, sectionElement, HEADER, header + " " + Helper.getI18NString(context, "SummaryView.continued"));
+					createAttribute(doc, sectionElement, TYPE, TABLE);
+					SECTION_ELEMENT.add(sectionElement);
+					rowHeaderElement = doc.createElement(ROWS);
+					sectionElement.appendChild(rowHeaderElement);
+					sectionTableElement = sectionElement;
+				}
+			}
+			LINE_COUNTERFORPAGE++;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e.getLocalizedMessage());
+		}
+	}
+
+	private int fieldAccess(Document doc, Element rowHeaderElement, int column_counter_for_section_creation, String strI18NLabel, boolean hasAccess) {
+		if (hasAccess) {
+
+			Element headerElement = doc.createElement(HEADER2);
+			rowHeaderElement.appendChild(headerElement);
+			headerElement.setTextContent(strI18NLabel);
+			COLUMN_COUNTER++;
+			column_counter_for_section_creation++;
+		}
+		return column_counter_for_section_creation;
+	}
+
+	private int buildContent(Context context, Document doc, MapList mListTable, int j, int lineCounterforTable, int column, int Length,
+			Map objectInfo, Element rowDataElement, int insert_data_row_count, Map<?, ?> programMap) throws SummaryViewException {
+		try {
+			StringList expressionList = Helper.stringList();
+			String[] objId = new String[1];
+			Boolean isRel = true;
+			objId = new String[] { (String) objectInfo.get(DomainRelationship.SELECT_ID) };
+			for (Object mColumn1 : mListTable) {
+				Map<?, ?> mapOfColumn = (Map<?, ?>) mColumn1;
+				String strExpr = (String) mapOfColumn.get("expression_relationship");
+				if (Helper.isNullOrEmpty(strExpr)) {
+					strExpr = (String) mapOfColumn.get("expression_businessobject");
+					isRel = false;
+				}
+				expressionList.add(strExpr);
+			}
+			if (!isRel) {
+				objId = new String[] { (String) objectInfo.get(DomainConstants.SELECT_ID) };
+			}
+
+			objectInfo.putAll(QueryUtil.getInfo(context, objId, expressionList).get(0));
+
+			for (Object mColumn1 : mListTable) {
+				if ((((column % COLUMN_COUNT) == 0) && (insert_data_row_count > (column - COLUMN_COUNT)))
+						|| (((column % COLUMN_COUNT) != 0) && (insert_data_row_count > column - (column % COLUMN_COUNT)))) {
+					j++;
+					lineCounterforTable++;
+					Map<?, ?> mapOfColumn = (Map<?, ?>) mColumn1;
+					String strName = (String) mapOfColumn.get(NAME);
+					String strExpr = (String) mapOfColumn.get("expression_relationship");
+					Boolean isRelationship = true;
+					if (Helper.isNullOrEmpty(strExpr)) {
+						strExpr = (String) mapOfColumn.get("expression_businessobject");
+						isRelationship = false;
+					}
+					Map<?, ?> mapOfSettings1 = (Map<?, ?>) mapOfColumn.get(SETTINGS);
+
+					String strValue = evaluateColumnValue(context, objectInfo, strName, mapOfSettings1, strExpr, isRelationship);
+					Element valueElement = doc.createElement(VALUE);
+					rowDataElement.appendChild(valueElement);
+					String strFormat = (String) mapOfSettings1.get(FORMAT);
+					if (!Helper.isNullOrEmpty(strFormat) && strFormat.equalsIgnoreCase("Date")) {
+						boolean bDisplayTime = PersonUtil.getPreferenceDisplayTimeValue(context);
+						int iDateFormat = PersonUtil.getPreferenceDateFormatValue(context);
+
+						Locale locale = context.getLocale();
+
+						double iClientTimeOffset = (new Double(((String[]) programMap.get("timeZone"))[0])).doubleValue();
+
+						strValue = eMatrixDateFormat.getFormattedDisplayDateTime(context, strValue, bDisplayTime, iDateFormat, iClientTimeOffset,
+								locale);
+
+					}
+					if (!Helper.isNullOrEmpty(strValue) && !strValue.equals(UNDEFINED)) {
+						valueElement.setTextContent(strValue);
+					}
+					COLUMN_COUNTER++;
+					if (COLUMN_COUNTER > COLUMN_COUNT && j < Length) {
+						COLUMN_COUNTER = 1;
+
+					}
+					if (lineCounterforTable == COLUMN_COUNT) {
+						lineCounterforTable = 0;
+						break;
+					}
+				}
+				insert_data_row_count++;
+			}
+			return lineCounterforTable;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+
+	}
+
+	private Element createPage(Context context, Document doc, Element sectionTableElement, String strSectionHeader, Map<?, ?> hashMapTable, int column)
+			throws SummaryViewException {
+		if (LINE_COUNTERFORPAGE > PDF_REPORT_PAGE_LINE_COUNT) {
+			LINE_COUNTERFORPAGE = 0;
+			PageElement = doc.createElement(PAGE);
+			rootReportElement.appendChild(PageElement);
+			sectionElement = doc.createElement(SECTION);
+			PageElement.appendChild(sectionElement);
+			createAttribute(doc, sectionElement, HEADER, strSectionHeader);
+			createAttribute(doc, sectionElement, TYPE, TABLE);
+			buildTableHeader(context, doc, sectionElement, hashMapTable, column);
+			if (sectionElement != null) {
+				sectionTableElement = sectionElement;
+			}
+		}
+		return sectionTableElement;
+	}
+
+	private StringBuilder createHTMLWithPageObject(Context context, Document doc, String strXSLTFileContent) throws SummaryViewException {
+		try {
+			File fileInXMLFormat = transformIntoXML(context, doc);
+			File fileSummaryReportInHTMLFormat = new File(context.createWorkspace() + File.separator + NUMBER + File.separator + SUMMARY_REPORT_HTML);
+			Source xmlSource = new StreamSource(fileInXMLFormat);
+			StringReader reader = new StringReader(strXSLTFileContent);
+			Source xsltSource = new StreamSource(reader);
+			TransformerFactory factory = TransformerFactory.newInstance();
+			Transformer transformer = factory.newTransformer(xsltSource);
+			transformer.transform(xmlSource, new StreamResult(fileSummaryReportInHTMLFormat));
+			String sCurrentLine = DomainConstants.EMPTY_STRING;
+			BufferedReader br = new BufferedReader(new FileReader(fileSummaryReportInHTMLFormat));
+			StringBuilder sbHTMLContent = new StringBuilder();
+			while ((sCurrentLine = br.readLine()) != null) {
+				sbHTMLContent.append(sCurrentLine);
+			}
+			br.close();
+			return sbHTMLContent;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private String createPDFWithPageObject(Context context, File fileInXMLFormat, File configFile) throws SummaryViewException {
+		try {
+			String strPath = context.createWorkspace() + File.separator + NUMBER;
+			String pdfXSLContent = getContentForPageObject(context, SUMMARY_REPORT_PDF_XSL);
+			String pdfXSD = strPath + File.separator + "SummaryReport.xsd";
+			File pdfXSDFile = new File(pdfXSD);
+			FileWriter fWrite = new FileWriter(pdfXSDFile);
+			fWrite.write(pdfXSLContent);
+			fWrite.close();
+			SummaryViewGeneration.writePDF(pdfXSDFile, configFile, fileInXMLFormat, PDF_FILE_NAME, strPath);
+			context.setCustomData("LSA_SUMMARY_REPORT_PDF", strPath + File.separator + PDF_FILE_NAME);
+			return strPath;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * Creates Section Element Under Report Element
+	 * 
+	 * @param strTypeOfSection
+	 * @param doc
+	 * @param strLabel
+	 * @return
+	 */
+	private Element createSection(String strTypeOfSection, Document doc, String strLabel) {
+		if (LINE_COUNTERFORPAGE == 0) {
+			PageElement = doc.createElement(PAGE);
+			rootReportElement.appendChild(PageElement);
+		}
+		LINE_COUNTERFORPAGE++;
+		if (LINE_COUNTERFORPAGE > PDF_REPORT_PAGE_LINE_COUNT) {
+			LINE_COUNTERFORPAGE = 0;
+			PageElement = doc.createElement(PAGE);
+			rootReportElement.appendChild(PageElement);
+		}
+		Element sectionTableElement = doc.createElement(SECTION);
+		PageElement.appendChild(sectionTableElement);
+		// set "header" attribute to Section element
+		createAttribute(doc, sectionTableElement, HEADER, strLabel);
+		// set "type" attribute to Section element
+		createAttribute(doc, sectionTableElement, TYPE, strTypeOfSection);
+		return sectionTableElement;
+	}
+
+	/**
+	 * This method is for getting the object id from args.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private String[] getObjectId(Context context, String[] args) throws SummaryViewException {
+		try {
+			String[] arrObjectIdDI = new String[2];
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			// If Command is clicked from Table - Device Identification
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			if (!Helper.isNullOrEmpty(emxTableRowId)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrObjectIdDI[0] = "emxTableRowId";
+					arrObjectIdDI[1] = rowId.getObjectId();
+				}
+			}
+			else {
+				// If Command is clicked from Properties Page
+				Object objDI = programMap.get("objectId");
+				arrObjectIdDI[0] = "objectId";
+				if (objDI instanceof String) {
+					arrObjectIdDI[1] = (String) objDI;
+				}
+				else if (objDI instanceof String[]) {
+					String[] arr = (String[]) objDI;
+					arrObjectIdDI[1] = arr[0];
+				}
+			}
+			return arrObjectIdDI;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * This method is for creating header element in xml file for type table
+	 * 
+	 * @param context
+	 * @param doc
+	 * @param sectionTableElement
+	 * @param tableMap
+	 * @throws SummaryViewException
+	 */
+	private void buildTableHeader(Context context, Document doc, Element sectionTableElement, Map<?, ?> tableMap, int columnCount)
+			throws SummaryViewException {
+
+		try {
+			MapList mListTable = (MapList) tableMap.get(COLUMNS);
+			int length = mListTable.size();
+			if (length % USER_COLUMN_COUNT == 1) {
+				COLUMN_COUNT = USER_COLUMN_COUNT + 1;
+			}
+			else {
+				COLUMN_COUNT = USER_COLUMN_COUNT;
+			}
+			Element rowHeaderElement = doc.createElement(ROWS);
+			sectionTableElement.appendChild(rowHeaderElement);
+			DomainObject dObj = new DomainObject();
+			COLUMN_COUNTER = 1;
+			int i = 0, count = 1;
+			for (Object mColumn : mListTable) {
+				if (count >= columnCount) {
+					i++;
+					Map<?, ?> map = (Map<?, ?>) mColumn;
+					Map<?, ?> mapOfSettings = (Map<?, ?>) map.get(SETTINGS);
+					String strColumnName = (String) map.get(LABEL);
+					String strI18NLabel = DomainConstants.EMPTY_STRING;
+					String strRegisteredSuite = (String) mapOfSettings.get(REGISTERED_SUITE);
+					boolean hasAccess = checkAccess(context, dObj, mapOfSettings);
+					if (!Helper.isNullOrEmpty(strColumnName)) {
+						strI18NLabel = getProductSpecificI18NString(context, strRegisteredSuite, strColumnName);
+					}
+					if (hasAccess) {
+
+						Element headerElement = doc.createElement(HEADER2);
+						rowHeaderElement.appendChild(headerElement);
+						headerElement.setTextContent(strI18NLabel);
+						COLUMN_COUNTER++;
+					}
+					if (COLUMN_COUNTER > COLUMN_COUNT && i < length) {
+						COLUMN_COUNTER = 1;
+						break;
+					}
+				}
+				count++;
+			}
+			LINE_COUNTERFORPAGE++;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e.getLocalizedMessage());
+		}
+	}
+
+	private boolean checkAccess(Context context, DomainObject dObj, Map<?, ?> mapOfSettings) throws SummaryViewException {
+		try {
+			boolean hasAccess = UINavigatorUtil.checkAccessForSettings(context, dObj, new HashMap(), (HashMap) mapOfSettings);
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * This method is for creating attribute to node in XML
+	 * 
+	 * @param doc
+	 * @param sectionElement
+	 * @param strAttributeName
+	 * @param strAttributeValue
+	 */
+	private void createAttribute(Document doc, Element sectionElement, String strAttributeName, String strAttributeValue) {
+		Attr attrAttributeHeader = doc.createAttribute(strAttributeName);
+		attrAttributeHeader.setValue(strAttributeValue);
+		sectionElement.setAttributeNode(attrAttributeHeader);
+	}
+
+	/**
+	 * This method is for populating form with label and values in xml file
+	 * 
+	 * @param context
+	 * @param args
+	 * @param dObj
+	 * @param doc
+	 * @param strSectionHeader
+	 * @param formMap
+	 * @throws SummaryViewException
+	 */
+	private void buildForm(Context context, String[] args, DomainObject dObj, Document doc, String strSectionHeader, Map<?, ?> formMap,
+			Map<?, ?> programMap) throws SummaryViewException {
+
+		try {
+			String strName = (String) formMap.get(NAME);
+			String strLabel = (String) formMap.get(LABEL);
+			String strI18NLabel = DomainConstants.EMPTY_STRING;
+			Map<?, ?> mapOfSettings = (Map<?, ?>) formMap.get(SETTINGS);
+			String strRegisteredSuite = DomainConstants.EMPTY_STRING;
+			// Getting the Section element to which following group will be
+			// appended
+			Element sectionElement = getMatchingSection(context, doc, strSectionHeader);
+			String strExpr = (String) formMap.get("expression_businessobject");
+			String strValue = evaluateFieldValue(context, args, dObj, strName, mapOfSettings, strExpr);
+			// UIForm.hasAccess(context, dObj, arg2, formMap);
+			String strGroupName;
+			if (mapOfSettings != null && !mapOfSettings.isEmpty()) {
+				strGroupName = (String) mapOfSettings.get(GROUP);
+				strRegisteredSuite = (String) mapOfSettings.get(REGISTERED_SUITE);
+				if (Helper.isNullOrEmpty(strGroupName)) {
+					strGroupName = NA;
+				}
+				String strFormat = (String) mapOfSettings.get(FORMAT);
+				if (!Helper.isNullOrEmpty(strFormat) && strFormat.equalsIgnoreCase("Date")) {
+					boolean bDisplayTime = PersonUtil.getPreferenceDisplayTimeValue(context);
+					int iDateFormat = PersonUtil.getPreferenceDateFormatValue(context);
+
+					Locale locale = context.getLocale();
+
+					double iClientTimeOffset = (new Double(((String[]) programMap.get("timeZone"))[0])).doubleValue();
+
+					strValue = eMatrixDateFormat.getFormattedDisplayDateTime(context, strValue, bDisplayTime, iDateFormat, iClientTimeOffset, locale);
+
+				}
+			}
+			else {
+				strGroupName = NA;
+			}
+			if (!Helper.isNullOrEmpty(strLabel)) {
+				strI18NLabel = getProductSpecificI18NString(context, strRegisteredSuite, strLabel);
+			}
+			if (LINE_COUNTERFORPAGE > PDF_REPORT_PAGE_LINE_COUNT) {
+				LINE_COUNTERFORPAGE = 0;
+
+				PageElement = doc.createElement(PAGE);
+				rootReportElement.appendChild(PageElement);
+				Element sectionFormElement = doc.createElement(SECTION);
+				PageElement.appendChild(sectionFormElement);
+
+				// set "header" attribute to Section element
+				createAttribute(doc, sectionFormElement, HEADER, strSectionHeader);
+				// set "type" attribute to Section element
+				createAttribute(doc, sectionFormElement, TYPE, FORM);
+			}
+			Random random = new Random();
+			randonGroupNumber = String.valueOf(random.nextInt());
+
+			if (!Helper.isNullOrEmpty(strGroupName) && !strGroupName.equalsIgnoreCase(NA)) {
+				strGroupName = FORM_NAME.get(FORM_NAME.size() - 1) + strGroupName;
+			}
+			createReportGroup(doc, strI18NLabel, sectionElement, strValue, strGroupName);
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private void createReportGroup(Document doc, String strI18NLabel, Element sectionElement, String strValue, String strGroupName)
+			throws SummaryViewException {
+		if (strGroupName.equals(NA) && GROUP_COUNTER == 1) {
+			GROUP_COUNTER++;
+			Element groupElement = createGroupElement(doc, sectionElement, randonGroupNumber);
+			addAttributeToGroup(doc, strI18NLabel, strValue, groupElement);
+			groupElementExist = groupElement;
+		}
+		else if (strGroupName.equals(NA) && (GROUP_COUNTER <= GROUP_LINE_COUNT)) {
+			GROUP_COUNTER++;
+			addAttributeToGroup(doc, strI18NLabel, strValue, groupElementExist);
+		}
+		else if (strGroupName.equals(NA) && (GROUP_COUNTER >= GROUP_LINE_COUNT)) {
+			GROUP_COUNTER = 1;
+			Element groupElement = createGroupElement(doc, sectionElement, randonGroupNumber);
+			addAttributeToGroup(doc, strI18NLabel, strValue, groupElement);
+			groupElementExist = groupElement;
+			GROUP_COUNTER++;
+		}
+		else if (!getExistingGroups(doc).contains(strGroupName)) {
+			LINE_COUNTERFORPAGE++;
+			Element groupElement = createGroupElement(doc, sectionElement, strGroupName);
+			addAttributeToGroup(doc, strI18NLabel, strValue, groupElement);
+		}
+		else if (getExistingGroups(doc).contains(strGroupName)) {
+
+			Element matchingGroupElement = getMatchingGroup(doc, strGroupName);
+			addAttributeToGroup(doc, strI18NLabel, strValue, matchingGroupElement);
+		}
+		else {
+			addAttributeToGroup(doc, strI18NLabel, strValue, groupElementExist);
+			if (GROUP_COUNTER > GROUP_LINE_COUNT) {
+				GROUP_COUNTER = 1;
+				groupElementExist = null;
+				randonGroupNumber = "";
+			}
+		}
+	}
+
+	/**
+	 * This method is for getting the value of field for Form
+	 * 
+	 * @param context
+	 * @param args
+	 * @param domObj
+	 * @param strName
+	 * @param mapOfSettings
+	 * @param strExpr
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private String evaluateFieldValue(Context context, String[] args, DomainObject domObj, String strName, Map<?, ?> mapOfSettings, String strExpr)
+			throws SummaryViewException {
+		try {
+			String strValue = "";
+			if (Helper.isNullOrEmpty(strExpr) || strExpr.equals("empty") || strExpr.equals("dummy")) {
+				String strFieldType = (String) mapOfSettings.get("Field Type");
+				if (!Helper.isNullOrEmpty(strFieldType) && strFieldType.contains("program")) {
+					String strProgramName = (String) mapOfSettings.get("Report Program");
+					String strFunctionName = (String) mapOfSettings.get("Report Function");
+
+					if (Helper.isNullOrEmpty(strProgramName)) {
+						strProgramName = (String) mapOfSettings.get("program");
+						if (Helper.isNullOrEmpty(strProgramName)) {
+							throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.ProgramNameNullOrEmpty"));
+						}
+					}
+					if (Helper.isNullOrEmpty(strFunctionName)) {
+						strFunctionName = (String) mapOfSettings.get("function");
+						if (Helper.isNullOrEmpty(strFunctionName)) {
+							throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.FunctionNameNullOrEmpty"));
+						}
+					}
+					strValue = JPO.invoke(context, strProgramName, args, strFunctionName, args, String.class);
+				}
+				else {
+					strValue = UNDEFINED;
+				}
+			}
+			else {
+				boolean isMultiVal = false;
+				String attributeName = UOMUtil.getAttrNameFromSelect(strExpr);
+				AttributeType attType = null;
+				try {
+					attType = new AttributeType(attributeName);
+					attType.open(context);
+					isMultiVal = attType.isMultiVal();
+				}
+				catch (Exception e) {
+					// Do nothing
+				}
+				finally {
+					attType.close(context);
+				}
+
+				strValue = getInternationalizedColumnValue(context, domObj, mapOfSettings, strExpr, isMultiVal);
+			}
+			return strValue;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private String getInternationalizedColumnValue(Context context, DomainObject domObj, Map<?, ?> mapOfSettings, String strExpr, boolean isMultiVal)
+			throws SummaryViewException {
+		try {
+
+			String strValue;
+			String fieldType = mapOfSettings.containsKey("Field Type") ? (String) mapOfSettings.get("Field Type") : "";
+			String adminType = mapOfSettings.containsKey("Admin Type") ? (String) mapOfSettings.get("Admin Type") : "";
+			String inputType = mapOfSettings.containsKey("Input Type") ? (String) mapOfSettings.get("Input Type") : "";
+			String format = mapOfSettings.containsKey(FORMAT) ? (String) mapOfSettings.get(FORMAT) : "";
+
+			if (!isMultiVal) {
+				strValue = domObj.getInfo(context, strExpr);
+			}
+
+			else {
+				Hashtable<?, ?> strValueHT = domObj.getBusinessObjectData(context, Helper.stringList(strExpr));
+				StringList strValueSL = (StringList) strValueHT.get(strExpr);
+				strValue = FrameworkUtil.join(strValueSL, "|");
+			}
+
+			StringBuilder strProperty = new StringBuilder(50);
+			if(!Helper.isNullOrEmpty(strValue)) {
+				if ("attribute".equalsIgnoreCase(fieldType) && !isMultiVal && "combobox".equalsIgnoreCase(inputType)) {
+					strProperty.append("emxFramework.Range.");
+					String expression = strExpr.substring(strExpr.lastIndexOf('[') + 1, strExpr.lastIndexOf(']'));
+					strProperty.append(expression.replace(' ', '_')).append('.');
+					strProperty.append(strValue.replace(' ', '_'));
+				}
+				else if (!Helper.isNullOrEmpty(adminType) && !"Date".equalsIgnoreCase(format)) {
+					switch (adminType) {
+					case "Policy":
+						strProperty.append("emxFramework.Policy.");
+						break;
+					case "State":
+						strProperty.append("emxFramework.State.");
+						strProperty.append(domObj.getInfo(context, DomainConstants.SELECT_POLICY).replace(' ', '_')).append('.');
+						break;
+					case "Type":
+						strProperty.append("emxFramework.Type.");
+						break;
+					default:
+						System.out.println("unsupported admin type : " + adminType);
+						break;
+					}
+					strProperty.append(strValue.replace(' ', '_'));
+				}
+				if (!Helper.isNullOrEmpty(strProperty.toString()) && !strProperty.toString().endsWith(".")) {
+					strValue = getProductSpecificI18NString(context, "framework", strProperty.toString());
+				}
+			}
+			return strValue;
+		}
+		catch (Exception ex) {
+			throw new SummaryViewException(ex);
+		}
+	}
+
+	/**
+	 * This method is for getting the column value for Table
+	 * 
+	 * @param context
+	 * @param args
+	 * @param objectId
+	 * @param relId
+	 * @param strName
+	 * @param mapOfSettings
+	 * @param strExpr
+	 * @param isRel
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private String evaluateColumnValue(Context context, Map objectInfoMap, String strName, Map<?, ?> mapOfSettings, String strExpr, Boolean isRel)
+			throws SummaryViewException {
+		try {
+			String strValue = "";
+			Boolean progFunction = false;
+			if (Helper.isNullOrEmpty(strExpr) || strExpr.equals("empty") || strExpr.equals("dummy")) {
+				String strColumnType = (String) mapOfSettings.get("Column Type");
+				if ((!Helper.isNullOrEmpty(strColumnType) && strColumnType.contains("program"))) {
+					String strProgramName = (String) mapOfSettings.get("Report Program");
+					String strFunctionName = (String) mapOfSettings.get("Report Function");
+					if (Helper.isNullOrEmpty(strProgramName)) {
+						progFunction = true;
+						strProgramName = (String) mapOfSettings.get("program");
+						if (Helper.isNullOrEmpty(strProgramName)) {
+							throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.ProgramNameNullOrEmpty"));
+						}
+					}
+					if (Helper.isNullOrEmpty(strFunctionName)) {
+						strFunctionName = (String) mapOfSettings.get("function");
+						if (Helper.isNullOrEmpty(strFunctionName)) {
+							throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.FunctionNameNullOrEmpty"));
+						}
+					}
+					String[] computedArgs = new String[] {};
+					Map<String, Object> parameterMap = new HashMap<>();
+					parameterMap.putAll(objectInfoMap);
+					if (progFunction) {
+						parameterMap.put("summaryReport", "true");
+						Map<String, String> objMap = new HashMap<>();
+						MapList mlObjMap = new MapList();
+						mlObjMap.add(objMap);
+						objMap.put(DomainConstants.SELECT_ID, (String) objectInfoMap.get(DomainConstants.SELECT_ID));
+						parameterMap.put("objectList", mlObjMap);
+						computedArgs = JPO.packArgs(parameterMap);
+					}
+					else {
+						parameterMap.put("currentObjectId", objectInfoMap.get(DomainConstants.SELECT_ID));
+						parameterMap.put("relId", objectInfoMap.get(DomainRelationship.SELECT_ID));
+						computedArgs = JPO.packArgs(parameterMap);
+					}
+					Object returnValue = JPO.invoke(context, strProgramName, computedArgs, strFunctionName, computedArgs, Object.class);
+					strValue = getValue(returnValue);
+				}
+				else {
+					strValue = UNDEFINED;
+				}
+			}
+			else {
+				if (isRel) {
+					strValue = (String) objectInfoMap.get(strExpr);
+					if (Helper.isNullOrEmpty(strValue)) {
+						String relExp = strExpr.substring(strExpr.lastIndexOf("[") + 1, strExpr.lastIndexOf("]"));
+						DomainRelationship domRel = DomainRelationship.newInstance(context, (String) objectInfoMap.get(DomainRelationship.SELECT_ID));
+						strValue = domRel.getAttributeValue(context, relExp);
+					}
+				}
+				else {
+					DomainObject domObj = DomainObject.newInstance(context, (String) objectInfoMap.get(DomainConstants.SELECT_ID));
+					boolean isMultiVal = false;
+					String attributeName = UOMUtil.getAttrNameFromSelect(strExpr);
+					AttributeType attType = null;
+					try {
+						attType = new AttributeType(attributeName);
+						attType.open(context);
+						isMultiVal = attType.isMultiVal();
+					}
+					catch (Exception e) {
+						// Do nothing
+					}
+					finally {
+						attType.close(context);
+					}
+					strValue = getInternationalizedColumnValue(context, domObj, mapOfSettings, strExpr, isMultiVal);
+				}
+			}
+			return strValue;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	private String getValue(Object returnValue) {
+		if (returnValue instanceof Vector) {
+			return ((Vector<String>) returnValue).isEmpty() ? "" : ((Vector<String>) returnValue).get(0);
+		}
+		else if (returnValue instanceof String) {
+			return (String) returnValue;
+		}
+		return "";
+	}
+
+	/**
+	 * This method is for getting the Matching Session Element
+	 * 
+	 * @param doc
+	 * @param strLabel
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private Element getMatchingSection(Context context, Document doc, String strLabel) throws SummaryViewException {
+		NodeList nodeList = doc.getElementsByTagName(SECTION);
+		Element retElement = null;
+		for (int i = 0; i < nodeList.getLength(); i++) {
+			Element element = (Element) nodeList.item(i);
+			String strHeader = element.getAttribute(HEADER);
+			if (strHeader.equals(strLabel)) {
+				retElement = element;
+			}
+		}
+
+		if (retElement != null) {
+			return retElement;
+		}
+		else {
+			throw new SummaryViewException(Helper.getI18NString(context, "SummaryView.message.NoMatchingSectionFound"));
+		}
+	}
+
+	/**
+	 * This is for transforming the document to XML
+	 * 
+	 * 
+	 * 
+	 * @param doc
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private File transformIntoXML(Context context, Document doc) throws SummaryViewException {
+		try {
+			TransformerFactory transformerFactory = TransformerFactory.newInstance();
+			Transformer transformer = transformerFactory.newTransformer();
+			DOMSource source = new DOMSource(doc);
+			File file = new File(context.createWorkspace() + File.separator + NUMBER + File.separator + SUMMARY_REPORT_XML);
+			StreamResult result = new StreamResult(file);
+			transformer.transform(source, result);
+			return file;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * This method for creating document
+	 * 
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private Document getDocumentBuilderFactory() throws SummaryViewException {
+		try {
+			DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+			DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+			Document doc = docBuilder.newDocument();
+			return doc;
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+	}
+
+	/**
+	 * This method is for creating the Group Element
+	 * 
+	 * @param doc
+	 * @param rootSectionElement
+	 * @param strGroupName
+	 * @return
+	 */
+	private Element createGroupElement(Document doc, Element rootSectionElement, String strGroupName) {
+		// Group elements
+		Element groupElement = doc.createElement(GROUP);
+		rootSectionElement.appendChild(groupElement);
+		Random randomGenerator = new Random();
+		// set attribute to Group element
+		Attr attrGroupName = doc.createAttribute(NAME);
+		if (Helper.isNullOrEmpty(strGroupName)) {
+			int randomNumber = randomGenerator.nextInt();
+			attrGroupName.setValue("G-" + randomNumber);
+		}
+		else {
+			attrGroupName.setValue(strGroupName);
+		}
+		groupElement.setAttributeNode(attrGroupName);
+		return groupElement;
+	}
+
+	/**
+	 * This method is for adding Attribute element to Group element
+	 * 
+	 * @param doc
+	 * @param strLabel
+	 * @param strValue
+	 * @param matchingGroupElement
+	 */
+	private void addAttributeToGroup(Document doc, String strLabel, String strValue, Element matchingGroupElement) {
+		// Attribute element
+		Element attributeElement = doc.createElement(ATTRIBUTE);
+		matchingGroupElement.appendChild(attributeElement);
+		// set attribute to Group element
+		Attr attrAttributeName = doc.createAttribute(NAME2);
+		attrAttributeName.setValue(strLabel);
+		attributeElement.setAttributeNode(attrAttributeName);
+		// set attribute to Group element
+		Attr attrAttributeValue = doc.createAttribute(VALUE);
+		attrAttributeValue.setValue(strValue);
+		attributeElement.setAttributeNode(attrAttributeValue);
+	}
+
+	/**
+	 * This method is for getting the matching Group element
+	 * 
+	 * @param doc
+	 * @param strGroupName
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private Element getMatchingGroup(Document doc, String strGroupName) throws SummaryViewException {
+		NodeList nodeListOfGroups = doc.getElementsByTagName(GROUP);
+		if (nodeListOfGroups != null && nodeListOfGroups.getLength() > 0) {
+			for (int j = 0; j < nodeListOfGroups.getLength(); j++) {
+				Element element = (Element) nodeListOfGroups.item(j);
+				String strAttrGroupName = element.getAttribute(NAME);
+
+				if (strAttrGroupName.equals(strGroupName)) {
+					return element;
+				}
+			}
+		}
+		throw new SummaryViewException("No matching group found.");
+	}
+
+	/**
+	 * This method is for getting existing Group Element
+	 * 
+	 * @param doc
+	 * @return
+	 */
+	private StringList getExistingGroups(Document doc) {
+		StringList sListExistingGroups = new StringList();
+		NodeList nodeListOfGroups = doc.getElementsByTagName(GROUP);
+		if (nodeListOfGroups != null && nodeListOfGroups.getLength() > 0) {
+			for (int j = 0; j < nodeListOfGroups.getLength(); j++) {
+				Element element = (Element) nodeListOfGroups.item(j);
+				String strAttrGroupName = element.getAttribute(NAME);
+				sListExistingGroups.add(strAttrGroupName);
+			}
+		}
+		return sListExistingGroups;
+	}
+
+	/**
+	 * This method is for getting Product Specification of Field in form or
+	 * table
+	 * 
+	 * @param context
+	 * @param registeredSuite
+	 * @param key
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	private String getProductSpecificI18NString(Context context, String registeredSuite, String key) throws SummaryViewException {
+		String strI18NLabel = DomainConstants.EMPTY_STRING;
+		try {
+			if ("framework".equalsIgnoreCase(registeredSuite)) {
+				registeredSuite = "Framework";
+			}
+			StringBuilder suite = new StringBuilder("eServiceSuite");
+			suite.append(registeredSuite).append(".StringResourceFileId");
+			String propertyFileName = Helper.getProperty(context, suite.toString());
+			strI18NLabel = EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), key);
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+
+		return strI18NLabel;
+	}
+
+	/**
+	 * This method is for getting title for operations in summary report
+	 * 
+	 * @param context
+	 * @return
+	 * @throws SummaryViewException
+	 */
+	@SummaryViewExecuteCallable
+	public Map<String, String> getReportActionSpecificI18NString(Context context, String[] args) throws SummaryViewException {
+		Map<String, String> reportActionI18N = new HashMap<String, String>();
+		try {
+			String propertyFileName = "SummaryViewStringResource";
+			reportActionI18N.put("saveAsPDF",
+					EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), "SummaryView.Actions.SaveAsPDF"));
+			reportActionI18N.put("saveAsHTML",
+					EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), "SummaryView.Actions.SaveAsHTML"));
+			reportActionI18N.put("email",
+					EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), "SummaryView.Actions.Email"));
+			reportActionI18N.put("print",
+					EnoviaResourceBundle.getProperty(context, propertyFileName, context.getLocale(), "SummaryView.Actions.Print"));
+		}
+		catch (Exception e) {
+			throw new SummaryViewException(e);
+		}
+
+		return reportActionI18N;
+	}
+
+	/**
+	 * @param context
+	 * @param type
+	 * @throws SummaryViewException
+	 */
+	private static String getFormNameforType(Context context, String type) throws Exception
+	{
+		try{
+			String  strSymbolicTypeName = FrameworkUtil.getAliasForAdmin(context, TYPE, type, true);
+			String strKeyForType=DomainObject.EMPTY_STRING;
+			try{
+				strKeyForType=Helper.getProperty(context, "SummaryView." + strSymbolicTypeName + ".form");
+			}catch(Exception e){
+				String command = "print Type '$1' select $2 dump";
+				String strTypeName= MqlUtil.mqlCommand(context, command,type,"derived");
+				if(UIUtil.isNullOrEmpty(strTypeName)){
+					throw new SummaryViewException (e.getLocalizedMessage());
+				}
+				else{
+					strKeyForType=getFormNameforType( context,  strTypeName); 
+				}
+			}
+			return strKeyForType;
+		}catch(Exception e1 ){
+			throw new SummaryViewException (e1.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * @param context
+	 * @param type
+	 * @throws SummaryViewException
+	 */
+	private static String getFormHeaderforType(Context context, String type) throws Exception
+	{
+		try{
+			String  strTypeName =type.replace(" ", "_") ;
+			String strHeader=DomainObject.EMPTY_STRING;
+			String strKey="SummaryView." + strTypeName + ".Header";
+			strHeader=Helper.getI18NString(context, strKey);
+			if (UIUtil.isNullOrEmpty(strHeader) || strHeader.equals(strKey)){
+				String command = "print Type '$1' select $2 dump";
+				String strParentTypeName= MqlUtil.mqlCommand(context, command,type,"derived");
+				if(UIUtil.isNullOrEmpty(strParentTypeName)){
+					strHeader=Helper.getI18NString(context, "SummaryView.label");
+				}
+				else{
+					strHeader=getFormHeaderforType( context,  strParentTypeName); 
+				}
+			}
+			return strHeader;
+		}catch(Exception e1 ){
+			throw new SummaryViewException (e1.getLocalizedMessage());
+		}
+	}
+}
+

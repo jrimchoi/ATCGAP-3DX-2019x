@@ -1,0 +1,167 @@
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.dcl.service.DCLLifecycleService;
+import com.dassault_systemes.enovia.dcl.service.EffectivityImplementationService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeOrder;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args){
+
+	}
+	
+	/**
+	 * Trigger method to set effective date on document when CO moves to In Approval.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CO object Id.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void setEffectiveDateOnDocument(Context context, String args[]) throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		try {
+			String strCAId = args[0];
+			EffectivityImplementationService effectivitytService = DCLServiceUtil.getEffectivityImplementationService(context);
+			//if(effectivitytService.isCANotStandaloneAndHasDocumentAsProposedChange(context, strCAId)){
+				effectivitytService.setEffectiveDateOnDocument(context,strCAId);
+			//}
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method is used to check whether interface is added on the CO or not.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CO object Id.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	/*public void isEffectivityTypeOptionAvailable(Context context, String args[])throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		String strCAId = args[0];
+		try{
+			EffectivityImplementationService effectivitytService = DCLServiceUtil.getEffectivityImplementationService(context);
+			if(effectivitytService.isCANotStandaloneAndHasDocumentAsProposedChange(context, strCAId)){
+				if (!effectivitytService.isEffectivityTypeOptionAvailable(context, strCAId)) {
+					String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.NoEffectivityOptionSet", null, null,
+							context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strMessage);
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+}*/
+	/**
+	 * Method is used to check whether implementation date on CO has elapsed or not.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args[0] holds CO object Id.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void isEffectiveDateElapsed(Context context, String args[])throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		String strCAId = args[0];
+		try{	
+			EffectivityImplementationService effectivitytService = DCLServiceUtil.getEffectivityImplementationService(context);
+			if(effectivitytService.isCANotStandaloneAndHasDocumentAsProposedChange(context, strCAId)){
+				if (effectivitytService.isEffectiveDateElapsed(context, strCAId)) {
+					String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Error.Msg.EffectiveDateElapsed", null, null,
+							context.getLocale(), DCLConstants.DCL_STRING_RESOURCE);
+					throw new DCLException(strMessage);
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method is used to notify Organization representative when Effective date has set on document.
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args Holds CO Object Id.
+	 * @throws DCLException if operation fails.
+	 * @exclude
+	 */
+	public void notifyOrganizationRepresentative(Context context, String args[]) throws DCLException
+	{
+		if(args==null || args.length<1)
+		{
+			throw new IllegalArgumentException();
+		}
+		String strDocId = args[0];
+		DCLLifecycleService lifecycleService = DCLServiceUtil.getDCLLifecycleService(context);
+		ControlledDocumentService CDService=DCLServiceUtil.getControlledDocumentService(context);
+		EffectivityImplementationService effectivitytService = DCLServiceUtil.getEffectivityImplementationService(context);
+		List<Map> mapCA =    CDService.getConnectedCA(context, strDocId, true, true);
+		if(mapCA != null){
+		for(int i=0;i<mapCA.size();i++){
+			Map<?,?> map=mapCA.get(i);
+			String strCAId=map.get(DomainObject.SELECT_ID).toString();
+			effectivitytService.notifyOrganizationRepresentative(context, strCAId);
+		}
+	        }
+ 
+	}
+	/**
+	 * Trigger on Change Affected Item Relationship to add effectivity atribute on from object
+	 * @param context the Enovia <code>Context</code> object.
+	 * @param args from side object id and to side object id
+	 * @throws DCLException if operation fails.
+	 */
+	public void addEffectivityAttributesOnCO(Context context, String args[]) throws DCLException
+	{
+		try {
+			String strFromId=args[0];
+			String strToId=args[1];
+			String strTypeControlledDocument=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+		
+			String strTypeChangeAction=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ACTION);
+    	         	DomainObject dobj=DomainObject.newInstance(context,strToId);
+    		
+			if ((dobj.isKindOf(context, strTypeControlledDocument) || dobj.isKindOf(context, strTypeChangeAction))
+					&& UIUtil.isNotNullAndNotEmpty(strFromId)) {
+    			EffectivityImplementationService effectivitytService = DCLServiceUtil.getEffectivityImplementationService(context);
+    			effectivitytService.addEffectivityAttribute(context,strFromId);
+   			}
+		} catch (FrameworkException e) {
+			throw new DCLException();
+		}
+		
+	}
+}
+
+

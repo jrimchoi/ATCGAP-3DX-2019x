@@ -1,0 +1,162 @@
+tcl;
+eval {
+
+    proc getSystemParameter {param} {
+        set sResult [mql print system inivar $param]
+        set lValues [split $sResult "="]
+        set sValue [lindex $lValues 1]
+        return [string trim $sValue]
+    }
+
+    proc getDefaultOutputDir {} {
+        set mxarch [getSystemParameter "MX_ARCH"]
+        set matrixinstall [getSystemParameter "MATRIXINSTALL"]
+
+        # default : UNIX
+        set OS "UNIX"
+
+        # if Win
+        if {$mxarch=="intel_a" || $mxarch=="win_b64"} {
+            set OS "WIN"
+        }
+
+        set output_dir ""
+        catch {set output_dir $env(CHANGELOGMIGRATION_OUTPUT_DIR)}
+
+        if {$output_dir == ""} {
+            if {"$OS"=="WIN"} {
+                # remove trailing backslash
+                set matrixinstall2 [string trimright $matrixinstall "\x5C"]
+                # replace \ by  /
+                set matrixinstall [string map {"\x5C" "/"} "$matrixinstall2"]
+            } else {
+                set matrixinstall [string trimright $matrixinstall "/"]
+            }
+            set output_dir $matrixinstall/logs
+        }
+        return $output_dir
+    }
+
+    proc getMarkerStatus {sImplementationName} {
+        # return code = 0 => migration already executed
+        set sStatus ""
+        set sResult [mql temp query bus VPLMDataMigration $sImplementationName ---]
+        if {$sResult != ""} {
+            set sStatus [mql print bus VPLMDataMigration $sImplementationName --- select attribute\[VPLMsys/MigrationStatus\] dump;];
+            if {$sStatus!="NOT_STARTED" && $sStatus!="ON_GOING" && $sStatus!="FINISHED"} {
+                puts "### ERROR: invalid status for \"$sImplementationName\" \[$sStatus\]"
+                return -code error
+            }
+        }
+        return $sStatus
+    }
+
+    proc setMarkerStatus {sImplementationName sStatus} {
+        set sResult [mql temp query bus VPLMDataMigration $sImplementationName ---]
+        if {$sResult == ""} {
+            puts ">> Create"
+            set lCmd [list mql add bus VPLMDataMigration $sImplementationName --- policy VPLMDataMigration_Policy vault vplm VPLMsys/MigrationStatus $sStatus]
+            set mqlret [catch {eval $lCmd} sOut]
+            if {$mqlret != 0} {
+                puts "### ERROR: cannot create status object: $sOut"
+                return -code error
+            }
+        } else {
+            puts ">> Modify"
+            set lCmd [list mql mod bus VPLMDataMigration $sImplementationName --- VPLMsys/MigrationStatus $sStatus]
+            set mqlret [catch {eval $lCmd} sOut]
+            if {$mqlret != 0} {
+                puts "### ERROR: cannot modify status object: $sOut"
+                return -code error
+            }
+        }
+    }
+
+    set mypid [pid]
+    set sec [clock seconds]
+    set sMigrationStepName "ChangeLogFlatTableMigration"
+    set sFilePrefix "changelogMigration_${sec}_${mypid}"
+    set sTmpDir [getDefaultOutputDir]
+    set sFlatTableName "ChangeLog"
+
+    set sStatus [getMarkerStatus $sMigrationStepName]
+    if { $sStatus == "FINISHED" } {
+        puts "### $sMigrationStepName database marker found, migration step has already been performed -> skipping"
+        return -code 0
+    }
+
+    puts "### Export file prefix is $sTmpDir/$sFilePrefix"
+
+    set bSkipExport 0
+
+    set bExportFilesFound 0
+    foreach subtable [list master detail] {
+        foreach f [glob -directory $sTmpDir -type f -nocomplain ${sFilePrefix}-$subtable-*.csv] {
+            set bExportFilesFound 1
+            puts "### found export file $f";
+        }
+    }
+
+    if { $bExportFilesFound!=0 && $bSkipExport==0 } {
+        puts "### ERROR : export files already present \[FAILED\]"
+        puts ""
+        return -code error
+    } elseif { $bExportFilesFound==0 && $bSkipExport!=0 } {
+        puts "### ERROR : while environment variable ZZZ has been exported to skip DataExport, no valid export file has been found (no ${sFilePrefix}-master-*.csv / ${sFilePrefix}-detail-*.csv)  \[FAILED\]"
+        puts ""
+        return -code error
+    }
+
+
+    # ===========
+    # DATA EXPORT
+    # ===========
+
+    puts ""
+    puts "### Data Export - start"
+    set lCmd [list mql execute program ChangelogMigrationToFlattable -output $sTmpDir/$sFilePrefix]
+    set mqlret [catch {eval $lCmd} sOut]
+    if {$mqlret != 0} {
+        puts "$sOut"
+        puts "### Data Export - end \[FAILED\]"
+        puts ""
+        return -code error
+    } else {
+        puts "### Data Export - end \[ok\]"
+        puts ""
+    }
+
+
+    # ===========
+    # DATA IMPORT
+    # ===========
+
+    puts ""
+    puts "### Data Import - start"
+    foreach subtable [list master detail] {
+        foreach f [glob -directory $sTmpDir -type f -nocomplain ${sFilePrefix}-$subtable-*.csv] {
+            puts "### [clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: import file $f - start"
+
+            set lCmd [list mql transition flattabletype $sFlatTableName $subtable filename $f]
+            set mqlret [catch {eval $lCmd} sOut]
+            if {$mqlret != 0} {
+                puts "$sOut"
+                puts "### [clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: import file $f - end \[FAILED\]"
+                puts ""
+                return -code error
+            } else {
+                puts "### [clock format [set systemTime [clock seconds]] -format %D-%H:%M:%S]: import file $f - end \[ok\]"
+                puts ""
+            }
+        }
+    }
+    puts "### Data Import - end"
+    puts ""
+
+    # ==========
+    # SET MARKER
+    # ==========
+
+    setMarkerStatus "ChangeLogFlatTableMigration" "FINISHED"
+}
+

@@ -1,0 +1,1423 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.riskmgmt.EmxTableRowId;
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.Hazard.HazardProcess;
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskContext;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskWithSelect;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.ManagedRiskBase} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws RiskMgmtException {
+		super(context, args);
+	}
+
+	/**
+	 * To create Hazard.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing Hazard object Id.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createHazard(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<String, String> attributesMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strProductId = (String) programMap.get(RiskMgmtConstants.PRODUCT_ID);
+			attributesMap.put(SYM_ATTR_SEVERITY.get(context), (String) programMap.get(FIELD_SEVERITY));
+			attributesMap.put(SYM_ATTR_OCCURENCE.get(context), (String) programMap.get(FIELD_OCCURRENCE));
+			if (!RiskMgmtUtil.isNullOrEmpty(strProductId)) {
+				Hazard hazard = new Hazard(context, DomainObject.newInstance(context, strProductId));
+				hazard.createNew(context, attributesMap);
+				returnMap.put(DomainConstants.SELECT_ID, hazard.getObjectId(context));
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * To refresh the calling frame after Hazard creation.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws RiskMgmtException
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String createHazardPostProcess(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			StringBuilder newRowXML = new StringBuilder();
+			String[] arrFrameName = (String[]) programMap.get(FRAME_NAME);
+			String strFrameName = !RiskMgmtUtil.isNullOrEmpty(arrFrameName)
+					? !RiskMgmtUtil.isNullOrEmpty(arrFrameName[0]) && !STRING_NULL.equals(arrFrameName[0]) ? arrFrameName[0] : FRAME_CONTENT
+					: FRAME_CONTENT;
+			String[] arrHazardId = (String[]) programMap.get(NEW_OBJECT_ID);
+			String[] arrProductId = (String[]) programMap.get(PRODUCT_ID);
+			String[] arrProductLevel = (String[]) programMap.get(PRODUCT_LEVEL);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrProductLevel) && !RiskMgmtUtil.isNullOrEmpty(arrProductLevel[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(arrProductId) && !RiskMgmtUtil.isNullOrEmpty(arrProductId[0])) {
+				StringBuilder newItemsXML = new StringBuilder();
+				newItemsXML.append("<item oid=\"").append(arrHazardId[0]).append("\" relId=\"").append("").append("\" pid=\"").append(arrProductId[0])
+						.append("\" pasteBelowToRow=\"").append(arrProductLevel[0]).append("\" />");
+
+				newRowXML.append("<mxRoot>");
+				newRowXML.append("<action><![CDATA[refresh]]></action>");
+				newRowXML.append("<data status=\"committed\" pasteBelowOrAbove=\"false\">");
+				newRowXML.append(newItemsXML.toString());
+				newRowXML.append("</data>");
+				newRowXML.append("</mxRoot>");
+				final String findAndReplace = FrameworkUtil.findAndReplace(newRowXML.toString(), "\"", "\\\"");
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.TRUE, FUNCTION_ADD_ROW_AND_REFRESH_PRODUCT_HAZARDS_STRUCTURE,
+						findAndReplace);
+			}
+
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_FRAME, strFrameName);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String createHazardsFromTemplate(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] productId = (String[]) programMap.get(RiskMgmtConstants.PRODUCT_ID);
+			String[] productLevel = (String[]) programMap.get(PRODUCT_LEVEL);
+			String[] tableRowIds = (String[]) programMap.get(EMX_TABLE_ROW_ID);
+			List<String> hazardTemplateIdList = new ArrayList<String>();
+			StringBuffer newRowXML = new StringBuffer();
+			if (!RiskMgmtUtil.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				if (!RiskMgmtUtil.isNullOrEmpty(emxTableRowIds)) {
+					for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+						hazardTemplateIdList.add(emxTableRowId.getObjectId());
+					}
+
+				}
+			}
+			Map<?, ?> hazardMap = new HashMap<String, String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(productId) && !RiskMgmtUtil.isNullOrEmpty(productId[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(hazardTemplateIdList)) {
+				HazardContext hazardContext = new HazardContext(productId[0]);
+				String[] hazardTemplateIdArr = hazardTemplateIdList.toArray(new String[0]);
+				hazardMap = Hazard.createFromTemplate(context, hazardContext, hazardTemplateIdArr);
+
+			}
+
+			if (!RiskMgmtUtil.isNullOrEmpty(productLevel) && !RiskMgmtUtil.isNullOrEmpty(productLevel[0])) {
+				if (!RiskMgmtUtil.isNullOrEmpty(hazardMap)) {
+					newRowXML.append("<mxRoot>");
+					for (Entry<?, ?> entry : hazardMap.entrySet()) {
+						StringBuffer newItemsXML = new StringBuffer();
+						String hazardId = (String) entry.getKey();
+						String relId = (String) entry.getValue();
+						if (!RiskMgmtUtil.isAnyNullOrEmpty(relId, hazardId)) {
+							newItemsXML.append("<item oid=\"").append(hazardId).append("\" relId=\"").append(relId).append("\" pid=\"")
+									.append(productId[0]).append("\" pasteBelowToRow=\"").append(productLevel[0]).append("\" />");
+
+							newRowXML.append("<action><![CDATA[refresh]]></action>");
+							newRowXML.append("<data status=\"committed\" pasteBelowOrAbove=\"false\">");
+							newRowXML.append(newItemsXML.toString());
+							newRowXML.append("</data>");
+						}
+					}
+					newRowXML.append("</mxRoot>");
+				}
+				final String findAndReplace = FrameworkUtil.findAndReplace(newRowXML.toString(), "\"", "\\\"");
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, true, FUNCTION_ADD_ROW_TO_SUMMARY_TABLE, findAndReplace);
+			}
+			else {
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_HAZARD_FRAMES_AND_CLOSE_TOP_WINDOW);
+			}
+
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRiskMgmtHazardSummaryNewHazardsData(Context context, String[] args) throws RiskMgmtException {
+
+		List<Map<?, ?>> returnData = new MapList();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strExpandLevel = null;
+			int intExpandLevel = 1;
+			if (programMap.containsKey(EXPAND_FILTER)) {
+				strExpandLevel = (String) programMap.get(EXPAND_FILTER);
+				if (!RiskMgmtUtil.isNull(strExpandLevel) && strExpandLevel.equalsIgnoreCase(EXPAND_ALL)) {
+					intExpandLevel = 0;
+				}
+				else {
+					intExpandLevel = Integer.parseInt(strExpandLevel);
+				}
+			}
+
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				returnData = getHazardData(context, strHazardId, intExpandLevel);
+			}
+			return returnData;
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+
+	}
+
+	/**
+	 * @param context
+	 * @param strHazardId
+	 * @param returnData
+	 * @return
+	 * @throws Exception
+	 * @throws MatrixException
+	 * @throws RiskMgmtException
+	 */
+	private List<Map<?, ?>> getHazardData(Context context, String strHazardId, int expandLevel) throws RiskMgmtException {
+		try {
+			MapList returnData = new MapList();
+			Set<String> inputSelects = new HashSet<String>();
+			inputSelects.add(SELECT_ID);
+			inputSelects.add(SELECT_NAME);
+			inputSelects.add(SELECT_TYPE);
+			inputSelects.add(SELECT_CURRENT);
+			inputSelects.add(SYM_ATTR_TITLE.getExpr(context));
+			inputSelects.add(SYM_ATTR_RISK_IMPACT_TYPE.getExpr(context));
+			inputSelects.add(SYM_ATTR_RISK_HAZARD_TYPE.getExpr(context));
+			inputSelects.add(SELECT_OWNER);
+			inputSelects.add(SELECT_DESCRIPTION);
+			inputSelects.add(SELECT_LEVEL);
+
+			Set<String> rpnSelects = new HashSet<String>();
+			rpnSelects.add(SYM_ATTR_SEVERITY.getExpr(context));
+			rpnSelects.add(SYM_ATTR_OCCURENCE.getExpr(context));
+			rpnSelects.add(SYM_ATTR_STATUS.getExpr(context));
+			rpnSelects.add(RiskMgmtUtil.concatExpr(SYM_ATTR_EFFECTIVE_DATE.getExpr(context), "generic"));
+
+			String[] ids = new String[] { strHazardId };
+			StringList qualifiedSelects = new StringList();
+			BusinessObjectWithSelectList busWithSelectList = BusinessObject.getSelectBusinessObjectData(context, ids, qualifiedSelects);
+			ManagedRiskWithSelect managedRiskWithSelect = new ManagedRiskWithSelect((BusinessObjectWithSelect) busWithSelectList.elementAt(0));
+			managedRiskWithSelect.setSelectData(DomainConstants.SELECT_ID, strHazardId);
+			managedRiskWithSelect.setSelectData(SELECT_LEVEL, LEVEL_ZERO);
+			List<ManagedRiskWithSelect> managedRisks = new ArrayList<>();
+			managedRisks.add(managedRiskWithSelect);
+			List<ManagedRiskWithSelect> associatedManagedRisksMap = new ArrayList<>();
+			Hazard.getNewHazards(context, inputSelects, null, rpnSelects, managedRisks, associatedManagedRisksMap, expandLevel);
+			if (!RiskMgmtUtil.isNullOrEmpty(associatedManagedRisksMap)) {
+				returnData = getRiskMapList(context, inputSelects, associatedManagedRisksMap);
+			}
+			return returnData;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRequirementsSummaryData(Context context, String[] args) throws RiskMgmtException {
+		List<Map<?, ?>> mlResult = null;
+		MapList reqList = new MapList();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				StringList objSelect = RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_REVISION, RiskMgmtConstants.MAJOR_ID,
+						RiskMgmtConstants.MAJOR_ID_LAST_MAJOR_ID);
+				mlResult = hazard.getRequirements(context, objSelect, RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID));
+			}
+
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+		if (!RiskMgmtUtil.isNullOrEmpty(mlResult)) {
+			reqList.addAll(mlResult);
+		}
+		return reqList;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getHazardTasksData(Context context, String[] args) throws RiskMgmtException {
+		List<Map<?, ?>> mlResult = null;
+		MapList taskList = new MapList();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				mlResult = hazard.getTasks(context, RiskMgmtUtil.stringList(DomainConstants.SELECT_ID),
+						RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID), null);
+			}
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+		if (!RiskMgmtUtil.isNullOrEmpty(mlResult)) {
+			taskList.addAll(mlResult);
+		}
+		return taskList;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDesignProjectRelatedProducts(Context context, String[] args) throws RiskMgmtException {
+		MapList mlProducts = new MapList();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)) {
+				DomainObject project = DomainObject.newInstance(context, strObjectId);
+				if (RiskMgmtUtil.getTypeKindOf(context, project, SYMBOLIC_TYPE_DESIGN_PROJECT).containsValue(Boolean.TRUE)) {
+					List<Map<?, ?>> productMapList = HazardMgmtUtil.getProducts(context, project);
+					if (!RiskMgmtUtil.isNullOrEmpty(productMapList)) {
+						mlProducts.addAll(productMapList);
+					}
+				}
+			}
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+		return mlProducts;
+	}
+
+	public List<String> getPMCWBSViewTableColumnDesignProjects(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean isCSVExport = false;
+			boolean isPrinterFriendly = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get("objectList");
+			List<String> vcDesignProjects = new Vector<String>();
+			if (!RiskMgmtUtil.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strObjectId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!RiskMgmtUtil.isNullOrEmpty(strObjectId)) {
+						DomainObject domainObject = DomainObject.newInstance(context, strObjectId);
+						List<Map<?, ?>> lmDesignProjects = HazardMgmtUtil.getTaskDesignProject(context, domainObject);
+						if (!RiskMgmtUtil.isNullOrEmpty(lmDesignProjects)) {
+							String strHref = getRelatedItemsHTML(context, new MapList(lmDesignProjects), isCSVExport, isPrinterFriendly);
+							vcDesignProjects.add(strHref);
+						}
+						else {
+							vcDesignProjects.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcDesignProjects;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String getRelatedItemsHTML(Context context, MapList mlRelatedItems, boolean isCSVExport, boolean isPrinterFriendly)
+			throws RiskMgmtException {
+		// TODO to check if this method can go to RiskMgmtUtil.java
+		try {
+			StringBuffer stringBuffer = new StringBuffer();
+			if (!RiskMgmtUtil.isNullOrEmpty(mlRelatedItems)) {
+				for (Object objRelatedItem : mlRelatedItems) {
+					Map<?, ?> mapRelatedItem = (Map<?, ?>) objRelatedItem;
+					if (!RiskMgmtUtil.isNullOrEmpty(mapRelatedItem)) {
+
+						String strType = (String) mapRelatedItem.get(DomainObject.SELECT_TYPE);
+						String strName = (String) mapRelatedItem.get(DomainObject.SELECT_NAME);
+						String strObjectId = (String) mapRelatedItem.get(DomainObject.SELECT_ID);
+						// TODO put condition for printer friendly
+						if (isCSVExport) {
+							stringBuffer.append(strName).append("\n");
+						}
+						else {
+							String typeIcon = UINavigatorUtil.getTypeIconProperty(context, strType);
+							stringBuffer.append("<img src=\"../common/images/").append(typeIcon)
+									.append("\"/>  <a href=\"javascript:showModalDialog('../common/emxNavigator.jsp?objectId=").append(strObjectId)
+									.append("', 400, 200, true)\">");
+							stringBuffer.append(strName).append("</a>").append("<br/>");
+						}
+					}
+				}
+			}
+
+			return stringBuffer.toString();
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRiskMgmtHazardSummaryData(Context context, String[] args) throws RiskMgmtException {
+		try {
+
+			List<Map<?, ?>> returnData = new MapList();
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strExpandLevel = null;
+			int intExpandLevel = 1;
+			if (inputMap.containsKey(EXPAND_FILTER)) {
+				strExpandLevel = (String) inputMap.get(EXPAND_FILTER);
+				if (!RiskMgmtUtil.isNull(strExpandLevel) && strExpandLevel.equalsIgnoreCase(EXPAND_ALL)) {
+					intExpandLevel = 0;
+				}
+				else {
+					intExpandLevel = Integer.parseInt(strExpandLevel);
+				}
+			}
+			String objectId = (String) inputMap.get(RiskMgmtConstants.OBJECT_ID);
+			String recursive = (String) inputMap.get(RECURSIVE);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				final String TYPE_PRODUCTS = SYMBOLIC_TYPE_PRODUCTS.toString();
+				DomainObject domainObject = DomainObject.newInstance(context, objectId);
+				Map<String, Boolean> typeInfoMap = RiskMgmtUtil.getTypeKindOf(context, domainObject, TYPE_PRODUCTS, SYMBOLIC_type_Task);
+				if (!RiskMgmtUtil.isNullOrEmpty(typeInfoMap) && (typeInfoMap.get(RiskMgmtSymNames.SYM_TYPE_PRODUCTS.get(context))
+						|| typeInfoMap.get(RiskMgmtSymNames.SYM_TYPE_TASK.get(context)))) {
+					Set<String> selects = new HashSet<String>();
+					selects.add(SELECT_ID);
+					selects.add(SELECT_NAME);
+					selects.add(SELECT_TYPE);
+					selects.add(SELECT_CURRENT);
+					selects.add(SYM_ATTR_TITLE.getExpr(context));
+					selects.add(SYM_ATTR_RISK_IMPACT_TYPE.getExpr(context));
+					selects.add(SYM_ATTR_RISK_HAZARD_TYPE.getExpr(context));
+					selects.add(SELECT_OWNER);
+					selects.add(SELECT_DESCRIPTION);
+					HazardContext hazardContext = new HazardContext(objectId);
+					List<ManagedRiskWithSelect> associatedManagedRisksMap = getAssociatedHazards(context, args, hazardContext, selects,
+							Boolean.getBoolean(recursive), intExpandLevel);
+					if (!RiskMgmtUtil.isNullOrEmpty(associatedManagedRisksMap)) {
+						returnData = getRiskMapList(context, selects, associatedManagedRisksMap);
+					}
+
+				}
+				else {
+					returnData = getHazardData(context, objectId, intExpandLevel);
+				}
+			}
+			return returnData;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private List<ManagedRiskWithSelect> getAssociatedHazards(Context context, String[] args, ManagedRiskContext riskContext, Set<String> selects,
+			boolean recursive, int expandLevel) throws RiskMgmtException {
+
+		try {
+			List<ManagedRiskWithSelect> hazardList = new ArrayList<>();
+			if (!RiskMgmtUtil.isNull(riskContext)) {
+				Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+				String occIndex = (String) inputMap.get("occIndex");
+				String sevIndex = (String) inputMap.get("sevIndex");
+				String row = (String) inputMap.get("row");
+				String col = (String) inputMap.get("col");
+
+				Set<String> rpnSelects = new HashSet<String>();
+				rpnSelects.add(SYM_ATTR_SEVERITY.getExpr(context));
+				rpnSelects.add(SYM_ATTR_OCCURENCE.getExpr(context));
+				rpnSelects.add(SYM_ATTR_STATUS.getExpr(context));
+				rpnSelects.add(RiskMgmtUtil.concatExpr(SYM_ATTR_EFFECTIVE_DATE.getExpr(context), "generic"));
+
+				int tempExpandLevel = expandLevel;
+				boolean tempRecursive = recursive;
+				if (tempExpandLevel != 1) {
+					tempRecursive = true;
+					if (tempExpandLevel != 0) {
+						tempExpandLevel = tempExpandLevel - 1;
+					}
+				}
+
+				List<ManagedRiskWithSelect> managedRisks = null;
+				if (!RiskMgmtUtil.isNullOrEmpty(occIndex) && !RiskMgmtUtil.isNullOrEmpty(sevIndex)) {
+					List<ManagedRiskWithSelect>[][] riskMatrix = riskContext.getRiskMatrix(context, selects, rpnSelects, null);
+					managedRisks = riskMatrix[Integer.valueOf(occIndex)][Integer.valueOf(sevIndex)];
+					if (!RiskMgmtUtil.isNullOrEmpty(managedRisks)) {
+						hazardList.addAll(managedRisks);
+					}
+				}
+				else if (!RiskMgmtUtil.isNullOrEmpty(row) && !RiskMgmtUtil.isNullOrEmpty(col)) {
+					List<ManagedRiskWithSelect> unevaluatedRisks = new ArrayList<ManagedRiskWithSelect>();
+					List<ManagedRiskWithSelect>[][] riskMatrix = riskContext.getRiskMatrix(context, selects, rpnSelects, unevaluatedRisks);
+					managedRisks = getFilteredRisks(context, riskMatrix, unevaluatedRisks, row, col);
+					if (!RiskMgmtUtil.isNullOrEmpty(managedRisks)) {
+						hazardList.addAll(managedRisks);
+					}
+				}
+				else {
+					if (SYM_TYPE_TASK.get(context).equals(riskContext.getInfo(context, DomainConstants.SELECT_TYPE))) {
+						HazardContext hazardContext = (HazardContext) riskContext;
+						managedRisks = hazardContext.getTaskHazards(context, selects, null, rpnSelects);
+					}
+					else {
+						managedRisks = riskContext.getRisks(context, selects, null, rpnSelects);
+					}
+					if (!RiskMgmtUtil.isNullOrEmpty(managedRisks)) {
+						for (ManagedRiskWithSelect managedRiskWithSelect : managedRisks) {
+							managedRiskWithSelect.setSelectData(SELECT_LEVEL, LEVEL_ONE);
+							List<ManagedRiskWithSelect> mgRiskList = new ArrayList<>();
+							mgRiskList.add(managedRiskWithSelect);
+							hazardList.add(managedRiskWithSelect);
+							if (tempRecursive) {
+								Hazard.getNewHazards(context, selects, null, rpnSelects, mgRiskList, hazardList, tempExpandLevel);
+							}
+						}
+					}
+				}
+			}
+
+			return hazardList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	/**
+	 * This method returns object ids of members of all design project related
+	 * to a product
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getIncludeRelatedDesignProjectMemberOID(Context context, String[] args) throws RiskMgmtException {
+		try {
+			StringList slProjectMemberId = new StringList();
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(RiskMgmtConstants.OBJECT_ID);
+			Map<?, ?> typeAheadMap = (Map<?, ?>) inputMap.get(TYPE_AHEAD_MAP);
+			if (!RiskMgmtUtil.isNullOrEmpty(typeAheadMap)) {
+				String rowObjectId = (String) typeAheadMap.get(ROW_OBJECT_ID);
+				if (!RiskMgmtUtil.isNullOrEmpty(rowObjectId)) {
+					objectId = rowObjectId;
+				}
+			}
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				DomainObject productObject = DomainObject.newInstance(context, objectId);
+				if (((RiskMgmtUtil.getTypeKindOf(context, productObject, RiskMgmtSymNames.SYM_TYPE_DESIGN_PROJECT.toString()))
+						.containsValue(Boolean.TRUE))) {
+					List<Map<?, ?>> productList = HazardMgmtUtil.getProducts(context, productObject);
+					List<String> projectMemberIdList = new ArrayList<>();
+					for (Map<?, ?> map : productList) {
+						String productId = (String) map.get(DomainConstants.SELECT_ID);
+						productObject = DomainObject.newInstance(context, productId);
+						projectMemberIdList = HazardMgmtUtil.getDesignProjectMembersAssociatedToProduct(context, productObject, null);
+						if (!RiskMgmtUtil.isNullOrEmpty(projectMemberIdList)) {
+							slProjectMemberId.addAll(projectMemberIdList);
+						}
+					}
+				}
+				else if (((RiskMgmtUtil.getTypeKindOf(context, productObject, RiskMgmtSymNames.SYM_TYPE_HAZARD.toString()))
+						.containsValue(Boolean.TRUE))) {
+					Hazard hazard = new Hazard(objectId);
+					HazardContext hazardContext = hazard.getProductContext(context);
+					if (!RiskMgmtUtil.isNull(hazardContext)) {
+						productObject = hazardContext;
+					}
+					List<String> projectMemberIdList = HazardMgmtUtil.getDesignProjectMembersAssociatedToProduct(context, productObject, null);
+					if (!RiskMgmtUtil.isNullOrEmpty(projectMemberIdList)) {
+						slProjectMemberId.addAll(projectMemberIdList);
+					}
+				}
+				else if (((RiskMgmtUtil.getTypeKindOf(context, productObject, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.toString()))
+						.containsValue(Boolean.TRUE))) {
+					Hazard hazard = new Hazard(objectId);
+					HazardContext hazardContext = hazard.getProductContext(context);
+					if (!RiskMgmtUtil.isNull(hazardContext)) {
+						productObject = hazardContext;
+					}
+					List<String> projectMemberIdList = HazardMgmtUtil.getDesignProjectMembersAssociatedToProduct(context, productObject, null);
+					if (!RiskMgmtUtil.isNullOrEmpty(projectMemberIdList)) {
+						slProjectMemberId.addAll(projectMemberIdList);
+					}
+				}
+			}
+			return slProjectMemberId;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public void actionChangeHazardOwner(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String ATTRIBUTE_COMMENTS = SYM_ATTR_COMMENTS.get(context);
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String[] transferReason = (String[]) inputMap.get(RiskMgmtConstants.FIELD_TRANSFER_REASON);
+			String[] objectId = (String[]) inputMap.get(RiskMgmtConstants.OBJECT_ID);
+			String[] newOwner = (String[]) inputMap.get(RiskMgmtConstants.FIELD_OWNER);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId) && !RiskMgmtUtil.isNullOrEmpty(newOwner) && !RiskMgmtUtil.isNullOrEmpty(transferReason)
+					&& !RiskMgmtUtil.isNullOrEmpty(objectId[0]) && !RiskMgmtUtil.isNullOrEmpty(newOwner[0])
+					&& !RiskMgmtUtil.isNullOrEmpty(transferReason[0])) {
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				attributeMap.put(ATTRIBUTE_COMMENTS, transferReason[0]);
+				Hazard hazard = new Hazard(objectId[0]);
+				hazard.changeOwnership(context, PersonUtil.getPersonObject(context, newOwner[0]), attributeMap);
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean canViewCommandRiskMgmtHazardPropertyActionsMenu(Context context, String args[]) throws RiskMgmtException {
+		final String STATE_CONTROLLED = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYMBOLIC_STATE_CONTROLLED);
+		try {
+			boolean userHasAccess = false;
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) inputMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+				Hazard hazard = new Hazard(objectId);
+				HazardContext hazardContext = hazard.getProductContext(context);
+				String strHazardState = hazard.currentState(context);
+				if (!RiskMgmtUtil.isNullOrEmpty(strHazardState) && !strHazardState.equals(STATE_CONTROLLED) && HazardMgmtUtil
+						.isProductsDesignProjectMemberOrHazardOwner(context, hazard, hazardContext, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					userHasAccess = true;
+				}
+			}
+			return userHasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns object id of hazard owner for excluding in the list
+	 * of change owner from hazard properties page
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedOwnerOIDHazard(Context context, String[] args) throws RiskMgmtException {
+		try {
+			StringList slOwnerId = new StringList();
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String parentId = (String) inputMap.get(RiskMgmtConstants.PARENT_OID);
+			if (!RiskMgmtUtil.isNull(parentId)) {
+				List<Map<?, ?>> mapInfoList = QueryUtil.getInfo(context, new String[] { parentId },
+						RiskMgmtUtil.stringList(DomainConstants.SELECT_OWNER, DomainConstants.SELECT_TYPE));
+				if (!RiskMgmtUtil.isNullOrEmpty(mapInfoList)) {
+					String type = (String) mapInfoList.get(0).get(DomainConstants.SELECT_TYPE);
+					if (RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context).equals(type)) {
+						String owner = (String) mapInfoList.get(0).get(DomainConstants.SELECT_OWNER);
+						slOwnerId.add(PersonUtil.getPersonObjectID(context, owner));
+
+					}
+				}
+			}
+			return slOwnerId;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getFormRiskMgmtHazardPropertiesFieldParentHazards(Context context, String[] args) throws RiskMgmtException {
+		final String TYPE_HAZARD = RiskMgmtSymNames.SYM_TYPE_HAZARD.get(context);
+		StringBuilder parentHazards = new StringBuilder();
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) inputMap.get(REQUEST_MAP);
+			String reportFormat = (String) requestMap.get(RiskMgmtConstants.REPORT_FORMAT);
+			String hazardId = (String) requestMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(hazardId)) {
+				Hazard hazard = new Hazard(hazardId);
+				List<Map<?, ?>> parentHazardList = hazard.getParentHazards(context,
+						RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME),
+						RiskMgmtUtil.stringList(DomainRelationship.SELECT_ID));
+				if (!RiskMgmtUtil.isNullOrEmpty(parentHazardList)) {
+					for (Object parentHazard : parentHazardList) {
+						Map<?, ?> parentHazardInfo = (Map<?, ?>) parentHazard;
+						String parentHazardId = (String) parentHazardInfo.get(DomainConstants.SELECT_ID);
+						String parentHazardName = (String) parentHazardInfo.get(DomainConstants.SELECT_NAME);
+						if (RiskMgmtConstants.CSV.equalsIgnoreCase(reportFormat)) {
+							return parentHazardName;
+						}
+						else {
+							if (!RiskMgmtUtil.isNullOrEmpty(parentHazards.toString())) {
+								parentHazards.append("<br/>");
+							}
+							parentHazards.append(RiskMgmtUtil.getObjectHTMLLinkModalDialogue(context, parentHazardId, TYPE_HAZARD, parentHazardName));
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+		return parentHazards.toString();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getFormRiskMgmtHazardPropertiesFieldProduct(Context context, String[] args) throws RiskMgmtException {
+		String product = DomainConstants.EMPTY_STRING;
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) inputMap.get(REQUEST_MAP);
+			String hazardId = (String) requestMap.get(RiskMgmtConstants.OBJECT_ID);
+			String productId = DomainConstants.EMPTY_STRING;
+			String productName = DomainConstants.EMPTY_STRING;
+			final String TYPE_HAZARD = SYM_TYPE_HAZARD.get(context);
+			String reportFormat = (String) requestMap.get(RiskMgmtConstants.REPORT_FORMAT);
+
+			StringBuilder productIdSelectable = new StringBuilder("from[");
+			productIdSelectable.append(TYPE_HAZARD);
+			productIdSelectable.append("].to.id");
+			StringBuilder productNameSelectable = new StringBuilder("from[");
+			productNameSelectable.append(TYPE_HAZARD);
+			productNameSelectable.append("].to.name");
+
+			if (!RiskMgmtUtil.isNullOrEmpty(hazardId)) {
+				Hazard hazard = new Hazard(hazardId);
+				HazardContext hazardContext = hazard.getProductContext(context);
+				if (!RiskMgmtUtil.isNull(hazardContext)) {
+					Map<?, ?> productInfoMap = hazardContext.getInfo(context,
+							RiskMgmtUtil.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME));
+					if (!RiskMgmtUtil.isNullOrEmpty(productInfoMap)) {
+						productId = (String) productInfoMap.get(DomainConstants.SELECT_ID);
+						productName = (String) productInfoMap.get(DomainConstants.SELECT_NAME);
+					}
+				}
+				if (!RiskMgmtUtil.isNullOrEmpty(productName) && !RiskMgmtUtil.isNullOrEmpty(productId)) {
+					if (RiskMgmtConstants.CSV.equalsIgnoreCase(reportFormat)) {
+						product = productName;
+					}
+					else {
+						product = RiskMgmtUtil.getObjectHTMLLinkModalDialogue(context, productId, RiskMgmtSymNames.SYM_TYPE_PRODUCTS.get(context),
+								productName);
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+		return product;
+	}
+
+	/**
+	 * Puts Edit Access on Hazard Properties Form fields.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void preProcessEditAccessCheckForHazardAttributes(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get(RiskMgmtConstants.REQUEST_MAP);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(RiskMgmtConstants.FORM_MAP);
+			MapList formFieldList = (MapList) formMap.get(RiskMgmtConstants.FIELDS);
+			String strHazardId = (String) requestMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strHazardProcess = hazard.getProcess(context);
+				for (Object object : formFieldList) {
+					Map<?, ?> fieldMap = (Map<?, ?>) object;
+					Map<String, String> settingsMap = (Map<String, String>) fieldMap.get(RiskMgmtConstants.SETTINGS);
+					String fieldName = (String) fieldMap.get(DomainConstants.SELECT_NAME);
+					if (!RiskMgmtUtil.isNullOrEmpty(fieldName)) {
+						switch (fieldName) {
+						case RiskMgmtConstants.FIELD_IDENTIFICATION:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_SEQUENCE_OF_EVENTS:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_CONDITION:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_HAZARDOUS_SITUATION:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_MAJOR_CLASSIFICATION:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_HARM:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_MINOR_CLASSIFICATION:
+							if (!HazardProcess.ANALYSIS.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_ACCEPTABILITY_CRITERIA:
+							if (!HazardProcess.EVALUATION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_ACCEPTABLE:
+							if (!HazardProcess.EVALUATION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_REDUCTION_REQUIRED:
+							if (!HazardProcess.EVALUATION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_ACCEPTABILITY_JUSTIFICATION:
+							if (!HazardProcess.EVALUATION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_REDUCTION_NOT_REQUIRED_RATIONALE:
+							if (!HazardProcess.EVALUATION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RESIDUAL_RISK_ACCEPTABLE:
+							if (!HazardProcess.COMPLETION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_RISK_BENEFIT_ANALYSIS:
+							if (!HazardProcess.COMPLETION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_DISCLOSE_RESIDUAL_RISK:
+							if (!HazardProcess.COMPLETION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						case RiskMgmtConstants.FIELD_BENEFIT_EXCEEDS_RISK:
+							if (!HazardProcess.COMPLETION.toString().equals(strHazardProcess))
+								settingsMap.put(RiskMgmtConstants.SETTINGS_EDITABLE, Boolean.FALSE.toString());
+							break;
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Start Risk Evaluation". It is visible only
+	 * when action is coming from Analysis column ,Hazard is under Analysis
+	 * Process and user is either the Hazard owner or is a member of any of the
+	 * Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardStartRiskEvaluation(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.ANALYSIS.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (HazardProcess.ANALYSIS.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Restart Risk Analysis". It is visible only
+	 * when action is coming from Analysis column,Hazard has completed Analysis
+	 * Process and user is either the Hazard owner or is a member of any of the
+	 * Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardRestartRiskAnalysis(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.ANALYSIS.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (!HazardProcess.ANALYSIS.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Start Risk Reduction". It is visible only
+	 * when action is coming from Evaluation column, Hazard is under Evaluation
+	 * Process, Value for "Risk Reduction Required" is "Yes" and user is either
+	 * the Hazard owner or is a member of any of the Design Projects associated
+	 * to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardStartRiskReduction(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.EVALUATION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+						RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)),
+								DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context))));
+				if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+					Map<?, ?> mHazardInfo = (Map<?, ?>) lmHazardInfo.get(0);
+					if (!RiskMgmtUtil.isNullOrEmpty(mHazardInfo)) {
+						String strCurrentProcess = (String) mHazardInfo.get(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)));
+						String strRiskReductionRequired = (String) mHazardInfo
+								.get(DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context)));
+						if (HazardProcess.EVALUATION.toString().equalsIgnoreCase(strCurrentProcess)
+								&& RiskMgmtConstants.YES.equalsIgnoreCase(strRiskReductionRequired)
+								&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, DomainObject.newInstance(context, strHazardId),
+										RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+							hasAccess = true;
+						}
+					}
+				}
+
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Restart Risk Evaluation". It is visible
+	 * only when action is coming from Evaluation column,Hazard has completed
+	 * Evaluation Process and user is either the Hazard owner or is a member of
+	 * any of the Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardRestartRiskEvaluation(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.EVALUATION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (!HazardProcess.EVALUATION.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Complete Risk Reduction". It is visible
+	 * only when action is coming from Reduction column,Hazard is under
+	 * Reduction process and user is either the Hazard owner or is a member of
+	 * any of the Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardCompleteRiskReduction(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.REDUCTION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (HazardProcess.REDUCTION.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Restart Risk Reduction". It is visible only
+	 * when action is coming from Reduction column,Hazard has completed
+	 * Reduction Process, Value for "Risk Reduction Required" is "Yes" and user
+	 * is either the Hazard owner or is a member of any of the Design Projects
+	 * associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardRestartRiskReduction(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.REDUCTION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+						RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)),
+								DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context))));
+				if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+					Map<?, ?> mHazardInfo = (Map<?, ?>) lmHazardInfo.get(0);
+					if (!RiskMgmtUtil.isNullOrEmpty(mHazardInfo)) {
+						String strCurrentProcess = (String) mHazardInfo.get(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)));
+						String strRiskReductionRequired = (String) mHazardInfo
+								.get(DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context)));
+						if (!HazardProcess.REDUCTION.toString().equalsIgnoreCase(strCurrentProcess)
+								&& RiskMgmtConstants.YES.equalsIgnoreCase(strRiskReductionRequired)
+								&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, DomainObject.newInstance(context, strHazardId),
+										RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+							hasAccess = true;
+						}
+					}
+				}
+
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Complete Risk Reduction Verification". It
+	 * is visible only when action is coming from Verification column,Hazard is
+	 * under Verification process and user is either the Hazard owner or is a
+	 * member of any of the Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardCompleteRiskReductionVerification(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.VERIFICATION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (HazardProcess.VERIFICATION.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Restart Risk Reduction Verification". It is
+	 * visible only when action is coming from Verification column,Hazard has
+	 * completed Verification Process, Value for "Risk Reduction Required" is
+	 * "Yes" and user is either the Hazard owner or is a member of any of the
+	 * Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardRestartRiskReductionVerification(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.VERIFICATION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				List<Map<?, ?>> lmHazardInfo = QueryUtil.getInfo(context, new String[] { strHazardId },
+						RiskMgmtUtil.stringList(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)),
+								DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context))));
+				if (!RiskMgmtUtil.isNullOrEmpty(lmHazardInfo)) {
+					Map<?, ?> mHazardInfo = (Map<?, ?>) lmHazardInfo.get(0);
+					if (!RiskMgmtUtil.isNullOrEmpty(mHazardInfo)) {
+						String strCurrentProcess = (String) mHazardInfo.get(DomainObject.getAttributeSelect(SYM_ATTR_PROCESS.get(context)));
+						String strRiskReductionRequired = (String) mHazardInfo
+								.get(DomainObject.getAttributeSelect(SYM_ATTR_RISK_REDUCTION_NEEDED.get(context)));
+						if (!HazardProcess.VERIFICATION.toString().equalsIgnoreCase(strCurrentProcess)
+								&& RiskMgmtConstants.YES.equalsIgnoreCase(strRiskReductionRequired)
+								&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, DomainObject.newInstance(context, strHazardId),
+										RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+							hasAccess = true;
+						}
+					}
+				}
+
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view command "Complete Review". It is visible only when
+	 * action is coming from Completion column,Hazard is under Completion
+	 * process and user is either the Hazard owner or is a member of any of the
+	 * Design Projects associated to the Product.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if context user has access, False: If context user does not
+	 *         has access
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandRiskMgmtHazardCompleteReview(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean hasAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardId = (String) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			String strCurrentColumn = (String) programMap.get(RiskMgmtConstants.CURRENT_COLUMN);
+			if (HazardProcess.COMPLETION.toString().equals(strCurrentColumn) && !RiskMgmtUtil.isNullOrEmpty(strHazardId)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strCurrentProcess = hazard.getProcess(context);
+				if (HazardProcess.COMPLETION.toString().equals(strCurrentProcess)
+						&& HazardMgmtUtil.isProductsDesignProjectMemberOrHazardOwner(context, hazard, RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					hasAccess = true;
+				}
+			}
+			return hasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Analysis process and set the state as "Identified"
+	 * if it's in some different state currently.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionStartRiskAnalysis(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.ANALYSIS);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Evaluation process.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionStartRiskEvaluation(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.EVALUATION);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Risk Reduction process and set the state to
+	 * Evaluated.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionStartRiskReduction(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.REDUCTION);
+			}
+			String[] arrIsComingFromStructureBrowser = (String[]) programMap.get("table");
+			if (!RiskMgmtUtil.isNullOrEmpty(arrIsComingFromStructureBrowser)) {
+				return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_TABLE_FRAME_ON_PROCESS_ACTION);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Risk Reduction Verification process.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionStartRiskReductionVerification(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.VERIFICATION);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_TABLE_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Completion process.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionStartReview(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.COMPLETION);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_TABLE_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Put the Hazard under Controlled process.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.riskmgmt.ExecuteCallable
+	public String actionCompleteReview(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrHazardId = (String[]) programMap.get(RiskMgmtConstants.OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(arrHazardId) && !RiskMgmtUtil.isNullOrEmpty(arrHazardId[0])) {
+				Hazard hazard = new Hazard(arrHazardId[0]);
+				hazard.setProcess(context, HazardProcess.CONTROLLED);
+			}
+			return RiskMgmtUtil.encodeFunctionForJavaScript(context, Boolean.FALSE, FUNCTION_REFRESH_FRAME_ON_PROCESS_ACTION);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public boolean canViewFormCreateHazardEvaluationFields(Context context, String args[]) throws RiskMgmtException {
+		try {
+			boolean userHasAccess = false;
+			Map<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String productId = (String) inputMap.get(RiskMgmtConstants.PRODUCT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(productId)) {
+				userHasAccess = true;
+			}
+			else {
+				String objectId = (String) inputMap.get(RiskMgmtConstants.PARENT_OID);
+				if (!RiskMgmtUtil.isNullOrEmpty(objectId)) {
+					if (RiskMgmtUtil.getTypeKindOf(context, new String[] { objectId }, SYMBOLIC_TYPE_HAZARD_TEMPLATE).containsValue(Boolean.FALSE)) {
+						userHasAccess = true;
+					}
+				}
+			}
+			return userHasAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+}
+

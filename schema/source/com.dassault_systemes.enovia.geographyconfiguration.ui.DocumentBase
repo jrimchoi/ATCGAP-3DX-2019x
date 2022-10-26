@@ -1,0 +1,634 @@
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.geographyconfiguration.EmxTableRowId;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographicConstants;
+import com.dassault_systemes.enovia.geographyconfiguration.GeographyConfiguration;
+import com.dassault_systemes.enovia.geographyconfiguration.Helper;
+import com.dassault_systemes.enovia.geographyconfiguration.QueryUtil;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectItr;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.Pattern;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	private final static GeographyConfiguration geographyConfiguration = GeographyConfiguration.getInstance();
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static MapList getDocumentProducts(Context context, String[] args) throws Exception {
+		try {
+			HashMap hmProgram = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) hmProgram.get("objectId");
+			String strAttrOrphanDrug = PropertyUtil.getSchemaProperty(context,
+					GeographicConstants.SYMBOLIC_ATTRIBUTE_ORPHAN_DRUG);
+			List<Map<?, ?>> docObjects = QueryUtil.getRelatedObjects(context,
+					DomainObject.newInstance(context, objectId),
+					GeographicConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_SPECIFICATION,
+					GeographicConstants.SYMBOLIC_TYPE_PRODUCTS, Helper.stringList(DomainConstants.SELECT_ID,DomainConstants.SELECT_OWNER,DomainObject.getAttributeSelect(strAttrOrphanDrug)),
+					new StringList(DomainRelationship.SELECT_ID), true, false, (short) 1, "", "");
+			MapList mlObject = new MapList();
+			for (Map objectmap : docObjects) {
+				mlObject.add(objectmap);
+			}
+			return mlObject;
+
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static MapList getDocumentCountries(Context context, String[] args) throws Exception {
+		try {
+			HashMap hmProgram = (HashMap) JPO.unpackArgs(args);
+			String sDocId = (String) hmProgram.get("objectId");
+			String relAssociateDocuments = PropertyUtil.getSchemaProperty(context,
+					GeographicConstants.SYMBOLIC_RELATIONSHIP_COUNTRY_DOCUMENTS);
+
+			StringList slSelects = new StringList();
+			slSelects.add("from[" + relAssociateDocuments + "].torel.from.id");
+			slSelects.add("from[" + relAssociateDocuments + "].id");
+			BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context,
+					new String[] { sDocId }, slSelects);
+			MapList mlCountries = new MapList();
+			List<String> slId = new StringList();
+			for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+				BusinessObjectWithSelect bowsTo = itr1.obj();
+
+				List<String> slToRelatedType = bowsTo
+						.getSelectDataList("from[" + relAssociateDocuments + "].torel.from.id");
+				List<String> slToRelatedRelId = bowsTo.getSelectDataList("from[" + relAssociateDocuments + "].id");
+				if (slToRelatedRelId != null) {
+					for (int i = 0; i < slToRelatedRelId.size(); i++) {
+						String countryId = slToRelatedType.get(i);
+						if (!slId.contains(countryId)) {
+							Map mCountry = new HashMap();
+							mCountry.put(DomainObject.SELECT_ID, countryId);
+							mCountry.put(DomainRelationship.SELECT_ID, slToRelatedRelId.get(i));
+							mlCountries.add(mCountry);
+							slId.add(countryId);
+						}
+					}
+				}
+
+			}
+
+			return mlCountries;
+
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public String addProducts(Context context, String[] args) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(GeographicConstants.OBJECTID);
+
+			String strEmxTableRowIds[] = (String[]) programMap.get(GeographicConstants.EMX_TABLE_ROW_ID);
+			StringList sListToDocIds = new StringList();
+			for (String strRowIds : strEmxTableRowIds) {
+				try {
+					String strRowId = strRowIds;
+					EmxTableRowId EmxTableRowId = new EmxTableRowId(strRowId);
+					String strDocObjectId = EmxTableRowId.getObjectId();
+					sListToDocIds.add(strDocObjectId);
+
+				} catch (Exception e) {
+					throw new Exception(e.getMessage());
+				}
+			}
+			String strArrDocIds[] = new String[sListToDocIds.size()];
+			for (int i = 0; i < sListToDocIds.size(); i++) {
+				strArrDocIds[i] = (String) sListToDocIds.get(i);
+			}
+			geographyConfiguration.addProductsToDocuments(context, strObjectId[0], strArrDocIds);
+
+			return Helper.encodeFunctionForJavaScript(context, false, "refreshProductDocumentPage");
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public String addCountries(Context context, String[] args) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(GeographicConstants.OBJECTID);
+
+			String strEmxTableRowIds[] = (String[]) programMap.get(GeographicConstants.EMX_TABLE_ROW_ID);
+			StringList sListToDocIds = new StringList();
+			for (String strRowIds : strEmxTableRowIds) {
+				try {
+					String strRowId = strRowIds;
+					EmxTableRowId EmxTableRowId = new EmxTableRowId(strRowId);
+					String strDocObjectId = EmxTableRowId.getObjectId();
+					sListToDocIds.add(strDocObjectId);
+
+				} catch (Exception e) {
+					throw new Exception(e.getMessage());
+				}
+			}
+			String arr[] = (String[]) sListToDocIds.toArray(new String[sListToDocIds.size()]);
+			List<String> slRelIds = new StringList();
+			String strRelLanguageUsed = PropertyUtil.getSchemaProperty(context,
+					GeographicConstants.SYMBOLIC_RELATIONSHIP_LANGUAGE_USED);
+			BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context, arr,
+					(StringList) new StringList("from[" + strRelLanguageUsed + "].id"));
+
+			for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+				BusinessObjectWithSelect bowsTo = itr1.obj();
+				List<String> slToRelatedType = bowsTo.getSelectDataList("from[" + strRelLanguageUsed + "].id");
+				slRelIds.addAll(slToRelatedType);
+			}
+
+			geographyConfiguration.addCountriesToDocuments(context, strObjectId[0],
+					slRelIds.toArray(new String[slRelIds.size()]));
+
+			return Helper.encodeFunctionForJavaScript(context, false, "refreshProductDocumentPage");
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public String removeProducts(Context context, String[] args) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strEmxTableRowIds[] = (String[]) programMap.get(GeographicConstants.EMX_TABLE_ROW_ID);
+			StringList sListObjIds = new StringList();
+			for (String strRowIds : strEmxTableRowIds) {
+				try {
+					String strRowId = strRowIds;
+					EmxTableRowId EmxTableRowId = new EmxTableRowId(strRowId);
+					String strDocObjectId = EmxTableRowId.getRelationshipId();
+					sListObjIds.add(strDocObjectId);
+
+				} catch (Exception e) {
+					throw new Exception(e.getMessage());
+				}
+			}
+			String strArrDocIds[] = new String[sListObjIds.size()];
+			for (int i = 0; i < sListObjIds.size(); i++) {
+				strArrDocIds[i] = (String) sListObjIds.get(i);
+			}
+			DomainRelationship.disconnect(context, strArrDocIds);
+			return Helper.encodeFunctionForJavaScript(context, false, "removeObjectAndRefresh");
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public String removeCountries(Context context, String[] args) throws Exception {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strRelAssociateDoc = PropertyUtil.getSchemaProperty(context,
+					GeographicConstants.SYMBOLIC_RELATIONSHIP_COUNTRY_DOCUMENTS);
+			String strEmxTableRowIds[] = (String[]) programMap.get(GeographicConstants.EMX_TABLE_ROW_ID);
+			StringList sListObjIds = new StringList();
+			for (String strRowIds : strEmxTableRowIds) {
+				try {
+					String strRowId = strRowIds;
+					EmxTableRowId EmxTableRowId = new EmxTableRowId(strRowId);
+					String strDocObjectId = EmxTableRowId.getRelationshipId();
+					sListObjIds.add(strDocObjectId);
+
+				} catch (Exception e) {
+					throw new Exception(e.getMessage());
+				}
+			}
+			List<String> slRelIds = new StringList();
+			slRelIds.addAll(sListObjIds);
+			for (int i = 0; i < sListObjIds.size(); i++) {
+				String cmd = "print connection $1 select $2 dump $3";
+				String countryId = MqlUtil.mqlCommand(context, cmd, false, sListObjIds.get(i).toString(),
+						"torel.from.id", "|");
+
+				String strRelLanguageUsed = PropertyUtil.getSchemaProperty(context,
+						GeographicConstants.SYMBOLIC_RELATIONSHIP_LANGUAGE_USED);
+				BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context,
+						new String[] { countryId }, (StringList) new StringList(
+								"from[" + strRelLanguageUsed + "].tomid[" + strRelAssociateDoc + "].id"));
+
+				for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+					BusinessObjectWithSelect bowsTo = itr1.obj();
+					List<String> slCountryRelIds = bowsTo
+							.getSelectDataList("from[" + strRelLanguageUsed + "].tomid[" + strRelAssociateDoc + "].id");
+					for (String relId : slCountryRelIds) {
+						if (!slRelIds.contains(relId))
+							slRelIds.add(relId);
+					}
+
+				}
+			}
+			DomainRelationship.disconnect(context, slRelIds.toArray(new String[slRelIds.size()]));
+			return Helper.encodeFunctionForJavaScript(context, false, "removeObjectAndRefresh");
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public List getHigherRevisionIcon(Context context, String[] args) throws Exception {
+
+		Map programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Map paramList = (HashMap) programMap.get("paramList");
+		String reportFormat = (String) paramList.get("reportFormat");
+
+		int iNumOfObjects = relBusObjPageList.size();
+		// The List to be returned
+		List lstHigherRevExists = new Vector(iNumOfObjects);
+		String arrObjId[] = new String[iNumOfObjects];
+
+		int iCount;
+		// Getting the bus ids for objects in the table
+		for (iCount = 0; iCount < iNumOfObjects; iCount++) {
+			Object obj = relBusObjPageList.get(iCount);
+			if (obj instanceof HashMap) {
+				arrObjId[iCount] = (String) ((HashMap) relBusObjPageList.get(iCount)).get(DomainConstants.SELECT_ID);
+			} else if (obj instanceof Hashtable) {
+				arrObjId[iCount] = (String) ((Hashtable) relBusObjPageList.get(iCount)).get(DomainConstants.SELECT_ID);
+			}
+		}
+
+		// Reading the tooltip from property file.
+		String strTooltipHigherRevExists = EnoviaResourceBundle.getProperty(context,
+				"GeographyConfigurationStringResource", "emxProduct.Revision.ToolTipHigherRevExists",
+				context.getSession().getLanguage());
+
+		String strHigherRevisionIconTag = "";
+		String strIcon = EnoviaResourceBundle.getProperty(context, "emxComponents.HigherRevisionImage");
+		DomainObject domObj = new DomainObject();
+
+		// Iterating through the list of objects to generate the program HTML
+		// output for each object in the table
+		for (int jCount = 0; jCount < iNumOfObjects; jCount++) {
+			String str = "";
+			boolean hasHigherRevision = higherRevisionExists(context, arrObjId[jCount]);
+			if (hasHigherRevision) {
+				if (reportFormat != null && "CSV".equalsIgnoreCase(reportFormat)) {
+					strHigherRevisionIconTag = strTooltipHigherRevExists;
+				} else {
+					strHigherRevisionIconTag = "<img src=\"../common/images/" + XSSUtil.encodeForXML(context, strIcon)
+					+ "\" border=\"0\"  align=\"middle\" " + "TITLE=\"" + " "
+					+ XSSUtil.encodeForXML(context, strTooltipHigherRevExists) + "\"" + "/>";
+				}
+			} else {
+				strHigherRevisionIconTag = " ";
+			}
+			lstHigherRevExists.add(strHigherRevisionIconTag);
+		}
+		return lstHigherRevExists;
+	}
+
+	public static boolean higherRevisionExists(Context context, String objectID) throws FrameworkException {
+
+		String RELATIONSHIP_MAIN_DERIVED = PropertyUtil.getSchemaProperty(context, "relationship_MainDerived");
+		boolean hasHigherRevision = false;
+		MapList mlDerivations = getAllDerivationsOfRelationship(context, objectID, RELATIONSHIP_MAIN_DERIVED);
+		if (mlDerivations != null && mlDerivations.size() > 0) {
+			hasHigherRevision = true;
+		}
+		return hasHigherRevision;
+	}
+
+	public static MapList getAllDerivationsOfRelationship(Context context, String objectID, String rel)
+			throws FrameworkException {
+		String RELATIONSHIP_DERIVED_ABSTRACT = PropertyUtil.getSchemaProperty(context, "relationship_DERIVED_ABSTRACT");
+		MapList mlDerivations = new MapList();
+
+		try {
+			StringList slObjSelects = new StringList(DomainObject.SELECT_ID);
+			slObjSelects.add(DomainObject.SELECT_TYPE);
+			slObjSelects.add(DomainObject.SELECT_NAME);
+			slObjSelects.add(DomainObject.SELECT_REVISION);
+			slObjSelects.add(DomainObject.SELECT_CURRENT);
+
+			StringList slRelSelects = new StringList(DomainRelationship.SELECT_ID);
+			slRelSelects.add(DomainRelationship.SELECT_NAME);
+
+			StringBuffer strRelPattern = new StringBuffer(50).append(RELATIONSHIP_DERIVED_ABSTRACT);
+
+			Pattern includeRelPattern = new Pattern(rel);
+
+			// Get the derivations.
+			DomainObject domObject = new DomainObject(objectID);
+			mlDerivations = domObject.getRelatedObjects(context, strRelPattern.toString(), DomainObject.QUERY_WILDCARD,
+					slObjSelects, slRelSelects, false, true, (short) 0, DomainObject.EMPTY_STRING,
+					DomainObject.EMPTY_STRING, (short) 0, DomainObject.CHECK_HIDDEN, DomainObject.PREVENT_DUPLICATES,
+					(short) DomainObject.PAGE_SIZE, null, includeRelPattern, null, DomainObject.EMPTY_STRING,
+					DomainObject.EMPTY_STRING, (short) 1);
+
+		} catch (Exception e) {
+			throw new FrameworkException(e.getMessage());
+		}
+		return mlDerivations;
+	}
+
+	public Vector<String> getOwnerLink(Context context, String[] args) throws FrameworkException {
+		Map programMap;
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+
+			// Gets the objectList from args
+			MapList mlObjectList = (MapList) programMap.get("objectList");
+			Map paramList = (Map) programMap.get("paramList");
+			String strReportFormat = (String) paramList.get("reportFormat");
+			Vector<String> lLinks = new Vector<String>();
+			// Getting the bus ids for objects in the table
+			String strPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			Map mPerson = getTypeObjectIds(context, strPerson);
+			for (Object object : mlObjectList) {
+				Map map = (Map) object;
+				String strName = (String) map.get(CommonDocument.SELECT_OWNER);
+				if (UIUtil.isNotNullAndNotEmpty(strName)) {
+
+					String strOwnerId = (String) mPerson.get(strName);
+					if (UIUtil.isNotNullAndNotEmpty(strOwnerId)) {
+						strName = PersonUtil.getFullName(context, strName);
+						if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strName)) {
+							strName = getObjectLink(context, strOwnerId, strName, "");
+						}
+					}
+				}
+				lLinks.add(strName);
+			}
+
+			return lLinks;
+		} catch (Exception ex) {
+			throw new FrameworkException(ex.getMessage());
+		}
+	}
+
+	private Map<String, String> getTypeObjectIds(Context context, String strType) throws Exception {
+
+		String strResult = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 dump $5 recordsep $6", false,
+				strType, DomainObject.QUERY_WILDCARD, DomainObject.QUERY_WILDCARD, "id", "|", ",");
+		List<String> slList = FrameworkUtil.split(strResult, ",");
+		Map<String, String> mOrg = new HashMap<String, String>();
+		for (String strObj : slList) {
+			StringList slListOrg = FrameworkUtil.split(strObj, "|");
+			mOrg.put((String) slListOrg.get(1), (String) slListOrg.get(3));
+
+		}
+
+		return mOrg;
+
+	}
+
+	private String getObjectLink(Context context, String strId, String strDisplayText, String strType)
+			throws FrameworkException { // XSSOK
+		if (UIUtil.isNullOrEmpty(strType))
+			strType = DomainObject.newInstance(context, strId).getInfo(context, DomainConstants.SELECT_TYPE);
+		String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type", strType, true);
+		String typeIcon;
+		try {
+			typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon." + strTypeSymName);
+		} catch (FrameworkException e) {
+			typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon.defaultType");
+		}
+
+		StringBuilder sbLink = new StringBuilder();
+		sbLink.append("<img src = \"images/").append(XSSUtil.encodeForHTML(context, typeIcon)).append("\"/>");
+		sbLink.append("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=");
+		sbLink.append(XSSUtil.encodeForXML(context, strId));
+		sbLink.append("', '930', '650', 'true')\" title=\"");
+		sbLink.append(XSSUtil.encodeForHTMLAttribute(context, strDisplayText));
+		sbLink.append("\" >");
+		sbLink.append(XSSUtil.encodeForXML(context, strDisplayText));
+		sbLink.append("</a>");
+		return sbLink.toString();
+	}
+
+	public List<String> getTableProductColumnOrphanDrugValue(Context context, String[] args) throws Exception {
+
+		try {
+			String strAttrOrphanDrug = PropertyUtil.getSchemaProperty(context,
+					GeographicConstants.SYMBOLIC_ATTRIBUTE_ORPHAN_DRUG);
+			String strYes = EnoviaResourceBundle.getProperty(context, "GeographyConfigurationStringResource",
+					context.getLocale(), "GeographyConfiguration.Product.Range.OrphanDrug.Yes");
+			String strNo = EnoviaResourceBundle.getProperty(context, "GeographyConfigurationStringResource",
+					context.getLocale(), "GeographyConfiguration.Product.Range.OrphanDrug.No");
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get("objectList");
+			List<String> slOrphanDrug = new StringList();
+			for (Map<?, ?> mProduct : mlObjectList) {
+				String strOrphanDrug = (String) mProduct
+						.get(DomainObject.getAttributeSelect(strAttrOrphanDrug));
+				if (UIUtil.isNotNullAndNotEmpty(strOrphanDrug))
+					slOrphanDrug.add(strOrphanDrug.equalsIgnoreCase("FALSE") ? strNo : strYes);
+				else
+					slOrphanDrug.add(DomainObject.EMPTY_STRING);
+			}
+			return slOrphanDrug;
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeAlreadyConnectedProducts(Context context, String[] args) throws Exception {
+		Map programMap = (Map) JPO.unpackArgs(args);
+		String objectId = (String) programMap.get("objectId");
+		List<Map<?, ?>> docObjects = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, objectId),
+				GeographicConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_SPECIFICATION,
+				GeographicConstants.SYMBOLIC_TYPE_PRODUCTS, Helper.stringList(DomainConstants.SELECT_ID),
+				new StringList(DomainRelationship.SELECT_ID), true, false, (short) 1, "", "");
+		StringList listOfObjects = new StringList();
+		for (Map objectmap : docObjects) {
+			listOfObjects.add((String) objectmap.get(DomainConstants.SELECT_ID));
+		}
+		return listOfObjects;
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeAlreadyConnectedCountries(Context context, String[] args) throws Exception {
+		Map programMap = (Map) JPO.unpackArgs(args);
+		String objectId = (String) programMap.get("objectId");
+
+		String relAssociateDocuments = PropertyUtil.getSchemaProperty(context,
+				GeographicConstants.SYMBOLIC_RELATIONSHIP_COUNTRY_DOCUMENTS);
+
+		StringList slSelects = new StringList();
+		slSelects.add("from[" + relAssociateDocuments + "].torel.from.id");
+		slSelects.add("from[" + relAssociateDocuments + "].id");
+		BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context,
+				new String[] { objectId }, slSelects);
+		StringList slId = new StringList();
+		for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+			BusinessObjectWithSelect bowsTo = itr1.obj();
+
+			List<String> slToCountryIds = bowsTo.getSelectDataList("from[" + relAssociateDocuments + "].torel.from.id");
+			List<String> slToRelatedRelId = bowsTo.getSelectDataList("from[" + relAssociateDocuments + "].id");
+			if (slToRelatedRelId != null) {
+				for (int i = 0; i < slToRelatedRelId.size(); i++) {
+					String countryId = slToCountryIds.get(i);
+					if (!slId.contains(countryId)) {
+						slId.add(countryId);
+					}
+				}
+			}
+
+		}
+
+		return slId;
+	}
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList includeCountriesWithLanguages(Context context, String[] args) throws Exception {
+		Map programMap = (Map) JPO.unpackArgs(args);
+		String strRelLanguageUsed=PropertyUtil.getSchemaProperty(context,GeographicConstants.SYMBOLIC_RELATIONSHIP_LANGUAGE_USED);
+		List<Map<String, String>> countryObjects =geographyConfiguration.getCountries(context, new StringList(), "from["+strRelLanguageUsed+"]=='TRUE'");
+		StringList listOfObjects=new StringList();
+		for(Map objectmap:countryObjects)
+		{
+			listOfObjects.add((String)objectmap.get(DomainConstants.SELECT_ID));
+		}
+		return listOfObjects;
+	}
+
+
+	public String getGEOProductAndCountryCommandLabel(Context context, String[] args) throws Exception {
+		try {		
+			String cmdLbl ="GeographyConfiguration.Commmand.Label.ProductAndCountry";
+			if(!showProductsCommand(context, args))
+					cmdLbl = "GeographyConfiguration.Label.Country";
+			return cmdLbl;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	
+	public boolean showProductsCommand(Context context, String[] args) throws Exception {
+		try {		
+			boolean showCommand=getResultForAccessFunctionPropertyKey(context, args, "ShowCommandGEODocumentProducts");
+			boolean isProductLineInstalled=FrameworkUtil.isSuiteRegistered(context, "appVersionProductLine", false, null, null);
+		   return showCommand&&isProductLineInstalled;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	
+	public boolean showCountryCommand(Context context, String[] args) throws Exception {
+		try {		
+			boolean showCommand=getResultForAccessFunctionPropertyKey(context, args, "ShowCommandGEODocumentCountry");
+		   return showCommand;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	
+	public boolean checkAccessOnGEOProductAndCountryCommand(Context context, String[] args) throws Exception {
+		try {
+			return getResultForAccessFunctionPropertyKey(context, args, "ShowCommandGEOProductAndCountry");
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+	
+	public boolean checkAccessOnProductAndCountryToolbar(Context context, String[] args) throws Exception {
+		try {
+			return getResultForAccessFunctionPropertyKey(context, args, "ShowCommandAddAndRemoveForProductsAndCountry");
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+	
+    /**
+     * @param context
+     * @param args : arguments from table
+     * @param strKey : Property key for Access Function
+     * @return :boolean based on Access Program execution
+     * @throws Exception
+     */
+    private static boolean  getResultForAccessFunctionPropertyKey(Context context, String[] args,String strKey) throws Exception
+    {
+    	try{
+    		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			if(!UIUtil.isNotNullAndNotEmpty(strObjectId)){
+				Map requestMap=(Map)programMap.get("requestMap");
+				strObjectId = (String) requestMap.get("objectId");
+			}
+    		String strAccessProgram=DomainObject.EMPTY_STRING;
+			String strObjType = DomainObject.newInstance(context, strObjectId).getInfo(context,
+					DomainConstants.SELECT_TYPE);
+			String strProperty = "GeographyConfiguration." + strObjType.replaceAll(" ", "") + "."
+					+ strKey;
+			try {
+				strAccessProgram = EnoviaResourceBundle.getProperty(context, strProperty);
+			} catch (Exception ex) {
+				String strParetType=getParentType(context,strObjType);
+				if(UIUtil.isNotNullAndNotEmpty(strParetType)){
+					strProperty = "GeographyConfiguration." + strParetType.replaceAll(" ", "") + "."
+							+ strKey;
+				}else{
+				strProperty = "GeographyConfiguration.Default."+strKey;
+				}
+				try{
+				strAccessProgram = EnoviaResourceBundle.getProperty(context, strProperty);
+				}catch(Exception e1){
+					return true;
+				}
+			}
+
+			if (!UIUtil.isNotNullAndNotEmpty(strAccessProgram))
+				return true;
+
+			StringList programInfo = FrameworkUtil.split(strAccessProgram, ":");
+			String programName = (String) programInfo.get(0);
+			String methodName = (String) programInfo.get(1);
+			boolean show = JPO.invoke(context, programName, null, methodName, args, Boolean.class);
+			return show;
+    	}catch(Exception e ){
+    		throw new Exception (e.getLocalizedMessage());
+    	}
+    }
+    
+    /**
+     * @param context
+     * @param type
+     * @throws Exception
+     */
+    private static String getParentType(Context context, String type) throws Exception
+    {
+    	try{
+    		String command = "print Type '$1' select $2 dump";
+    		return  MqlUtil.mqlCommand(context, command,type,"derived");
+    	}catch(Exception e ){
+    		throw new Exception (e.getLocalizedMessage());
+    	}
+    }
+    
+
+}
+

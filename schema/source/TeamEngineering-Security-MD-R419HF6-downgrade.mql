@@ -1,0 +1,63 @@
+# File: TeamEngineering-Security-MD-R419HF6-downgrade.mql
+# Description: This file downgrades VPLM security data from R419 HF6 to R419 GA for One-Click
+#
+# MBH 17:07:19 Created file
+# MBH 17:07:19 TSK3570620 : Change Control (FUN072116)
+# MBH 17:07:19 TSK3315404 : CA Collaboration Sync Dependencies (FUN068718)
+
+tcl;
+eval {
+# TSK3570620 (Shared rules are not delete since they can be used by other policies than these below)
+
+  mql modify policy VPLM_SMB_Definition allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_Definition_Document allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_Evaluation allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_Resource allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_Management allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_Task_Management allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+  mql modify policy VPLM_SMB_PostIt_Management allstate remove rule ChangeControlIRPCObjectRule all remove rule ChangeControlRepComposeeRule all;
+
+  mql modify policy VPLM_SMB_PORT_Definition allstate remove rule ChangeControlPortComposeeRule all;
+  mql modify policy VPLM_SMB_PORT_Evaluation allstate remove rule ChangeControlPortComposeeRule all;
+  mql modify policy VPLM_SMB_PORT_Resource allstate remove rule ChangeControlPortComposeeRule all;
+
+  mql modify policy VPLM_SMB_CX_Definition allstate remove rule ChangeControlConnectionComposeeRule all;
+  mql modify policy VPLM_SMB_CX_Evaluation allstate remove rule ChangeControlConnectionComposeeRule all;
+  mql modify policy VPLM_SMB_CX_Resource allstate remove rule ChangeControlConnectionComposeeRule all;
+  mql modify policy VPLM_SMB_CX_Management allstate remove rule ChangeControlConnectionComposeeRule all;
+  mql modify policy VPLM_SMB_CX_PostIt_Management allstate remove rule ChangeControlConnectionComposeeRule all;
+  mql modify policy VPLM_SMB_CX_Task_Management allstate remove rule ChangeControlConnectionComposeeRule all;
+
+  set pol1 [mql list policy VPLM_SMB_CX_PostIt_Management_WithoutRevSeq]
+  if {$pol1 == "VPLM_SMB_CX_PostIt_Management_WithoutRevSeq" } {
+    mql modify policy VPLM_SMB_CX_PostIt_Management_WithoutRevSeq allstate remove rule ChangeControlConnectionComposeeRule all;
+  }
+
+  set pol2 [mql list policy VPLM_SMB_CX_PostIt_Management_WithRevSeq]
+  if {$pol2 == "VPLM_SMB_CX_PostIt_Management_WithRevSeq" } {
+    mql modify policy VPLM_SMB_CX_PostIt_Management_WithRevSeq allstate remove rule ChangeControlConnectionComposeeRule all;
+  }
+
+  set pol1 [mql list policy VPLM_SMB_CX_Task_Management_WithoutRevSeq]
+  if {$pol1 == "VPLM_SMB_CX_PostIt_Task_WithoutRevSeq" } {
+    mql modify policy VPLM_SMB_CX_PostIt_Task_WithoutRevSeq allstate remove rule ChangeControlConnectionComposeeRule all;
+  }
+
+  set pol2 [mql list policy VPLM_SMB_CX_Task_Management_WithRevSeq]
+  if {$pol2 == "VPLM_SMB_CX_Task_Management_WithRevSeq" } {
+    mql modify policy VPLM_SMB_CX_Task_Management_WithRevSeq allstate remove rule ChangeControlConnectionComposeeRule all;
+  }
+
+  mql modify rule "VPLM_SMB_INSTANCE" \
+    remove revoke user "VPLMViewer" key ChangeControlRevokeRule modify,changetype,delete,create \
+      filter "from.interface\[Change Control\]==TRUE && (transaction.data\[CHANGEID\]=='' || (from.attribute\[Change Id\]!='' && from.attribute\[Change Id\]!=transaction.data\[CHANGEID\]))" \
+    remove revoke user "Global User" key ChangeControlRevokeRule modify,changetype,delete,create \
+      filter "from.interface\[Change Control\]==TRUE && (transaction.data\[CHANGEID\]=='' || (from.attribute\[Change Id\]!='' && from.attribute\[Change Id\]!=transaction.data\[CHANGEID\]))";
+
+# TSK3315404
+  mql modify rule "VPLM_SMB_INSTANCE" \
+    remove revoke user "VPLMViewer" key "AuthoringLockRevokeRule" modify,changetype,delete filter "(interface\[VPLMIntegAuthoringLock\]==TRUE && attribute\[authorable\]==FALSE)" \
+    remove revoke user "Global User" key "AuthoringLockRevokeRule" modify,changetype,delete filter "(interface\[VPLMIntegAuthoringLock\]==TRUE && attribute\[authorable\]==FALSE)";
+}
+exit
+

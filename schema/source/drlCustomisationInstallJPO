@@ -1,0 +1,457 @@
+import com.matrixone.apps.domain.util.FrameworkProperties;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
+import matrix.db.*;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+/**
+ *
+ * @author Administrator
+ */
+public class ${CLASSNAME} {
+
+    private static String DRL_INSTALL_LOG_OBJECT_GENERATOR_NAME = "type_DRLToolsInstallationLog";
+    private static String DRL_INSTALL_LOG_POLICY = "policy_DRLTools";
+    private static String DRL_INSTALL_LOG_TYPE = "type_DRLToolsInstallationLog";
+    private static String DRL_INSTALL_LOG_FORMAT = "generic";
+    private static String DRL_ATTRIBUTE_SOURCE = "drlConfigurationObjectSource";
+    private static String DRL_ATTRIBUTE_INSTALLATION_COMMENTS = "drlInstallationComments";
+    private static String DRL_ATTRIBUTE_INSTALLATION_INSTALLED_BY = "drlInstallationInstalledBy";
+    private static String DRL_ATTRIBUTE_INSTALLATION_NAME = "drlInstallationName";
+    private static String DRL_ATTRIBUTE_INSTALLATION_STATUS = "drlInstallationStatus";
+    private static String DRL_ATTRIBUTE_INSTALLATION_TOOL = "drlInstallationTool";
+    private static String DRL_ATTRIBUTE_INSTALLATION_VERSION = "drlInstallationVersion";
+    private static String DRL_ATTRIBUTE_INSTALLATION_ENVIRONMENT_DETAILS = "drlInstallationEnvironmentDetails";
+	private static String DRL_ATTRIBUTE_INSTALLATION_DESIGNER_VERSION = "drlDesignerVersion";
+
+    public static void mxMain(Context context, String[] args) throws Exception {
+       try {
+			if (args != null && args.length > 0) {
+				log(context, "Args count: " + Integer.toString(args.length));
+				System.out.println("Args count: " + Integer.toString(args.length));
+				for (int i = 0; i < args.length; i++) {
+					System.out.println("Arg " + Integer.toString(i) + " = " + args[i]);
+				}
+				HashMap<String, String> argsAsKeyValuePairMap = getArgsAsKeyValuePairMap(args);
+				if (argsAsKeyValuePairMap.containsKey("name")) {
+
+					BusinessObject busObj = createNew(context, DRL_INSTALL_LOG_OBJECT_GENERATOR_NAME, DRL_INSTALL_LOG_TYPE, DRL_INSTALL_LOG_POLICY);
+
+					if (argsAsKeyValuePairMap.containsKey("description")) {
+						String description = argsAsKeyValuePairMap.get("description");
+						busObj.setDescription(context, description);
+						busObj.update(context);
+					}
+					AttributeList attributes = new AttributeList();
+					HashMap<String, String> attributeNameKeyMap = getAttributeNameKeyMap();
+					for (String key : argsAsKeyValuePairMap.keySet()) {
+						if (attributeNameKeyMap.containsKey(key)) {
+							String attributeName = attributeNameKeyMap.get(key);
+							AttributeType attributeTypeObj = new AttributeType(attributeName);
+							String attributeValue = argsAsKeyValuePairMap.get(key);
+							matrix.db.Attribute attributeValueObj = new matrix.db.Attribute(attributeTypeObj, attributeValue);
+							attributes.addElement(attributeValueObj);
+						}
+					}
+
+					busObj.setAttributes(context, attributes);
+
+					busObj.open(context);
+					System.out.println("Object Created:" + busObj.getTypeName() + " " + busObj.getName() + " " + busObj.getRevision() + ". ID =  " + busObj.getObjectId());
+					busObj.close(context);
+					if (argsAsKeyValuePairMap.containsKey("files")) {
+						String files = argsAsKeyValuePairMap.get("files");
+						if (files != null && !files.isEmpty()) {
+							checkInSourceFiles(context, files, busObj);
+						}
+					}
+				}
+			} else {
+				throw new Exception("No arguments defined");
+			}
+		} catch (Exception ex) {
+            System.out.println("Error occured writing log: " + ex.getMessage());
+        }
+    }
+
+    private static HashMap<String, String> getAttributeNameKeyMap() {
+        HashMap<String, String> attributeNameKey = new HashMap<String, String>();
+        attributeNameKey.put("source", DRL_ATTRIBUTE_SOURCE);
+        attributeNameKey.put("comments", DRL_ATTRIBUTE_INSTALLATION_COMMENTS);
+        attributeNameKey.put("by", DRL_ATTRIBUTE_INSTALLATION_INSTALLED_BY);
+        attributeNameKey.put("name", DRL_ATTRIBUTE_INSTALLATION_NAME);
+        attributeNameKey.put("status", DRL_ATTRIBUTE_INSTALLATION_STATUS);
+        attributeNameKey.put("tool", DRL_ATTRIBUTE_INSTALLATION_TOOL);
+        attributeNameKey.put("version", DRL_ATTRIBUTE_INSTALLATION_VERSION);
+		attributeNameKey.put("designer", DRL_ATTRIBUTE_INSTALLATION_DESIGNER_VERSION);
+        return attributeNameKey;
+    }
+
+    private static HashMap<String, String> getArgsAsKeyValuePairMap(String[] args) {
+        HashMap<String, String> keyValuePairMap = new HashMap<String, String>();
+        if (args != null && args.length > 0) {
+            System.out.println("Args count: " + Integer.toString(args.length));
+            for (int i = 0; i < args.length - 1; i++) {
+                String key = args[i];
+                i++;
+                String value = args[i];
+                if (value == null) {
+                    value = "";
+                }
+                if (key != null && !key.isEmpty()) {
+                    key = key.toLowerCase();
+                    keyValuePairMap.put(key, value);
+                }
+            }
+        }
+        return keyValuePairMap;
+    }
+
+    private static BusinessObject createNew(Context context, String objectGeneratorName, String typeSymbolicName, String policySymbolicName) throws Exception {
+        String err;
+        StringBuilder strMQL = new StringBuilder();
+        String strID = null;
+        strMQL.append("execute program eServicecommonNumberGenerator.tcl '");
+        strMQL.append(objectGeneratorName);
+        strMQL.append("' '-' '");
+        strMQL.append(policySymbolicName);
+        strMQL.append("' 'Null' 'eService Production' '' '");
+        strMQL.append(typeSymbolicName);
+        strMQL.append("'");
+
+        String strRes = getResultFromMQLCommand(context, strMQL.toString());
+        StringList lstReturnVals = FrameworkUtil.split(strRes, "|");
+
+        if (lstReturnVals.size() >= 2) {
+            err = (String) lstReturnVals.get(1);
+        } else {
+            err = "unknown";
+        }
+
+        if (lstReturnVals.get(0).equals("1")) {
+            throw new Exception("Failed to create new. Error: " + err);
+        } else {
+            strID = (String) lstReturnVals.get(1);
+            strID = strID.trim();
+            BusinessObject busObj = new BusinessObject(strID);
+            try {
+                if (!busObj.exists(context)) {
+                    throw new Exception("Failed to create new. Error: " + err);
+                }
+                return busObj;
+            } catch (Exception e) {
+                throw new Exception("Failed to create new. Error: " + err + ". Execption thrown testing object existance " + e.getMessage());
+            }
+        }
+    }
+
+    private static String getResultFromMQLCommand(Context context, String mqlCommand) throws Exception {
+        matrix.db.MQLCommand command = new matrix.db.MQLCommand();
+        StringBuilder strMQL = new StringBuilder();
+        strMQL.append(mqlCommand);
+        command.open(context);
+        command.executeCommand(context, strMQL.toString());
+        String err = command.getError();
+        String strRes = command.getResult().trim();
+        command.close(context);
+        if (strRes.isEmpty()) {
+            throw new Exception("no results returned, error=" + err);
+        }
+        return strRes;
+    }
+
+    private static void checkInSourceFiles(Context context, String filePaths, BusinessObject busObj) throws Exception {
+        try {
+            ArrayList<String> filePathsList = new ArrayList<String>();
+            if (filePaths != null && filePaths.isEmpty() == false) {
+                filePathsList.addAll(Arrays.asList(filePaths.split(",")));
+            }
+            for (String filePath : filePathsList) {
+                File file = new File(filePath);
+                if (file.exists()) {
+                    if (file.isDirectory()) {
+                        String zipFilePath = createZipFile(file);
+                        file = new File(zipFilePath);
+                    }
+                    System.out.println("Checking in file " + file.getPath());
+                    checkIn(context, busObj, file.getName(), file.getParent(), DRL_INSTALL_LOG_FORMAT, true, true, "STORE", false, "");
+                } else {
+                    System.out.println("File does not exist: " + file.getPath());
+                }
+            }
+        } catch (Exception ex) {
+            throw new Exception("Problem occured checking in source file " + ex.getMessage(), ex);
+        }
+    }
+
+    private static void log(Context context, String message) {
+        MatrixLogWriter logWriter = new MatrixLogWriter(context);
+        try {
+            logWriter.write(message);
+        } catch (IOException ex) {
+            System.out.println("Error occured writing log: " + ex.getMessage());
+        }
+    }
+
+    private static String createZipFile(File sourceFolder) throws Exception {
+
+        String tempDirectory = System.getProperty("java.io.tmpdir");
+        String outputZipFileName = combineFilePaths(tempDirectory, sourceFolder.getName() + ".zip");
+        File outputFile = new File(outputZipFileName);
+        if (outputFile.exists()) {
+            outputFile.delete();
+        }
+        ArrayList<String> fileList = new ArrayList<String>();
+        generateFileList(fileList, sourceFolder.getPath(), sourceFolder);
+        zipIt(sourceFolder.getPath(), fileList, outputZipFileName);
+        return outputZipFileName;
+    }
+
+    private static String combineFilePaths(String path1, String path2) {
+        File file1 = new File(path1);
+        File file2 = new File(file1, path2);
+        return file2.getPath();
+    }
+
+    /**
+     * Zip it
+     *
+     * @param zipFile output ZIP file location
+     */
+    private static void zipIt(String sourceFolder, ArrayList<String> fileList, String outputZipFileName) throws Exception {
+        byte[] buffer = new byte[1024];
+
+        try {
+
+            FileOutputStream fos = new FileOutputStream(outputZipFileName);
+            ZipOutputStream zos = new ZipOutputStream(fos);
+
+
+            for (String file : fileList) {
+
+                // log.debug("File Added : " + file);
+                ZipEntry ze = new ZipEntry(file);
+                zos.putNextEntry(ze);
+
+                FileInputStream in =
+                        new FileInputStream(sourceFolder + File.separator + file);
+
+                int len;
+                while ((len = in.read(buffer)) > 0) {
+                    zos.write(buffer, 0, len);
+                }
+
+                in.close();
+            }
+
+            zos.closeEntry();
+            //remember close it
+            zos.close();
+
+        } catch (IOException ex) {
+            throw new Exception("Error occured creating zip file " + ex.getMessage(), ex);
+        }
+    }
+
+    /**
+     * Traverse a directory and get all files, and add the file into fileList
+     *
+     * @param node file or directory
+     */
+    private static void generateFileList(ArrayList<String> fileList, String sourceFolder, File node) {
+
+        //add file only
+        if (node.isFile()) {
+            fileList.add(generateZipEntry(sourceFolder, node.getAbsoluteFile().toString()));
+        }
+
+        if (node.isDirectory()) {
+            String[] subNote = node.list();
+            for (String filename : subNote) {
+                generateFileList(fileList, sourceFolder, new File(node, filename));
+            }
+        }
+
+    }
+
+    /**
+     * Format the file path for zip
+     *
+     * @param file file path
+     * @return Formatted file path
+     */
+    private static String generateZipEntry(String sourceFolder, String file) {
+        return file.substring(sourceFolder.length() + 1, file.length());
+    }
+
+    private static void checkIn(Context context, BusinessObject busObj, String fileName, String path, String format, boolean unlock, boolean append, String store, boolean usingCommonDocumentModel, String comment) throws MatrixException {
+        if (usingCommonDocumentModel) {
+            String clientServer = "server";
+            String[] jpoArgs = new String[]{busObj.getObjectId(), path, fileName, format, store, Boolean.toString(unlock), clientServer, comment};
+            matrix.db.JPO.invoke(context, "emxCommonDocument", null, "checkinBus", jpoArgs);
+        }
+        busObj.checkinFile(context, unlock, append, "", format, store, fileName, path);
+    }
+
+    public int updateEnvironmentDetails(Context context, String[] args) throws Exception {
+        if (args == null || args.length == 0) {
+            throw new IllegalArgumentException();
+        }
+        try {
+            String objectId = args[0];
+            BusinessObject busObj = new BusinessObject(objectId);
+            AttributeType attributeTypeObj = new AttributeType(DRL_ATTRIBUTE_INSTALLATION_ENVIRONMENT_DETAILS);
+            StringBuilder environmentDetails = this.getEnvironmentDetails(context);
+            matrix.db.Attribute attributeValueObj = new matrix.db.Attribute(attributeTypeObj, environmentDetails.toString());
+            AttributeList attributes = new AttributeList();
+            attributes.addElement(attributeValueObj);
+            busObj.setAttributes(context, attributes);
+            busObj.update(context);
+            return 0;
+        } catch (Exception e) {
+            throw new Exception("Failed to update environment details: " + e.getMessage(), e);
+        }
+    }
+
+    private StringBuilder getEnvironmentDetails(Context context) {
+        StringBuilder str = new StringBuilder();
+        try {
+            String replaceVersion = "V6R2008-2.0";
+            String newVersion = "V6R2009";
+            int versionLength = replaceVersion.length();
+            ServerVersion version = new ServerVersion();
+            version.open(context);
+
+            String host = version.getHost(context);
+            str.append("host:").append(host).append("\n");
+            String user = version.getUser(context);
+            str.append("user:").append(user).append("\n");
+            String dbServerName = version.getDatabaseServerName(context);
+            str.append("dbServerName:").append(dbServerName).append("\n");
+            String dbServerVersion = version.getDatabaseServerVersion(context);
+            str.append("dbServerVersion:").append(dbServerVersion).append("\n");
+            String driverName = version.getDatabaseDriverName(context);
+            str.append("driverName:").append(driverName).append("\n");
+            String driverVersion = version.getDatabaseDriverVersion(context);
+            str.append("driverVersion:").append(driverVersion).append("\n");
+            String serverVersion = version.getVersion(context);
+            int versionIndex = serverVersion.indexOf(replaceVersion);
+            if (versionIndex >= 0) {
+                serverVersion = newVersion + serverVersion.substring(versionLength);
+            }
+            str.append("serverVersion:").append(serverVersion).append("\n");
+            String strAppName = FrameworkProperties.getProperty(context, "emxFramework.HelpAbout.ApplicationName");
+            str.append("strAppName:").append(strAppName).append("\n");
+            version.close(context);
+
+            String osName = System.getProperty("os.name");
+            str.append("osName:").append(osName).append("\n");
+            String osArch = System.getProperty("os.arch");
+            str.append("osArch:").append(osArch).append("\n");
+            String osArchDataModel = System.getProperty("os.arch.data.model");
+            if (osArchDataModel == null || osArchDataModel.length() == 0) {
+                osArchDataModel = System.getProperty("sun.arch.data.model");
+            }
+            str.append("osArchDataModel:").append(osArchDataModel).append("\n");
+            String osVersion = System.getProperty("os.version");
+            str.append("osVersion:").append(osVersion).append("\n");
+            String javaVersion = System.getProperty("java.version");
+            str.append("javaVersion:").append(javaVersion).append("\n");
+            String javaVendor = System.getProperty("java.vendor");
+            str.append("javaVendor:").append(javaVendor).append("\n");
+
+            Hashtable advList = com.matrixone.apps.domain.util.FrameworkUtil.getAdvancedHelpInfo(context);
+
+            String baseVersion = "";
+            try {
+                baseVersion = com.matrixone.apps.domain.util.MqlUtil.mqlCommand(context, "print prog $1 select $2 dump",
+                        "eServiceSystemInformation.tcl", "property[version].value");
+            } catch (Exception ex) {
+                str.append("Error: ").append(ex.toString()).append("\n");
+            }
+
+            String Result = "";
+            String error = "";
+            String sErrorCode = "";
+
+            MQLCommand prMQL = new MQLCommand();
+            prMQL.open(context);
+
+            prMQL.executeCommand(context, "execute program $1 $2", "eServiceHelpAbout.tcl", "TRUE");
+            Result = prMQL.getResult().trim();
+            error = prMQL.getError();
+
+            if (Result != null && !Result.isEmpty()) {
+
+                StringList applicationList = new StringList();
+                applicationList.add("Framework");
+                applicationList.add("BusinessMetrics");
+                applicationList.add("CommonComponents");
+                applicationList.add("TeamCentral");
+
+                StringTokenizer token = new StringTokenizer(Result, "|", false);
+                sErrorCode = token.nextToken().trim();//first token
+
+                if (sErrorCode.equals("1"))//internal failure of tcl program
+                {
+                    str.append("Error ").append(token.nextToken().trim()).append("\n");//second token
+                } else {
+                    while (token.hasMoreTokens()) {
+                        String sApplicationName = (String) token.nextToken();
+                        String versionValue = (String) token.nextToken();
+                        versionIndex = versionValue.indexOf(replaceVersion);
+                        if (versionIndex >= 0) {
+                            versionValue = newVersion + versionValue.substring(versionLength);
+                        }
+                        //added for - easy version string
+                        String vStr = FrameworkUtil.findAndReplace(versionValue, " ", "_");
+                        boolean keyFound = false;
+                        try {
+                            String versionStrFromProp = FrameworkProperties.getProperty(context, "emxFramework.HelpAbout.Version." + vStr);
+                            if (versionStrFromProp != null && !"".equalsIgnoreCase(versionStrFromProp)) {
+                                versionValue = versionStrFromProp;
+                                keyFound = true;
+                            }
+                        } catch (Exception e) {
+                        }
+                        if (!keyFound) {
+                            if (versionValue.indexOf(baseVersion) != -1) {
+                                try {
+                                    String versionStrFromProp = FrameworkProperties.getProperty(context, "emxFramework.HelpAbout.Version." + baseVersion);
+                                    if (versionStrFromProp != null && !"".equalsIgnoreCase(versionStrFromProp)) {
+                                        versionValue = FrameworkUtil.findAndReplace(versionValue, baseVersion, versionStrFromProp);
+                                    }
+                                } catch (Exception ex) {
+                                }
+                            }
+                        }
+                        //end - easy version string
+                        if (!applicationList.contains(sApplicationName)) {
+                            try {
+                                sApplicationName = FrameworkProperties.getProperty(context, "emxFramework.HelpAbout." + sApplicationName);
+                            } catch (Exception ex) {
+                            }
+                        } else {
+                            continue;
+                        }
+                        str.append(sApplicationName).append(":").append(versionValue).append("\n");
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            str.append("Error Getting Environment Details:\n");
+            str.append(ex.toString());
+        }
+        return str;
+    }
+}
+

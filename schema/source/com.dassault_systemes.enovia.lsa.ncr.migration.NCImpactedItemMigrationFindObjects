@@ -1,0 +1,422 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.logging.FileHandler;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
+
+import matrix.db.Context;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ncr.NCRException;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	private static final String	TRACE_NC_MIGRATION		= "NCMigration";
+	private static final String	FILE_NC_MIGRATION_LOG	= "NCMigration.log";
+	private static final String	FILE_EXTENSION			= ".xls";
+	private static final String	IMPACTED_ITEMS			= "Impacted Items";
+	private static String		MIGRATION_START_TIME	= DomainConstants.EMPTY_STRING;
+	private static String		SPECIAL_CHARACTER		= "";
+	private static String		DELIMETER_CHARACTER		= ",";
+	public static int			LIMIT_PER_FILE			= 1000;
+
+	public static int			flagForFirstTime		= 0;
+	// Logger
+	private static Logger		logger					= Logger.getLogger(TRACE_NC_MIGRATION);
+
+	private static final String	FILE_SEPERATOR			= java.io.File.separator;
+
+	public ${CLASSNAME}() {
+	}
+
+	private static void executeNCImpactedItemsMigrationFindObjects(Context context, String[] args) throws NCRException {
+
+		if (args.length < 1 || "help".equalsIgnoreCase(args[0])) {
+			try {
+				help(context, args);
+			}
+			catch (Exception e) {
+				throw new NCRException(e.getLocalizedMessage());
+			}
+		}
+		else {
+			String strDirPath = args[0];
+
+			if (args.length > 2) {
+				throw new NCRException("Arguments passed incorrectly. Please see help by passing only one argument: \"help\" to the program");
+			}
+			else {
+				int limit = LIMIT_PER_FILE;
+				if (args.length == 2) {
+					String strLimitPerFile = args[1];
+					limit = Integer.parseInt(strLimitPerFile);
+					if (limit == 0) {
+						limit = LIMIT_PER_FILE;
+					}
+				}
+				validateFilePath(strDirPath);
+				LocalDateTime currentTime = LocalDateTime.now();
+				DateTimeFormatter dtf = DateTimeFormatter.ofPattern("MMddyyyy_HHmmss");
+				MIGRATION_START_TIME = currentTime.format(dtf);
+
+				// Create log file
+				FileHandler logging = createLogFile(TRACE_NC_MIGRATION, strDirPath);
+
+				try {
+					traceBeginMethod(context);
+					final String TYPE_NCR = PropertyUtil.getSchemaProperty(context, "type_NCR");
+					final String RELATIONSHIP_NCR_PRODUCTCONTROL = PropertyUtil.getSchemaProperty(context, "relationship_NCRProductControl");
+					final String RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT = PropertyUtil.getSchemaProperty(context,
+							"relationship_NCRProductControlProduct");
+					StringBuilder sbImpactedItems = new StringBuilder();
+					sbImpactedItems.append("from[").append(RELATIONSHIP_NCR_PRODUCTCONTROL);
+					sbImpactedItems.append("].to.from[").append(RELATIONSHIP_NCR_PRODUCT_CONTROL_PRODUCT);
+					sbImpactedItems.append("].to.id");
+
+					LinkedList<String> busSelList = new LinkedList<>();
+					busSelList.add(DomainConstants.SELECT_TYPE);
+					busSelList.add(DomainConstants.SELECT_NAME);
+					busSelList.add(DomainConstants.SELECT_ID);
+					busSelList.add(DomainConstants.SELECT_POLICY);
+					busSelList.add(DomainConstants.SELECT_CURRENT);
+					busSelList.add(sbImpactedItems.toString());
+
+					List<Map<?, ?>> objectListMap = QueryUtil.findObjects(context, TYPE_NCR, null, StringList.asList(busSelList));
+					createCSVForMigration(context, TRACE_NC_MIGRATION, strDirPath, limit, busSelList, objectListMap);
+				}
+				catch (Exception exp) {
+					traceError(context, exp.getMessage());
+					throw new NCRException(exp);
+				}
+				finally {
+					traceEndMethod(context);
+					logging.close();
+				}
+			}
+		}
+	}
+
+	private static File createCSVForMigration(Context context, String strFileName, String strFullPath, int strLimitPerFile,
+			LinkedList<String> busSelList, List<Map<?, ?>> objectListMap) throws NCRException {
+		traceBeginMethod(context);
+		try {
+			flagForFirstTime = 0;
+			int fileNumber = 1;
+			File file = new File(strFullPath + FILE_SEPERATOR + strFileName + "_" + fileNumber + FILE_EXTENSION);
+			boolean isFileCreated = file.createNewFile();
+
+			if (isFileCreated || file.exists()) {
+				FileWriter writer = new FileWriter(file);
+				PrintWriter pw = new PrintWriter(writer);
+				logger.log(Level.INFO, "Writing objects to file");
+
+				int count = 0;
+				for (Map<?, ?> objectMap : objectListMap) {
+					Map<?, ?> mapOfAttributes = getInfo(context, objectMap, busSelList);
+					if (count != 0 && Math.IEEEremainder(count, strLimitPerFile) == 0) {
+						pw.close();
+						fileNumber++;
+						file = new File(strFullPath + FILE_SEPERATOR + strFileName + "_" + fileNumber + FILE_EXTENSION);
+						writer = new FileWriter(file);
+						pw = new PrintWriter(writer);
+						flagForFirstTime = 0;
+					}
+					createCSVFile(context, pw, mapOfAttributes, busSelList);
+					pw.flush();
+					count++;
+				}
+
+				pw.close();
+				logger.log(Level.INFO, "Objects are written to file");
+			}
+			else {
+				throw new NCRException("Please check if path " + strFullPath + " is correct");
+			}
+			return file;
+		}
+		catch (Exception e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new NCRException(e);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	private static Map<?, ?> getInfo(Context context, Map<?, ?> objectMap, LinkedList<String> busSelect) throws NCRException {
+		try {
+			Map<String, String> mapOfAttributes = new HashMap<>();
+			Iterator<?> iter = busSelect.iterator();
+			while (iter.hasNext()) {
+				String key = (String) iter.next();
+				String value = (String) objectMap.get(key);
+				if (value == null) {
+					value = DomainConstants.EMPTY_STRING;
+				}
+				mapOfAttributes.put(key, value);
+			}
+			return mapOfAttributes;
+		}
+		catch (Exception e) {
+			throw new NCRException(e.getMessage());
+		}
+	}
+
+	private static void createCSVFile(Context context, PrintWriter pw, Map<?, ?> attributesList, LinkedList<String> busSelList) throws IOException {
+		if (flagForFirstTime == 0) {
+			Iterator<?> itrKeys = busSelList.iterator();
+			while (itrKeys.hasNext()) {
+				String key = (String) itrKeys.next();
+				attributesList.get(key).toString().trim().replace("\n", " ").replace("\t", " ");
+				if (key.contains("to.id")) {
+					key = IMPACTED_ITEMS;
+				}
+				pw.print(key + "\t");
+			}
+			flagForFirstTime = 1;
+		}
+		if (flagForFirstTime == 1) {
+			Iterator<?> itrKeys = busSelList.iterator();
+			pw.println();
+			while (itrKeys.hasNext()) {
+				String key = (String) itrKeys.next();
+				String value = (String) attributesList.get(key);
+				if (key.contains("to.id")) {
+					if (value.contains(SPECIAL_CHARACTER)) {
+						value = value.replaceAll(SPECIAL_CHARACTER, DELIMETER_CHARACTER);
+					}
+				}
+				value = value.toString().trim().replace("\n", " ").replace("\t", " ");
+				pw.print(value + "\t");
+			}
+		}
+		logger.log(Level.INFO, "Object: " + attributesList.get(DomainConstants.SELECT_NAME) + " written");
+	}
+
+	private static FileHandler createLogFile(String strFileNameForLogs, String strFullPath) throws NCRException {
+		FileHandler fh;
+		try {
+			File logFolder = new File(strFullPath.toString());
+			logFolder.mkdirs();
+			logFolder.setWritable(true);
+			logFolder.setExecutable(true);
+			logger.log(Level.INFO, "Creating log file");
+			File logFile = new File(logFolder.getAbsolutePath() + FILE_SEPERATOR + strFileNameForLogs.trim().replace(" ", "_") + "_FindObjects_"
+					+ MIGRATION_START_TIME + ".log");
+			logFile.setWritable(true);
+			logFile.setExecutable(true);
+			fh = new FileHandler(logFile.getAbsolutePath());
+			fh.setFormatter(new SimpleFormatter());
+			logger.addHandler(fh);
+			fh.setFormatter(new SimpleFormatter());
+			return fh;
+		}
+		catch (SecurityException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new NCRException(e);
+		}
+		catch (IOException e) {
+			logger.log(Level.SEVERE, e.getLocalizedMessage());
+			throw new NCRException(e);
+		}
+	}
+
+	private static boolean validateFilePath(String strPath) throws NCRException {
+		// Validate path
+		logger.log(Level.INFO, "Validating File Path");
+		boolean isPathNotNullOrNotEmpty = UIUtil.isNotNullAndNotEmpty(strPath);
+		File filePath = new File(strPath);
+		if (isPathNotNullOrNotEmpty && !filePath.isDirectory()) {
+			logger.log(Level.SEVERE, "Invalid file path");
+			throw new NCRException("Invalid file path");
+		}
+		else {
+			logger.log(Level.INFO, "File Path Validated");
+			return true;
+		}
+	}
+
+	/**
+	 * Entry point of the migration program.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            The command line arguments
+	 * @throws NCRException
+	 *             if operation fails
+	 * @throws MatrixException
+	 */
+	public static void mxMain(Context context, String[] args) throws NCRException {
+		try {
+			boolean traceON = true;
+			boolean allSession = false; // false for only this session
+
+			context.setTrace(FILE_NC_MIGRATION_LOG, TRACE_NC_MIGRATION, traceON, allSession);
+			traceBeginMethod(context);
+			executeNCImpactedItemsMigrationFindObjects(context, args);
+		}
+		catch (Exception exp) {
+			ContextUtil.abortTransaction(context);
+			traceError(context, exp.getMessage());
+			throw new NCRException(exp);
+		}
+		finally {
+			traceEndMethod(context);
+		}
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void traceBeginMethod(Context context) throws NCRException {
+		String methodName = getTracedMethodName();
+		traceBegin(context, methodName + "()");
+	}
+
+	/**
+	 * Print "ERROR: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void traceError(Context context, String message) throws NCRException {
+		trace(context, "ERROR: " + message);
+	}
+
+	/**
+	 * Print "End: <method name>" trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void traceEndMethod(Context context) throws NCRException {
+		String methodName = getTracedMethodName();
+		traceEnd(context, methodName + "()");
+	}
+
+	/**
+	 * Returns the name of the method being traced. This SHOULD NOT be called by
+	 * any client other than traceBeginMethod and traceEndMethod methods.
+	 * 
+	 * @return the method name
+	 */
+	private static String getTracedMethodName() {
+		Exception exp = new Exception();
+		StackTraceElement[] stes = exp.getStackTrace();
+		StackTraceElement ste = stes[2];
+		String methodName = ste.getMethodName();
+		return methodName;
+	}
+
+	/**
+	 * Print "End: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void traceEnd(Context context, String message) throws NCRException {
+		trace(context, "End: " + message);
+	}
+
+	/**
+	 * Prints trace message for trace type LPIMigration
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void trace(Context context, String message) throws NCRException {
+		try {
+			context.printTrace(TRACE_NC_MIGRATION, message);
+		}
+		catch (Exception exp) {
+			traceError(context, exp.getMessage());
+			throw new NCRException(exp);
+		}
+	}
+
+	/**
+	 * Print "Begin: " token before trace message
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param message
+	 *            The message to be printed in trace
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private static void traceBegin(Context context, String message) throws NCRException {
+		trace(context, "Begin: " + message);
+	}
+
+	private static void help(Context context, String[] args) throws Exception {
+		if (!context.isConnected()) {
+			throw new Exception("Not supported on desktop client");
+		}
+		System.out.println("================================================================================================\n");
+		System.out.println(" While running migration, ensure that the folder provided is empty else it overrides the existing files");
+
+		System.out.println(" NC Impacted item migration is a two step process \n");
+
+		System.out.println(" Step 1: Find objects of NC type and write them into .xls files \n");
+		System.out.println(" Example: \n");
+		System.out.println(
+				" execute program com.dassault_systemes.enovia.lsa.ncr.migration.NCImpactedItemMigrationFindObjects F:\\Migration 1000; \n");
+		System.out.println(" First parameter  = the directory where files should be written \n");
+		System.out.println(" Second Parameter =  number of objects to be written to a file default 1000 \n");
+		System.out.println(" \n");
+
+		System.out.println(" Step 2: Migrate the NC objects  \n");
+		System.out.println(" Example: \n");
+		System.out.println(" execute program com.dassault_systemes.enovia.lsa.ncr.migration.NCImpactedItemMigration F:\\Migration 1 1000; \n");
+		System.out.println(" First parameter	= the directory to read xls files from and dump the log files into \n");
+		System.out.println(" Second Parameter	= minimum range of file to start migrating default 1 \n");
+		System.out.println(" Third Parameter	= maximum range of file to end migrating default all files starting from minimum range \n");
+		System.out.println("        - value 'n' can be provided for all files to migrate starting from mimimum range \n");
+		System.out.println("================================================================================================\n");
+	}
+}
+

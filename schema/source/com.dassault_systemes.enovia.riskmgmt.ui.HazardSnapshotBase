@@ -1,0 +1,362 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.riskmgmt.HazardMgmtUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.dassault_systemes.enovia.snapshot.services.SnapshotService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtRiskAssessmentSummaryBase} {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+		super(context, args);
+	}
+
+	/**
+	 * Gets SnapshotService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return SnapshotService implementation reference
+	 * @throws RiskMgmtException
+	 *             if operation fails
+	 */
+	private SnapshotService getSnapshotService(Context context) throws RiskMgmtException {
+		try {
+			Class<?> implClass = Class.forName("com.dassault_systemes.enovia.snapshot.services.impl.SnapshotServiceImpl", false,
+					this.getClass().getClassLoader());
+			SnapshotService SnapshotService = (SnapshotService) implClass.newInstance();
+			return SnapshotService;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Creates new Snapshot object when user clicks done on slide in form.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 * @return map having id of newly created object
+	 * @throws RiskMgmtException
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public HashMap<String, String> createSnapshot(Context context, String[] args) throws RiskMgmtException {
+		try {
+			final String POLICY_PRDH_SNAPSHOT = PropertyUtil.getSchemaProperty(context, RiskMgmtConstants.SYMBOLIC_POLICY_PRDH_SNAPSHOT);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String name = (String) programMap.get(RiskMgmtConstants.FIELD_NAME);
+			String typeName = (String) programMap.get(RiskMgmtConstants.SNAPSHOT);
+			String partId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			DomainObject partObj = DomainObject.newInstance(context, partId);
+			HashMap<String, String> returnMap = new HashMap<String, String>();
+			SnapshotService service = getSnapshotService(context);
+			DomainObject snapshot = service.generateSnapshot(context, partObj, typeName, name, POLICY_PRDH_SNAPSHOT);
+			returnMap.put(DomainConstants.SELECT_ID, snapshot.getObjectId(context));
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * It returns access to view "Generate Snapshot" command.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return True: if Product has at-least one Hazard and context user is
+	 *         either a member or has Product Manager role; False: If not a
+	 *         member
+	 * @throws RiskMgmtException
+	 */
+	public boolean canViewTableSnapshotListTableActionGenerateSnapshot(Context context, String[] args) throws RiskMgmtException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strParentOID = (String) programMap.get(OBJECT_ID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strParentOID) && RiskMgmtUtil.countConnectionsWithRel(context,
+					DomainObject.newInstance(context, strParentOID), RiskMgmtSymNames.SYM_REL_HAZARD.toString(), "to") > 0) {
+				if (RiskMgmtUtil.hasRoles(context, RiskMgmtConstants.SYMBOLIC_role_ProductManager) || HazardMgmtUtil.isProductsDesignProjectMember(
+						context, DomainObject.newInstance(context, strParentOID), RiskMgmtConstants.PROJECT_LEAD_ACCESS)) {
+					blAccess = true;
+				}
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for CurrentSeverity column of
+	 * table RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnCurrentSeverity(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String strOccurance = (String) map.get("from[relationship_RiskRPN].attribute[attribute_RiskProbability]");
+				String strSeverity = (String) map.get("from[relationship_RiskRPN].attribute[attribute_RiskImpact]");
+				String strRPN = (String) map.get("from[relationship_RiskRPN].attribute[attribute_RiskRPNValue]");
+				String strEffectiveDate = (String) map.get("from[relationship_RiskRPN].attribute[attribute_EffectiveDate]");
+
+				if (!RiskMgmtUtil.isNullOrEmpty(strOccurance) && !RiskMgmtUtil.isNullOrEmpty(strSeverity) && !RiskMgmtUtil.isNullOrEmpty(strRPN)
+						&& !RiskMgmtUtil.isNullOrEmpty(strEffectiveDate)) {
+					StringList occList = FrameworkUtil.split(strOccurance, RiskMgmtConstants.COMMA);
+					StringList sevList = FrameworkUtil.split(strSeverity, RiskMgmtConstants.COMMA);
+					StringList rpnList = FrameworkUtil.split(strRPN, RiskMgmtConstants.COMMA);
+					StringList effectiveDateList = FrameworkUtil.split(strEffectiveDate, RiskMgmtConstants.COMMA);
+
+					if (!RiskMgmtUtil.isNullOrEmpty(occList) && !RiskMgmtUtil.isNullOrEmpty(sevList) && !RiskMgmtUtil.isNullOrEmpty(rpnList)
+							&& !RiskMgmtUtil.isNullOrEmpty(effectiveDateList)) {
+						List<String> sortedDates = RiskMgmtUtil.getSortedDates(effectiveDateList, "yyyy/MM/dd@HH:mm:ss:z");
+
+						if (!RiskMgmtUtil.isNullOrEmpty(sortedDates)) {
+							int initialIndex = effectiveDateList.indexOf(sortedDates.get(sortedDates.size() - 1));
+							int currentIndex = effectiveDateList.indexOf(sortedDates.get(0));
+
+							String currentSev = (String) sevList.get(currentIndex);
+							String currentOcc = (String) occList.get(currentIndex);
+							String currentRPN = (String) rpnList.get(currentIndex);
+							String initialSev = (String) sevList.get(initialIndex);
+							String initialOcc = (String) occList.get(initialIndex);
+							String initialRPN = (String) rpnList.get(initialIndex);
+
+							// saving below values now so that they can be
+							// reused in respective columns. current sev column
+							// must come before other
+							// columns
+							map.put(RiskMgmtConstants.FIELD_INITIAL_SEVERITY, initialSev);
+							map.put(RiskMgmtConstants.FIELD_INITIAL_OCCURENCE, initialOcc);
+							map.put(RiskMgmtConstants.FIELD_INITIAL_RPN, initialRPN);
+							map.put(RiskMgmtConstants.FIELD_FINAL_SEVERITY, currentSev);
+							map.put(RiskMgmtConstants.FIELD_FINAL_OCCURENCE, currentOcc);
+							map.put(RiskMgmtConstants.FIELD_FINAL_RPN, currentRPN);
+
+							returnList.add(currentSev);
+						}
+						else {
+							returnList.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+					else {
+						returnList.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for CurrentOccurence column of
+	 * table RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnCurrentOccurence(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String currentOcc = (String) map.get(RiskMgmtConstants.FIELD_FINAL_OCCURENCE);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+					returnList.add(currentOcc);
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for CurrentRPN column of table
+	 * RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnCurrentRPN(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String currentOcc = (String) map.get(RiskMgmtConstants.FIELD_FINAL_RPN);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+					returnList.add(currentOcc);
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for InitialSeverity column of
+	 * table RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnInitialSeverity(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String currentOcc = (String) map.get(RiskMgmtConstants.FIELD_INITIAL_SEVERITY);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+					returnList.add(currentOcc);
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for InitialOccurence column of
+	 * table RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnInitialOccurence(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String currentOcc = (String) map.get(RiskMgmtConstants.FIELD_INITIAL_OCCURENCE);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+					returnList.add(currentOcc);
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * This method returns a list having values for InitialRPN column of table
+	 * RiskMgmtHazardsSnapshot.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws RiskMgmtException
+	 *             if the operation fails
+	 */
+	public StringList getTableRiskMgmtHazardsSnapshotColumnInitialRPN(Context context, String[] args) throws RiskMgmtException {
+		StringList returnList = new StringList();
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(RiskMgmtConstants.OBJECT_LIST);
+
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String currentOcc = (String) map.get(RiskMgmtConstants.FIELD_INITIAL_RPN);
+
+				if (!RiskMgmtUtil.isNullOrEmpty(currentOcc)) {
+					returnList.add(currentOcc);
+				}
+				else {
+					returnList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return returnList;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

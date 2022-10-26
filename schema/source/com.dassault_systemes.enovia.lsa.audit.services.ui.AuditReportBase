@@ -1,0 +1,1033 @@
+/************************************************************************************************************
+ * /* AuditReportBase
+ **
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ **
+ *
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditReportBase program to handle reports
+ * 
+ * 
+ ************************************************************************************************************/
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.AuditUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.AttributeType;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args) {
+
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args)
+
+	{
+		return 0;
+	}
+
+	/**
+	 * This method checks if any active Legal Hold Object is connected to
+	 * current document object & returns either 0 or 1 based on the result This
+	 * method runs on the delete check trigger of Delete Document.
+	 * 
+	 * @param context,
+	 *            ObjectId
+	 * @param args
+	 * @return int, send 0 if the method is successful, otherwise send 1 to
+	 *         block the trigger. @also, gives an alert message if there are any
+	 *         objects found.
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAutoNamed(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+
+		try {
+			// Get form info
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap formMap = (HashMap) programMap.get("formMap");
+			MapList formFieldList = (MapList) formMap.get("fields");
+			String relConnect = (String) paramMap.get("connect_rel");
+			String parentOID = (String) paramMap.get("parentOID");
+
+			// Create autonamed object
+			String sNewObjId = FrameworkUtil.autoName(context, AuditConstants.REG_TYPE_AUDITREPORTSUMMARY, "",
+					AuditConstants.REG_POLICY_AUDITREPORTSUMMARY, "");
+			DomainObject newObj = DomainObject.newInstance(context, sNewObjId);
+			newObj.openObject(context);
+
+			for (int i = 0; i < formFieldList.size(); i++) {
+				HashMap fieldMap = (HashMap) formFieldList.get(i);
+				String fieldName = (String) fieldMap.get("name");
+				String fieldValue = (String) paramMap.get(fieldName);
+
+				if (null != fieldValue && !"".equals(fieldValue)) {
+					if ("description".equalsIgnoreCase(fieldName)) {
+						// Code Added to update the descritpion field values
+						newObj.setDescription(context, fieldValue);
+					}
+					else if ("Audit Title".equals(fieldName)) {
+						newObj.setAttributeValue(context, "Title", fieldValue);
+					}
+					else {
+						newObj.setAttributeValue(context, fieldName, fieldValue);
+					}
+				}
+			}
+
+			// Check if there is a relationship passed as a parameter
+			// If so then we will connect
+			if (null != relConnect && !"".equals(relConnect)) {
+				DomainObject parentObj = DomainObject.newInstance(context, parentOID);
+
+				// newObj.connect( context, new RelationshipType(""), boolean
+				// from, BusinessObject object)
+				newObj.connect(context, new RelationshipType(relConnect), false, parentObj);
+			}
+
+			newObj.closeObject(context, true);
+			returnMap.put("objectId", sNewObjId);
+		}
+
+		catch (Exception ex) {
+			returnMap.put("Action", "Stop");
+			String exStr = ex.toString();
+
+			if (exStr.lastIndexOf("Exception:") >= 0)
+				exStr = exStr.substring(exStr.lastIndexOf("Exception:") + 10, exStr.length());
+
+			returnMap.put("Message", exStr);
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * Get the list of objects. get the Audit which have Audit Type is Internal
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - objectList MapList
+	 * @returns Object of type MapList
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInternalAuditSummary(Context context, String[] args) throws AuditException {
+		MapList mListTotalResults = null;
+		try {
+			// Get the parameter Hashmap.
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			SelectList sListObjectSelects = new SelectList();
+			sListObjectSelects.add(DomainConstants.SELECT_ID);
+			// sListObjectSelects.add(AuditConstants.SELECT_AUDITACTUALENDDATE);
+			sListObjectSelects
+					.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITACTUALENDDATE)));
+			// sListObjectSelects.add(AuditConstants.SELECT_SUBSYSTEM);
+			sListObjectSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM)));
+			// sListObjectSelects.add(AuditConstants.SELECT_AUDITNEXTSCHEDULEAUDIT);
+			sListObjectSelects
+					.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITNEXTSCHEDULEAUDIT)));
+			// sListObjectSelects.add(AuditConstants.SELECT_AUDITLOCATION);
+			sListObjectSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITLOCATION)));
+
+			String strWhere = "(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE) + "].value=='"
+					+ AuditConstants.INTERNAL_PROCESS + "')" +"||"+ "(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE) + "].value=='"
+					+ AuditConstants.INTERNAL_SYSTEM+ "')";
+			// find the object which satisfy where clause
+			mListTotalResults = DomainObject.findObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT), // type
+					"*", // name
+					"*", // rev
+					"*", // owner
+					null, // vault
+					strWhere, // where
+					null, // queryname
+					false, // expandtype
+					sListObjectSelects, // selects
+					Short.parseShort("1000"), // querylimit
+					null, // format
+					null);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+		}
+		return mListTotalResults;
+	}
+
+	public MapList getInternalAudits(Context context, String[] args) throws AuditException {
+		try {
+
+			// HashMap paramMap = (HashMap)JPO.unpackArgs(args);
+			MapList mlAuditRet = new MapList();
+			String sAuditLocation;
+			String sSubSystem;
+			String sNextScheduled;
+			String sLastCompleted;
+			String sLastCompletedOID;
+			String sDevices;
+			SimpleDateFormat sdfDateFormat = new SimpleDateFormat("MM/dd/yyyy hh:mm:ss a", Locale.US);
+			// Table columns should be 'Audit Location,Sub-system,next
+			// scehduled,last completed,devices'
+
+			// **********************
+			// Get range values of location and sub-system, a combination of
+			// these will be
+			// used to determine the total number of possible audits
+			// **********************
+			AttributeType attrAuditLocation = new AttributeType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITLOCATION));
+			AttributeType attrSubSystem = new AttributeType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM));
+
+			attrAuditLocation.open(context);
+			StringList slAuditLocationValues = attrAuditLocation.getChoices(context);
+			attrAuditLocation.close(context);
+
+			attrSubSystem.open(context);
+			StringList slSubSystemValues = attrSubSystem.getChoices(context);
+			attrSubSystem.close(context);
+
+			// **********************
+			// Loop through all combos of location and sub-system
+			// **********************
+			Iterator itrAuditLocation = slAuditLocationValues.iterator();
+			while (itrAuditLocation.hasNext()) {
+				sAuditLocation = (String) itrAuditLocation.next();
+				Iterator itrSubSystem = slSubSystemValues.iterator();
+
+				while (itrSubSystem.hasNext()) {
+					sSubSystem = (String) itrSubSystem.next();
+
+					// **********************
+					// Get the last completed audit and next scheduled and
+					// devices
+					// **********************
+					String sWhere = "(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITLOCATION) + "].value=='"
+							+ sAuditLocation + "')&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM)
+							+ "].value=='" + sSubSystem + "')";
+					SelectList resultSelects = new SelectList(3);
+					resultSelects.add(DomainConstants.SELECT_ID);
+					resultSelects.add(DomainConstants.SELECT_TYPE);
+					resultSelects.add(DomainConstants.SELECT_NAME);
+					resultSelects.add(DomainConstants.SELECT_REVISION);
+					resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+					resultSelects.add(DomainConstants.SELECT_CURRENT);
+					// resultSelects.add("attribute["+PropertyUtil.getSchemaProperty(context,
+					// AuditConstants.SYM_ATTR_NEXTSCHEDULEDAUDIT)+"]");
+					resultSelects.add("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_CLOSEDATE + "]"));
+					resultSelects.add("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDSTARTDATE) + "]");
+					resultSelects.add("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_DEVICE) + "]");
+
+					MapList mlTotalResults = null;
+					mlTotalResults = DomainObject.findObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT), // type
+							"*", // name
+							"*", // rev
+							"*", // owner
+							null, // vault
+							sWhere, // where
+							null, // queryname
+							false, // expandtype
+							resultSelects, // selects
+							Short.parseShort("1000"), // querylimit
+							null, // format
+							null); // search
+
+					sNextScheduled = "";
+					sLastCompleted = "";
+					sLastCompletedOID = "";
+					sDevices = "";
+					// Iterate through results for this particular
+					// location/sub-system
+					// combination
+					Iterator itrTotalResults = mlTotalResults.iterator();
+					while (itrTotalResults.hasNext()) {
+						Map mResult = (Map) itrTotalResults.next();
+						String sTempNextScheduled = (String) mResult
+								.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDSTARTDATE) + "]");
+						String sTempLastCompleted = (String) mResult
+								.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_CLOSEDATE + "]") + "]");
+						String sTempDevice = (String) mResult
+								.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_DEVICE) + "]");
+						String sTempState = (String) mResult.get(DomainConstants.SELECT_CURRENT);
+						String sTempId = (String) mResult.get(DomainConstants.SELECT_ID);
+
+						// Check for the most recent last completed date
+						if (null == sTempLastCompleted || "".equals(sTempLastCompleted)) {
+							// Do nothing
+						}
+						else if (null == sLastCompleted || "".equals(sLastCompleted)) {
+							sLastCompleted = sTempLastCompleted;
+							sLastCompletedOID = sTempId;
+						}
+						else if (null != sTempLastCompleted && !"".equals(sTempLastCompleted)) {
+							Date dLastCompleted = sdfDateFormat.parse(sLastCompleted);
+							Date dTempLastCompleted = sdfDateFormat.parse(sTempLastCompleted);
+							if (dTempLastCompleted.after(dLastCompleted)) {
+								sLastCompleted = sTempLastCompleted;
+								sLastCompletedOID = sTempId;
+							}
+						}
+
+						// Get a list of the Next scheduled dates
+						if (!"Closed".equals(sTempState) && (null != sTempNextScheduled && !"".equals(sTempNextScheduled))) {
+							String sNextScheduledFormatted = "<nobr><a href='emxTree.jsp?objectId=" + sTempId + " 'target='content'>"
+									+ sTempNextScheduled + "</a></nobr>";
+							sNextScheduled += "".equals(sNextScheduled) ? sNextScheduledFormatted : "<br>" + sNextScheduledFormatted;
+						}
+						// Get a list of the Devices
+						if (null != sTempDevice && !"".equals(sTempDevice)) {
+							String sDeviceFormatted = "<nobr><a href='emxTree.jsp?objectId=" + sTempId + " 'target='content'>" + sTempDevice
+									+ "</a></nobr>";
+							sDevices += "".equals(sDevices) ? sDeviceFormatted : "<br>" + sDeviceFormatted;
+						}
+					}
+
+					// if no last value the display none
+					if (null == sLastCompleted || "".equals(sLastCompleted)) {
+						sLastCompleted = "<img src='images/iconSmallStatusAlert.gif' /> None";
+					}
+					else {
+						// format so to provide link
+						sLastCompleted = "<a href='emxTree.jsp?objectId=" + sLastCompletedOID + " 'target='content'>" + sLastCompleted + "</a>";
+					}
+
+					if (null == sNextScheduled || "".equals(sNextScheduled)) {
+						sNextScheduled = "<img src='images/iconSmallStatusAlert.gif' /> None";
+					}
+
+					// **********************
+					// Create the maps and add to maplist return
+					// Create unique id based on location and sub-system
+					// **********************
+
+					HashMap map = new HashMap();
+					String sId = sAuditLocation + "||" + sSubSystem;
+					map.put("id", sId);
+					map.put("Audit Location", sAuditLocation);
+					map.put("Sub-System", sSubSystem);
+					map.put("Planned Start Date", sNextScheduled);
+					map.put("Last Completed", sLastCompleted);
+					map.put("Audit Devices", sDevices);
+					mlAuditRet.add(map);
+
+				} // End itrSubSystem while
+			} // End itrAuditLocation while
+
+			return mlAuditRet;
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+			// throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * Get attribute from table map.
+	 *
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Vault names
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public static Vector<String> getTableAttribute(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap columnMap = (HashMap) programMap.get("columnMap");
+			HashMap settingsMap = (HashMap) columnMap.get("settings");
+			String sAttrName = (String) settingsMap.get("IW_Attr_Name");
+
+			MapList mlObjectList = (MapList) programMap.get("objectList");
+			Vector<String> vColumnValues = new Vector<String>(mlObjectList.size());
+			String sLocation;
+			// String sPlanneddate="";
+
+			Iterator itr = mlObjectList.iterator();
+			while (itr.hasNext()) {
+				Map map = (Map) itr.next();
+
+				sLocation = (String) map.get(sAttrName);
+				vColumnValues.add(sLocation);
+			}
+
+			// if (sAttrName==null || "".equals(sAttrName)){
+			// IW Attribute Name is not set on the form field
+			// throw new Exception("FastTrakReporting:getReportAttribute -
+			// IW_Attr_Name not set on form field");
+			// }
+
+			return vColumnValues;
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+			// throw new Exception(e.toString());
+		}
+
+	}
+
+	/**
+	 * This method is to check for Create Request Access
+	 *
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return true, if user has required Roles
+	 */
+	public boolean showCreateAuditReportSummary(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			return AuditUtil.hasAccessOnAudit(context, strObjectId);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method is to check for Promote Audit Report Summary Access
+	 *
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return true, if user has required Roles
+	 */
+	public boolean showPromoteAuditReportSummary(Context context, String[] args) throws AuditException {
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY);
+		final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		final String STATE_FINALIZATION = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_FINALIZATION);
+		final String POLICY_AUDITREPORTSUMMARY = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREPORTSUMMARY);
+		final String STATE_DRAFT = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREPORTSUMMARY,
+				AuditConstants.SYM_STATE_DRAFT);
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			boolean showPromoteAuditReportSummary = false;
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY, DomainConstants.SELECT_CURRENT));
+
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAuditReportSummary = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY);
+						String strCurrentstate = (String) mpObjectInfo.get(DomainConstants.SELECT_CURRENT);
+
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReportSummary)
+								&& STATE_DRAFT.equalsIgnoreCase(strCurrentstate)) {
+							DomainObject dmoAuditReportSummary = DomainObject.newInstance(context, strObjectId);
+							Map parentMap = dmoAuditReportSummary.getRelatedObject(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREPORTSUMMARY), false,
+									Helper.stringList(DomainConstants.SELECT_ID), null);
+							if (!Helper.isNullOrEmpty(parentMap)) {
+								String strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+
+								if (!Helper.isNullOrEmpty(strAuditId)) {
+									DomainObject doAudit = DomainObject.newInstance(context, strAuditId);
+									String strAuditState = doAudit.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+									// Promote link to be visible only if parent
+									// Audit is "Finalization" state
+									if (!STATE_FINALIZATION.equalsIgnoreCase(strAuditState)) {
+										showPromoteAuditReportSummary = false;
+										return showPromoteAuditReportSummary;
+									}
+									else {
+										showPromoteAuditReportSummary = AuditUtil.hasAccessOnAudit(context, strAuditId);
+									}
+								}
+							}
+						}
+						else {
+							showPromoteAuditReportSummary = true;
+						}
+
+					}
+
+				}
+
+			}
+
+			return showPromoteAuditReportSummary;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Gets the request field. this method will display request and Reply in
+	 * Audit Summary Report
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return the request field
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getRequestField(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			int count = 1;
+			HashMap reqMap = (HashMap) programMap.get("requestMap");
+			String reportFormat = (String) reqMap.get("reportFormat");
+			String objectId = (String) paramMap.get("objectId");
+			String languageStr = (String) paramMap.get("languageStr");
+
+			StringBuffer returnStr = new StringBuffer();
+			String label = "    ";
+			String field = ": ";
+			String endData = "    ";
+			String newLine = "\n";
+			String beginTable = "";
+			String endTable = "";
+
+			String strAttributeName = "";
+			String strAttrValue = "";
+			String strAttributeLabel = "";
+
+			String strName = "";
+			String strRequestID = "";
+			DomainObject doRequest;
+			String strDescription = "";
+			String strCurrent = "";
+			int iReplyCount;
+			String strReplyName = "";
+			String strReplyDescription = "";
+			MapList mListReplies = new MapList();
+			String strReplyCurrent = "";
+
+			String i18nAuditRequest = i18nNow.getI18nString("LQIAudit.Common.AUDRequest", "LQIAuditStringResource", languageStr);
+			String i18nNoRequest = i18nNow.getI18nString("LQIAudit.Message.NoRequest", "LQIAuditStringResource", languageStr);
+			String i18nName = i18nNow.getI18nString("LQIAudit.Common.Name", "LQIAuditStringResource", languageStr);
+			String i18nState = i18nNow.getI18nString("   LQIAudit.Common.State", "LQIAuditStringResource", languageStr);
+			String i18nRequestDescription = i18nNow.getI18nString("LQIAudit.Common.Description", "LQIAuditStringResource", languageStr);
+			String i18nRequestAttributesList = i18nNow.getI18nString("LQIAudit.AttributesList.AuditRequest", "LQIAuditStringResource", languageStr);
+			String i18nRequestAttributeLabel = i18nNow.getI18nString("LQIAudit.AttributesList.AuditRequestLabel", "LQIAuditStringResource",
+					languageStr);
+
+			String i18nAuditReplies = i18nNow.getI18nString("LQIAudit.Heading.AssociatedResponses", "LQIAuditStringResource", languageStr);
+			String i18nNoReply = i18nNow.getI18nString("LQIAudit.Message.NoReply", "LQIAuditStringResource", languageStr);
+			String i18nReplyDescription = i18nNow.getI18nString("LQIAudit.Common.Description", "LQIAuditStringResource", languageStr);
+			String i18nReplyAttributeList = i18nNow.getI18nString("LQIAudit.AttributesList.AuditReply", "LQIAuditStringResource", languageStr);
+			String i18nReplyAttributeLabel = i18nNow.getI18nString("LQIAudit.AttributesList.AuditReplyLabel", "LQIAuditStringResource", languageStr);
+
+			String[] sReplyAttributes = i18nReplyAttributeList.split(",");
+			String[] sReplyAttributesLabel = i18nReplyAttributeLabel.split(",");
+			String[] sAttributes = i18nRequestAttributesList.split(",");
+			String[] sAttributesLabel = i18nRequestAttributeLabel.split(",");
+
+			if (reportFormat == null) {
+				label = "<tr><td class=\"label\" rowspan=\"1\" >";
+				field = "</td><td class=\"field\" width=\"50%\" colspan=\"10\">";
+				endData = "</td></tr>";
+				newLine = "<br>";
+				beginTable = "<table border=\"0\" width=\"99%\" cellpadding=\"5\" cellspacing=\"2\">";
+				endTable = "</table>";
+				// returnStr.append("<script
+				// type=\"text/javascript\">addStyleSheet(\"emxUIForm\");</script>");
+				returnStr.append("<link rel=\"stylesheet\" type=\"text/css\" href=\"../common/styles/emxUIForm.css\" />");
+			}
+			DomainObject doAuditObject = DomainObject.newInstance(context, objectId);
+
+			StringList objSelects = new StringList(); // object selects
+			objSelects.addElement(DomainConstants.SELECT_ID);
+			objSelects.addElement(DomainConstants.SELECT_CURRENT);
+			objSelects.addElement(DomainConstants.SELECT_DESCRIPTION);
+			objSelects.addElement(DomainConstants.SELECT_NAME);
+			objSelects.addElement(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_COMMENTS)));
+			// objSelects.addElement(AuditConstants.SELECT_SUBSYSTEM);
+			objSelects.addElement(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM)));
+			// objSelects.addElement(AuditConstants.SELECT_AUDITFUNCTIONALAREA);
+			objSelects.addElement(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITFUNCTIONALAREA)));
+			objSelects.addElement(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_EXTERNALREFERENCE)));
+			objSelects.addElement(DomainConstants.SELECT_CURRENT);
+
+			StringList relSelects = new StringList(); // relationship selects
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+			// get the related Requests
+			MapList objList = doAuditObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST), objSelects, relSelects, false, true, (short) 1, "",
+					"");
+			objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+			if (objList.size() == 0) {
+				return returnStr.append(i18nNoRequest).toString();
+			}
+
+			for (int i = 0; i < objList.size(); i++) {
+				returnStr.append("<b>" + i18nAuditRequest + " " + count + "</b><br>");
+				count++;
+				Map objMap = (Map) objList.get(i);
+
+				strName = (String) objMap.get(DomainConstants.SELECT_NAME);
+				strRequestID = (String) objMap.get(DomainConstants.SELECT_ID);
+				doRequest = DomainObject.newInstance(context, strRequestID);
+				strDescription = (String) objMap.get(DomainConstants.SELECT_DESCRIPTION);
+				strCurrent = (String) objMap.get(DomainConstants.SELECT_CURRENT);
+
+				iReplyCount = 1;
+				returnStr.append(beginTable);
+				returnStr.append(label);
+				returnStr.append(i18nName);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strName);
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nState);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strCurrent);
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nRequestDescription);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strDescription);
+				returnStr.append(endData);
+				// getting the attributes list from properties file
+				for(int j= 0 ; j < sAttributes.length ; j++){
+					strAttributeName = sAttributes[j];
+					strAttributeLabel = sAttributesLabel[j];
+					strAttrValue = (String) objMap.get("attribute[" + strAttributeName + "]");
+					returnStr.append(label);
+					returnStr.append(strAttributeLabel);
+					returnStr.append(" ");
+					returnStr.append(field);
+					returnStr.append(strAttrValue);
+					returnStr.append(endData);
+
+				}
+				returnStr.append(endTable);
+				returnStr.append(newLine);
+				returnStr.append(newLine);
+
+				returnStr.append("<b>");
+				//returnStr.append(i18nAuditReplies);
+				returnStr.append("</b><br>");
+				// getting connected reply
+				mListReplies = doRequest.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPLY), objSelects, relSelects, false, true, (short) 1,
+						"", "");
+				// if no reply is connected then display no reply message
+				if (mListReplies.size() == 0) {
+					returnStr.append("<b>");
+					returnStr.append(i18nNoReply);
+					returnStr.append("</b><br><br>");
+				}
+				else {
+					for (int j = 0; j < mListReplies.size(); j++) {
+						returnStr.append("<b>");
+						returnStr.append(i18nAuditReplies);
+						returnStr.append(" ");
+						returnStr.append(iReplyCount);
+						returnStr.append("</b><br>");
+						iReplyCount++;
+						Map objReplyMap = (Map) mListReplies.get(j);
+						strReplyName = (String) objReplyMap.get(DomainConstants.SELECT_NAME);
+						strReplyDescription = (String) objReplyMap.get(DomainConstants.SELECT_DESCRIPTION);
+						strReplyCurrent = (String) objMap.get(DomainConstants.SELECT_CURRENT);
+						returnStr.append(beginTable);
+						returnStr.append(label);
+						returnStr.append(i18nName);
+						returnStr.append(" ");
+						returnStr.append(field);
+						returnStr.append(strReplyName);
+						returnStr.append(endData);
+						returnStr.append(label);
+						returnStr.append(i18nState);
+						returnStr.append(" ");
+						returnStr.append(field);
+						returnStr.append(strReplyCurrent);
+						returnStr.append(endData);
+						returnStr.append(label);
+						returnStr.append(i18nReplyDescription);
+						returnStr.append(" ");
+						returnStr.append(field);
+						returnStr.append(strReplyDescription);
+						returnStr.append(endData);
+						for(int k= 0 ; k < sReplyAttributes.length ; k++){
+							strAttributeName = sReplyAttributes[k];
+							strAttributeLabel = sReplyAttributesLabel[k];;
+							strAttrValue = (String) objMap.get("attribute[" + strAttributeName + "]");
+							returnStr.append(label);
+							returnStr.append(strAttributeLabel);
+							returnStr.append(" ");
+							returnStr.append(field);
+							returnStr.append(strAttrValue);
+							returnStr.append(endData);
+
+						}
+						returnStr.append(endTable);
+						returnStr.append(newLine + newLine);
+					}
+
+				}
+
+			}
+
+			return returnStr.toString();
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Gets the finding field. this method will display Finding information in
+	 * Audit Summary Report
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return the finding field
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getFindingField(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			int count = 1;
+			HashMap reqMap = (HashMap) programMap.get("requestMap");
+			String reportFormat = (String) reqMap.get("reportFormat");
+			String objectId = (String) paramMap.get("objectId");
+			String languageStr = (String) paramMap.get("languageStr");
+
+			StringBuffer returnStr = new StringBuffer();
+			String label = "    ";
+			String field = ": ";
+			String endData = "    ";
+			String newLine = "\n";
+			String beginTable = "";
+			String endTable = "";
+			String strDescription = "";
+			String strName = "";
+			String strAttributeName = "";
+			String strAttrValue = "";
+			String strAttributeLabel = "";
+			String strCurrent = "";
+			String i18nAuditFindings = i18nNow.getI18nString("LQIAudit.Common.AuditFinding", "LQIAuditStringResource", languageStr);
+			String i18nNoFindings = i18nNow.getI18nString("LQIAudit.Message.NoFindings", "LQIAuditStringResource", languageStr);
+			String i18nName = i18nNow.getI18nString("LQIAudit.Common.Name", "LQIAuditStringResource", languageStr);
+			String i18nState = i18nNow.getI18nString("   LQIAudit.Common.State", "LQIAuditStringResource", languageStr);
+
+			String i18nFindingDescription = i18nNow.getI18nString("LQIAudit.Common.Description", "LQIAuditStringResource", languageStr);
+			// getting attribute list from properties file
+			String i18nFindingAttributes = i18nNow.getI18nString("LQIAudit.AttributesList.AuditFinding", "LQIAuditStringResource", languageStr);
+			// getting attribute labels from properties file
+			String i18nFindingAttributesLabel = i18nNow.getI18nString("LQIAudit.AttributesList.AuditFindingLabel", "LQIAuditStringResource",
+					languageStr);
+			String[] sAttributes = i18nFindingAttributes.split(",");
+			String[] sAttributesLabel = i18nFindingAttributesLabel.split(",");
+
+			if (reportFormat == null) {
+				label = "<tr><td class=\"label\" rowspan=\"1\" >";
+				field = "</td><td class=\"field\" width=\"50%\" colspan=\"10\">";
+				endData = "</td></tr>";
+				newLine = "<br>";
+				beginTable = "<table border=\"0\" width=\"99%\" cellpadding=\"5\" cellspacing=\"2\">";
+				endTable = "</table>";
+				// returnStr.append("<script
+				// type=\"text/javascript\">addStyleSheet(\"emxUIForm\");</script>");
+				returnStr.append("<link rel=\"stylesheet\" type=\"text/css\" href=\"../common/styles/emxUIForm.css\" />");
+			}
+			DomainObject doAuditObject = DomainObject.newInstance(context, objectId);
+
+			StringList objSelects = new StringList(); // object selects
+			objSelects.addElement(DomainConstants.SELECT_ID);
+			objSelects.addElement(DomainConstants.SELECT_DESCRIPTION);
+			objSelects.addElement(DomainConstants.SELECT_NAME);
+			objSelects.addElement(DomainConstants.SELECT_CURRENT);
+			// objSelects.addElement(AuditConstants.SELECT_AUDIT_REPEATFINDING);
+			objSelects.addElement(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_REPEATFINDING)));
+			// objSelects.addElement(AuditConstants.SELECT_AUDITSEVERITY);
+			objSelects.addElement(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITSEVERITY)));
+			// objSelects.addElement(AuditConstants.SELECT_SUBSYSTEM);
+			objSelects.addElement(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM)));
+			// objSelects.addElement(AuditConstants.SELECT_AUDIT_RESPONSETYPE);
+			objSelects
+					.addElement(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_RESPONSETYPE)));
+			objSelects.addElement(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITFINDINGRESPONSE)));
+
+			// objSelects.addElement(AuditConstants.SELECT_AUDITFOLLOWUPREQUIRED);
+			objSelects.addElement(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITFOLLOWUPREQUIRED)));
+
+			StringList relSelects = new StringList(); // relationship selects
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+			// getting related Finding
+			MapList objList = doAuditObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING), objSelects, relSelects, false, true, (short) 1, "",
+					"");
+			objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+			if (objList.size() == 0) {
+				return returnStr.append(i18nNoFindings).toString();
+			}
+
+			for (int i = 0; i < objList.size(); i++) {
+				returnStr.append("<b>");
+				returnStr.append(i18nAuditFindings);
+				returnStr.append(" ");
+				returnStr.append(count);
+				returnStr.append("</b><br>");
+				count++;
+				Map objMap = (Map) objList.get(i);
+				strName = (String) objMap.get(DomainConstants.SELECT_NAME);
+				strDescription = (String) objMap.get(DomainConstants.SELECT_DESCRIPTION);
+				strCurrent = (String) objMap.get(DomainConstants.SELECT_CURRENT);
+				returnStr.append(beginTable);
+				returnStr.append(label);
+				returnStr.append(i18nName);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strName);
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nState);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strCurrent);
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nFindingDescription);
+				returnStr.append(" ");
+				returnStr.append(field);
+				returnStr.append(strDescription);
+				returnStr.append(endData);
+
+				for(int j=0;j < sAttributes.length;j++) {
+					strAttributeName = sAttributes[j];
+					strAttributeLabel = sAttributesLabel[j];
+					strAttrValue = (String) objMap.get("attribute[" + strAttributeName + "]");
+					returnStr.append(label);
+					returnStr.append(strAttributeLabel);
+					returnStr.append(" ");
+					returnStr.append(field);
+					returnStr.append(strAttrValue);
+					returnStr.append(endData);
+
+				}
+
+				returnStr.append(endTable);
+				returnStr.append(newLine + newLine);
+			}
+
+			return returnStr.toString();
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Gets the audit report field. this method will display Report information
+	 * in Audit Summary Report
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return the audit report field
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getAuditReportField(Context context, String[] args) throws AuditException {
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			int count = 1;
+			HashMap reqMap = (HashMap) programMap.get("requestMap");
+			String reportFormat = (String) reqMap.get("reportFormat");
+			String objectId = (String) paramMap.get("objectId");
+			String languageStr = (String) paramMap.get("languageStr");
+
+			StringBuffer returnStr = new StringBuffer();
+			String label = "    ";
+			String field = ": ";
+			String endData = "    ";
+			String newLine = "\n";
+			String beginTable = "";
+			String endTable = "";
+			String strCurrent = "";
+			String strDescription = "";
+			String strName = "";
+
+			String i18nAuditreport = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.AuditReport");
+			String i18nNoReport = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.NoAuditReport");
+			String i18nName = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.Name");
+			String i18nState = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.State");
+			// String i18nTitle =
+			// i18nNow.getI18nString("LQIAudit.Common.Label.Title",
+			// "LQIAuditStringResource", languageStr);
+
+			String i18nReportAttributes = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.AttributesList.AuditReport");
+
+			String i18nReportDescription = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.Description");
+
+			if (reportFormat == null) {
+				label = "<tr><td class=\"label\" rowspan=\"1\" >";
+				field = "</td><td class=\"field\" width=\"50%\" colspan=\"10\">";
+				endData = "</td></tr>";
+				newLine = "<br>";
+				beginTable = "<table border=\"0\" width=\"99%\" cellpadding=\"5\" cellspacing=\"2\">";
+				endTable = "</table>";
+				// returnStr.append("<script
+				// type=\"text/javascript\">addStyleSheet(\"emxUIForm\");</script>");
+				returnStr.append("<link rel=\"stylesheet\" type=\"text/css\" href=\"../common/styles/emxUIForm.css\" />");
+			}
+			DomainObject doAuditObject = DomainObject.newInstance(context, objectId);
+
+			StringList objSelects = new StringList(); // object selects
+			objSelects.addElement(DomainConstants.SELECT_ID);
+			objSelects.addElement(DomainConstants.SELECT_DESCRIPTION);
+			objSelects.addElement(DomainConstants.SELECT_NAME);
+			objSelects.addElement(DomainConstants.SELECT_CURRENT);
+			objSelects.addElement("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_TITLE) + "]");
+
+			StringList relSelects = new StringList(); // relationship selects
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+			String auditReportSummary = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY);
+			MapList objList = doAuditObject.getRelatedObjects(context, auditReportSummary, auditReportSummary, objSelects, relSelects, false, true,
+					(short) 1, "", "");
+			objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+			if (objList.size() == 0) {
+				return returnStr.append(i18nNoReport).toString();
+			}
+
+			for (int i = 0; i < objList.size(); i++) {
+				StringTokenizer sTokAttributes = new StringTokenizer(i18nReportAttributes, ",");
+				returnStr.append("<b>");
+				returnStr.append(i18nAuditreport);
+				returnStr.append(' ');
+				returnStr.append(count);
+				returnStr.append("</b><br>");
+				count++;
+				Map objMap = (Map) objList.get(i);
+				strName = (String) objMap.get(DomainConstants.SELECT_NAME);
+				strDescription = (String) objMap.get(DomainConstants.SELECT_DESCRIPTION);
+				strCurrent = (String) objMap.get(DomainConstants.SELECT_CURRENT);
+
+				returnStr.append(beginTable);
+				returnStr.append(label);
+				returnStr.append(i18nName);
+				returnStr.append(' ');
+				returnStr.append(field);
+				returnStr.append(strName);
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nState);
+				returnStr.append(' ');
+				returnStr.append(field);
+				returnStr.append(Helper.getI18NString(context, Helper.StringResource.AEF, "emxFramework.State.Audit_Report_Summary." + strCurrent));
+				returnStr.append(endData);
+				returnStr.append(label);
+				returnStr.append(i18nReportDescription);
+				returnStr.append(' ');
+				returnStr.append(field);
+				returnStr.append(strDescription);
+				returnStr.append(endData);
+				String strAttributeName = "";
+				String strAttrValue = "";
+				while (sTokAttributes.hasMoreTokens()) {
+					strAttributeName = (String) sTokAttributes.nextToken();
+					strAttrValue = (String) objMap.get("attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_TITLE) + "]");
+					returnStr.append(label);
+					returnStr.append(strAttributeName);
+					returnStr.append(' ');
+					returnStr.append(field);
+					returnStr.append(strAttrValue);
+					returnStr.append(endData);
+
+				}
+				returnStr.append(endTable);
+				returnStr.append(newLine + newLine);
+
+			}
+			return returnStr.toString();
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+}
+

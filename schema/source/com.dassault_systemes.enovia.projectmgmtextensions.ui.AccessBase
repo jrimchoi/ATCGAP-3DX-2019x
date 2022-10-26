@@ -1,0 +1,315 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.Pattern;
+
+import com.dassault_systemes.enovia.projectmgmtextensions.Helper;
+import com.dassault_systemes.enovia.projectmgmtextensions.Helper.StringResource;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEConstants;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEException;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEUtil;
+import com.dassault_systemes.enovia.projectmgmtextensions.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.program.ProgramCentralConstants;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * This method checks if Discussion summary table action menu should be
+	 * shown on Task in context of LSA Specific sub type of Project Space.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @return boolean a boolean value
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public boolean canViewMenuPMCContentSummaryCreateNew(Context context, String[] args) throws PMEException {
+		boolean hasAccess = true;
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(PMEConstants.OBJECT_ID);
+
+			if (isTaskParentProjectSpaceSubtypeAndTaskInCompleteState(context, objectId)) {
+				hasAccess = false;
+			}
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+
+		return hasAccess;
+	}
+
+	/**
+	 * This method checks if Upload File command should be shown on Deliverables
+	 * view on Task in context of LSA Specific sub type of Project Space. It
+	 * first calls PRG Access Program\Function and based on the output, performs
+	 * LSA Specific checks.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @return boolean a boolean value
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public boolean canViewCommandPMCContentUploadFiles(Context context, String[] args) throws PMEException {
+		boolean hasAccess = true;
+		try {
+			hasAccess = JPO.invoke(context, "emxTaskBase", null, "hasAccessForDeliverable", args, Boolean.class);
+
+			if (hasAccess) {
+				Map programMap = (Map) JPO.unpackArgs(args);
+				String objectId = (String) programMap.get(PMEConstants.OBJECT_ID);
+
+				if (isTaskParentProjectSpaceSubtypeAndTaskInCompleteState(context, objectId)) {
+					hasAccess = false;
+				}
+			}
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+
+		return hasAccess;
+	}
+
+	/**
+	 * This method checks if Assignee summary table action menu should be shown
+	 * on Task in context of LSA Specific sub type of Project Space.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @return boolean a boolean value
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public boolean canViewMenuPMCAssigneeSummaryToolbarActions(Context context, String[] args) throws PMEException {
+		boolean result = true;
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String objectId = (String) programMap.get(PMEConstants.OBJECT_ID);
+
+			if (!Helper.isNullOrEmpty(objectId) && PMEUtil.isTaskParentLSASpecificProjectSpaceSubtype(context, objectId)
+					&& isTaskInState(context, objectId, ProgramCentralConstants.STATE_PROJECT_TASK_REVIEW)) {
+				result = false;
+			}
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+		return result;
+	}
+
+	/**
+	 * This method checks if a Task's parent is LSA Specific Project Space sub
+	 * type and if Task is in complete state.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param String
+	 *            object id of Task object
+	 * @return boolean a boolean value
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	private boolean isTaskParentProjectSpaceSubtypeAndTaskInCompleteState(Context context, String objectId) throws PMEException {
+		boolean result = false;
+		try {
+			if (!Helper.isNullOrEmpty(objectId) && PMEUtil.isTaskParentLSASpecificProjectSpaceSubtype(context, objectId)
+					&& isTaskInState(context, objectId, ProgramCentralConstants.STATE_PROJECT_TASK_COMPLETE)) {
+				result = true;
+			}
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+		return result;
+	}
+
+	/**
+	 * This method checks if a Task is in complete state or not.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param String
+	 *            object id of Task object
+	 * @return boolean a boolean value
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	private boolean isTaskInState(Context context, String objectId, String stateName) throws PMEException {
+		boolean isTaskInCompleteState = false;
+		try {
+			if (!Helper.isNullOrEmpty(objectId) && !Helper.isNullOrEmpty(stateName)) {
+				List<Map<?, ?>> lsInfo = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainObject.SELECT_CURRENT,
+						ProgramCentralConstants.SELECT_KINDOF_TASK, ProgramCentralConstants.SELECT_KINDOF_PHASE));
+
+				if (!Helper.isNullOrEmpty(lsInfo)) {
+					String isKindOfTask = (String) lsInfo.get(0).get(ProgramCentralConstants.SELECT_KINDOF_TASK);
+					String isKindOfPhase = (String) lsInfo.get(0).get(ProgramCentralConstants.SELECT_KINDOF_PHASE);
+					String state = (String) lsInfo.get(0).get(DomainObject.SELECT_CURRENT);
+
+					if (((!Helper.isNullOrEmpty(isKindOfTask) && PMEConstants.TRUE.equalsIgnoreCase(isKindOfTask)) || (!Helper
+							.isNullOrEmpty(isKindOfPhase) && PMEConstants.TRUE.equalsIgnoreCase(isKindOfPhase)))
+							&& !Helper.isNullOrEmpty(state)
+							&& stateName.equals(state)) {
+						isTaskInCompleteState = true;
+					}
+				}
+			}
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+		return isTaskInCompleteState;
+	}
+
+	/**
+	 * This method checks if context use should be allowed to user Edit
+	 * functionality on Assignee table. It first calls PRG Access
+	 * Program\Function and based on the output, performs LSA Specific checks.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @return Map a key value pair map
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public Map<?, ?> preProcessCheckForEditForPMCAssignee(Context context, String[] args) throws PMEException {
+		try {
+			HashMap returnMap = (HashMap) JPO.invoke(context, "emxTask", null, "preProcessCheckForEdit", args, Map.class);
+
+			if (!Helper.isNullOrEmpty(returnMap)) {
+				String action = (String) returnMap.get(PMEConstants.ACTION);
+
+				if (PMEConstants.CONTINUE.equals(action)) {
+					Map<?, ?> programMap = JPO.unpackArgs(args);
+					Map<?, ?> reqMap = (Map<?, ?>) programMap.get(PMEConstants.REQUEST_MAP);
+					Map<?, ?> tableData = (Map<?, ?>) programMap.get(PMEConstants.TABLE_DATA);
+					MapList objectList = (MapList) tableData.get("ObjectList");
+					String objectId = (String) reqMap.get(PMEConstants.OBJECT_ID);
+
+					boolean showEditLink = true;
+					returnMap = new HashMap(3);
+
+					if (!Helper.isNullOrEmpty(objectId) && PMEUtil.isTaskParentLSASpecificProjectSpaceSubtype(context, objectId)) {
+						List<Map<?, ?>> lsInfo = QueryUtil.getInfo(context, new String[] { objectId }, Helper.stringList(DomainObject.SELECT_CURRENT,
+								ProgramCentralConstants.SELECT_KINDOF_TASK, ProgramCentralConstants.SELECT_KINDOF_PHASE));
+
+						if (!Helper.isNullOrEmpty(lsInfo)) {
+							String isKindOfTask = (String) lsInfo.get(0).get(ProgramCentralConstants.SELECT_KINDOF_TASK);
+							String isKindOfPhase = (String) lsInfo.get(0).get(ProgramCentralConstants.SELECT_KINDOF_PHASE);
+							String state = (String) lsInfo.get(0).get(DomainObject.SELECT_CURRENT);
+
+							if (((!Helper.isNullOrEmpty(isKindOfTask) && PMEConstants.TRUE.equalsIgnoreCase(isKindOfTask)) || (!Helper
+									.isNullOrEmpty(isKindOfPhase) && PMEConstants.TRUE.equalsIgnoreCase(isKindOfPhase)))
+									&& !Helper.isNullOrEmpty(state)
+									&& (ProgramCentralConstants.STATE_PROJECT_TASK_REVIEW.equals(state) || ProgramCentralConstants.STATE_PROJECT_TASK_COMPLETE
+											.equals(state))) {
+								showEditLink = false;
+							}
+						}
+					}
+
+					if (showEditLink) {
+						returnMap.put(PMEConstants.ACTION, PMEConstants.CONTINUE);
+						returnMap.put("ObjectList", objectList);
+					}
+					else {
+						String message = Helper.getI18NString(context, StringResource.PME, "PME.ErrorMessage.UserNotAuthorised");
+						returnMap.put(PMEConstants.ACTION, PMEConstants.STOP);
+						returnMap.put(PMEConstants.MESSAGE, message);
+						returnMap.put("ObjectList", objectList);
+					}
+				}
+			}
+
+			return returnMap;
+		}
+		catch (Exception ex) {
+			throw new PMEException(ex);
+		}
+	}
+
+	/**
+	 * This method checks that PRG Risk command should not be shown in CAPA and
+	 * Design Project context.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param args
+	 *            contains the parameter map.
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public boolean canViewCommandPMCRisk(Context context, String args[]) throws PMEException {
+		final String TYPE_CAPA = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_TYPE_CAPA);
+		final String TYPE_DESIGN_PROJECT = PropertyUtil.getSchemaProperty(context, PMEConstants.SYMBOLIC_TYPE_DESIGN_PROJECT);
+		matrix.util.Pattern pattern = new Pattern(TYPE_DESIGN_PROJECT);
+		pattern.addPattern(TYPE_CAPA);
+		try {
+			boolean isTaskParentOtherThanDesignProjectOrCAPA = true;
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strTaskId = (String) programMap.get(PMEConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strTaskId)) {
+				StringBuilder sbTypePattern = new StringBuilder();
+				sbTypePattern.append(PMEConstants.SYMBOLIC_TYPE_CAPA);
+				sbTypePattern.append(PMEConstants.COMMA);
+				sbTypePattern.append(PMEConstants.SYMBOLIC_type_TaskManagement);
+				sbTypePattern.append(PMEConstants.COMMA);
+				sbTypePattern.append(PMEConstants.SYMBOLIC_TYPE_DESIGN_PROJECT);
+
+				List<Map<?, ?>> lmAssociatedDesignProjectsOrCAPA = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strTaskId),
+						PMEConstants.SYMBOLIC_relationship_Subtask, sbTypePattern.toString(), Helper.stringList(DomainConstants.SELECT_ID,
+								DomainConstants.SELECT_LEVEL, DomainConstants.SELECT_TYPE, DomainConstants.SELECT_NAME), Helper
+								.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), true, false, null, null, true, true, pattern, null, null);
+
+				if (!Helper.isNullOrEmpty(lmAssociatedDesignProjectsOrCAPA)) {
+					isTaskParentOtherThanDesignProjectOrCAPA = false;
+				}
+			}
+			return isTaskParentOtherThanDesignProjectOrCAPA;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+}
+

@@ -1,0 +1,127 @@
+/*
+ ** emxPLCTransactionNotificationUtilBase.java
+ **
+ ** Copyright (c) 1992-2018 Dassault Systemes.
+ **
+ ** All Rights Reserved.
+ ** This program contains proprietary and trade secret information of MatrixOne, Inc.
+ ** Copyright notice is precautionary only and does not evidence any actual or intended
+ ** publication of such program.
+ **
+ */
+
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.matrixone.apps.configuration.ConfigurationConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.BackgroundProcess;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+/**
+ * The <code>emxPLCTransactionNotificationUtilBase</code> class contains common transaction notification utility methods for PLC
+ * @version Variant Configuration R207 - Copyright (c) 2008-2018 Dassault Systemes.
+ * @since PLC R207
+ */
+
+public class ${CLASSNAME} extends ${CLASS:emxPLCTransactionNotificationUtil}
+{
+
+   /**
+    * Constructor.
+    *
+    * @param context the eMatrix <code>Context</code> object
+    * @param args holds no arguments
+    * @throws Exception if the operation fails
+    */
+   public ${CLASSNAME} (Context context, String[] args) throws Exception
+   {
+      super(context, args);
+   }
+
+   public int transactionNotifications(Context context, String[] args) throws Exception
+   {
+       int result = 0;
+       String transHistories = args[0];
+       
+       //Check for Boolean Compatibility Rule Create/Remove. According to Subscribed event from UX Rule Added/Rule Removed.
+       //Notification Trigger will get call and send notification accordingly. 
+       String objectId = transHistories.substring(transHistories.indexOf("id=")+3, transHistories.indexOf("type="));
+       String strType = transHistories.substring(transHistories.indexOf("type=")+5, transHistories.indexOf("triggerName="));
+       String historyString = transHistories.substring(transHistories.indexOf("history=")+8);
+       if("businessobject".equalsIgnoreCase(strType.trim())){
+    	 if(new DomainObject(objectId).isKindOf(context, ConfigurationConstants.TYPE_BOOLEAN_COMPATIBILITY_RULE)&& historyString.startsWith("disconnect")){
+    		 args[1]="FTRRuleRemovedEvent";
+    	 } else if(new DomainObject(objectId).isKindOf(context, ConfigurationConstants.TYPE_VARIANT) && historyString.startsWith("disconnect") && args[1].equals("FTRConfigurationFeatureRemovedEvent")){
+    		 args[1]="FTRVariantRemovedEvent";
+    	 } else if(new DomainObject(objectId).isKindOf(context, ConfigurationConstants.TYPE_VARIABILITYGROUP) && historyString.startsWith("disconnect") && args[1].equals("FTRConfigurationFeatureRemovedEvent")){
+    		 args[1]="FTRVariabilityGroupRemovedEvent";
+    	 }
+       }else if("connection".equalsIgnoreCase(strType.trim())){
+			String strTo = historyString.substring(historyString.indexOf("to:")+4);
+			if (historyString.startsWith("create") && strTo.startsWith(ConfigurationConstants.TYPE_VARIANT)  && args[1].equals("FTRConfigurationFeatureAddedEvent")) {
+				args[1] = "FTRVariantAddedEvent";
+			} else if (historyString.startsWith("create") && strTo.startsWith(ConfigurationConstants.TYPE_VARIABILITYGROUP)  && args[1].equals("FTRConfigurationFeatureAddedEvent")) {
+				args[1] = "FTRVariabilityGroupAddedEvent";
+			} else {   
+				 String[] relIds = new String[1];
+				 relIds[0]=objectId;
+				 StringList lstRelSelect = new StringList();
+				 lstRelSelect.add(DomainRelationship.SELECT_NAME);
+				 lstRelSelect.add("tomid[Left Expression].from.type");
+				 lstRelSelect.add("tomid[Right Expression].from.type");
+				 MapList relMapList = DomainRelationship.getInfo(context, relIds, lstRelSelect);
+				 Object objLERelFromType = (Object)((Map)relMapList.get(0)).get("tomid[Left Expression].from.type"); 
+				 Object objRERelFromType = (Object)((Map)relMapList.get(0)).get("tomid[Right Expression].from.type");
+				 StringList lstLEFromType = new StringList();
+				 StringList lstRFFromType = new StringList();
+				 String strRelName = (String)((Map)relMapList.get(0)).get(DomainRelationship.SELECT_NAME);
+				 if(objLERelFromType instanceof String){
+					 lstLEFromType.add((String)objLERelFromType);
+				 }else if(objLERelFromType instanceof StringList){
+					 lstLEFromType = (StringList)objLERelFromType;
+				 }
+				 if(objRERelFromType instanceof String){
+					 lstRFFromType.add((String)objRERelFromType);
+				 }else if(objRERelFromType instanceof StringList){
+					 lstRFFromType = (StringList)objRERelFromType;
+				 }
+				 if(ConfigurationConstants.RELATIONSHIP_BOOLEAN_COMPATIBILITY_RULE.equalsIgnoreCase(strRelName)&& historyString.startsWith("create")){
+					 args[1]="FTRRuleAddedEvent";
+				 }else if(lstLEFromType.contains(ConfigurationConstants.TYPE_BOOLEAN_COMPATIBILITY_RULE) || lstRFFromType.contains(ConfigurationConstants.TYPE_BOOLEAN_COMPATIBILITY_RULE)){
+					result = 0;
+					return result;
+				 }
+			}
+       }
+       //
+       
+       if(transHistories != null && !"".equals(transHistories))
+       {
+           try
+           {
+               ContextUtil.pushContext(context);
+               Context frameContext = context.getFrameContext("emxFTRTransactionNotificationUtilBase");
+               BackgroundProcess backgroundProcess = new BackgroundProcess();
+               backgroundProcess.submitJob(frameContext, "emxFTRTransactionNotificationUtilBase", "notifyInBackground", args , (String)null);
+           } catch(Exception ex)
+           {
+               ContextUtil.abortTransaction(context);               
+               ex.printStackTrace();
+               throw ex;
+           }finally{
+               //Set the context back to the context user
+               ContextUtil.popContext(context);
+          }
+       }
+       return result;
+   }
+
+}
+

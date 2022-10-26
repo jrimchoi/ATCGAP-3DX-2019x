@@ -1,0 +1,58 @@
+import java.util.Map;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+	
+	public void changeRevision(Context context, String args[]) throws Exception {
+		boolean isContextPushed = false;
+		try {
+			String sObjectId = args[0];
+						
+			ContextUtil.pushContext(context);	
+			isContextPushed = true;
+			
+			StringList slSelects = new StringList();
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			slSelects.add("previous.id");
+			
+			DomainObject doLastRevision = new DomainObject(sObjectId);
+			Map objMap = doLastRevision.getInfo(context, slSelects);
+			String sName = (String) objMap.get(DomainConstants.SELECT_NAME);
+			String sNextRevision = (String) objMap.get(DomainConstants.SELECT_REVISION);
+			String sPrvObjectId = (String) objMap.get("previous.id");
+			
+			if(UIUtil.isNotNullAndNotEmpty(sName) && UIUtil.isNotNullAndNotEmpty(sNextRevision) && UIUtil.isNotNullAndNotEmpty(sPrvObjectId)) {
+				
+				BusinessObject boPrvRevision = new BusinessObject(sPrvObjectId);
+				String sNewNextRevision = (String) boPrvRevision.getNextSequence(context);
+				
+				if(UIUtil.isNotNullAndNotEmpty(sNewNextRevision) && !sNextRevision.equals(sNewNextRevision)) {
+				
+					String mqlQuery = "mod bus "+sObjectId+" "+DomainConstants.SELECT_NAME+" "+sName+" "+DomainConstants.SELECT_REVISION+" "+sNewNextRevision;
+					MqlUtil.mqlCommand(context, true, mqlQuery, true);
+					
+				}
+			}
+			
+		} catch(Exception e){
+			e.printStackTrace();
+		} finally {
+			if(isContextPushed)
+				ContextUtil.popContext(context);
+		}
+	}
+	
+}
+
+

@@ -1,0 +1,2396 @@
+
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collection;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Company;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+
+import matrix.db.Attribute;
+import matrix.db.AttributeList;
+import matrix.db.AttributeType;
+import matrix.db.BusinessObject;
+import matrix.db.BusinessType;
+import matrix.db.Context;
+import matrix.db.Group;
+import matrix.db.GroupList;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.db.Relationship;
+import matrix.db.RelationshipType;
+import matrix.db.Role;
+import matrix.db.RoleList;
+import matrix.db.UserList;
+import matrix.db.Vault;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+@Deprecated
+public class ${CLASSNAME} {
+	public static final String	APPROVAL_MATRIX_DEFAULT					= "Default";
+	public static final String	APPROVAL_MATRIX_CLERICAL				= "Clerical";
+	public static final String	APPROVAL_MATRIX_GENERAL					= "General";
+
+	public static final String	ATTR_ROUTE_BASE_PURPOSE					= PropertyUtil.getSchemaProperty("attribute_RouteBasePurpose");
+	public static final String	ATTR_ROUTE_BASE_POLICY					= PropertyUtil.getSchemaProperty("attribute_RouteBasePolicy");
+	public static final String	ATTR_ROUTE_BASE_STATE					= PropertyUtil.getSchemaProperty("attribute_RouteBaseState");
+	public static final String	ATTR_ROUTE_STATUS						= PropertyUtil.getSchemaProperty("attribute_RouteStatus");
+	public static final String	ECO_ATTR_APPROVAL_TYPE					= PropertyUtil.getSchemaProperty("attribute_ApprovalType");
+	public static final String	TASK_ATTR_APPROVAL_REQUIRED				= PropertyUtil.getSchemaProperty("attribute_ApprovalRequired");
+	public static final String	ATTRIBUTE_REFERENCE_EXPRESSION			= PropertyUtil.getSchemaProperty("attribute_ReferenceExpression");
+	public static final String	ATTRIBUTE_REFERENCE_EXPRESSION_RESULT	= PropertyUtil.getSchemaProperty("attribute_ReferenceExpressionResult");
+	public static final String	ATTR_ROUTE_NODE_ID						= PropertyUtil.getSchemaProperty("attribute_RouteNodeID");
+	public static final String	ATTR_SCHEDULED_COMPLETION_DATE			= PropertyUtil.getSchemaProperty("attribute_ScheduledCompletionDate");
+	public static final String	ATTR_ACTUAL_COMPLETION_DATE				= PropertyUtil.getSchemaProperty("attribute_ActualCompletionDate");
+	public static final String	ATTR_COMMENTS							= PropertyUtil.getSchemaProperty("attribute_Comments");
+	public static final String	ATTR_APPROVAL_STATUS					= PropertyUtil.getSchemaProperty("attribute_ApprovalStatus");
+	/* Apr 21, 2007 - darina - Mod Start */
+	public static final String	ATTR_IW_ROUTE_TASK_USER					= PropertyUtil.getSchemaProperty("attribute_IWRouteTaskUser");
+	/* Apr 21, 2007 - darina - Mod End */
+	public static final String	POLICY_PERSON							= PropertyUtil.getSchemaProperty("policy_Person");
+
+	public static final String	RELATIONSHIP_NEW_PART_PART_REVISION		= PropertyUtil.getSchemaProperty("relationship_NewPartPartRevision");
+
+	public static final String	RELATIONSHIP_ECO_AFFECTED_ITEM			= PropertyUtil.getSchemaProperty("relationship_ECOAffectedItem");
+
+	public static final String	RELATIONSHIP_MAKE_OBSOLETE				= PropertyUtil.getSchemaProperty("relationship_MakeObsolete");
+	public static final String	RELATIONSHIP_NEW_SPECIFICATION_REVISION	= PropertyUtil.getSchemaProperty("relationship_OCDDCOAffectedObjects");
+	public static final String	RELATIONSHIP_APPROVAL_TASK				= PropertyUtil.getSchemaProperty("relationship_ApprovalTask");
+
+	public static final String	RELATIONSHIP_SUB_APPROVAL_MATRIX		= PropertyUtil.getSchemaProperty("relationship_SubApprovalMatrix");
+	public static final String	REL_OBJECT_ROUTE						= PropertyUtil.getSchemaProperty("relationship_ObjectRoute");
+	public static final String	REL_ROUTE_NODE							= PropertyUtil.getSchemaProperty("relationship_RouteNode");
+
+	public static final String	ROLE_DOCUMENT_CONTROL					= PropertyUtil.getSchemaProperty("role_DocumentControl");
+
+	public static final String	STATE_ACTIVE							= PropertyUtil.getSchemaProperty(null, "policy", POLICY_PERSON,
+			"state_Active");
+
+	public static final String	TYPE_ROUTE								= PropertyUtil.getSchemaProperty("type_Route");
+	public static final String	TYPE_APPROVAL_MATRIX					= PropertyUtil.getSchemaProperty("type_ApprovalMatrix");
+	public static final String	TYPE_APPROVAL_TASK						= PropertyUtil.getSchemaProperty("type_ApprovalTask");
+	public static final String	TYPE_CONTROLLED_DOCUMENT				= PropertyUtil.getSchemaProperty("type_ControlledDocument");
+	public static final String	CORE_APPROVAL_TYPE						= PropertyUtil.getSchemaProperty("type_DocumentChangeOrder");
+	public static final String	TYPE_PERSON								= PropertyUtil.getSchemaProperty("type_Person");
+	public static final String	TYPE_SUB_APPROVAL_MATRIX				= PropertyUtil.getSchemaProperty("type_SubApprovalMatrix");
+
+	public static String		VAULT_PRODUCTION						= PropertyUtil.getSchemaProperty("vault_eServiceProduction");
+
+	public static final String	SELECT_REFERENCE_EXPRESSION				= "attribute[" + ATTRIBUTE_REFERENCE_EXPRESSION + "]";
+	public static final boolean	blnAllowPromoteWithoutData				= true;
+	public static final String	DELIMITER								= "|";
+	public static final short	QUERY_LIMIT								= 1000;
+	public static String		REFERENCE_EXPRESSION_TEST_OBJECT_TYPES	= TYPE_CONTROLLED_DOCUMENT;
+
+	/**
+	 * Constructor ensures that we are connected to eMatrix.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            not used in constructor
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		if (!context.isConnected())
+			// throw new Exception("not supported on desktop client");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoDesktopClient"));
+	}
+
+	/**
+	 * Default method that eMatrix calls when invoking this JPO. This method
+	 * should not be used.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            not used in mxMain
+	 * @return 1 - this should not be called
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	public int mxMain(Context context, String[] args) throws Exception {
+		if (true) {
+			// throw new
+			// Exception("Must specify method on IW_ApprovalMatrix
+			// invocation.");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoMethodSpecified"));
+		}
+		return 1;
+	}
+
+	/**
+	 * Takes the Part and attempts to create and attach Part Setup Form object
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] Map - parentID, jsTreeID, Type - either new or quote
+	 * @return HashMap - Contains callback/treeLocation
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<String, String> createApprovalMatrix(Context context, String[] args) throws Exception {
+		Map<String, String> returnMap = new HashMap<String, String>();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strJsTreeID = (String) programMap.get("jsTreeID");
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			String strName = (String) paramMap.get("Name");
+			String strDescription = (String) paramMap.get("Description"); // Bug
+																			// 24857
+																			// -
+																			// Get
+																			// string
+																			// from
+																			// Description
+																			// field.
+			String strRevision = (String) paramMap.get("Revision");
+			String strRefExp = (String) paramMap.get("Reference Expression");
+			String strRefExpDesc = (String) paramMap.get("Reference Expression Description");
+
+			DomainObject doAMObject = new DomainObject();
+			doAMObject.createObject(context, "Approval Matrix", strName, strRevision, "Approval Matrix", context.getVault().getName());
+			String sId = doAMObject.getId();
+
+			doAMObject.open(context);
+			doAMObject.setAttributeValue(context, "Reference Expression", strRefExp);
+			doAMObject.setAttributeValue(context, "Reference Expression Description", strRefExpDesc);
+			doAMObject.setDescription(context, strDescription); // #24857 - Save
+																// the
+																// Description
+																// along with
+																// the strings
+																// from the
+																// other fields.
+			doAMObject.close(context);
+
+			// Create the CallBack Tree
+			StringBuffer treeUrl = new StringBuffer("emxTree.jsp?");
+			treeUrl.append("jsTreeID=").append(strJsTreeID);
+			treeUrl.append("&mode=insert");
+			treeUrl.append("&SuiteDirectory=Framework");
+			treeUrl.append("&emxSuiteDirectory=Framework");
+			treeUrl.append("&objectId=").append(sId);
+			returnMap.put("objectId", doAMObject.getId());
+
+		}
+		catch (Exception mx1E) {
+			mx1E.printStackTrace();
+			return returnMap;
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * Takes the Apprval Matrices selected and deletes them.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] Map - parentID, jsTreeID
+	 * @return HashMap - Contains callback/treeLocation
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map<String, String> delete(Context context, String[] args) throws Exception {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			// String sObjectId = (String) mapArgs.get("objectId");
+			// String strJsTreeID = (String) mapArgs.get("jsTreeID");
+
+			// Go through Rows and delete appropriate objects
+			// Go through the table array and identify IDs to remove
+			if (!(mapArgs.get("emxTableRowId") == null)) {
+				String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+				// Begin Transaction
+				// We have to use a following code because transaction could be
+				// opened in jsp
+				// from which we have invoked this method.
+				boolean isStart = false;
+				if (!ContextUtil.isTransactionActive(context)) {
+					context.start(true);
+					isStart = true;
+				}
+
+				String strRelPattern = RELATIONSHIP_SUB_APPROVAL_MATRIX + "," + RELATIONSHIP_APPROVAL_TASK;
+				String strTypePattern = TYPE_SUB_APPROVAL_MATRIX + "," + TYPE_APPROVAL_TASK;
+				SelectList objSelects = new SelectList();
+				objSelects.addId();
+				SelectList relSelects = new SelectList();
+
+				ContextUtil.pushContext(context);
+
+				for (int i = 0; i < emxTableRowId.length; ++i) {
+					String strParentId = emxTableRowId[i].substring(emxTableRowId[i].indexOf("|") + 1);
+
+					DomainObject doParent = new DomainObject(strParentId);
+
+					MapList childrenList = doParent.getRelatedObjects(context, strRelPattern, // relationship
+																								// pattern
+							strTypePattern, // object pattern
+							objSelects, // object selects
+							relSelects, // relationship selects
+							false, // to direction
+							true, // from direction
+							(short) 0, // recursion level
+							"", // object where clause
+							"", // relationship where
+							0, null, null, null);
+
+					Vector vDelete = new Vector();
+					vDelete.add(strParentId);
+
+					Iterator childIter = childrenList.iterator();
+					while (childIter.hasNext()) {
+						vDelete.add(((Map) childIter.next()).get(DomainConstants.SELECT_ID));
+					}
+
+					String[] deleteIds = new String[vDelete.size()];
+					vDelete.toArray(deleteIds);
+
+					DomainObject.deleteObjects(context, deleteIds);
+				}
+				ContextUtil.popContext(context);
+
+				// Commit Transaction
+				if (isStart) {
+					context.commit();
+				}
+
+			}
+			else {
+				/*
+				 * throw new
+				 * Exception("Please select at least one item to delete.");
+				 */
+				throw new Exception(
+						Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoItemToDeleteError"));
+			}
+		}
+		catch (Exception mx1E) {
+			context.abort();
+			mx1E.printStackTrace();
+			return returnMap;
+		}
+		catch (Throwable ex) {
+			context.abort();
+			ex.printStackTrace();
+			return returnMap;
+		}
+		returnMap.put("callback", "javascript:getTopWindow().refreshTablePage();");
+		return returnMap;
+	}
+
+	/**
+	 * Takes the Apprval Matrix Children selected in the Structure Browser and
+	 * deletes them.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] Map - parentID, jsTreeID
+	 * @return HashMap - Contains callback/treeLocation
+	 * @throws Throwable
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map<String, String> deleteFromSB(Context context, String[] args) throws Throwable {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+
+		StringBuffer itemList = new StringBuffer();
+		itemList.append("<mxRoot>");
+		itemList.append("<action>remove</action>");
+
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+
+			// Go through Rows and delete appropriate objects
+			// Go through the table array and identify IDs to remove
+			if (!(mapArgs.get("emxTableRowId") == null)) {
+				String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+				// Begin Transaction
+				// We have to use a following code because transaction could be
+				// opened in jsp
+				// from which we have invoked this method.
+				boolean isStart = false;
+				if (!ContextUtil.isTransactionActive(context)) {
+					context.start(true);
+					isStart = true;
+				}
+
+				String strRelPattern = RELATIONSHIP_SUB_APPROVAL_MATRIX + "," + RELATIONSHIP_APPROVAL_TASK;
+				String strTypePattern = TYPE_SUB_APPROVAL_MATRIX + "," + TYPE_APPROVAL_TASK;
+				SelectList objSelects = new SelectList();
+				objSelects.addId();
+				SelectList relSelects = new SelectList();
+
+				ContextUtil.pushContext(context);
+
+				HashSet<String> hsDelete = new HashSet<String>();
+
+				for (int i = 0; i < emxTableRowId.length; ++i) {
+					// String strParentId =
+					// emxTableRowId[i].substring(emxTableRowId[i].indexOf("|")
+					// + 1);
+
+					String[] strToken = emxTableRowId[i].split("\\|");
+					String strParentId = strToken[1].trim();
+					String strRelId = strToken[2].trim();
+					String strLevelId = strToken[3].trim();
+
+					itemList.append("<item id='" + strLevelId + "'/>");
+
+					DomainObject doParent = new DomainObject(strParentId);
+
+					MapList childrenList = doParent.getRelatedObjects(context, strRelPattern, // relationship
+																								// pattern
+							strTypePattern, // object pattern
+							objSelects, // object selects
+							relSelects, // relationship selects
+							false, // to direction
+							true, // from direction
+							(short) 0, // recursion level
+							"", // object where clause
+							"", // relationship where
+							0, null, null, null);
+
+					hsDelete.add(strParentId);
+
+					Iterator childIter = childrenList.iterator();
+					while (childIter.hasNext()) {
+						hsDelete.add((String) ((Map) childIter.next()).get(DomainConstants.SELECT_ID));
+					}
+				}
+
+				String[] deleteIds = new String[hsDelete.size()];
+				hsDelete.toArray(deleteIds);
+
+				DomainObject.deleteObjects(context, deleteIds);
+
+				ContextUtil.popContext(context);
+
+				// Commit Transaction
+				if (isStart) {
+					context.commit();
+				}
+
+			}
+			else {
+				/*
+				 * throw new
+				 * Exception("Please select at least one item to delete.");
+				 */
+				throw new Exception(
+						Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoItemToDeleteError"));
+			}
+		}
+		catch (Exception mx1E) {
+			context.abort();
+			mx1E.printStackTrace();
+			return returnMap;
+		}
+
+		itemList.append("</mxRoot>");
+
+		String strURL = "javascript:parent.removedeletedRows(\"" + itemList.toString() + "\")";
+		returnMap.put("callback", strURL);
+
+		return returnMap;
+	}
+
+	/**
+	 * Gets approval groups based on documents attached to the ECO and the type
+	 * of change.
+	 * 
+	 * The hashmap return contains a String key which is the name of the groups
+	 * that needs to approve the ECO. The value is a StringList that contains
+	 * all the users in the group idnetified in the key.
+	 * 
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] String- the ECO object id that is being promoted.
+	 * @return HashMap Key = String 'Group Name', Value = StringList 'Users in
+	 *         group'
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	public HashMap getApprovalMatrixGroupsRoles(Context context, String[] args) throws Exception {
+		HashMap mApprovalTasks;
+		// String sGroupRole;
+
+		// StringList slGroups = new StringList();
+		// StringList slUsers = new StringList();
+
+		// Get ObjectID
+		String sOId = args[0];
+		String sReqOpt = args[1];
+		String processChildren = args[2];
+		String sScope = args[3];
+
+		DomainObject thisObj = new DomainObject(sOId);
+		String thisObjType = thisObj.getInfo(context, DomainConstants.SELECT_TYPE);
+
+		// An ECO's approval matrix is based on an attribute on the ECO called
+		// 'Approval Type'
+		// The Test Reports' approval matrix is based on what it is attached to.
+		// A TR can only be attached to a Protocol or an MVI. If it is attached
+		// to
+		// a protocol then use the parent protocols approval matrix. If it is
+		// attached
+		// to a MVI then use the general Test Report Approval Matrix
+		if (thisObjType.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context, "type_TestReport"))) {
+			StringList trSelects = new StringList();
+			trSelects.add(DomainConstants.SELECT_ID);
+
+			MapList relatedProtocol = thisObj.getRelatedObjects(context, "Attached Reports", // relationship
+																								// pattern
+					"Protocol", // object pattern
+					trSelects, // object selects
+					new StringList(), // relationship selects
+					true, // to direction
+					false, // from direction
+					(short) 1, // recursion level
+					null, // object where clause
+					null, 0, null, null, null); // relationship where clause
+
+			// If their is no protocol attached it might be an Engineering Test
+			// Report attached to an MVI.
+			if (relatedProtocol.size() == 0) {
+				MapList relatedMVI = thisObj.getRelatedObjects(context, "MVI Component", // relationship
+																							// pattern
+						"Master Validation Index", // object pattern
+						trSelects, // object selects
+						new StringList(), // relationship selects
+						true, // to direction
+						false, // from direction
+						(short) 1, // recursion level
+						null, // object where clause
+						null, 0, null, null, null); // relationship where clause
+
+				// If an MVI is attached used the generic Test Report Approval
+				// Matrix.
+				if (relatedMVI.size() == 0)
+					// throw new
+					// Exception("Test Report must be attached to a Protocol or
+					// MVI");
+					throw new Exception(
+							Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.TestReportNotAttached"));
+				else {
+					mApprovalTasks = getGeneralGroupsAndUsers(context, sOId, sReqOpt, APPROVAL_MATRIX_GENERAL, processChildren, sScope);
+					return mApprovalTasks;
+				}
+			}
+			// There is a protocol attached so use its approval matrix.
+			else {
+				sOId = (String) ((Map) relatedProtocol.get(0)).get(DomainConstants.SELECT_ID);
+				mApprovalTasks = getGeneralGroupsAndUsers(context, sOId, sReqOpt, APPROVAL_MATRIX_GENERAL, processChildren, sScope);
+				return mApprovalTasks;
+			}
+		}
+		// If the command is passing in processChildren=true then that means we
+		// are looking at the data attached
+		// to this object to figure out the Approval Matrix
+		else if (processChildren.equalsIgnoreCase("TRUE")) {
+			DomainObject ecoObject = new DomainObject(sOId);
+			String strApprovalType = ecoObject.getAttributeValue(context, ECO_ATTR_APPROVAL_TYPE);
+
+			if (strApprovalType == null || strApprovalType.trim().length() == 0) {
+				// throw new
+				// Exception("Approval Type attribute needs to have a value");
+				strApprovalType = APPROVAL_MATRIX_GENERAL;
+			}
+
+			mApprovalTasks = getGeneralGroupsAndUsers(context, sOId, sReqOpt, strApprovalType, processChildren, sScope);
+
+			return mApprovalTasks;
+		}
+		// Use the objects type to find the approval matrix
+		else {
+			mApprovalTasks = getGeneralGroupsAndUsers(context, sOId, sReqOpt, APPROVAL_MATRIX_GENERAL, processChildren, sScope);
+
+			return mApprovalTasks;
+		}
+	}
+
+	/**
+	 * Method used for if you need to invoke the approval matrix outside of this
+	 * class.
+	 * 
+	 */
+	public HashMap getGeneralGroupsAndUsersUtil(Context context, String args[]) throws Exception {
+
+		// Get Input
+		String sObjId = args[0];
+		String sReqOpt = args[1];
+		String processChildren = args[2];
+		String sScope = args[3];
+
+		HashMap mGroupsAndUsers;
+
+		mGroupsAndUsers = getGeneralGroupsAndUsers(context, sObjId, sReqOpt, APPROVAL_MATRIX_GENERAL, processChildren, sScope);
+
+		return mGroupsAndUsers;
+	}
+
+	/**
+	 * Gets approval groups based on a 'General' type of change.
+	 * 
+	 * The hashmap return contains a String key which is the name of the groups
+	 * that needs to approve the ECO. The value is a StringList that contains
+	 * all the users in the group idnetified in the key.
+	 * 
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param String
+	 *            - the ECO object id that is being promoted.
+	 * @return HashMap Key = String 'Group Name', Value = StringList 'Users in
+	 *         group'
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	private HashMap getGeneralGroupsAndUsers(Context context, String sECOid, String sReqOpt, String sECOType, String processChildren, String sScope)
+			throws Exception {
+		HashMap mGroups = new HashMap();
+		HashMap mAllTasks = new HashMap();
+		Map thisObjectMap = null;
+		Map innerObjectMap = null;
+
+		DomainObject masterObject = DomainObject.newInstance(context, sECOid);
+		DomainObject thisSpecificObject = new DomainObject(sECOid);
+		thisSpecificObject.open(context);
+		// Jesse Craig changed because ECO relationships has changed from ASP to
+		// product now 2011
+		String relPattern = RELATIONSHIP_ECO_AFFECTED_ITEM;
+
+		StringList typeSelects = new StringList();
+		typeSelects.add(CommonDocument.SELECT_ID);
+		typeSelects.add(CommonDocument.SELECT_TYPE);
+		typeSelects.add(CommonDocument.SELECT_NAME);
+
+		StringList relSelects = new StringList();
+		MapList objectList = new MapList();
+
+		if (processChildren.equalsIgnoreCase("TRUE")) {
+			// If nothing is attached to the ECO and we allow processing an ECO
+			// alone just use the Default Approval Matrix Object
+			objectList = masterObject.getRelatedObjects(context, relPattern, // relationship
+					// pattern
+					"*", // object pattern
+					typeSelects, // object selects
+					relSelects, // relationship selects
+					false, // to direction
+					true, // from direction
+					(short) 1, // recursion level
+					"", // object where clause
+					null, 0, null, null, null); // relationship where clause
+
+			if (objectList.size() == 0 && !blnAllowPromoteWithoutData)
+				// throw new
+				// Exception("You are not allowed to promote this ECO without
+				// attached parts or documents.");
+				throw new Exception(
+						Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoECOPromoteAttachless"));
+
+			// Jesse Craig changed because we need to add parent in when
+			// processing children 2011 release
+			MapList parentList = DomainObject.findObjects(context, thisSpecificObject.getTypeName(), // type
+					// pattern
+					thisSpecificObject.getName(), // name pattern
+					thisSpecificObject.getRevision(), // rev pattern
+					"*", // owner pattern
+					"*", // vault pattern
+					"", // where expression
+					false, // expand type
+					typeSelects); // object selects
+			objectList.addAll(0, parentList); // Put this guy at the top of the
+												// list.
+
+		}
+		else {
+			objectList = DomainObject.findObjects(context, thisSpecificObject.getTypeName(), // type
+					// pattern
+					thisSpecificObject.getName(), // name pattern
+					thisSpecificObject.getRevision(), // rev pattern
+					"*", // owner pattern
+					"*", // vault pattern
+					"", // where expression
+					false, // expand type
+					typeSelects); // object selects
+		}
+		thisSpecificObject.close(context);
+		// If nothing is attached to the ECO and we allow processing an ECO
+		// alone just use the Default Approval Matrix Object
+		if (objectList.size() == 0 && blnAllowPromoteWithoutData) {
+			objectList = DomainObject.findObjects(context, TYPE_APPROVAL_MATRIX, // type
+																					// pattern
+					APPROVAL_MATRIX_DEFAULT, // name pattern
+					"-", // rev pattern
+					"*", // owner pattern
+					"*", // vault pattern
+					"", // where expression
+					false, // expand type
+					typeSelects); // object selects
+		}
+
+		for (int i = 0; i < objectList.size(); i++) {
+			// BusinessObject connectedObject = new BusinessObject(
+			// (String) (((Map) objectList.get(i)).get("id")));
+
+			String sObjectType = (String) (((Map) objectList.get(i)).get("type"));
+			String sObjectId = (String) (((Map) objectList.get(i)).get("id"));
+			String sObjectName = (String) (((Map) objectList.get(i)).get("name"));
+
+			MapList mlApprovalMatrix = new MapList();
+			MapList mlApprovalTasks = new MapList();
+
+			if (sECOType.equalsIgnoreCase(APPROVAL_MATRIX_GENERAL)) {
+				mlApprovalMatrix = getApprovalMatrixForObject(context, sObjectId, sObjectId, TYPE_APPROVAL_MATRIX, sObjectType, sObjectName, false,
+						"");
+				mlApprovalTasks = getApprovalTasks(context, sReqOpt, mlApprovalMatrix);
+			}
+			// If it's a Clerical ECO just use the Clerical Approval Matrix
+			// Object. This is not the best way to do this
+			// because we actually went out and got the normal Approval Matrix
+			// stuff and then clear it out.
+			else if (sECOType.equalsIgnoreCase(APPROVAL_MATRIX_CLERICAL)) {
+				mlApprovalMatrix = getApprovalMatrixForObject(context, sObjectId, sObjectId, TYPE_APPROVAL_MATRIX, APPROVAL_MATRIX_CLERICAL, "-",
+						false, "");
+				mlApprovalTasks = getApprovalTasks(context, sReqOpt, mlApprovalMatrix);
+			}
+
+			for (int j = 0; j < mlApprovalTasks.size(); j++) {
+				thisObjectMap = (Map) mlApprovalTasks.get(j);
+
+				String sApprovalUser = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Approval User]"));
+				String sApprovalUserName = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Approval Name]"));
+				String sRouteTaskUser = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Route Task User]"));
+				// Get the route sequence number for sorting purposes -04/11 LM
+				String sRouteSeq = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Route Sequence]"));
+
+				// When we put together all the tasks for all the attached
+				// information we don't want to put
+				// the same group in there every time. For example, if we have
+				// three documents attached to
+				// the ECO and the Approval Matrix says we need to have Document
+				// Control sign on Documents
+				// we don't want to make Document Control sign three times. But
+				// what we will do is update the
+				// Task Title and Task Instructions so that the user gets all
+				// the instructions passed down
+				// by the Approval Tasks.
+				//
+				// We ignore the "Attribute" Approval User because that will be
+				// a specific user for each
+				// affected item and we want duplicate roles for this.
+				//
+				// We ignore Optional signatures becuase we may want to have
+				// many Authors optionally sign
+				if (mGroups.containsKey(sRouteTaskUser) && !sApprovalUser.equalsIgnoreCase("Attribute")
+						&& !sReqOpt.equalsIgnoreCase("IWOptionalApprovalMatrixGroups")) {
+					String sTaskTitle = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Title]"));
+					String sTaskInstructions = (String) (((Map) mlApprovalTasks.get(j)).get("attribute[Route Instructions]"));
+
+					ArrayList aAllTaskKeys = new ArrayList(mAllTasks.keySet());
+					String sKey = "";
+					for (int k = 0; k < aAllTaskKeys.size(); k++) {
+						sKey = (String) aAllTaskKeys.get(k);
+						innerObjectMap = ((Map) mAllTasks.get(sKey));
+
+						String sMasterRouteTaskUser = (String) innerObjectMap.get("attribute[Route Task User]");
+
+						if (sMasterRouteTaskUser.equals(sRouteTaskUser)) {
+							String sMasterTitle = (String) innerObjectMap.get("attribute[Title]");
+							String sMasterInstructions = (String) innerObjectMap.get("attribute[Route Instructions]");
+
+							if (!sMasterTitle.equals(sTaskTitle))
+								innerObjectMap.put("attribute[Title]", "Multiple Responsibilities");
+
+							if (!sMasterInstructions.equals(sTaskInstructions))
+								innerObjectMap.put("attribute[Route Instructions]", sMasterInstructions + "<br><br>" + sTaskInstructions);
+
+							mAllTasks.put(sKey, innerObjectMap);
+							break;
+						}
+					}
+					continue;
+				}
+
+				StringList slUsers = new StringList();
+
+				// If "Attribute" is retured then we need to get that attribute
+				// value off of the object
+				// We assume the value of the attribute is a Person that we can
+				// assign a task to.
+				if (sApprovalUser.equalsIgnoreCase("Attribute")) {
+					DomainObject thisObject = new DomainObject(sObjectId);
+					String sAttributeValue = thisObject.getInfo(context, sApprovalUserName);
+					sAttributeValue = (sAttributeValue != null) ? sAttributeValue : "";
+					slUsers.add(sAttributeValue);
+				}
+				else if (sApprovalUserName != null && !sApprovalUserName.equals("null") && !sApprovalUserName.equals("")) {
+					slUsers.add(sApprovalUserName);
+				}
+				else {
+					if (sApprovalUser.equalsIgnoreCase("Group"))
+						slUsers = getUsersForGroup(context, sRouteTaskUser, sScope, sObjectId, "");
+					else if (sApprovalUser.equalsIgnoreCase("Role"))
+						slUsers = getUsersForRole(context, sRouteTaskUser, sScope, sObjectId, "");
+					else if (sApprovalUser.equalsIgnoreCase("Person")) {
+						sApprovalUserName = (sApprovalUserName != null) ? sApprovalUserName : "";
+						slUsers.add(sApprovalUserName);
+					}
+				}
+
+				// go through the stinglist of users and format them to be last,
+				// first (username)
+				StringList slDisplayName = new StringList();
+				for (int k = 0; k < slUsers.size(); k++) {
+					// [Haritha.Panuganti] Bug 24385. Fix how Last Name First
+					// Name appears in the Approval Matrix. This effects all the
+					// products.
+					// The Same Fix is provided as a hot fix for V6R2009X
+					// version of Complaints By Gary Pool.
+					String sUser = slUsers.get(k).toString();
+					String fullName = "";
+					String tlFullName = PersonUtil.getFullName(context, sUser);
+					fullName += tlFullName + " (" + sUser + ")";
+					slDisplayName.add(fullName);
+				}
+				// sort the stringlist
+				slDisplayName.sort();
+
+				// Add any results to the hashmap
+				mGroups.put(sRouteTaskUser, slDisplayName);
+				thisObjectMap.put("User List", slDisplayName);
+				Integer intI = Integer.valueOf(i);
+				Integer intJ = Integer.valueOf(j);
+				// Add the route sequence number to the key for sorting purposes
+				// -04/11 LM
+				// mAllTasks.put(intI.toString() + intJ.toString(),
+				// thisObjectMap);
+				mAllTasks.put(sRouteSeq + intI.toString() + intJ.toString(), thisObjectMap);
+			}
+		}
+
+		return mAllTasks;
+	}
+
+	/**
+	 * Form report for ECO Metrics.
+	 * 
+	 * @param context
+	 *            JPO Context
+	 * @param args
+	 *            JPO Arguments
+	 * @return MapList
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList tableReferenceExpressionResults(Context context, String[] args) throws Exception {
+		// Get Parameters
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		String type = (String) paramMap.get("type");
+		String name = (String) paramMap.get("name");
+		String revision = (String) paramMap.get("revision");
+		String vault = (String) paramMap.get("vault");
+		String limit = (String) paramMap.get("queryLimit");
+
+		// Process 'type'
+		if (type == null || type.trim().length() == 0) {
+			type = REFERENCE_EXPRESSION_TEST_OBJECT_TYPES;
+		}
+
+		// Process Query Limit
+		short shortLimit = QUERY_LIMIT;
+		if (limit != null && limit.length() > 0) {
+			shortLimit = new Short(limit).shortValue();
+		}
+
+		SelectList objSelects = new SelectList();
+		objSelects.addId();
+
+		MapList foundObjects = DomainObject.findObjects(context, type // Type
+		// pattern
+				, name // Name pattern
+				, revision // Revision pattern
+				, "*" // Owner pattern
+				, vault // Vault Pattern
+				, null // Where Expression
+				, null // Query name
+				, true // Expand type
+				, objSelects // Selects
+				, shortLimit);
+
+		return foundObjects;
+	}
+
+	/**
+	 * Modified: Feb 2, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * Gets the (Sub) Approval Matrix associated with the given object. The
+	 * method was modified to support recursive calls to the method.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param sDocumentId
+	 *            id of the object for which the Approval Matrix processing was
+	 *            initiated. This value must remain the same because this id
+	 *            represents the object for which all of the Reference
+	 *            Expressions will be evaluated against.
+	 * @param sObjectId
+	 *            id of the object for which the Approval Matrix is identified.
+	 *            Initially, this is the same as the <code>sDocumentId</code>
+	 *            value. But, when a Reference Experssion is identified and
+	 *            evaluated, the value is updated to the id of the resultant Sub
+	 *            Approval Matrix.
+	 * @param sParentObjectType
+	 *            utilized by the 'Approval Matrix' query. Typically, the value
+	 *            is 'Approval Matrix'.
+	 * @param sObjectType
+	 *            the 'type' of the object represented by the
+	 *            <code>sDocumentId</code> object. This value maps to the 'name'
+	 *            of the target Approval Matrix object.
+	 * @param sObjectName
+	 *            the 'name' of the object represented by the
+	 *            <code>sDocumentId</code> object. This value maps to the
+	 *            'revision' of the target Approval Matrix object.
+	 * @param isSubApprovalMatrix
+	 *            if the object represented by the <code>sObjectId</code> is a
+	 *            'Sub Approval Matrix' type, this value will be 'true'.
+	 * @param sExpressionResult
+	 *            the target 'Reference Expression Result' attribute value of
+	 *            the desired 'Sub Approval Matrix'.
+	 * @return list containing 0 or 1 (Sub) Approval Matrix objects.
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	private static MapList getApprovalMatrixForObject(Context context, String sDocumentId, String sObjectId, String sParentObjectType,
+			String sObjectType, String sObjectName, boolean isSubApprovalMatrix, String sExpressionResult) throws Exception {
+		SelectList resultSelects = new SelectList(4);
+		resultSelects.add(DomainConstants.SELECT_ID);
+		resultSelects.add(DomainConstants.SELECT_TYPE);
+		resultSelects.add(DomainConstants.SELECT_NAME);
+		resultSelects.add(DomainConstants.SELECT_REVISION);
+		resultSelects.add(SELECT_REFERENCE_EXPRESSION);
+
+		String approvalMatrixWhere = "current == 'Active'";
+
+		MapList approvalMatrixMap = null;
+
+		/*
+		 * Need to execute different methods depending on if we'er dealing with
+		 * an 'Approval Matrix' or a 'Sub Approval Matrix'.
+		 */
+		if (!isSubApprovalMatrix) {
+			approvalMatrixMap = queryForApprovalMatrixObjects(context, sParentObjectType, sObjectType, sObjectName, resultSelects,
+					approvalMatrixWhere);
+		}
+		else {
+			approvalMatrixMap = expandToSubApprovalMatrix(context, sObjectId, resultSelects, approvalMatrixWhere, sExpressionResult);
+
+			// We shouldn't get more than one Sub Approval Matrix returned.
+			if (approvalMatrixMap.size() > 1) {
+				// i18nNow i18nnow = new i18nNow();
+				// Get language via context of user
+				// String language = context.getSession().getLanguage();
+				String contentLabel = Helper.getI18NString(context, Helper.StringResource.LSA,
+						"emxFramework.ApprovalMatrix.ErrorMsg.TooManySubApprovalMatricesForReferenceExpression");
+				String errMsg = "getApprovalMatrixForObject: " + contentLabel;
+
+				throw new Exception(errMsg);
+			}
+		}
+
+		/*
+		 * Next, we need to see if the (Sub) Approval Matrix has a 'Reference
+		 * Expression' value: If yes, we need to process the expression, using
+		 * the results to process further; If no, we are finished.
+		 */
+		MapList finalMapList = new MapList();
+
+		if (approvalMatrixMap != null && approvalMatrixMap.size() > 0) {
+			String matrixId = (String) (((Map) approvalMatrixMap.get(0)).get("id"));
+			String matrixReferencExpression = (String) (((Map) approvalMatrixMap.get(0)).get(SELECT_REFERENCE_EXPRESSION));
+
+			if (matrixReferencExpression != null && matrixReferencExpression.trim().length() > 0) {
+				String expressionResult = evaluateReferenceExpression(context, sDocumentId, matrixReferencExpression);
+
+				if (expressionResult.length() > 0) {
+					finalMapList = getApprovalMatrixForObject(context, sDocumentId, matrixId, "", "", "", true, expressionResult);
+				}
+
+				/*
+				 * If we don't get a result, then we need to return the original
+				 * approvalMatrixMap
+				 */
+				if (finalMapList.size() == 0) {
+					finalMapList = approvalMatrixMap;
+				}
+			}
+			else {
+				finalMapList = approvalMatrixMap;
+			}
+		} // End if (approvalMatrixMap != null && approvalMatrixMap.size() >
+			// 0)
+
+		return finalMapList;
+	}
+
+	/**
+	 * Feb 2, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * Code extracted from the <code>getApprovalMatrixForObject</code> method to
+	 * encapsulate the query for Approval Matrix objects.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param sParentObjectType
+	 *            utilized by the 'Approval Matrix' query. Typically, the value
+	 *            is 'Approval Matrix'.
+	 * @param sObjectType
+	 *            the 'type' of the object for which the Approval Matrix is
+	 *            sought. This value maps to the 'name' of the target Approval
+	 *            Matrix object.
+	 * @param sObjectName
+	 *            the 'name' of the object for which the Approval Matrix is
+	 *            sought. This value maps to the 'revision' of the target
+	 *            Approval Matrix object.
+	 * @param resultSelects
+	 *            select list
+	 * @param approvalMatrixWhere
+	 *            where statement to limit the results
+	 * @return
+	 * @throws FrameworkException
+	 * @throws MatrixException
+	 * @throws Exception
+	 */
+	private static MapList queryForApprovalMatrixObjects(Context context, String sParentObjectType, String sObjectType, String sObjectName,
+			SelectList resultSelects, String approvalMatrixWhere) throws FrameworkException, MatrixException, Exception {
+
+		// Just created for an error message later
+		String sOriginalType = sObjectType;
+
+		/*
+		 * Query for "Approval Matrix" Start
+		 * 
+		 * This section queries for the 'Approval Matrix' object that matches
+		 * the arguments provided. In general, sParentObjectType ==
+		 * "Approval Matrix"
+		 */
+		MapList approvalMatrixMap = null;
+
+		approvalMatrixMap = DomainObject.findObjects(context, sParentObjectType, // type
+																					// pattern
+				sObjectType, // name pattern
+				sObjectName, // rev pattern
+				"*", // owner pattern
+				"*", // vault pattern
+				approvalMatrixWhere, // where expression
+				false, // expand type
+				resultSelects); // object selects
+
+		if (approvalMatrixMap.isEmpty()) {
+			approvalMatrixMap = DomainObject.findObjects(context, sParentObjectType, // type
+					// pattern
+					sObjectType, // name pattern
+					"-", // rev pattern
+					"*", // owner pattern
+					"*", // vault pattern
+					approvalMatrixWhere, // where expression
+					false, // expand type
+					resultSelects); // object selects
+		}
+
+		if (approvalMatrixMap.isEmpty()) {
+			while (!sObjectType.equals(null) && !sObjectType.equals("")) {
+				BusinessType thisType = new BusinessType(sObjectType, new Vault(VAULT_PRODUCTION));
+				sObjectType = thisType.getParent(context);
+
+				if (sObjectType != null && !sObjectType.equals("")) {
+					approvalMatrixMap = DomainObject.findObjects(context, sParentObjectType, // type
+							// pattern
+							sObjectType, // name pattern
+							"-", // rev pattern
+							"*", // owner pattern
+							"*", // vault pattern
+							approvalMatrixWhere, // where
+							// expression
+							false, // expand type
+							resultSelects); // object
+					// selects
+				}
+
+				if (!approvalMatrixMap.isEmpty())
+					break;
+			}
+		}
+
+		if (approvalMatrixMap.isEmpty()) {
+			approvalMatrixMap = DomainObject.findObjects(context, sParentObjectType, // type
+					// pattern
+					APPROVAL_MATRIX_DEFAULT, // name pattern
+					"-", // rev pattern
+					"*", // owner pattern
+					"*", // vault pattern
+					approvalMatrixWhere, // where expression
+					false, // expand type
+					resultSelects); // object selects
+		}
+
+		if (approvalMatrixMap.isEmpty()) {
+			// throw new
+			// Exception("There is a misconfiguration with the Approval
+			// Matrix.\nUnable to retrieve information for Type: "
+			// + sOriginalType + " Name: " + sObjectName);
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.AMMisconfiuration")
+					+ "\n" + Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.AMMisconfiurationUnable")
+					+ " Type: " + sOriginalType + " Name: " + sObjectName);
+
+		}
+		/*
+		 * Query for "Approval Matrix" End
+		 */
+		return approvalMatrixMap;
+	}
+
+	/**
+	 * Feb 2, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * Expand one-level to all related Sub Approval Matrix objects.
+	 * 
+	 * @param context
+	 * @param objectId
+	 *            id of root of expand
+	 * @param resultSelects
+	 *            select list
+	 * @param approvalMatrixWhere
+	 *            where statement to limit the results
+	 * @param expressionResult
+	 *            value of "Reference Expression Result" attribute of target Sub
+	 *            Approval Matrix
+	 * @return list containing 0 or 1 Sub Approval Matrices
+	 * @throws FrameworkException
+	 * @throws MatrixException
+	 * @throws Exception
+	 */
+	private static MapList expandToSubApprovalMatrix(Context context, String objectId, SelectList resultSelects, String approvalMatrixWhere,
+			String expressionResult) throws FrameworkException, MatrixException, Exception {
+
+		DomainObject matrixObject = new DomainObject(objectId);
+		MapList approvalMatrixMap = null;
+
+		/*
+		 * Set the where clause to return the prescribed "Sub Approval Matrix"
+		 */
+		String modApprovalMatixWhere = approvalMatrixWhere + " && attribute[" + ATTRIBUTE_REFERENCE_EXPRESSION_RESULT + "] == '"
+				+ expressionResult.trim() + "'";
+
+		approvalMatrixMap = matrixObject.getRelatedObjects(context, RELATIONSHIP_SUB_APPROVAL_MATRIX, // relationship
+				// pattern
+				TYPE_SUB_APPROVAL_MATRIX, // object
+				// pattern
+				resultSelects, // object selects
+				null, // relationship selects
+				false, // to direction
+				true, // from direction
+				(short) 1, // recursion level
+				modApprovalMatixWhere, // object where
+				// clause
+				null, 0, null, null, null); // relationship where clause
+
+		return approvalMatrixMap;
+	}
+
+	/**
+	 * Feb 2, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method will evaluate the passed expression against the object id.
+	 * 
+	 * @param context
+	 * @param objectId
+	 *            id of object that the Reference Expression will be evaluated
+	 *            against.
+	 * @param matrixReferencExpression
+	 *            matrix expression that will execute against object.
+	 * @return result of expression evaluation.
+	 * @throws Exception
+	 */
+	private static String evaluateReferenceExpression(Context context, String objectId, String matrixReferencExpression) throws Exception {
+
+		// Check parameters
+		if (objectId == null || objectId.trim().length() == 0 || matrixReferencExpression == null || matrixReferencExpression.trim().length() == 0) {
+			// throw new
+			// Exception("evaluateReferenceExpression: Error: Missing
+			// parameters");
+			throw new Exception("evaluateReferenceExpression: "
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + " "
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.MissingParameters"));
+		}
+
+		/*
+		 * Let's now evaluate the expression against the object.
+		 */
+		String result = "";
+
+		try {
+			MQLCommand mqlCommand = new MQLCommand();
+			mqlCommand.open(context);
+			mqlCommand.executeCommand(context, "evaluate expression $1 on bus $2", matrixReferencExpression, objectId);
+			result = mqlCommand.getResult();
+			mqlCommand.close(context);
+		}
+		catch (MatrixException mex) {
+			// i18nNow i18nnow = new i18nNow();
+			// Get language via context of user
+			// String language = context.getSession().getLanguage();
+			String contentLabel = Helper.getI18NString(context, Helper.StringResource.LSA,
+					"emxFramework.ApprovalMatrix.ErrorMsg.ReferenceExpressionEvaluation");
+			String errMsg = "evaluateReferenceExpression: " + contentLabel;
+
+			mex.printStackTrace();
+
+			throw new Exception(errMsg);
+		}
+
+		/*
+		 * Check the result value.
+		 */
+		if (result == null) {
+			result = "";
+		}
+
+		return result.trim();
+	}
+
+	/**
+	 * @param context
+	 * @param sReqOpt
+	 * @param approvalMatrixMap
+	 * @return
+	 * @throws FrameworkException
+	 * @throws Exception
+	 */
+	private static MapList getApprovalTasks(Context context, String sReqOpt, MapList approvalMatrixMap) throws FrameworkException, Exception {
+		String approvalMatrixObjectId = (String) (((Map) approvalMatrixMap.get(0)).get("id"));
+		// String approvalMatrixObjectType = (String) (((Map)
+		// approvalMatrixMap.get(0)).get("type"));
+		// String approvalMatrixObjectName = (String) (((Map)
+		// approvalMatrixMap.get(0)).get("name"));
+		// String approvalMatrixObjectRevision = (String) (((Map)
+		// approvalMatrixMap.get(0)).get("revision"));
+
+		DomainObject approvalMatrixObject = DomainObject.newInstance(context, approvalMatrixObjectId);
+
+		String relPattern = RELATIONSHIP_APPROVAL_TASK;
+		String taskWhere = "";
+
+		if (sReqOpt.equalsIgnoreCase("IWRequiredApprovalMatrixGroups"))
+			taskWhere = "current == 'Active' && attribute[" + TASK_ATTR_APPROVAL_REQUIRED + "] == 'Required'";
+		else if (sReqOpt.equalsIgnoreCase("IWReqOptApprovalMatrixGroups"))
+			taskWhere = "current == 'Active' && attribute[" + TASK_ATTR_APPROVAL_REQUIRED + "] == 'One of the following'";
+		else if (sReqOpt.equalsIgnoreCase("IWOptionalApprovalMatrixGroups"))
+			taskWhere = "current == 'Active' && attribute[" + TASK_ATTR_APPROVAL_REQUIRED + "] == 'Optional'";
+		else
+			// throw new
+			// Exception("Must specify if the signature is required on attribute
+			// Approval Required.");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.ARSigReq"));
+
+		StringList typeSelects = new StringList();
+		typeSelects.add(CommonDocument.SELECT_ID);
+		typeSelects.add(CommonDocument.SELECT_TYPE);
+		typeSelects.add(CommonDocument.SELECT_NAME);
+		typeSelects.add("attribute[Allow Delegation]");
+		typeSelects.add("attribute[Approval Name]");
+		typeSelects.add("attribute[Approval Required]");
+		typeSelects.add("attribute[Approval User]");
+		typeSelects.add("attribute[Assignee Set Due Date]");
+		typeSelects.add("attribute[Comments]");
+		typeSelects.add("attribute[Date Offset From]");
+		typeSelects.add("attribute[Due Date Offset]");
+		typeSelects.add("attribute[Review Comments Needed]");
+		typeSelects.add("attribute[Review Task]");
+		typeSelects.add("attribute[Route Action]");
+		typeSelects.add("attribute[Route Instructions]");
+		typeSelects.add("attribute[Route Sequence]");
+		typeSelects.add("attribute[Route Task User]");
+		typeSelects.add("attribute[Route Task User Company]");
+		// typeSelects.add("attribute[Task Comments Needed]");
+		typeSelects.add("attribute[Task Requirement]");
+		typeSelects.add("attribute[Title]");
+
+		StringList relSelects = new StringList();
+		MapList objectList = approvalMatrixObject.getRelatedObjects(context, relPattern, // relationship
+				// pattern
+				"*", // object pattern
+				typeSelects, // object
+				// selects
+				relSelects, // relationship
+				// selects
+				false, // to direction
+				true, // from direction
+				(short) 1, // recursion level
+				taskWhere, // object where
+				// clause
+				null, 0, null, null, null); // relationship where
+		// clause
+
+		if (objectList.isEmpty() && sReqOpt.equalsIgnoreCase("IWRequiredApprovalMatrixGroups"))
+			// throw new
+			// Exception("There aren't any Approval Tasks assigned to " +
+			// approvalMatrixObjectType + " " + approvalMatrixObjectName + " " +
+			// approvalMatrixObjectRevision + ".");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoAssignedAT"));
+
+		return objectList;
+	}
+
+	/**
+	 * Starts an Approval route. - For the tasks it sets the due date 2 working
+	 * days from the current date. - The state condition for the attached ECO is
+	 * set to Review
+	 * 
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] String- the ECO object id that is being promoted.
+	 * @param args
+	 *            [1] String - a '|' seperated list of approvers for the Route
+	 * @return int - 0 if successful
+	 * @throws Throwable
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public int startRoute(Context context, String[] args) throws Throwable {
+		HashMap allTasksMap = (HashMap) JPO.unpackArgs(args);
+		String sObjId = (String) allTasksMap.get("routeId");
+
+		ContextUtil.startTransaction(context, true);
+		Route oRoute = new Route(sObjId);
+		oRoute.open(context);
+		setScheduledCompletionDates(context, oRoute);
+		oRoute.promote(context);
+		oRoute.close(context);
+		ContextUtil.commitTransaction(context);
+
+		return 0;
+	}
+
+	/**
+	 * Creates an Approval route and attaches it to the ECO. - For the tasks it
+	 * sets the due date 2 working days from the current date. - The state
+	 * condition for the attached ECO is set to Review
+	 * 
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] String- the ECO object id that is being promoted.
+	 * @param args
+	 *            [1] String - a '|' seperated list of approvers for the Route
+	 * @return int - 0 if successful
+	 * @throws Throwable
+	 */
+	public int createRoute(Context context, String[] args) throws Throwable {
+		String sAttrRouteCompletionAction = PropertyUtil.getSchemaProperty(context, "attribute_RouteCompletionAction");
+
+		String sRouteBasePolicy = "";
+		String sRouteBaseState = "";
+		String sStartImmediately = "Yes";
+
+		try {
+			String sUser = context.getUser();
+			String singleTaskName = "";
+			HashMap singleTaskMap = new HashMap();
+			String singleTaskAttrName = "";
+			String singleTaskAttrValue = "";
+			HashMap allTasksMap = (HashMap) JPO.unpackArgs(args);
+
+			String sObjId = (String) allTasksMap.get("sBusObjId");
+			sStartImmediately = (String) allTasksMap.get("startImmediately");
+			allTasksMap.remove("startImmediately");
+			allTasksMap.remove("sBusObjId");
+
+			// We are going to set the Route Base state to the current (already
+			// promoted) state
+			// and set the Route Base Policy to the policy being used at this
+			// moment.
+			DomainObject ecoObject = new DomainObject(sObjId);
+			sRouteBasePolicy = ecoObject.getInfo(context, DomainConstants.SELECT_POLICY);
+			sRouteBaseState = ecoObject.getInfo(context, DomainConstants.SELECT_CURRENT);
+			sRouteBaseState = FrameworkUtil.reverseLookupStateName(context, sRouteBasePolicy, sRouteBaseState);
+			sRouteBasePolicy = FrameworkUtil.getAliasForAdmin(context, "Policy", sRouteBasePolicy, true);
+
+			String sECOName = "";
+			if (ecoObject.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_ACTIONITEM")))
+				sECOName = ecoObject.getAttributeValue(context, PropertyUtil.getSchemaProperty(context, "attribute_ActionItemName"));
+			else
+				sECOName = ecoObject.getName(context);
+
+			// Setup all the Route attributes that get passed in
+			String routeDescription = (String) allTasksMap.get("routeDescription");
+
+			allTasksMap.remove("routeDescription");
+			if (routeDescription == null || routeDescription.trim().length() == 0)
+				// routeDescription = "This Route is being used to Approve " +
+				// sECOName + ".";
+				routeDescription = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.Message.RouteIsApproving")
+						+ sECOName;
+
+			String routeCompletionAction = (String) allTasksMap.get("routeCompletionAction");
+
+			allTasksMap.remove("routeCompletionAction");
+			if (routeCompletionAction == null || routeCompletionAction.trim().length() == 0)
+				routeCompletionAction = "Promote Connected Object";
+
+			String routeBasePurpose = (String) allTasksMap.get("routeBasePurpose");
+
+			allTasksMap.remove("routeBasePurpose");
+			if (routeBasePurpose == null || routeBasePurpose.trim().length() == 0)
+				routeBasePurpose = "Approval";
+
+			String routeScope = (String) allTasksMap.get("routeScope");
+
+			allTasksMap.remove("routeScope");
+			if (routeScope == null || routeScope.trim().length() == 0)
+				routeScope = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION;
+
+			ContextUtil.startTransaction(context, true);
+
+			// Create a new autonamed route
+			String autoNameRouteId = FrameworkUtil.autoName(context, "type_Route", "policy_Route");
+			Route oRoute = new Route(autoNameRouteId);
+
+			oRoute.open(context);
+
+			// Add the ECO to the Route
+			String[] selObjects = { sObjId };
+			oRoute.AddContent(context, selObjects);
+
+			// Set attributes on the Route
+			AttributeList routeAttrList = new AttributeList();
+			routeAttrList.addElement(new Attribute(new AttributeType(DomainObject.ATTRIBUTE_ORIGINATOR), sUser));
+			routeAttrList.addElement(new Attribute(new AttributeType(sAttrRouteCompletionAction), routeCompletionAction));
+			routeAttrList.addElement(new Attribute(new AttributeType(DomainObject.ATTRIBUTE_ROUTE_BASE_PURPOSE), routeBasePurpose));
+			// If the routeScope value = "project scope", we need to store the
+			// id
+			// of the referenced project in the 'Restrict Members' attribugte of
+			// the route
+			if (routeScope.equalsIgnoreCase(${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_PROJECT_SPACE)) {
+				com.matrixone.apps.common.Task task = (com.matrixone.apps.common.Task) DomainObject.newInstance(context, DomainConstants.TYPE_TASK,
+						DomainConstants.PROGRAM);
+				// com.matrixone.apps.program.Task task =
+				// (com.matrixone.apps.program.Task)
+				// DomainObject.newInstance(context, DomainConstants.TYPE_TASK,
+				// DomainConstants.PROGRAM);
+				task.setId(sObjId);
+
+				StringList projectSelects = new StringList();
+				projectSelects.add(DomainConstants.SELECT_ID);
+				projectSelects.add(DomainConstants.SELECT_NAME);
+
+				String projectId = "";
+				Map projectinfo = task.getProject(context, projectSelects); // Get
+																			// the
+																			// id
+																			// of
+																			// the
+																			// project
+				projectId = (String) projectinfo.get("id");
+				routeScope = projectId;
+			}
+			routeAttrList.addElement(new Attribute(new AttributeType(DomainObject.ATTRIBUTE_RESTRICT_MEMBERS), routeScope));
+			routeAttrList.addElement(new Attribute(new AttributeType(DomainObject.ATTRIBUTE_ROUTE_INSTRUCTIONS), "Route Instructions"));
+			oRoute.setAttributes(context, routeAttrList);
+			oRoute.setDescription(context, routeDescription);
+			oRoute.update(context);
+
+			// Connect person creating route to the route via project route
+			BusinessObject personObject = com.matrixone.apps.common.Person.getPerson(context);
+			oRoute.connect(context, new RelationshipType(DomainObject.RELATIONSHIP_PROJECT_ROUTE), true, personObject);
+
+			// Loop through the task map to set all the tasks on the Route
+			Iterator allTaskItr = allTasksMap.keySet().iterator();
+
+			while (allTaskItr.hasNext()) {
+				singleTaskName = (String) allTaskItr.next();
+				singleTaskMap = (HashMap) allTasksMap.get(singleTaskName);
+
+				// This is a custom attribute we use for setup but don't want to
+				// try to set it on an Inbox Task
+				if (singleTaskMap.containsKey("attribute[Approval User]"))
+					singleTaskMap.remove("attribute[Approval Name]");
+
+				String sTaskAssignee = "";
+				if (singleTaskMap.containsKey("User")) {
+					sTaskAssignee = (String) singleTaskMap.get("User");
+					// If the User that is passed is blank or null then it was
+					// one of the optional
+					// choices so we don't want to process that field so
+					// continue to the next task.
+					if (sTaskAssignee == null || sTaskAssignee.equals(""))
+						continue;
+					else
+						singleTaskMap.remove("User");
+				}
+				else {
+					// throw new
+					// Exception("This task doesn't have a user to send to.");
+					throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoTaskUser"));
+				}
+
+				String sApprovalUser = "";
+				boolean bIsGroupOrRole = false;
+				if (singleTaskMap.containsKey("attribute[Approval User]")) {
+					sApprovalUser = (String) singleTaskMap.get("attribute[Approval User]");
+					singleTaskMap.remove("attribute[Approval User]");
+					if (sApprovalUser.equalsIgnoreCase("Group"))
+						bIsGroupOrRole = true;
+					else if (sApprovalUser.equalsIgnoreCase("Role"))
+						bIsGroupOrRole = true;
+				}
+
+				// 2. Connect selected person to route using Route Node
+				// relationship and populate the relationship values.
+				// When the route is started by being promoted to "In Process",
+				// this relationship and it's
+				// attributes are used to create the inbox tasks that are
+				// assigned to the users
+
+				// Create relationship
+				BusinessObject personTaskAssignee = com.matrixone.apps.common.Person.getPerson(context, sTaskAssignee);
+				Relationship relRouteNode = oRoute.connect(context, new RelationshipType(DomainObject.RELATIONSHIP_ROUTE_NODE), true,
+						personTaskAssignee);
+				DomainRelationship relationShipRouteNode = new DomainRelationship(relRouteNode);
+
+				// Populate the attributes on the relationship
+				relationShipRouteNode.open(context);
+
+				// Loop through the attributes and set the values
+				// (TODO - should use setAttributeValues so we only have one
+				// call)
+				Iterator singleTaskItr = singleTaskMap.keySet().iterator();
+				singleTaskItr = singleTaskMap.keySet().iterator();
+				while (singleTaskItr.hasNext()) {
+					singleTaskAttrName = (String) singleTaskItr.next();
+
+					// need to eliminate keys that are not setting an attribute
+					// value
+					if (singleTaskAttrName != null && singleTaskAttrName.indexOf("attribute[") >= 0) {
+
+						singleTaskAttrValue = (String) singleTaskMap.get(singleTaskAttrName);
+						singleTaskAttrName = singleTaskAttrName.substring(singleTaskAttrName.indexOf("[") + 1, singleTaskAttrName.indexOf("]"));
+
+						if (singleTaskAttrName.equals("Route Task User")) {
+							// Need to get the role_ or group_ name
+							if (bIsGroupOrRole) {
+								singleTaskAttrValue = FrameworkUtil.getAliasForAdmin(context, sApprovalUser, singleTaskAttrValue, true);
+							}
+							else {
+								String sTempRouteTaskUser = singleTaskAttrValue;
+								try {
+									singleTaskAttrValue = FrameworkUtil.getAliasForAdmin(context, "Group", sTempRouteTaskUser, true);
+
+									if (singleTaskAttrValue == null || singleTaskAttrValue.equals("") || singleTaskAttrValue.equals(null)) {
+										singleTaskAttrValue = FrameworkUtil.getAliasForAdmin(context, "Role", sTempRouteTaskUser, true);
+									}
+								}
+								catch (Exception e) {
+									throw new Exception(e.toString());
+								}
+							}
+							/* Apr 21, 2007 - darina - Mod Start */
+							relationShipRouteNode.setAttributeValue(context, ATTR_IW_ROUTE_TASK_USER, singleTaskAttrValue);
+							singleTaskAttrValue = "";
+							/* Apr 21, 2007 - darina - Mod End */
+						}
+						relationShipRouteNode.setAttributeValue(context, singleTaskAttrName, singleTaskAttrValue);
+					}
+				} // End while
+
+				relationShipRouteNode.close(context);
+
+			}
+			// TODO - replace this mql with an expand
+			// Update Object Route attributes
+			// Get relationship id
+			MQLCommand command = new MQLCommand();
+			command.open(context);
+			command.executeCommand(context, "print bus $1 select $2 dump", autoNameRouteId, "relationship[Object Route].id");
+			String sObjectRouteRelId = command.getResult().trim();
+			command.close(context);
+
+			if (sObjectRouteRelId.indexOf(",") > -1) {
+				// There should only be one eco attached
+				// throw new Exception("There is more than one ECO attached.");
+				throw new Exception(
+						Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.TooManyECOAttached"));
+			}
+
+			oRoute.updateObjectRouteRelAttributes(context, sObjectRouteRelId, // objectRouteRelId
+					sRouteBasePolicy, // routeBasePolicy
+					sRouteBaseState); // routeBaseState
+
+			if (sStartImmediately == null || "Yes".equalsIgnoreCase(sStartImmediately)) {
+				setScheduledCompletionDates(context, oRoute);
+				oRoute.promote(context);
+			}
+
+			oRoute.close(context);
+			ContextUtil.commitTransaction(context);
+
+			return 0;
+
+		} // end try
+		catch (Exception exp) {
+			ContextUtil.abortTransaction(context);
+			exp.printStackTrace();
+			throw new Exception(exp.getMessage());
+		}
+	}
+
+	/**
+	 * Use this helper method if you want to call the copyRoute method from a
+	 * JSP, for example emxExecute.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            - HashMap objectId - the parent object id routeStateCopyFrom -
+	 *            The registered state name that the route you want to copy is
+	 *            set to (state_approve) routeStateCopyTo - The registered state
+	 *            name you want to connect the new route to (state_update)
+	 * @return HashMap
+	 * @throws Throwable
+	 */
+	public HashMap copyRouteHelper(Context context, String[] args) throws Throwable {
+		HashMap returnMap = new HashMap();
+
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) mapArgs.get("objectId");
+			// String jsTreeID = (String) mapArgs.get("jsTreeID");
+			String routeStateCopyFrom = (String) mapArgs.get("routeStateCopyFrom");
+			String routeStateCopyTo = (String) mapArgs.get("routeStateCopyTo");
+
+			copyRoute(context, objectId, routeStateCopyFrom, routeStateCopyTo);
+			DomainObject doObject = new DomainObject(objectId);
+			doObject.promote(context);
+		}
+		catch (Exception mx1E) {
+			return returnMap;
+		}
+		return returnMap;
+	}
+
+	/**
+	 * This method will look for a previously completed route on the parent
+	 * object. If it finds an acceptable route, it will copy that route to a new
+	 * state on the parent object and start it.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param objectId
+	 *            - the parent object id
+	 * @param routeStateCopyFrom
+	 *            - The registered state name that the route you want to copy is
+	 *            set to (state_approve)
+	 * @param routeStateCopyTo
+	 *            - The registered state name you want to connect the new route
+	 *            to (state_update)
+	 * @throws Throwable
+	 */
+	public void copyRoute(Context context, String strObjectId, String routeStateToCopyFrom, String routeStateToCopyTo) throws Throwable {
+
+		try {
+			Route oRoute;
+
+			RelationshipType rtObjectRoute = new RelationshipType(REL_OBJECT_ROUTE);
+			RelationshipType rtRouteNode = new RelationshipType(REL_ROUTE_NODE);
+
+			StringList objSelects = new StringList();
+			objSelects.add(DomainConstants.SELECT_ID);
+			objSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			StringList relSelects = new StringList();
+			relSelects.add("attribute[" + ATTR_ROUTE_BASE_PURPOSE + "]");
+			relSelects.add("attribute[" + ATTR_ROUTE_BASE_POLICY + "]");
+			relSelects.add("attribute[" + ATTR_ROUTE_BASE_STATE + "]");
+			String strObjWhere = "attribute[" + ATTR_ROUTE_STATUS + "]=='Finished' && current=='Complete'";
+			String strRelWhere = "attribute[" + ATTR_ROUTE_BASE_STATE + "]=='" + routeStateToCopyFrom + "'";
+
+			DomainObject doObject = new DomainObject(strObjectId);
+			MapList routeList = doObject.getRelatedObjects(context, REL_OBJECT_ROUTE, // relationship
+																						// pattern
+					TYPE_ROUTE, // object pattern
+					objSelects, // object selects
+					relSelects, // relationship selects
+					false, // to direction
+					true, // from direction
+					(short) 1, // recursion level
+					strObjWhere, // object where clause
+					strRelWhere, 0, null, null, null); // relationship where
+
+			// copy the route
+			if (routeList.size() == 1) {
+				Map oldRouteMap = (Map) routeList.get(0);
+				String oldRouteId = (String) oldRouteMap.get(DomainConstants.SELECT_ID);
+				DomainObject doOldRoute = new DomainObject(oldRouteId);
+				Map attrMap = doOldRoute.getAttributeMap(context);
+
+				String autoNameRouteId = FrameworkUtil.autoName(context, "type_Route", "policy_Route");
+				oRoute = new Route(autoNameRouteId);
+				oRoute.setDescription(context, (String) oldRouteMap.get(DomainConstants.SELECT_DESCRIPTION));
+				oRoute.setAttributeValues(context, attrMap);
+
+				DomainRelationship doRouteRel = oRoute.addRelatedObject(context, rtObjectRoute, true, strObjectId);
+				doRouteRel.setAttributeValue(context, ATTR_ROUTE_BASE_STATE, routeStateToCopyTo);
+				doRouteRel.setAttributeValue(context, ATTR_ROUTE_BASE_POLICY,
+						(String) ((Map) routeList.get(0)).get("attribute[" + ATTR_ROUTE_BASE_POLICY + "]"));
+				doRouteRel.setAttributeValue(context, ATTR_ROUTE_BASE_PURPOSE,
+						(String) ((Map) routeList.get(0)).get("attribute[" + ATTR_ROUTE_BASE_PURPOSE + "]"));
+
+				StringList objTaskSelects = new StringList();
+				objTaskSelects.add(DomainConstants.SELECT_ID);
+				StringList relTaskSelects = new StringList();
+				relTaskSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+				MapList taskList = doOldRoute.getRelatedObjects(context, REL_ROUTE_NODE, // relationship
+																							// pattern
+						TYPE_PERSON, // object pattern
+						objTaskSelects, // object selects
+						relTaskSelects, // relationship selects
+						false, // to direction
+						true, // from direction
+						(short) 1, // recursion level
+						null, // object where clause
+						null, 0, null, null, null); // relationship where
+
+				for (int i = 0; i < taskList.size(); i++) {
+					String personId = (String) ((Map) taskList.get(i)).get(DomainConstants.SELECT_ID);
+					String oldRelId = (String) ((Map) taskList.get(i)).get(DomainConstants.SELECT_RELATIONSHIP_ID);
+					DomainRelationship drOldRel = new DomainRelationship(oldRelId);
+					Map relAttrMap = drOldRel.getAttributeMap(context);
+					relAttrMap.remove(ATTR_SCHEDULED_COMPLETION_DATE);
+					relAttrMap.remove(ATTR_ACTUAL_COMPLETION_DATE);
+					relAttrMap.remove(ATTR_COMMENTS);
+					relAttrMap.remove(ATTR_APPROVAL_STATUS);
+					relAttrMap.remove(ATTR_ROUTE_NODE_ID);
+
+					DomainRelationship drNewRel = oRoute.addToObject(context, rtRouteNode, personId);
+					drNewRel.open(context);
+					relAttrMap.put(ATTR_ROUTE_NODE_ID, drNewRel.getName());
+					drNewRel.setAttributeValues(context, relAttrMap);
+					drNewRel.close(context);
+				}
+
+				setScheduledCompletionDates(context, oRoute);
+				oRoute.promote(context);
+			}
+			else
+				// throw new
+				// Exception("could not find a previous route to clone");
+				throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoPreviousRoute"));
+		}
+		catch (Exception mx1E) {
+		}
+	}
+
+	public void setScheduledCompletionDates(Context context, Route oRoute) throws Throwable {
+		/*
+		 * Set the 'Scheduled Completion Date' attribute on all of the Route
+		 * Node relationships. Much of this code was taken from
+		 * /components/emxRouteStart.jsp.
+		 */
+
+		// where clause filters to all route tasks with due offset from this
+		// Route Start
+		String attrDueDateOffset = PropertyUtil.getSchemaProperty(context, "attribute_DueDateOffset");
+		String attrDueDateOffsetFrom = PropertyUtil.getSchemaProperty(context, "attribute_DateOffsetFrom");
+		String OFFSET_FROM_ROUTE_START_DATE = "Route Start Date";
+		String OFFSET_FROM_TASK_CREATE_DATE = "Task Create Date";
+
+		String selDueDateOffset = "attribute[" + attrDueDateOffset + "]";
+		String selDueDateOffsetFrom = "attribute[" + attrDueDateOffsetFrom + "]";
+		String selRouteNodeRelId = DomainObject.SELECT_RELATIONSHIP_ID;
+		String selSequence = "attribute[" + DomainObject.ATTRIBUTE_ROUTE_SEQUENCE + "]";
+		String sWhereExp = "";
+
+		StringList relSelects = new StringList();
+		relSelects.addElement(selDueDateOffset);
+		relSelects.addElement(selDueDateOffsetFrom);
+		relSelects.addElement(selRouteNodeRelId);
+
+		sWhereExp += "(" + selDueDateOffset + " !~~ \"\")";
+		sWhereExp += " && (" + selDueDateOffsetFrom + " ~~ \"" + OFFSET_FROM_ROUTE_START_DATE + "\")";
+
+		// get all route tasks with due offset from this Route Start
+		MapList routeStartOffsetList = getRouteStartOffsetTaskList(context, oRoute, relSelects, sWhereExp);
+		// set Scheduled Due Date attribute for all delta offset Route Nodes
+		setDueDatesFromOffset(context, routeStartOffsetList);
+
+		// where clause filters to First order tasks offset from their
+		// creation (i.e. this route start)
+		sWhereExp = "";
+		sWhereExp += "(" + selDueDateOffset + " !~~ \"\")";
+		sWhereExp += " && (" + selDueDateOffsetFrom + " ~~ \"" + OFFSET_FROM_TASK_CREATE_DATE + "\")";
+		sWhereExp += " && (" + selSequence + " == \"1\")";
+
+		MapList routeFirstOrderOffsetList = getFirstOrderOffsetTasks(context, oRoute, relSelects, sWhereExp);
+		// set Scheduled Due Date attribute for all delta offset ORDER 1
+		// Route Nodes offset From Task create which is same as Route start
+		setDueDatesFromOffset(context, routeFirstOrderOffsetList);
+
+	}
+
+	/*
+	 * 12/8/2005 - DA Method 'borrowed' from M1 include file:
+	 * /components/emxRouteInclude.inc
+	 * 
+	 * set Scheduled Complete Date attribute for all RouteNodes constructed from
+	 * this maplist; The Completion Due Date is got by adding Offset days
+	 * attribute to current System date-time
+	 */
+	static public void setDueDatesFromOffset(Context context, MapList offsetList) throws Throwable {
+
+		String attrDueDateOffset = PropertyUtil.getSchemaProperty(context, "attribute_DueDateOffset");
+		String selDueDateOffset = "attribute[" + attrDueDateOffset + "]";
+
+		Map rNodeMap = null;
+		Relationship relObjRouteNode = null;
+		Attribute scheduledDateAttribute = null;
+		AttributeList timeAttrList = new AttributeList();
+		GregorianCalendar cal = new GregorianCalendar();
+		GregorianCalendar offSetCal = new GregorianCalendar();
+		SimpleDateFormat formatterTest = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(), Locale.US);
+
+		Iterator nextOrderOffsetItr = offsetList.iterator();
+
+		// get the equivalent server time with required timezone
+		// cal.setTime(new Date(cal.getTime().getTime() + (new
+		// Double(clientTZOffset*(1000*60*60))).intValue())); commented on 8th
+		// March
+		cal.setTime(new Date(cal.getTime().getTime())); // modified on 8th March
+		String routeTaskScheduledDateStr = "";
+		String rNodeId = "";
+		String duedateOffset = "";
+
+		while (nextOrderOffsetItr.hasNext()) {
+			// use separate calendar objects and reset offSetCal to master
+			// calendar
+			// to ensure
+			// all delta tasks are offset from same Route Start Time.
+			offSetCal = (GregorianCalendar) cal.clone();
+			rNodeMap = (Map) nextOrderOffsetItr.next();
+			rNodeId = (String) rNodeMap.get(DomainObject.SELECT_RELATIONSHIP_ID);
+			duedateOffset = (String) rNodeMap.get(selDueDateOffset);
+			// construct corresponding RouteNode relationships and now set
+			// correct
+			// due-date
+			// by adding delta offset to Current time (Route Start) time
+			relObjRouteNode = new Relationship(rNodeId);
+			offSetCal.add(Calendar.DATE, Integer.parseInt(duedateOffset));
+			routeTaskScheduledDateStr = formatterTest.format(offSetCal.getTime());
+			scheduledDateAttribute = new Attribute(new AttributeType(DomainObject.ATTRIBUTE_SCHEDULED_COMPLETION_DATE), routeTaskScheduledDateStr);
+			timeAttrList.add(scheduledDateAttribute);
+			// need to push context to set Scheduled Completion date attribute
+			try {
+				ContextUtil.pushContext(context);
+				relObjRouteNode.setAttributes(context, timeAttrList);
+				ContextUtil.popContext(context);
+			}
+			catch (Exception ex) {
+				throw ex;
+			}
+		}
+	}
+
+	/*
+	 * 12/8/2005 - DA Method 'borrowed' from M1 include file:
+	 * /components/emxRouteInclude.inc
+	 * 
+	 * method to get all Order 1 tasks of Route that are offset from task create
+	 */
+	public MapList getFirstOrderOffsetTasks(Context context, DomainObject route, StringList relSelects, String sWhereExp) throws Exception {
+
+		MapList taskMapList = route.getRelatedObjects(context, Route.RELATIONSHIP_ROUTE_NODE, // String
+																								// relPattern
+				"*", // String typePattern
+				null, // StringList objectSelects,
+				relSelects, // StringList relationshipSelects,
+				false, // boolean getTo,
+				true, // boolean getFrom,
+				(short) 1, // short recurseToLevel,
+				"", // String objectWhere,
+				sWhereExp, // String relationshipWhere,
+				0, null, // Pattern includeType,
+				null, // Pattern includeRelationship,
+				null); // Map includeMap
+
+		return taskMapList;
+
+	}
+
+	/*
+	 * 12/8/2005 - DA Method 'borrowed' from M1 include file:
+	 * /components/emxRouteInclude.inc
+	 * 
+	 * method to get all Route Nodes of this Route whose due-dates are offset
+	 * from Route Start event
+	 */
+	static public MapList getRouteStartOffsetTaskList(Context context, DomainObject Route, StringList relSelects, String sWhereExp) throws Exception {
+
+		MapList RouteNodeMapList = Route.getRelatedObjects(context, Route.RELATIONSHIP_ROUTE_NODE, // String
+																									// relPattern
+				"*", // String typePattern
+				null, // StringList objectSelects,
+				relSelects, // StringList relationshipSelects,
+				false, // boolean getTo,
+				true, // boolean getFrom,
+				(short) 1, // short recurseToLevel,
+				"", // String objectWhere,
+				sWhereExp, // String relationshipWhere,
+				0, null, // Pattern includeType,
+				null, // Pattern includeRelationship,
+				null); // Map includeMap
+
+		return RouteNodeMapList;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method gets the active users for a Group and its child Groups. The
+	 * method calls itself recursively and places the results in a Set. The call
+	 * to the <code>mqlGetUsersOfRoleOrGroup</code> returns a delimited String
+	 * with user names then 'inactive' status. The assumption, verified through
+	 * brief unit testing, is that the values align:<br>
+	 * user1|user2|..|user10|<user1's inactive value>|<user2's inactive
+	 * value>|..|<user10's inactive value>
+	 * 
+	 * @param context
+	 * @param sGroup
+	 *            actual name of group
+	 * @return
+	 * @throws Exception
+	 */
+	private static HashSet getActiveUsersForGroup(Context context, String sGroup, String sScope, String sObjectId, String sSelect) throws Exception {
+		HashSet hsUsers = new HashSet();
+
+		try {
+			Group gGroup = new Group(sGroup);
+
+			Collection users;
+
+			if (sScope.equalsIgnoreCase(${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION))
+				users = mqlGetActiveUsersOfRoleOrGroupInCurrentCompany(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.GROUP, sGroup, sSelect);
+			else if (sScope.equalsIgnoreCase(${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_PROJECT_SPACE))
+				users = mqlGetActiveUsersOfRoleOrGroupInProject(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.GROUP, sGroup, sObjectId, sSelect);
+			else
+				users = mqlGetActiveUsersOfRoleOrGroup(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.GROUP, sGroup, sSelect);
+
+			hsUsers.addAll(users);
+
+			GroupList glChildGroups = gGroup.getChildren(context, false);
+			for (int k = 0; k < glChildGroups.size(); k++) {
+				Group gChildGroup = (Group) glChildGroups.get(k);
+				hsUsers.addAll(getActiveUsersForGroup(context, gChildGroup.getName(), sScope, sObjectId, sSelect));
+			}
+
+		}
+		catch (Exception e) {
+			throw e;
+		}
+
+		return hsUsers;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This is just a wrapper that replaces a similarly named method, now
+	 * <code>old_getUsersForGroup</code>. Gets active users for a given group
+	 * and returns them in a sorted StringList.
+	 * 
+	 * @param context
+	 * @param sGroup
+	 * @return
+	 * @throws Exception
+	 */
+	public static StringList getUsersForGroup(Context context, String sGroup, String sScope, String sObjectId, String sSelect) throws Exception {
+		StringList slReturnGroupStringList = new StringList();
+
+		try {
+			slReturnGroupStringList.addAll(getActiveUsersForGroup(context, sGroup, sScope, sObjectId, sSelect));
+			slReturnGroupStringList.sort();
+		}
+		catch (Exception e) {
+			throw e;
+		}
+
+		return slReturnGroupStringList;
+	}
+
+	/**
+	 * October, 2007<br>
+	 * A. Mihalchenko<br>
+	 * <br>
+	 * This method gets the active users for a Role and its child Roles. The
+	 * method calls itself recursively and places the results in a Set.
+	 * 
+	 * @param context
+	 * @param sRole
+	 *            actual name of role
+	 * @return
+	 * @throws Exception
+	 */
+
+	private static HashSet getActiveUsersForRole(Context context, String sRole, String sScope, String sObjectId, String sSelect) throws Exception {
+		HashSet hsUsers = new HashSet();
+		if (sRole.contains("+")) {
+			sRole = sRole.replace("+", " ");
+		}
+		Role rRole = new Role(sRole);
+		Collection users;
+
+		if (sScope.equalsIgnoreCase(${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION))
+			users = mqlGetActiveUsersOfRoleOrGroupInCurrentCompany(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.ROLE, sRole, sSelect);
+		else if (sScope.equalsIgnoreCase(${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_PROJECT_SPACE))
+			users = mqlGetActiveUsersOfRoleOrGroupInProject(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.ROLE, sRole, sObjectId, sSelect);
+		else
+			users = mqlGetActiveUsersOfRoleOrGroup(context, ${CLASS:IW_ApprovalMatrix_PersonChooser}.ROLE, sRole, sSelect);
+
+		hsUsers.addAll(users);
+
+		RoleList rlChildRoles = rRole.getChildren(context, false);
+		for (int k = 0; k < rlChildRoles.size(); k++) {
+			Role rChildRole = (Role) rlChildRoles.get(k);
+			hsUsers.addAll(getActiveUsersForRole(context, rChildRole.getName(), sScope, sObjectId, sSelect));
+		}
+
+		return hsUsers;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This is just a wrapper that replaces a similarly named method, now
+	 * <code>old_getUsersForRole</code>. Gets active users for a given role and
+	 * returns them in a sorted StringList.
+	 * 
+	 * @param context
+	 * @param sRole
+	 * @return
+	 * @throws Exception
+	 */
+	public static StringList getUsersForRole(Context context, String sRole, String sScope, String sObjectId, String sSelect) throws Exception {
+		StringList slUsersStringList = new StringList();
+
+		try {
+			slUsersStringList.addAll(getActiveUsersForRole(context, sRole, sScope, sObjectId, sSelect));
+			slUsersStringList.sort();
+		}
+		catch (Exception e) {
+			throw e;
+		}
+
+		return slUsersStringList;
+	}
+
+	/**
+	 * Feb 5, 2006<br>
+	 * darina<br>
+	 * <br>
+	 * Table column evaluation for the Reference Expression 'test' gui.
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Vault names
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_ReferenceExpressionValue(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		HashMap paramMap = (HashMap) programMap.get("paramList");
+		String referenceExpression = (String) paramMap.get("ReferenceExpression");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			resultList = new Vector(relBusObjPageList.size());
+			String id = null;
+			String result = null;
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				id = (String) ((HashMap) relBusObjPageList.get(i)).get("id");
+				result = evaluateReferenceExpression(context, id, referenceExpression);
+				resultList.add(result);
+			} // End for
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * Feb 5, 2006<br>
+	 * darina<br>
+	 * <br>
+	 * <b>NOT USED!!</b> In support of the 'nice to have' reference expression
+	 * 'test' function. Need to get the 'Reference Expression' attribute value
+	 * of an object for the gui.
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Vault names
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getParentReferenceExpressionValue(Context context, String[] args) throws Exception {
+
+		// HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// HashMap paramMap = (HashMap) programMap.get("paramMap");
+		// String objectId = (String) paramMap.get("objectId");
+		Vector resultList = new Vector();
+
+		// // Set the 'selects'
+		//
+		// DomainObject object = new DomainObject(objectId);
+		//
+		// String selectValue = bows.getSelectData(SELECT_REFERENCE_EXPRESSION);
+		// resultList.add(selectValue);
+		resultList.add("Hello");
+		return resultList;
+	}
+
+	/**
+	 * January, 2007<br>
+	 * T. Holforty<br>
+	 * <br>
+	 * This method makes an MQL call to a role or group in order to select some
+	 * data. The delimited results are returned minus the newline character.
+	 * 
+	 * @param context
+	 * @param roleOrGroup
+	 *            value expected: 'role' or 'group'
+	 * @param roleOrGroupName
+	 *            name of a role or group
+	 * @param select
+	 *            actual select against a role or group
+	 * @return delimited string of select values
+	 * @throws MatrixException
+	 */
+	private static Collection mqlGetActiveUsersOfRoleOrGroup(Context context, String roleOrGroup, String roleOrGroupName, String sSelect)
+			throws MatrixException {
+		// Get the list of users in the role/group
+		UserList userList = null;
+		if (roleOrGroup.equalsIgnoreCase("role")) {
+			Role role = new Role(roleOrGroupName);
+			userList = role.getAssignments(context);
+		}
+		else if (roleOrGroup.equalsIgnoreCase("group")) {
+			Group group = new Group(roleOrGroupName);
+			userList = group.getAssignments(context);
+		}
+
+		ArrayList returnList = new ArrayList();
+		if (userList != null) {
+			Iterator userIter = userList.iterator();
+			while (userIter.hasNext()) {
+				String userName = ((matrix.db.Person) userIter.next()).getName();
+				String personState = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select current", "Person", userName, "-");
+
+				if (personState.equals("Active"))
+					returnList.add(userName);
+			}
+		}
+
+		return returnList;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method makes an MQL call to a role or group in order to select some
+	 * data. The delimited results are returned minus the newline character.
+	 * 
+	 * @param context
+	 * @param roleOrGroup
+	 *            value expected: 'role' or 'group'
+	 * @param roleOrGroupName
+	 *            name of a role or group
+	 * @param select
+	 *            actual select against a role or group
+	 * @return delimited string of select values
+	 * @throws MatrixException
+	 */
+	private static Collection mqlGetActiveUsersOfRoleOrGroupInCurrentCompany(Context context, String roleOrGroup, String roleOrGroupName,
+			String sSelect) throws MatrixException {
+		Person person = Person.getPerson(context);
+		Company company = person.getCompany(context);
+
+		// Get the list of users in the company
+		StringList objSelects = new StringList();
+		objSelects.add(DomainConstants.SELECT_ID);
+		objSelects.add(DomainConstants.SELECT_NAME);
+		String whereClause = "(current == Active)";
+		MapList companyUserList = company.getPersons(context, objSelects, whereClause);
+
+		// Get the list of users in the role/group
+		UserList userList = null;
+		if (roleOrGroup.equalsIgnoreCase("role")) {
+			Role role = new Role(roleOrGroupName);
+			userList = role.getAssignments(context);
+		}
+		else if (roleOrGroup.equalsIgnoreCase("group")) {
+			Group group = new Group(roleOrGroupName);
+			userList = group.getAssignments(context);
+		}
+
+		// Pull users that are in both the company and group/role
+		ArrayList returnList = new ArrayList();
+		if (userList != null) {
+			Iterator userIter = userList.iterator();
+			while (userIter.hasNext()) {
+				String userName = ((matrix.db.Person) userIter.next()).getName();
+
+				for (int i = 0; i < companyUserList.size(); i++) {
+					Map companyUser = (Map) companyUserList.get(i);
+					if (userName.equals(companyUser.get("name"))) {
+						if (sSelect != null && sSelect.equals(DomainConstants.SELECT_ID)) {
+							returnList.add(companyUser.get(DomainConstants.SELECT_ID));
+						}
+						else {
+							returnList.add(userName);
+						}
+					}
+				}
+			}
+		}
+
+		return returnList;
+	}
+
+	/**
+	 * January, 2007<br>
+	 * T. Holforty<br>
+	 * <br>
+	 * This method makes an MQL call to a role or group in order to select some
+	 * data. The delimited results are returned minus the newline character.
+	 * 
+	 * @param context
+	 * @param roleOrGroup
+	 *            value expected: 'role' or 'group'
+	 * @param roleOrGroupName
+	 *            name of a role or group
+	 * @param select
+	 *            actual select against a role or group
+	 * @return delimited string of select values
+	 * @throws MatrixException
+	 */
+	private static Collection mqlGetActiveUsersOfRoleOrGroupInProject(Context context, String roleOrGroup, String roleOrGroupName, String sObjectId,
+			String sSelect) throws Exception {
+		// Pull users that are in both the project and group/role
+		ArrayList returnList = new ArrayList();
+
+		// com.matrixone.apps.program.Task task =
+		// (com.matrixone.apps.program.Task) DomainObject.newInstance(context,
+		// DomainConstants.TYPE_TASK, DomainConstants.PROGRAM);
+		com.matrixone.apps.common.Task task = (com.matrixone.apps.common.Task) DomainObject.newInstance(context, DomainConstants.TYPE_TASK,
+				DomainConstants.PROGRAM);
+
+		task.setId(sObjectId);
+
+		StringList projectSelects = new StringList();
+		projectSelects.add(DomainConstants.SELECT_ID);
+		projectSelects.add(DomainConstants.SELECT_NAME);
+
+		String projectId = "";
+
+		// Try to get the project. If no project exists throw an exception
+		try {
+			Map projectinfo = task.getProject(context, projectSelects); // Get
+																		// the
+																		// id of
+																		// the
+																		// project
+			projectId = (String) projectinfo.get("id");
+		}
+		catch (Exception e) {
+			/*
+			 * String sMsg =
+			 * "Could not find a related project. Route Restrict Members of 'project space' might not applicable with this route"
+			 * ; throw new Exception(sMsg);
+			 */
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoRelatedProject"));
+		}
+
+		// com.matrixone.apps.program.ProjectSpace project =
+		// (com.matrixone.apps.program.ProjectSpace)
+		// DomainObject.newInstance(context, DomainConstants.TYPE_PROJECT_SPACE,
+		// DomainConstants.PROGRAM);
+		// project.setId(projectId);
+		DomainObject project = new DomainObject(projectId);
+
+		// Retrieve the poject's member list.
+		StringList memberSelects = new StringList(2);
+		memberSelects.add(DomainConstants.SELECT_ID);
+		memberSelects.add(DomainConstants.SELECT_NAME);
+		StringList relSelects = new StringList(0);
+
+		String memberWhere = "current == Active";
+
+		// Need to push context. If Deliverable/Task owner is not member of
+		// project, they don't have access to memberslist
+		pushContext(context);
+
+		// MapList membersList = project.getMembers(context, memberSelects,
+		// relSelects, memberWhere, null, true, true);
+		MapList membersList = project.getRelatedObjects(context, DomainConstants.RELATIONSHIP_MEMBER, // relationship
+																										// pattern
+				"*", // type filter.
+				memberSelects, // business object selectables.
+				relSelects, // relationship selectables.
+				false, // expand to direction.
+				true, // expand from direction.
+				(short) 1, // level
+				memberWhere, // object where clause
+				"", 0, null, null, null); // relationship where clause
+
+		ContextUtil.popContext(context);
+		// Get the list of users in the role/group
+		UserList userList = null;
+		if (roleOrGroup.equalsIgnoreCase("role")) {
+			Role role = new Role(roleOrGroupName);
+			userList = role.getAssignments(context);
+		}
+		else if (roleOrGroup.equalsIgnoreCase("group")) {
+			Group group = new Group(roleOrGroupName);
+			userList = group.getAssignments(context);
+		}
+		if (userList != null) {
+			Iterator userIter = userList.iterator();
+			while (userIter.hasNext()) {
+				String userName = ((matrix.db.Person) userIter.next()).getName();
+
+				for (int i = 0; i < membersList.size(); i++) {
+					Map memberUser = (Map) membersList.get(i);
+					if (userName.equals(memberUser.get("name"))) {
+						if (sSelect != null && sSelect.equals(DomainConstants.SELECT_ID)) {
+							returnList.add(memberUser.get(DomainConstants.SELECT_ID));
+						}
+						else {
+							returnList.add(userName);
+						}
+					}
+				}
+			}
+		}
+
+		return returnList;
+	}
+
+	protected static void pushContext(Context context) throws MatrixException, FrameworkException {
+		ContextUtil.pushContext(context);
+	}
+
+	/**
+	 * /** Check project structure create pre process.
+	 * 
+	 * @param context
+	 *            the Enovia context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hash map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 * 
+	 *             public static HashMap checkStructureCreatePreProcess(Context
+	 *             context, String[] args) throws Exception { HashMap returnMap
+	 *             = new HashMap(); HashMap programMap = (HashMap)
+	 *             JPO.unpackArgs(args); HashMap paramMap = (HashMap)
+	 *             programMap.get("paramMap");
+	 * 
+	 *             try { // Get id of the row selected String objectId =
+	 *             (String) paramMap.get("objectId"); DomainObject dob = new
+	 *             DomainObject(objectId); String type = dob.getInfo(context,
+	 *             DomainConstants.SELECT_TYPE);
+	 * 
+	 *             // Check the type of the object. No adds the type Approval
+	 *             Task. if (type.equals(TYPE_APPROVAL_TASK)) { throw new
+	 *             MatrixException(i18nNow.getI18nString(
+	 *             "LSGProject.Common.ObjectDoesntSupportClone"
+	 *             ,"LSGProjectStringResource"
+	 *             ,context.getSession().getLanguage())); }
+	 * 
+	 *             } catch (Exception e) { String message = e.toString();
+	 *             returnMap.put("Message", message); returnMap.put("Action",
+	 *             "STOP"); } return returnMap; }
+	 */
+
+	public static void main(String[] args) throws MatrixException, Exception {
+		// Establish connection to the RMI
+		Context context = new Context(":bos", "");
+		context.resetContext("creator", "", "");
+
+		getApprovalMatrixForObject(context, "43614.50539.63700.39084", "", TYPE_APPROVAL_MATRIX, "Work Instruction", "WKINS-0000004", false, "");
+
+	}
+}
+

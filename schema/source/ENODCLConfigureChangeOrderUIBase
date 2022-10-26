@@ -1,0 +1,651 @@
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TimeZone;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.ChangeBlockService;
+import com.dassault_systemes.enovia.dcl.service.ConfigureChangeOrderService;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.dassault_systemes.enovia.questionnaire.TableRowId;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	public void createCOEforms(Context context, String args[])throws DCLException {
+		try {
+
+			Map programMap=JPO.unpackArgs(args);
+			String strObjectId[]=(String[]) programMap.get(DCConstants.OBJECTID);
+
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			changeOrderService.createCOEForms(context,strObjectId[0]);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public MapList getCOEForms(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?> )JPO.unpackArgs(args);
+			String strObjectId=(String) programMap.get(DCConstants.OBJECTID);
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			MapList mlEForms=changeOrderService.getCOEForms(context,strObjectId);
+			return mlEForms;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+
+	public void createCORoute(Context context, String args[])	throws DCLException {
+
+		try {
+			
+			Map programMap=JPO.unpackArgs(args);
+			String strObjectId[]=(String[]) programMap.get(DCConstants.OBJECTID);
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			changeOrderService.createCORoute(context,strObjectId[0]);
+		
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeApprovalRoutes(Context context, String args[]) throws DCLException {
+		try {
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			MapList mlRouteTemplate =changeOrderService.findApprovalBasedRoutes(context);
+			StringList sListRouteTempId=new StringList();
+			for (Object objRoute : mlRouteTemplate) {
+				Map mRoute=(Map) objRoute;
+				String strRouteTemplateId=(String) mRoute.get(DomainConstants.SELECT_ID);
+				sListRouteTempId.add(strRouteTemplateId);
+			}
+			return sListRouteTempId;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> addActionTaskToApproval(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?> )JPO.unpackArgs(args);
+			String strObjectId[]=(String[]) programMap.get(DCConstants.OBJECTID);
+			String strParentObjectId[]=(String[]) programMap.get(DCConstants.PARENT_OID);
+			String strEmxTableRowId[]=(String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strAttributeAssigneeSetDueDate = PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_attribute_AssigneeSetDueDate);
+			String strAttributeDueDateOffset =PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_DueDateOffset);
+			String strAttributeDateOffsetFrom =PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_DateOffsetFrom);
+			String strAttributeRouteInstruction = PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_attribute_RouteInstructions);
+			Map mAttribute=new HashMap();
+			StringList sListApprovalObj=new StringList();
+			for (String strRowIds : strEmxTableRowId) {
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strObjId=tr.getObjectId();
+				sListApprovalObj.add(strObjId);
+			}
+			String strObjId=DomainObject.EMPTY_STRING;
+			
+			if (strObjectId == null) {
+				ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+				strObjId=changeOrderService.createAndConnectRouteTemplate(context, strParentObjectId[0]);
+			}
+			else
+				strObjId	=strObjectId[0];
+			
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			Map<String,String> mRElIds=changeOrderService.assignActionTaskToRouteTemplate(context, strObjId, sListApprovalObj);
+			for (Iterator iterator = mRElIds.keySet().iterator(); iterator.hasNext();) {
+				String strApproval = (String) iterator.next();
+				String strStartValue[] =(String[]) programMap.get(strApproval+"StartValue");
+				String strInstruction[]=(String[]) programMap.get(strApproval+"Instruction");
+				String strRelId=mRElIds.get(strApproval);
+				if (strStartValue[0].equals(DCLConstants.ASSIGNEE_SET_DUE_DATE)) {
+					mAttribute.put(strAttributeAssigneeSetDueDate, DCLConstants.YES);
+				}
+				else if (strStartValue[0].equals(DCLConstants.ROUTE_START_DATE) || strStartValue[0].equals(DCLConstants.TASK_CREATE_DATE)) {
+					mAttribute.put(strAttributeAssigneeSetDueDate,DCLConstants.NO);
+					mAttribute.put( strAttributeDateOffsetFrom,strStartValue[0]);
+					String strNoofDays[]=(String[]) programMap.get(strApproval+"Days");
+					strNoofDays[0]=UIUtil.isNotNullAndNotEmpty(strNoofDays[0])?strNoofDays[0]:"1";
+					mAttribute.put(strAttributeDueDateOffset,strNoofDays[0]);
+				}
+				
+				if(UIUtil.isNotNullAndNotEmpty(strInstruction[0]))
+					mAttribute.put(strAttributeRouteInstruction,strInstruction[0]);
+				changeOrderService.assigneeAttributeValues(context,strRelId,mAttribute);
+			}
+			Map mReturn=new HashMap();
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "closeTopWindow"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> removeActionTasks(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			Map<String,String> mReturnMap= new HashMap<String, String>();
+			StringBuilder sbJavascript = new StringBuilder();
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strPerson=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strBusinessRole=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTaskUser);
+			StringList slActionTaskRelId= new StringList();
+			StringBuffer sbActionTasksRowId= new StringBuffer();
+			String strErrorMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Alert.CannotRemoveActionTask");
+			for (String strRowIds : strTableRowIds) {
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strObjectId = tr.getObjectId();
+				String strType=DCLUtil.getInfo(context, strObjectId, DomainConstants.SELECT_TYPE);
+				if (!strType.equals(strPerson) && !strType.equals(strBusinessRole)) {
+					mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strErrorMessage));
+					return mReturnMap;
+				}
+				String strRelId=tr.getRelationshipId();
+				slActionTaskRelId.add(strRelId);
+				sbActionTasksRowId.append(strRowId).append(";");
+
+			}
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			changeOrderService.disconnectActionTaskFromRouteTemplate(context,slActionTaskRelId);
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "removeRowsSelected", sbActionTasksRowId.toString()));
+			return mReturnMap;
+			
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getRouteNoOfDaysColumnValues(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slRouteDateType=new StringList();
+			for (Object objMap : objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<input type=\"text\" disabled=\"disabled\" size = '3' name='").append(strobjectId).append("Days'></input>");
+				slRouteDateType.add(sBuff.toString());
+			}
+			return slRouteDateType;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getRouteAssigneeDateTypeColumnValues(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slRouteDateType=new StringList();
+			for (Object objMap : objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				String strAssigneeDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Range.AssigneeSetDueDate");
+				String strRouteStartDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Range.RouteStartDate");
+				String strTaskCreateDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Range.TaskCreateDate");
+
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<select  name='"+strobjectId+"StartValue'  onchange=\"disableActionTaskNoOfDays('"+strobjectId+"');\">");
+				sBuff.append("<option value='").append(DCLConstants.ASSIGNEE_SET_DUE_DATE).append("'>").append(strAssigneeDate).append("</option>");
+				sBuff.append("<option value='").append(DCLConstants.ROUTE_START_DATE).append("'>").append(strRouteStartDate).append("</option>");
+				sBuff.append("<option value='").append(DCLConstants.TASK_CREATE_DATE).append("'>").append(strTaskCreateDate).append("</option>");
+				sBuff.append("</select>");
+				slRouteDateType.add(sBuff.toString());
+			}
+			return slRouteDateType;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	public List<String> getRouteInstructionsColumnValues(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap=(Map) JPO.unpackArgs(args);
+			List<Map> objectList=(List<Map>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			List<String> slResponse=new StringList();
+			for (Object objMap : objectList) {
+				Map<String,String> mObjectMap=(Map<String, String>) objMap;
+				String strobjectId= mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff=new StringBuilder();
+				sBuff.append("<textarea name='").append(strobjectId).append("Instruction'></textarea>");
+				slResponse.add(sBuff.toString());
+			}
+			return slResponse;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map> getRouteTemplateActionTasks(Context context, String args[]) throws Exception {
+		Map programMap=JPO.unpackArgs(args);
+		String strObjectId=(String) programMap.get(DCConstants.OBJECTID);
+		ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+		List<Map> mlObjects=changeOrderService.getCORouteActionTasks(context,strObjectId);
+		return mlObjects;
+
+	}
+
+	public List<String> getActionTaskColumnValues(Context context,String args[])throws Exception {
+		try {
+			Map<?,?> programMap = (Map<?,?> )JPO.unpackArgs(args);
+			String strRouteTaskUser=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTaskUser);
+			String strAttrRouteTaskUser=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteTaskUser);
+			String strTypeRoutetemplate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTemplate);
+			List<String> slActionTaskName=new StringList();
+			List<Map<String, String>> mlObjectList= (List<Map<String, String>>) programMap.get(QuestionnaireConstants.OBJECTLIST);
+			String strTypeIconPerson = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon."
+					+ DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strTypeIconRoute = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon."
+					+ DomainSymbolicConstants.SYMBOLIC_type_RouteTemplate);
+			for(Object objMap:mlObjectList)  {
+				Map mQues =(Map) objMap;
+				String strId= (String) mQues.get(DomainConstants.SELECT_ID);
+				String strName= (String) mQues.get(DomainConstants.SELECT_NAME);
+				String strType  =  (String) mQues.get(DomainConstants.SELECT_TYPE);
+				String strTypeIcon = UIUtil.isNotNullAndNotEmpty(strType) && strType.equals(strTypeRoutetemplate) ? strTypeIconRoute
+						: strTypeIconPerson;
+				if (UIUtil.isNotNullAndNotEmpty(strType) && strType.equals(strRouteTaskUser)) {
+					strName=(String) mQues.get("attribute["+strAttrRouteTaskUser+"].value");
+					strName=PropertyUtil.getSchemaProperty(context, strName);
+					strTypeIcon=DomainObject.EMPTY_STRING;
+				}
+				if (UIUtil.isNullOrEmpty(strName)) {
+					strName=DCLUtil.getInfo(context, strId,DomainConstants.SELECT_NAME );
+					strTypeIcon=FrameworkUtil.getAliasForAdmin(context,DomainConstants.SELECT_TYPE, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER, true);
+				}
+				StringBuilder sBuff= new StringBuilder();
+				sBuff.append("<img src = \"images/").append(strTypeIcon).append("\"/>&#160;");
+				sBuff.append("<a class=\"object\" href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=");
+				sBuff.append(strId);
+				sBuff.append("', '930', '650', 'true')\" >");
+				sBuff.append(strName);
+				sBuff.append("</a>");
+				slActionTaskName.add(sBuff.toString());
+
+			}
+			return slActionTaskName;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> preProcessAddActionTask(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId[]=(String[])programMap.get(DCConstants.OBJECTID);
+			String strTableRowIds[] =  (String[])programMap.get(QuestionnaireConstants.EMX_TABLE_ROW_ID);
+			String strErrorMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Alert.CannotAddActionTask");
+			String strTypeRoutetemplate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_RouteTemplate);
+			Map mReturn=new HashMap();
+	
+			StringBuilder sbApprovalObj =new StringBuilder();
+			if (strTableRowIds != null) {
+				for (String strRowIds : strTableRowIds) {
+					String strRowId=strRowIds;
+			TableRowId tr=new TableRowId(strRowId);
+					String strObjId=tr.getObjectId();
+					String strType=DCLUtil.getInfo(context, strObjId, DomainConstants.SELECT_TYPE);
+					if (!strType.equals(strTypeRoutetemplate)) {
+						mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strErrorMessage));
+				return mReturn;
+			}
+					else
+						sbApprovalObj.append(strObjId);
+				}
+				
+			}
+			String strHeader = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Header.AddActionTask");
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "addActionTask", strHeader, sbApprovalObj.toString(), strObjectId[0]));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}	
+
+	}
+
+	public boolean canConfigureEFormAndApproval(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+			String strRelChgangeInstance=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE);
+			String strPolicyFormalChange=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strPolicyStateInApproval = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange,
+					DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			StringList slObjectSelect =new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_CURRENT);
+			slObjectSelect.add("to[" + strRelChgangeInstance + "].from.id");
+			Map mCOInfo = DCLUtil.getInfo(context, strObjectId, slObjectSelect);
+			String strChangeTemplateId = (String)mCOInfo.get("to[" + strRelChgangeInstance + "].from.id");
+			if (UIUtil.isNotNullAndNotEmpty(strChangeTemplateId)
+					&& !PolicyUtil.checkState(context, strObjectId, strPolicyStateInApproval, PolicyUtil.GE))
+				return true;
+			return false;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	
+	/**
+	 * Access program to display DCL Configure Effectivity command. 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args holds packed arguments.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean canConfigureDocumentEffectivity(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strInterface = "DCLEffectivity";
+			String strCOId= (String) programMap.get(DCConstants.OBJECTID);
+			String strCOInterface = DCLUtil.mqlCommand(context, "print bus $1 select $2 dump $3", false, strCOId, "interface", "|" );
+			StringList sl = FrameworkUtil.split(strCOInterface,"|");
+			String strPolicyFormalChange=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strCOStateImplemented = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange,
+					DCLConstants.SYMBOLIC_STATE_IMPLEMENTED);
+			if ((!PolicyUtil.checkState(context, strCOId, strCOStateImplemented, PolicyUtil.GE)) && !sl.isEmpty() && sl != null
+					&& sl.contains(strInterface))
+				return true;
+			return false;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+	/**
+	 * Add action Task from Route Template to Approval Route and remove Approval Route Template from CO
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args objectId of CO
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public void addTaskToRouteAndRemoveRouteTemplate(Context context, String args[]) throws DCLException {
+		try {
+			String strCOId=args[0];
+			ConfigureChangeOrderService changeOrderService=DCLServiceUtil.getConfigureChangeOrderService(context);
+			changeOrderService.addTaskToRouteAndRemoveRouteTemplate(context,strCOId);
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> preProcessApprovalsAndEForm(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId[]= (String[]) programMap.get(DCConstants.OBJECTID);
+			String strCurrentState =DCLUtil.getInfo(context, strObjectId[0],DomainConstants.SELECT_CURRENT);
+			StringBuilder sbJavascript=new StringBuilder();
+			if (strCurrentState.equals("In Approval") || strCurrentState.equals("Complete") || strCurrentState.equals("Implemented")) {
+				sbJavascript
+						.append("var submitURL=\"../common/emxTable.jsp?program=emxLifecycle:getCurrentTaskSignaturesOnObject&table=AEFLifecycleTaskSignaturesSummary&toolbar=AEFLifecycleTasksToolbar&FilterFramePage=../common/emxLifecycleTasksSignaturesFilter.jsp&FilterFrameSize=40&sortColumnName=Name&objectBased=false&HelpMarker=emxhelplifecycletasks");
+			}
+			else {
+				sbJavascript
+						.append("var submitURL=\"../common/emxIndentedTable.jsp?table=DCLCOApprovalTable&expandProgram=ENODCLConfigureChangeOrderUI:getRouteTemplateActionTasks&toolbar=DCLCOApprovalToolbar&selection=multiple&hideRootSelection=true");
+		
+			}
+			sbJavascript.append("&objectId=").append(strObjectId[0]);
+			sbJavascript.append("\";");
+			sbJavascript.append("\n this.location.href=submitURL;");
+			Map<String,String>  mReturn=new HashMap();
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, sbJavascript.toString());
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map postProcessRefreshTable(Context context, String[] args) throws DCLException {
+		try{
+			Map mapReturn = new HashMap();
+			mapReturn.put("Action","refresh");
+			return mapReturn;
+		}
+		catch(Exception ex){
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getEFormTableAttributeValues(Context context, String[] args) throws DCLException {
+		
+		try {
+			Map<?,?> programMap = (Map<?,?>)JPO.unpackArgs(args);
+			List<Map> mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			Map mColumnMap=(Map) programMap.get("columnMap");
+			String strName=(String) mColumnMap.get(DomainConstants.SELECT_NAME);
+			String strSelect=DomainConstants.EMPTY_STRING;
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+			
+			String strAttrDueDate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strPolicyFormalChange=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strAttrTaskRequirement=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			String strRelRelatedChangePackageItem = PropertyUtil.getSchemaProperty(context,
+					DCLConstants.SYMBOLIC_RELATIONSHIP_RELATED_CHANGE_PACKAGE_ITEM);
+			switch (strName) {
+			case "Name":
+				strSelect = DomainConstants.SELECT_NAME;
+				break;
+			case "State":
+				strSelect = DomainConstants.SELECT_CURRENT;
+				break;
+			case "Description":
+				strSelect = DomainConstants.SELECT_DESCRIPTION;
+				break;
+			case "eForm Requirement":
+				strSelect = DomainObject.getAttributeSelect(strAttrTaskRequirement);
+				break;
+			case "DueDate":
+				strSelect = DomainObject.getAttributeSelect(strAttrDueDate);
+				break;
+			case "Reference":
+				strSelect = "to[" + strRelRelatedChangePackageItem + "].from.name";
+				break;
+			case "owner":
+				strSelect = DomainConstants.SELECT_OWNER;
+				break;
+				
+			}
+			List<String> slEFormValue=new StringList();
+			for (Map mEForm : mobjectList) {
+				String strId=(String) mEForm.get(DomainConstants.SELECT_ID);
+				String strPolicy=(String) mEForm.get(DomainConstants.SELECT_POLICY);
+				String strSelectValue=DCLUtil.getInfo(context, strId, strSelect);
+				
+				if(strName.equals("eForm Requirement")&&UIUtil.isNotNullAndNotEmpty(strSelectValue))
+					strSelectValue = EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),
+							"emxFramework.Range.Task_Requirement." + strSelectValue);
+				
+				if (strName.equals("State")) {
+					strPolicy=UIUtil.isNotNullAndNotEmpty(strPolicy)?strPolicy:strPolicyFormalChange.replace(" ", "_");
+					// strPolicy=PropertyUtil.getSchemaProperty(context,
+					// DCLConstants.SYMBOLIC_POLICY_EFORM);
+					strSelectValue = EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),
+							"emxFramework.State." + strPolicy + "." + strSelectValue);
+				}
+				StringBuffer sbLink=new StringBuffer();
+				if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strSelectValue)&&strName.equals("Reference")) {
+					String strCOIDSelect = "to[" + strRelRelatedChangePackageItem + "].from.id";
+					String strCOtypeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon."
+							+ DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+					
+					String strCOId = DCLUtil.getInfo(context, strId, strCOIDSelect);
+						sbLink.append("<img src = \"images/").append(strCOtypeIcon).append("\"/>&#160;");
+	    				sbLink.append("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=");
+	    				sbLink.append(XSSUtil.encodeForJavaScript(context, strCOId));
+	        			sbLink.append("', '930', '650', 'true')\"> ");
+	    				sbLink.append(strSelectValue);
+	    				sbLink.append("</a>");
+    				}
+    				else if(UIUtil.isNotNullAndNotEmpty(strSelectValue))
+    					sbLink.append(strSelectValue);
+					strSelectValue=sbLink.toString();
+					slEFormValue.add(strSelectValue);
+				}
+				
+			return slEFormValue;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateEFormAttributes(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strAttrDueDate=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			
+			Map<?,?> paramMap = (Map<?,?> )programMap.get(DCLConstants.PARAMMAP);
+			String streFormId=(String)paramMap.get(DCConstants.OBJECTID);
+			String strOwnerName = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			
+			TimeZone tz = TimeZone.getTimeZone(context.getSession().getTimezone());
+      		double dbMilisecondsOffset = (double)(-1)*tz.getRawOffset();
+      		double clientTZOffset = (new Double(dbMilisecondsOffset/(1000*60*60))).doubleValue();
+        	String strDate = DCLUtil.getDateinEmatrixFormat(context, strOwnerName, String.valueOf(clientTZOffset));
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			impl.updateAttributeValues(context, null, streFormId, strDate, strAttrDueDate);
+	
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateEFormDescription(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			Map<?,?> paramMap = (Map<?,?> )programMap.get(DCLConstants.PARAMMAP);
+			String streFormId=(String)paramMap.get(DCConstants.OBJECTID);
+			String strDescription = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			DomainObject dObj = DomainObject.newInstance(context,streFormId);
+			dObj.setDescription(context, strDescription);
+	
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public void updateEFormRequirement(Context context, String args[]) throws DCLException {
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strAttrTaskRequirement=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			Map<?,?> paramMap = (Map<?,?> )programMap.get(DCLConstants.PARAMMAP);
+			String streFormId=(String)paramMap.get(DCConstants.OBJECTID);
+			String strEFormRequirement = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			ChangeBlockService impl = DCLServiceUtil.getChangeBlockService(context);
+			impl.updateAttributeValues(context, null, streFormId, strEFormRequirement, strAttrTaskRequirement);
+		  			
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map<String,List<String>> getEFormRequirementRanges(Context context,String args[]) throws Exception {
+		try {
+			String strMandatory = EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),
+					"emxFramework.Range.Task_Requirement.Mandatory");
+			String strOptional = EnoviaResourceBundle.getProperty(context, "emxFrameworkStringResource", context.getLocale(),
+					"emxFramework.Range.Task_Requirement.Optional");
+			List<String> slResponseDisplay = new StringList();
+			slResponseDisplay.add(strOptional);
+			slResponseDisplay.add(strMandatory);
+			List<String> slResponse = new StringList();
+			slResponse.add(DCLConstants.OPTIONAL);
+			slResponse.add(DCLConstants.MANDATORY);
+			Map<String,List<String>> rangeMap = new HashMap<String,List<String>>();
+			rangeMap.put(QuestionnaireConstants.FIELD_CHOICES, slResponse);
+			rangeMap.put(QuestionnaireConstants.FIELD_DISPLAY_CHOICES,slResponseDisplay);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	@ProgramCallable
+	public MapList getCARelatedProposedChange(Context context,String args[])throws Exception {
+		try {
+			MapList lRelatedProposeChangeMap = new MapList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strCAId = (String) programMap.get("objectId");
+			StringList slBusSelect = new StringList(DomainConstants.SELECT_ID);
+			slBusSelect.add(DomainConstants.SELECT_OWNER);
+			ControlledDocumentService controlledDocumentService = DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> mlReturn = controlledDocumentService.getRealizedFromChangeAction(context, strCAId, slBusSelect);
+			if(mlReturn.isEmpty()){
+				mlReturn = controlledDocumentService.getProposedFromChangeAction(context, strCAId, slBusSelect);
+			}
+			for(Map mreturn:mlReturn){
+				Map proposedChangeMap = new HashMap<>();
+				proposedChangeMap.put(DomainConstants.SELECT_ID, ((List)mreturn.get(DomainConstants.SELECT_ID)).get(0).toString());
+				proposedChangeMap.put(DomainConstants.SELECT_OWNER, ((List)mreturn.get(DomainConstants.SELECT_OWNER)).get(0).toString());
+				lRelatedProposeChangeMap.add(proposedChangeMap);
+			}
+			return lRelatedProposeChangeMap;
+		}
+			catch (Exception ex) {
+				throw new Exception(ex);
+		}
+	}
+
+}
+

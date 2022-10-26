@@ -1,0 +1,846 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.Attribute;
+import matrix.db.Context;
+import matrix.db.User;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	public static final String	ATTRIBUTE_SCHEDULED_COMPLETION_DATE			= PropertyUtil.getSchemaProperty("attribute_ScheduledCompletionDate");
+	public static final String	SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE	= "attribute[" + ATTRIBUTE_SCHEDULED_COMPLETION_DATE + "]";
+	public static final String	ATTRIBUTE_ACTUAL_COMPLETION_DATE			= PropertyUtil.getSchemaProperty("attribute_ActualCompletionDate");
+	public static final String	SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE		= "attribute[" + ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]";
+	public static final String	ATTRIBUTE_COMMENTS							= PropertyUtil.getSchemaProperty("attribute_Comments");
+	public static final String	SELECT_ATTRIBUTE_COMMENTS					= "attribute[" + ATTRIBUTE_COMMENTS + "]";
+	public static final String	RELATIONSHIP_OBJECT_ROUTE					= PropertyUtil.getSchemaProperty("relationship_ObjectRoute");
+	public static final String	TYPE_ROUTE									= PropertyUtil.getSchemaProperty("type_Route");
+	public static final String	ATTRIBUTE_ROUTE_STATUS						= PropertyUtil.getSchemaProperty("attribute_RouteStatus");
+	public static final String	SELECT_ATTRIBUTE_ROUTE_STATUS				= "attribute[" + ATTRIBUTE_ROUTE_STATUS + "]";
+	public static final String	RELATIONSHIP_ROUTE_NODE						= PropertyUtil.getSchemaProperty("relationship_RouteNode");
+	public static final String	TYPE_PERSON									= PropertyUtil.getSchemaProperty("type_Person");
+	public static final String	ATTRIBUTE_ROUTE_TASK_USER					= PropertyUtil.getSchemaProperty("attribute_RouteTaskUser");
+	public static final String	SELECT_ATTRIBUTE_ROUTE_TASK_USER			= "attribute[" + ATTRIBUTE_ROUTE_TASK_USER + "]";
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * Returns a MapList of objectIds for Routes connected to an Action Item
+	 * 
+	 * @return routeList
+	 * @throws Exception
+	 */
+	protected static MapList getRelatedRoutes(Context context, DomainObject actionItemObj) throws Exception {
+		// First get the routes that aren't Rejected
+		String objWhereClause = "attribute[Route Status] != Rejected";
+
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		MapList routeList = actionItemObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE,
+				objSelects, new StringList(), false, true, (short) 1, objWhereClause, "", 0, null, null, null);
+
+		return routeList;
+	}
+
+	public int sendMailAuditActionItemAssignment(Context context, String[] args) throws Exception {
+
+		StringList toList = new StringList();
+		int retVal = 0;
+		try {
+
+			String objectId = args[0];
+
+			DomainObject actionObj = DomainObject.newInstance(context, objectId);
+			// String name = actionObj.getInfo(context,
+			// DomainConstants.SELECT_NAME);
+			String desc = actionObj.getInfo(context, DomainConstants.SELECT_DESCRIPTION);
+
+			boolean isFinding = actionObj.getInfo(context, DomainConstants.SELECT_TYPE)
+					.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK)) == 0;
+			boolean isAudit = actionObj.getInfo(context, DomainConstants.SELECT_TYPE)
+					.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT)) == 0;
+
+			HashMap paramMap = new HashMap();
+			paramMap.put("objectId", actionObj);
+			// String[] args2 = JPO.packArgs(paramMap);
+
+			MapList routeList = getRelatedRoutes(context, actionObj);
+
+			String dueDateVal = getExpectedImplementationDate(context, objectId);
+
+			StringList objSelects = new StringList(1);
+			objSelects.addElement(DomainConstants.SELECT_ID);
+
+			Map audit = new HashMap();
+			if (!isAudit) {
+				if (!isFinding) {
+					audit = actionObj.getRelatedObject(context, PropertyUtil.getSchemaProperty("relationship_ActionItem"), false, objSelects,
+							new StringList());
+
+				}
+				else {
+					audit = actionObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false,
+							objSelects, new StringList());
+				}
+			}
+			DomainObject auditObj;
+
+			if (!isAudit)
+				auditObj = DomainObject.newInstance(context, (String) (audit.get(DomainConstants.SELECT_ID)));
+
+			else
+				auditObj = actionObj;
+
+			String auditName = auditObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+			for (int i = 0; i < routeList.size(); i++) {
+
+				// Now get the route object
+				DomainObject routeObj = DomainObject.newInstance(context, (String) ((Map) routeList.get(i)).get(DomainConstants.SELECT_ID));
+
+				// get the related person objects
+				MapList personList = routeObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_ROUTE_NODE, DomainConstants.TYPE_PERSON,
+						new StringList(DomainConstants.SELECT_ID), new StringList(), false, true, (short) 1, "", "", 0);
+
+				// loop through the results - if multiple approvers concat the
+				// approvers to string buffer
+				for (int j = 0; j < personList.size(); j++) {
+
+					// Get the person object
+					DomainObject personObj = DomainObject.newInstance(context, (String) ((Map) personList.get(j)).get(DomainConstants.SELECT_ID));
+
+					// get the user name attributes
+					// String last = personObj.getAttributeValue(context,
+					// DomainConstants.ATTRIBUTE_LAST_NAME);
+					// String first = personObj.getAttributeValue(context,
+					// DomainConstants.ATTRIBUTE_FIRST_NAME);
+					String login = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+					toList.addElement(login);
+
+				}
+
+			}
+
+			String str = "";
+			String subject = "";
+			String body = "";
+
+			if (!isAudit) {
+				if (isFinding)
+					str = " Audit Finding ";
+
+				else
+					str = " Audit ";
+
+				subject = " Implementer Assignment";
+				body = "";
+
+				body = "You have been assigned as the Implementer for an Action Task regarding " + str + auditName + ".\n";
+				body += "\n";
+				body += " Description:  " + desc + ".\n";
+				body += "\n\n";
+				body += "The expected Implementation date is " + dueDateVal;
+				body += "\n\n";
+				body += "You can use this link to go to ";
+
+			}
+			else {
+				subject = " Audit Approver Assignment";
+				body = "";
+
+				body = "You have been assigned as the Audit Approver for the Audit " + auditName + ".\n";
+				body += "\n";
+				body += " Description:  " + desc + ".\n";
+				body += "\n\n";
+				body += "The expected Implementation date is " + dueDateVal;
+				body += "\n\n";
+				body += "You can use this link to go to ";
+
+			}
+
+			body += MailUtil.getBaseURL(context) + "?objectId=" + auditObj.getId(context);
+			Helper.sendMail(context, subject, body, toList);
+			// }
+
+		}
+		catch (Exception e) {
+			System.err.println("Error: Trigger Failed " + e);
+			retVal = 1;
+		}
+
+		return retVal;
+
+	}
+
+	public String getExpectedImplementationDate(Context context, String objectId) throws Exception {
+
+		String scheduledCompletionDate = "";
+
+		MapList taskList = getTaskList(context, objectId);
+
+		for (int i = 0; i < taskList.size(); i++) {
+			scheduledCompletionDate = (String) ((Map) taskList.get(0)).get(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+		}
+
+		return scheduledCompletionDate;
+	}
+
+	public String getActualImplementationDate(Context context, String objectId) throws Exception {
+
+		String actualCompletionDate = "";
+
+		MapList taskList = getTaskList(context, objectId);
+
+		for (int i = 0; i < taskList.size(); i++) {
+			actualCompletionDate = (String) ((Map) taskList.get(0)).get(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+		}
+
+		return actualCompletionDate;
+	}
+
+	public String getComments(Context context, String objectId) throws Exception {
+
+		String comments = "";
+
+		MapList taskList = getTaskList(context, objectId);
+
+		for (int i = 0; i < taskList.size(); i++) {
+			comments = (String) ((Map) taskList.get(0)).get(SELECT_ATTRIBUTE_COMMENTS);
+		}
+
+		return comments;
+	}
+
+	public MapList getTaskList(Context context, String objectId) throws Exception {
+
+		DomainObject doActionTask = DomainObject.newInstance(context, objectId);
+
+		String relPattern = RELATIONSHIP_OBJECT_ROUTE;
+		String typePattern = TYPE_ROUTE;
+		String busWhere = SELECT_ATTRIBUTE_ROUTE_STATUS + "==Started || " + SELECT_ATTRIBUTE_ROUTE_STATUS + "==Finished";
+		String relWhere = "";
+
+		StringList busSelects = new StringList();
+		busSelects.add(DomainConstants.SELECT_ID);
+		StringList relSelects = new StringList();
+
+		MapList routeList = doActionTask.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, true, // to,
+				true, // from
+				(short) 1, // recurseToLevel,
+				busWhere, relWhere, 0);
+
+		MapList taskList = new MapList();
+
+		if (routeList.size() == 1) {
+			String routeId = (String) ((Map) routeList.get(0)).get(DomainConstants.SELECT_ID);
+			DomainObject doRoute = DomainObject.newInstance(context, routeId);
+			relPattern = RELATIONSHIP_ROUTE_NODE;
+			typePattern = TYPE_PERSON;
+			busWhere = "";
+			relWhere = "";
+
+			busSelects.add(DomainConstants.SELECT_NAME);
+			relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+			relSelects.add(SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+			relSelects.add(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+			relSelects.add(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+			relSelects.add(SELECT_ATTRIBUTE_COMMENTS);
+
+			taskList = doRoute.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, true, // to,
+					true, // from
+					(short) 1, // recurseToLevel,
+					busWhere, relWhere, 0);
+		}
+
+		return taskList;
+	}
+
+	public int sendMailAuditActionItemReject(Context context, String[] args) throws Exception {
+
+		String objectId = args[0];
+
+		DomainObject domainObj = DomainObject.newInstance(context, objectId);
+		String actionItem = domainObj.getInfo(context, DomainConstants.SELECT_NAME);
+		// String current = domainObj.getInfo(context,
+		// DomainConstants.SELECT_CURRENT);
+		String desc = domainObj.getDescription(context);
+		// String scheduledCompletetionDate =
+		// getExpectedImplementationDate(context,objectId);
+		boolean isFinding = domainObj.getInfo(context, DomainConstants.SELECT_TYPE)
+				.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK)) == 0;
+		boolean isAudit = domainObj.getInfo(context, DomainConstants.SELECT_TYPE)
+				.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT)) == 0;
+
+		StringList objSelects = new StringList(1);
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		Map audit = new HashMap();
+		DomainObject auditObj;
+
+		if (!isAudit) {
+			if (!isFinding) {
+				audit = domainObj.getRelatedObject(context, PropertyUtil.getSchemaProperty("relationship_ActionItem"), false, objSelects,
+						new StringList());
+
+			}
+			else {
+				audit = domainObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false,
+						objSelects, new StringList());
+			}
+		}
+
+		if (!isAudit)
+			auditObj = DomainObject.newInstance(context, (String) (audit.get(DomainConstants.SELECT_ID)));
+
+		else
+			auditObj = domainObj;
+
+		String auditName = auditObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+		StringList toList = new StringList();
+
+		if (!isAudit) {
+			User owner = domainObj.getOwner(context);
+			String originator = owner.toString();
+
+			if (!toList.contains(originator))
+				toList.addElement(originator);
+		}
+
+		else {
+
+			Attribute tlAttr = auditObj.getAttributeValues(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR));
+			String tl = tlAttr.getValue();
+			String strName = PersonUtil.getFullName(context, tl);
+			String firstName = strName.split(" ")[0].trim();
+			String lastName = strName.split(" ")[1].trim();
+
+			objSelects.addElement(DomainConstants.SELECT_ID);
+
+			String whereExpression = "( " + Person.SELECT_LAST_NAME + "==\"" + lastName + "\" ) && ( " + Person.SELECT_FIRST_NAME + "==\"" + firstName
+					+ "\" )";
+
+			MapList objList = DomainObject.findObjects(context, DomainConstants.TYPE_PERSON, null, whereExpression, objSelects);
+
+			for (int i = 0; i < 1; i++) {
+
+				Map personMap = (Map) objList.get(i);
+				String objId = (String) personMap.get(DomainConstants.SELECT_ID);
+
+				DomainObject personObj = DomainObject.newInstance(context, objId);
+				String personName = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+				toList.add(personName);
+			}
+
+		}
+
+		String str = "";
+		String subject = "";
+
+		String body = "";
+
+		if (!isAudit) {
+
+			if (isFinding)
+				str = " Audit Finding Action Item ";
+
+			else
+				str = " Audit Action Item ";
+
+			subject = str + " has been rejected";
+
+			body = "";
+
+			body = "Your " + str + actionItem + " for Audit " + auditName + " has been rejected.";
+
+			body += "\n\n";
+			body += "Description: " + desc + "\n";
+
+			body += "\nYou can use this link to go to " + actionItem + ":\n";
+		}
+
+		else {
+			subject = auditName + " has been rejected";
+
+			body = "";
+
+			body = "Audit " + auditName + " has been rejected.";
+
+			body += "\n\n";
+			body += "Description: " + desc + "\n";
+
+			body += "\nYou can use this link to go to " + auditName + ":\n";
+		}
+
+		body += MailUtil.getBaseURL(context) + "?objectId=" + objectId;
+
+		return Helper.sendMail(context, subject, body, toList);
+
+	}
+
+	public int sendMailAuditActionItemComplete(Context context, String[] args) throws Exception {
+
+		String objectId = args[0];
+
+		DomainObject domainObj = DomainObject.newInstance(context, objectId);
+		String actionItem = domainObj.getInfo(context, DomainConstants.SELECT_NAME);
+		// String current = domainObj.getInfo(context,
+		// DomainConstants.SELECT_CURRENT);
+		String desc = domainObj.getDescription(context);
+		String scheduledCompletetionDate = getExpectedImplementationDate(context, objectId);
+		String actualCompletetionDate = getActualImplementationDate(context, objectId);
+
+		boolean isFinding = domainObj.getInfo(context, DomainConstants.SELECT_TYPE)
+				.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK)) == 0;
+		boolean isAudit = domainObj.getInfo(context, DomainConstants.SELECT_TYPE)
+				.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT)) == 0;
+
+		StringList objSelects = new StringList(1);
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		Map audit = new HashMap();
+		DomainObject auditObj;
+
+		if (!isAudit) {
+			if (!isFinding) {
+				audit = domainObj.getRelatedObject(context, PropertyUtil.getSchemaProperty("relationship_ActionItem"), false, objSelects,
+						new StringList());
+
+			}
+			else {
+				audit = domainObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false,
+						objSelects, new StringList());
+			}
+		}
+
+		if (!isAudit)
+			auditObj = DomainObject.newInstance(context, (String) (audit.get(DomainConstants.SELECT_ID)));
+
+		else
+			auditObj = domainObj;
+
+		String auditName = auditObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+		StringList toList = new StringList();
+
+		if (!isAudit) {
+			User owner = domainObj.getOwner(context);
+			String originator = owner.toString();
+
+			if (!toList.contains(originator))
+				toList.addElement(originator);
+		}
+
+		else {
+
+			Attribute tlAttr = auditObj.getAttributeValues(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR));
+			String tl = tlAttr.getValue();
+			String lastName = tl.split(",")[0].trim();
+			String firstName = tl.split(",")[1].trim();
+
+			objSelects.addElement(DomainConstants.SELECT_ID);
+
+			String whereExpression = "( " + Person.SELECT_LAST_NAME + "==\"" + lastName + "\" ) && ( " + Person.SELECT_FIRST_NAME + "==\"" + firstName
+					+ "\" )";
+
+			MapList objList = DomainObject.findObjects(context, DomainConstants.TYPE_PERSON, null, whereExpression, objSelects);
+
+			for (int i = 0; i < 1; i++) {
+
+				Map personMap = (Map) objList.get(i);
+				String objId = (String) personMap.get(DomainConstants.SELECT_ID);
+
+				DomainObject personObj = DomainObject.newInstance(context, objId);
+				String personName = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+				toList.add(personName);
+			}
+
+		}
+
+		String str = "";
+		String subject = "";
+
+		String body = "";
+
+		if (!isAudit) {
+
+			if (isFinding)
+				str = " Audit Finding Action Item ";
+
+			else
+				str = " Audit Action Item ";
+
+			subject = str + " Completed";
+
+			body = "";
+
+			body = "Your " + str + " has been Completed: " + actionItem + " for Audit " + auditName;
+
+			body += "\n\n";
+			body += "Description: " + desc + "\n";
+			body += "Scheduled Completetion Date: " + scheduledCompletetionDate + "\n";
+			body += "Actual Completetion Date: " + actualCompletetionDate + "\n";
+
+			body += "\nYou can use this link to go to " + actionItem + ":\n";
+		}
+
+		else {
+			// String plannedStartDate = auditObj.getInfo(context,
+			// AuditConstants.SELECT_AUDIT_PLANNEDSTARTDATE);
+			String plannedStartDate = auditObj.getInfo(context,
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDSTARTDATE)));
+			// String plannedEndDate = auditObj.getInfo(context,
+			// AuditConstants.SELECT_AUDIT_PLANNEDENDDATE);
+			String plannedEndDate = auditObj.getInfo(context,
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDENDDATE)));
+
+			subject = "Audit " + auditName + " is Approved.";
+
+			body = "";
+
+			body = "Audit " + auditName + " is Approved.";
+
+			body += "\n\n";
+			body += "Description: " + desc + "\n";
+			body += "Planned Start Date: " + plannedStartDate + "\n";
+			body += "Planned End Date: " + plannedEndDate + "\n";
+
+			body += "\nYou can use this link to go to " + auditName + ":\n";
+
+		}
+
+		body += MailUtil.getBaseURL(context) + "?objectId=" + objectId;
+
+		return Helper.sendMail(context, subject, body, toList);
+
+	}
+
+	public int sendMailAuditPromotedToActive(Context context, String[] args) throws AuditException {
+		final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		final String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_ACTIVE);
+		final String ATTRIBUTE_LEAD_AUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+		final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+		final String ATTRIBUTE_PLANNED_START_DATE = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDSTARTDATE);
+		final String ATTRIBUTE_PLANNED_END_DATE = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDENDDATE);
+		try {
+			String objectId = args[0];
+
+			if (!Helper.isNullOrEmpty(objectId)) {
+				List<Map<?, ?>> lmAuditInfo = QueryUtil.getInfo(context, new String[] { objectId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_NAME, DomainObject.SELECT_DESCRIPTION,
+								DomainObject.getAttributeSelect(ATTRIBUTE_LEAD_AUDITOR), DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES),
+								DomainObject.getAttributeSelect(ATTRIBUTE_PLANNED_START_DATE),
+								DomainObject.getAttributeSelect(ATTRIBUTE_PLANNED_END_DATE)));
+
+				if (!Helper.isNullOrEmpty(lmAuditInfo)) {
+					Map<?, ?> auditInfo = lmAuditInfo.get(0);
+
+					String state = (String) auditInfo.get(DomainConstants.SELECT_CURRENT);
+					if (!STATE_ACTIVE.equalsIgnoreCase(state)) {
+						return 0;
+					}
+
+					String auditNum = (String) auditInfo.get(DomainConstants.SELECT_NAME);
+					String desc = (String) auditInfo.get(DomainObject.SELECT_DESCRIPTION);
+					String leadAuditorName = (String) auditInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_LEAD_AUDITOR));
+					String plannedStartDate = (String) auditInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_PLANNED_START_DATE));
+					String plannedEndDate = (String) auditInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_PLANNED_END_DATE));
+
+					StringList toList = new StringList();
+
+					if (!Helper.isNullOrEmpty(leadAuditorName)) {
+						toList.add(leadAuditorName);
+					}
+
+					String strAuditees = (String) auditInfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES));
+
+					if (!Helper.isNullOrEmpty(strAuditees)) {
+						String[] auditees = strAuditees.split("~");
+
+						for (String auditee : auditees) {
+							if (!Helper.isNullOrEmpty(auditee) && !toList.contains(auditee)) {
+								toList.add(auditee);
+							}
+						}
+					}
+
+					if (Helper.isNullOrEmpty(desc)) {
+						desc = DomainConstants.EMPTY_STRING;
+					}
+					StringBuilder subject = new StringBuilder(40);
+					subject.append(auditNum).append(" has been promoted to Active.");
+
+					StringBuilder body = new StringBuilder();
+					body.append(auditNum).append(" has been promoted to Active state.");
+					body.append("\n\nPlanned Start Date: ").append(plannedStartDate);
+					body.append("\n\nPlanned End Date: ").append(plannedEndDate);
+					body.append("\n\nDescription: ").append(desc);
+					body.append("\nYou can use this link to go to ").append(auditNum).append(":\n");
+					body.append(MailUtil.getBaseURL(context)).append("?objectId=").append(objectId);
+
+					return Helper.sendMail(context, subject.toString(), body.toString(), toList);
+				}
+			}
+
+			return 0;
+		}
+		catch (Exception ex) {
+			throw new AuditException(ex);
+		}
+	}
+
+	public int sendMailAuditLeadAssignment(Context context, String[] args) throws Exception {
+
+		// int retVal = 0;
+		String objectId = args[0];
+		String strLanguage = context.getSession().getLanguage();
+
+		DomainObject auditObj = DomainObject.newInstance(context, objectId);
+		String auditNum = auditObj.getInfo(context, DomainConstants.SELECT_NAME);
+		String desc = auditObj.getDescription(context);
+		Attribute tlAttr = auditObj.getAttributeValues(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR));
+		String tl = tlAttr.getValue();
+		String lastName = tl.split(",")[0].trim();
+		String firstName = tl.split(",")[1].trim();
+		StringList toList = new StringList();
+		// Person.doesPersonExists(context, "");
+		StringList objSelects = new StringList(6); // object select list.
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		String whereExpression = "( " + Person.SELECT_LAST_NAME + "==\"" + lastName + "\" ) && ( " + Person.SELECT_FIRST_NAME + "==\"" + firstName
+				+ "\" )";
+
+		MapList objList = DomainObject.findObjects(context, DomainConstants.TYPE_PERSON, null, whereExpression, objSelects);
+
+		for (int i = 0; i < 1; i++) {
+
+			Map personMap = (Map) objList.get(i);
+			String objId = (String) personMap.get(DomainConstants.SELECT_ID);
+
+			DomainObject personObj = DomainObject.newInstance(context, objId);
+			String personName = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+			toList.add(personName);
+		}
+
+		String subject = i18nNow.getI18nString("LQIAudit.Mail.AuditLeadAssignment.Subject", "LQIAuditStringResource", strLanguage);
+		String body = "";
+
+		body += i18nNow.getI18nString("LQIAudit.Mail.AuditLeadAssignment.Body1", "LQIAuditStringResource", strLanguage);
+		body += " " + auditNum + ".\n\n";
+		body += i18nNow.getI18nString("LQIAudit.Mail.AuditLeadAssignment.Body2", "LQIAuditStringResource", strLanguage);
+		body += "\n" + desc + "\n\n";
+		body += i18nNow.getI18nString("LQIAudit.Mail.AuditLeadAssignment.Body3", "LQIAuditStringResource", strLanguage);
+		body += " " + auditNum + ":\n";
+		body += MailUtil.getBaseURL(context) + "?objectId=" + objectId;
+
+		return Helper.sendMail(context, subject, body, toList);
+
+	}
+
+	/**
+	 * This is called from the triggers on the attributes: Audit Auditors Audit
+	 * Lead Auditor Audit Auditees
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public int sendEmailNotificationMemberChange(Context context, String[] args) throws Exception {
+		String auditOID = args[0];
+		String attribute = args[1];
+		String newValue = args[2];
+		String oldValue = args[3];
+
+		DomainObject newObj = DomainObject.newInstance(context, auditOID);
+		sendEmailNotificationMemberChange(context, oldValue, newValue, newObj, attribute);
+
+		// always return 0 because we never want to stop the transaction
+		return 0;
+	}
+
+	public static void sendEmailNotificationMemberChange(Context context, String oldVal, String newVal, DomainObject audit, String attr)
+			throws Exception {
+
+		if (oldVal == null) {
+			oldVal = "";
+		}
+		if (newVal == null) {
+			newVal = "";
+		}
+
+		String[] oldmembers = oldVal.split("~");
+		String[] newmembers = newVal.split("~");
+		StringList sendAddEmail = createDifferenceOfMembersList(newmembers, oldmembers);
+		StringList sendRemoveEmail = createDifferenceOfMembersList(oldmembers, newmembers);
+
+		if (sendRemoveEmail.size() > 0) {
+			StringList toList = createToList(context, sendRemoveEmail);
+			String subject = "Removed from member list for Audit " + audit.getInfo(context, DomainConstants.SELECT_NAME);
+			String body = createEMailBodyForChangedUser(context, audit, attr, false);
+			Helper.sendMail(context, subject, body, toList);
+		}
+
+		if (sendAddEmail.size() > 0) {
+			StringList toList = createToList(context, sendAddEmail);
+			String subject = "Added to member list for Audit " + audit.getInfo(context, DomainConstants.SELECT_NAME);
+			String body = createEMailBodyForChangedUser(context, audit, attr, true);
+			Helper.sendMail(context, subject, body, toList);
+		}
+
+	}
+
+	private static String createEMailBodyForChangedUser(Context context, DomainObject audit, String attr, boolean add)
+			throws FrameworkException, Exception {
+		StringBuffer body = new StringBuffer();
+		if (add) {
+			body.append("\nYou have been added to ");
+		}
+		else {
+			body.append("\nYou have been removed from ");
+		}
+
+		if (attr.equals(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR))) {
+			body.append("Lead Auditor");
+		}
+		else if (attr.equals(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITORS))) {
+			body.append("Auditor's List");
+		}
+		else if (attr.equals("Audit Owner")) {
+			body.append("Audit Owner");
+		}
+		else {
+			body.append("Member's List");
+		}
+
+		body.append(" for Audit ");
+		body.append(audit.getInfo(context, DomainConstants.SELECT_NAME));
+		body.append("\nYou can use this URL to open Audit: ");
+		body.append(MailUtil.getBaseURL(context) + "?objectId=" + audit.getId());
+		return body.toString();
+	}
+
+	/**
+	 * This creates a list of the members that should be notified via an email.
+	 * It was originally duplicated in the method
+	 * sendEmailNotificationMemberChange and was extracted to this method to
+	 * clean up copy/pasted code.
+	 * 
+	 * @param memberList1
+	 * @param memberList2
+	 * @return
+	 */
+	private static StringList createDifferenceOfMembersList(String[] memberList1, String[] memberList2) {
+		StringList differenceList = new StringList();
+		boolean isOld;
+		for (String mem : memberList1) {
+			if (mem == null || mem.equals("")) {
+				continue;
+			}
+			isOld = false;
+
+			for (String newM : memberList2) {
+				if (newM.compareTo(mem) == 0) {
+					isOld = true;
+					break;
+				}
+			}
+			if (!isOld) {
+				differenceList.addElement(mem);
+			}
+
+		}
+		return differenceList;
+	}
+
+	/**
+	 * This code was duplicated a couple of times in the method
+	 * sendEmailNotificationMemberChange so I extracted it into its own method.
+	 * It builds the list
+	 * 
+	 * @param context
+	 * @param sendRemoveEmail
+	 * @return
+	 * @throws FrameworkException
+	 */
+	private static StringList createToList(Context context, StringList sendRemoveEmail) throws FrameworkException {
+		StringList toList = new StringList();
+		for (int i = 0; i < sendRemoveEmail.size(); i++) {
+			String tempM = (String) sendRemoveEmail.get(i);
+
+			String[] splitName = tempM.split(",");
+			if (splitName.length == 2) {
+				// In this case we assume the name is in the form 'last,first'
+				// and we need to get the username
+				String lastName = splitName[0].trim();
+				String firstName = splitName[1].trim();
+
+				// Person.doesPersonExists(context, "");
+				StringList objSelects = new StringList(6); // object select
+															// list.
+				objSelects.addElement(DomainConstants.SELECT_ID);
+
+				String whereExpression = "( " + com.matrixone.apps.common.Person.SELECT_LAST_NAME + "==\"" + lastName + "\" ) && ( "
+						+ com.matrixone.apps.common.Person.SELECT_FIRST_NAME + "==\"" + firstName + "\" )";
+
+				MapList objList = DomainObject.findObjects(context, DomainConstants.TYPE_PERSON, null, whereExpression, objSelects);
+
+				if (objList.size() > 0) {
+					Map personMap = (Map) objList.get(0);
+					String objId = (String) personMap.get(DomainConstants.SELECT_ID);
+
+					DomainObject personObj = DomainObject.newInstance(context, objId);
+					String personName = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+					toList.add(personName);
+				}
+			}
+			else {
+				// in this case we assume we are already dealing with a username
+				// and
+				// no conversion is necessary
+				toList.add(tempM);
+			}
+
+		}
+		return toList;
+	}
+
+}
+

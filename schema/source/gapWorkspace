@@ -1,0 +1,518 @@
+import java.util.HashMap;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static final String CONST_COMMA = ",";
+	public static final String CONST_PIPE = "|";
+	public static final String CONST_VAL_SEP = "~";
+	public static final String CONST_HYPEN = "-";
+	public static final String SYM_ATTRIBUTE_GAP_FRAME_MODEL = "attribute_gapFrameModel";
+	public static final String ATTRIBUTE_GAP_FRAME_MODEL = PropertyUtil.getSchemaProperty(SYM_ATTRIBUTE_GAP_FRAME_MODEL);
+	/**
+	 * this method return HTML output for gap Frame Model field
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getGAPFrameModel(Context context, String args[]) throws Exception
+	{
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strLang = context.getSession().getLanguage();
+		String strMode = (String) requestMap.get("mode");
+		String strDefaultRange = i18nNow.getI18nString ("emxTeamCentral.gapFrameModel.Default.Range", "emxTeamCentralStringResource", strLang); 
+		String strDefaultSize = CONST_HYPEN;
+		// ENGMASA : added below code to append machine type value on edit form : START
+		String strDefaultMachineType = DomainObject.EMPTY_STRING;
+		// ENGMASA : added below code to append machine type value on edit form : END
+		StringList slSizeRanges = new StringList();
+		slSizeRanges.add(CONST_HYPEN);
+		slSizeRanges.add( DomainObject.EMPTY_STRING);
+		// read selected values for edit mode		
+		if (UIUtil.isNotNullAndNotEmpty(strMode))
+		{
+			String strObjectId = (String) requestMap.get("objectId");
+			DomainObject doWrkSpace = DomainObject.newInstance(context, strObjectId);
+			String strVal = doWrkSpace.getAttributeValue(context, ATTRIBUTE_GAP_FRAME_MODEL);
+			if (strMode.equals("view"))
+			{
+				return strVal;
+			}
+			else if (strMode.equals("edit"))
+			{
+				if (UIUtil.isNotNullAndNotEmpty(strVal) && !strVal.equals(CONST_HYPEN))
+				{//${CLASS:emxContextUtil}.mqlNotice(context, strVal);
+					StringList slList = FrameworkUtil.split(strVal, " ");
+					//${CLASS:emxContextUtil}.mqlNotice(context, strVal);
+					if (slList.size()==2)
+					{
+					strDefaultRange = (String) slList.get(0);
+					strDefaultSize = (String) slList.get(1);
+					}
+					else 
+					{
+						strDefaultMachineType = strVal;
+						strDefaultRange = DomainObject.EMPTY_STRING;
+						strDefaultSize = DomainObject.EMPTY_STRING;
+					}
+					// ENGMASA : added below code to append machine type value on edit form : START
+					if (slList.size()>2)
+						strDefaultMachineType = (String) slList.get(2);
+					// ENGMASA : added below code to append machine type value on edit form : END
+					String strSizeRanges = DomainObject.EMPTY_STRING;
+					if (UIUtil.isNotNullAndNotEmpty(strDefaultRange))
+						strSizeRanges=readFrameSizeForRange(context, strDefaultRange, strLang);
+					if (UIUtil.isNotNullAndNotEmpty(strSizeRanges))
+					{
+						slList.clear();
+						slList = FrameworkUtil.split(strSizeRanges, CONST_VAL_SEP);
+						String strTemp = (String) slList.get(1);
+						slSizeRanges.clear();
+						slSizeRanges = FrameworkUtil.split(strTemp, CONST_PIPE);
+					}
+				}
+			}
+		}
+		StringBuffer sbFrameModel = new StringBuffer();
+		
+		// get Frame Model sizes
+		String strFrameModelSize = getFrameModelSizes(context, strLang);
+		
+		StringList slRanges = getFrameModelRanges(context);slRanges.add( DomainObject.EMPTY_STRING);
+		//sbFrameModel.append("<script type=\"text/javascript\" src=\"../common/scripts/emxUIFormUtil.js\"></script>");
+		sbFrameModel.append("<select name=\"gapFrameModel\" id=\"gapFrameModel\" onChange=\"javascript:modifygapFrameModelSize('")
+					.append(strFrameModelSize)
+					.append("')\">");
+		
+			String strRange = null;
+			
+			for (int y=0; y<slRanges.size(); y++)
+			{
+				strRange = (String) slRanges.get(y);
+				sbFrameModel.append("<option value=\"" + strRange + "\"");
+				if (strRange.equals(strDefaultRange))
+					sbFrameModel.append(" selected=\"selected\"");				
+				sbFrameModel.append(">");
+				sbFrameModel.append(strRange + "</option> ");
+			}
+			// EC~1.0|2.0,EG~
+			sbFrameModel.append("</select>");
+			sbFrameModel.append("<select name=\"gapFrameModelSize\" id=\"gapFrameModelSize\" onChange=\"javascript:updateMachineType()\">");
+			// build size combobox
+			strRange = null;
+			
+			for (int y=0; y<slSizeRanges.size(); y++)
+			{
+				strRange = (String) slSizeRanges.get(y);
+				sbFrameModel.append("<option value=\"" + strRange + "\"");
+				if (strRange.equals(strDefaultSize))
+					sbFrameModel.append(" selected=\"selected\"");				
+				sbFrameModel.append(">");
+				sbFrameModel.append(strRange + "</option> ");
+			}
+			sbFrameModel.append("</select>");
+			// ENGMASA : added below code to append machine type as free text box : START
+		   // append gap machine type as texbox
+			sbFrameModel.append("<input type=\"text\" name=\"gapFrameMachineType\" id=\"gapFrameMachineType\" onkeyup=\"javascript:updateMachineType()\" value=\"")
+						.append(strDefaultMachineType)
+						.append("\" size=\"5\" />");
+			// ENGMASA : added below code to append machine type as free text box : END
+		return sbFrameModel.toString();
+	}
+	/**
+	 * this method reads property vale and return ranges for Frame Model
+	 * @author ENGMASA
+	 * @param context
+	 * @return
+	 * @throws Exception
+	 */
+	public static StringList getFrameModelRanges(Context context) throws Exception
+	{
+		StringList slRanges = new StringList();
+		String strLang = context.getSession().getLanguage();
+		String strGapModelRanges = i18nNow.getI18nString ("emxTeamCentral.gapFrameModel.Range", "emxTeamCentralStringResource", strLang); 
+		if (UIUtil.isNotNullAndNotEmpty(strGapModelRanges))
+		{
+			slRanges = FrameworkUtil.split(strGapModelRanges, CONST_COMMA);			
+		}
+		return slRanges;
+	}
+	/**
+	 * this method read and returns sizes map for each frame Model 
+	 * @author ENGMASA
+	 * @param context
+	 * @param strLang
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getFrameModelSizes(Context context, String strLang) throws Exception
+	{
+		StringBuffer sbSizes = new StringBuffer();
+		StringBuffer sbRangeSizeVal = new StringBuffer();
+		
+		
+		String strSize = null;
+		// read ranges
+		StringList slRanges = getFrameModelRanges(context);
+		String strRange = null;
+		
+		for (int y=0; y<slRanges.size(); y++)
+		{
+			strRange = (String) slRanges.get(y);
+			if (y>0)
+				sbSizes.append(CONST_COMMA);
+			// read sizes for range
+			strSize = readFrameSizeForRange(context, strRange, strLang);
+			sbSizes.append(strSize);
+		}
+		return sbSizes.toString();
+	}
+	/**
+	 * this method reads sizes for Frame Model range
+	 * @param context
+	 * @param strRange
+	 * @param strLang
+	 * @return
+	 * @throws Exception
+	 */
+	public static String readFrameSizeForRange(Context context, String strRange, String strLang) throws Exception
+	{
+		StringBuffer sbRangeSizeKey = new StringBuffer();
+		StringBuffer sbRangeSizeval = new StringBuffer();
+		String strKeyPart1 = "emxTeamCentral.gapFrameModel.";
+		String strKeyPart2 = ".Ranges";
+		sbRangeSizeKey.setLength(0);
+		// read key
+		sbRangeSizeKey.append(strKeyPart1)
+					  .append(strRange)
+					  .append(strKeyPart2);
+		String strKey = sbRangeSizeKey.toString();
+		String strVal = null;
+		if (strRange.equals(CONST_HYPEN))
+			strVal = CONST_HYPEN;
+		else
+		  strVal = i18nNow.getI18nString (strKey, "emxTeamCentralStringResource", strLang); 
+		if (UIUtil.isNotNullAndNotEmpty(strVal))
+		{
+			// split by comma
+			StringList slList = FrameworkUtil.split(strVal, CONST_COMMA);
+			String strSize = null;
+			sbRangeSizeval.append(strRange)
+						  .append(CONST_VAL_SEP);
+			for (int y=0; y<slList.size(); y++)
+			{
+				strSize = (String) slList.get(y);
+				strSize = strSize.trim();
+				if (y>0)
+					sbRangeSizeval.append(CONST_PIPE);
+				sbRangeSizeval.append(strSize);				
+			}
+		}
+		return sbRangeSizeval.toString();
+	}
+	/**
+	 * this method updates Frame model size for workspace
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @throws Exception
+	 */
+	public static void setFrameModelSize(Context context, String[] args) throws Exception
+	{
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		Object objFrameModelSize = requestMap.get("gapFrameModelSize");
+		String strFrameModelSize = readObjectInstanceValue(objFrameModelSize);
+		Object objFrameModel = requestMap.get("gapFrameModel");
+		String strFrameModel = readObjectInstanceValue(objFrameModel);
+		// ENGMASA : added below code to read and machine type as value : START
+		Object objFrameMachineType = requestMap.get("gapFrameMachineType");
+		String strFrameMachineType = readObjectInstanceValue(objFrameMachineType);
+		// ENGMASA : added below code to read and machine type as value : END
+		
+		StringBuffer sbFinalVal = new StringBuffer();
+		String strObjectId = (String) paramMap.get("objectId");
+		String strDefault = CONST_HYPEN;
+		// check if value is -
+		if (strFrameModel.equals(CONST_HYPEN) || strFrameModelSize.contentEquals(CONST_HYPEN))
+		{
+			sbFinalVal.append(CONST_HYPEN);
+		}
+		else if (strFrameModel.equals(DomainObject.EMPTY_STRING) || strFrameModelSize.contentEquals(DomainObject.EMPTY_STRING))
+		{
+			sbFinalVal.append(strFrameMachineType);
+		}
+		else
+		{
+			sbFinalVal.append(strFrameModel)
+					  .append(" ")
+					  .append(strFrameModelSize);
+			// ENGMASA : added below code to read and machine type as value : START
+			sbFinalVal.append(" ")
+			          .append(strFrameMachineType);
+			// ENGMASA : added below code to read and machine type as value : END
+		}
+		// update attribute for new object
+		if (UIUtil.isNotNullAndNotEmpty(sbFinalVal.toString()))
+		{
+			DomainObject doWrkSpace = DomainObject.newInstance(context, strObjectId);
+			doWrkSpace.setAttributeValue(context, ATTRIBUTE_GAP_FRAME_MODEL, sbFinalVal.toString());
+		}
+	}
+	/**
+	 * this method read value from Object array
+	 * @author ENGMASA
+	 * @param object
+	 * @return
+	 * @throws Exception
+	 */
+	public static String readObjectInstanceValue(Object object) throws Exception
+	{
+		String strVal = null;
+		if (object==null)
+			return DomainObject.EMPTY_STRING;
+			//throw new IllegalArgumentException ("Locale is not defined correctly");
+		if (object instanceof String[]) {
+			String stringArray[] = (String[]) object;
+			strVal = stringArray[0];
+		}
+		else if(object instanceof String) {
+			strVal = object.toString();
+		}
+		else
+		{
+			throw new IllegalArgumentException ("Locale is not defined correctly");
+		}
+		return strVal;
+	}
+	/**
+	 * this method returns attribute field list for Workspace
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public MapList displayWorkspaceDescrAttrField(Context context, String args[] ) throws Exception
+	{
+		HashMap programMap  = (HashMap)JPO.unpackArgs(args);
+		//System.out.println("~~~~~~~~~~~~~~~~~~ displayWorkspaceDescrAttrField programMap : "+programMap);
+		MapList mlAttrFieldList = new MapList();
+		String strLang = context.getSession().getLanguage();
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		//String strMode = (String) requestMap.get("mode");
+		// get attribute mappings list for Workspace
+		String strWrkField = i18nNow.getI18nString ("emxTeamCentral.GAP.Project.DescFields", "emxTeamCentralStringResource", strLang); 
+		// split strWrkField and read each value and update list
+		if (UIUtil.isNotNullAndNotEmpty(strWrkField))
+		{
+			StringList slList = FrameworkUtil.split(strWrkField, CONST_PIPE);
+			String strAttrLabel = null;
+			String strAttrName  = null;
+			StringList slAttrValList = null;
+			String strAttr = null;
+			for (int u=0; u<slList.size(); u++)
+			{
+				strAttr = (String) slList.get(u);
+				slAttrValList = FrameworkUtil.split(strAttr, CONST_VAL_SEP);
+				// read values and build field map
+				strAttrLabel = (String) slAttrValList.get(0);
+				strAttrName  = (String) slAttrValList.get(1);
+				// build map
+				// if gapFrameModel then make editable false
+		        if (!"gapFrameModel".equals(strAttrName))
+		        {
+		        	 mlAttrFieldList = buildFieldMap(context, strAttrLabel, strAttrName, u, mlAttrFieldList);
+		        }
+			}
+		}
+		return mlAttrFieldList;
+	}
+	/**
+	 * this method buils field map for Workpsace web form
+	 * @author ENGMASA
+	 * @param context
+	 * @param strAttrLabel
+	 * @param strAttrName
+	 * @param iIndex
+	 * @param mlAttrFieldList
+	 * @return
+	 * @throws Exception
+	 */
+	public MapList  buildFieldMap(Context context, String strAttrLabel, String strAttrName, int iIndex, MapList mlAttrFieldList) throws Exception
+	{
+		Map mpFieldMap = new HashMap();
+		Map mpSettingsMap = new HashMap(); 
+		String LABEL = "label";
+		String EXPRESSION_BUSINESSOBJECT	= "expression_businessobject";
+		String SETTING_FIELD_TYPE			= "Field Type";
+    	String SETTING_ADMIN_TYPE			= "Admin Type";
+    	String SETTING_REGISTERED_SUITE		= "Registered Suite";
+    	String SETTING_UPDATE_PROGRAM		= "Update Program";
+        String SETTING_UPDATE_FUNCTION		= "Update Function";
+        String SETTING_PROGRAM	        	= "program";
+        String SETTING_FUNCTION	        	= "function";
+        
+		mpFieldMap.put(DomainConstants.SELECT_NAME, strAttrName);
+		
+		mpFieldMap.put(DomainConstants.SELECT_DESCRIPTION, "Workpsace desc attribute field");
+		mpFieldMap.put(LABEL, strAttrLabel);
+		mpFieldMap.put(EXPRESSION_BUSINESSOBJECT, "attribute["+strAttrName+"].value");
+		// build settings map
+		mpSettingsMap.put(SETTING_FIELD_TYPE, "programHTMLOutput");
+		mpSettingsMap.put(SETTING_ADMIN_TYPE, "attribute_"+strAttrName);
+		
+		mpSettingsMap.put(SETTING_REGISTERED_SUITE, "TeamCentral");
+		mpSettingsMap.put(SETTING_UPDATE_PROGRAM, "gapWorkspace");
+		mpSettingsMap.put(SETTING_UPDATE_FUNCTION, "setAttrFieldValue");
+		
+		mpSettingsMap.put(SETTING_PROGRAM, "gapWorkspace");
+		mpSettingsMap.put(SETTING_FUNCTION, "getDescAttrField");
+		// add sequence custom
+		//mpSettingsMap.put("GAP_FIELD_SQU", iIndex);
+		
+		mpFieldMap.put("settings", mpSettingsMap);
+		mlAttrFieldList.add(mpFieldMap);
+		return mlAttrFieldList;
+	}
+	/**
+	 * this method return HTML output for gap Frame Model field
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getDescAttrField(Context context, String args[]) throws Exception
+	{
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		//System.out.println("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~programMap : "+programMap);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strLang = context.getSession().getLanguage();
+		String strMode = (String) requestMap.get("mode");
+		StringBuffer sbField = new StringBuffer();
+		HashMap mapField = (HashMap) programMap.get("fieldMap");
+		Map mapSettings = (Map) mapField.get("settings");
+		// if null then check form if create form then set mode as edit
+		if (UIUtil.isNullOrEmpty(strMode))
+		{
+			String strFormName = (String) requestMap.get("form");
+			if (strFormName.equals("TMCWorkspaceCreate"))
+				strMode = "edit";
+			else if (strFormName.equals("type_Workspace"))
+			{
+				Map mapImageData = (Map) programMap.get("ImageData");
+				if (mapImageData.containsKey("mapImageData"))
+				{
+					String strHelMarker =(String) mapImageData.get("HelpMarker");
+					//System.out.println("~~~~~~~~~~~~~~~~~~~strHelMarker : "+strHelMarker);
+					if ("emxhelpeditworkspacedetails".equals(strHelMarker))
+					{
+						strMode = "edit";
+					}
+				}
+			}
+		}//strMode = "view";
+		//System.out.println(" edit strMode ::: "+strMode);
+		// read selected values for edit mode		
+		if (UIUtil.isNotNullAndNotEmpty(strMode))
+		{
+			String strObjectId = (String) requestMap.get("objectId");
+			String strVal = DomainObject.EMPTY_STRING;
+			if (UIUtil.isNotNullAndNotEmpty(strObjectId))
+			{
+				DomainObject doWrkSpace = DomainObject.newInstance(context, strObjectId);
+				String strAttrName = (String) mapSettings.get("Admin Type");
+				strAttrName = PropertyUtil.getSchemaProperty(context, strAttrName);
+				strVal = doWrkSpace.getAttributeValue(context, strAttrName);
+			}
+			if (strMode.equals("view"))
+			{
+				return strVal;
+			}
+			else if (strMode.equals("edit"))
+			{
+				String strFieldName = (String) mapField.get(DomainObject.SELECT_NAME);
+				// populate sequence and label to populate text area
+				String strSeq = "1";//String.valueOf((int) mapSettings.get("GAP_FIELD_SQU"));
+				String strLabel = (String) mapField.get("label");
+				StringBuffer sbVal = new StringBuffer();
+				sbVal.append(strSeq)
+					 .append(CONST_VAL_SEP)
+					 .append(strLabel)
+					 .append(CONST_VAL_SEP)
+					 .append(strFieldName);
+				sbField.append("<input type=\"text\" id=\"")
+				       .append(strFieldName)
+				       .append("\" onkeyup=\"javascript:updateWorkspaceDesc('").append(sbVal.toString()).append("');\" name=\"")
+				       .append(strFieldName)
+				       .append("\" value=\"")
+				       .append(strVal)
+				       .append("\" />");
+			}
+		}
+		
+		
+		return sbField.toString();
+	}
+	/**
+	 * this method updates Frame model size for workspace
+	 * @author ENGMASA
+	 * @param context
+	 * @param args
+	 * @throws Exception
+	 */
+	public static void setAttrFieldValue(Context context, String[] args) throws Exception
+	{
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		Object objAttrName = fieldMap.get(DomainObject.SELECT_NAME);
+		//System.out.println("objAttrName : "+objAttrName);
+		Object objAttrValue = requestMap.get(objAttrName);
+		//System.out.println("objAttrValue : "+objAttrValue);
+		String strAttrValue = readObjectInstanceValue(objAttrValue);
+		//System.out.println("strAttrValue : "+strAttrValue);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String strObjectId = (String) paramMap.get("objectId");
+		DomainObject doWrkSpace = DomainObject.newInstance(context, strObjectId);
+		doWrkSpace.setAttributeValue(context, objAttrName.toString(), strAttrValue);
+	}
+	/**
+     * Access function to enable or dosbale description field
+     * @author ENGMASA
+     * @param context
+     * @param args
+     * @return true or false
+     * @throws Exception
+     */
+    public boolean checkIfToBeDisbaled(Context context, String[] args) throws Exception
+    {
+		Map programMap = (HashMap) JPO.unpackArgs(args);
+		String symType = (String)programMap.get("type");
+		//${CLASS:emxContextUtil}.mqlNotice(context, "1");
+		return true;
+    }
+	public static void main(String[] args) {
+		Object ob = "[Ljava.lang.String;@6b019d61";
+		System.out.println("ob : "+ob);
+	}
+}
+

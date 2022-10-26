@@ -1,0 +1,56 @@
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.HazardTemplate;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws RiskMgmtException {
+		super();
+	}
+
+	public int deleteHazardsConnectedToHazardTemplate(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String hazardTemplateId = args[0];
+			if (!RiskMgmtUtil.isNullOrEmpty(hazardTemplateId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(hazardTemplateId);
+				String[] hazardIds = null;
+				List<Map<?, ?>> relHazardList = hazardTemplate.getHazards(context, new StringList(DomainObject.SELECT_ID), new StringList(
+						DomainRelationship.SELECT_ID), DomainConstants.EMPTY_STRING);
+				if (!RiskMgmtUtil.isNullOrEmpty(relHazardList)) {
+					hazardIds = new String[relHazardList.size()];
+					for (int index = 0; index < relHazardList.size(); index++) {
+						hazardIds[index] = (String) relHazardList.get(index).get(DomainObject.SELECT_ID);
+					}
+					DomainObject.deleteObjects(context, hazardIds);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+		return 0;
+	}
+}
+

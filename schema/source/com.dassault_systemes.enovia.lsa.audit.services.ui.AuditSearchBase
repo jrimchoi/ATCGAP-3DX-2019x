@@ -1,0 +1,616 @@
+/************************************************************************************************************
+/*   AuditSearchBase
+ **
+ **  Copyright (c) 2014-2018 Dassault Systemes
+ *   All Rights Reserved.
+ *   This program contains proprietary and trade secret information of
+ *   Dassault Systemes  Copyright notice is precautionary only
+ **   and does not evidence any actual or intended publication of such program.
+ **
+ *
+
+  Author   Date         Description
+
+  SCT      09-APR-2007  AuditSearchBase program to handle Search Operations
+
+
+ ************************************************************************************************************/
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Locale;
+import java.util.Set;
+import java.util.StringTokenizer;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+
+
+public class ${CLASSNAME}  extends DomainObject
+{
+
+
+    /**
+     * Constructor.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     *
+     * @throws Exception if the operation fails
+     *
+     * @since AEF 10.5.0.0
+     */
+
+    public ${CLASSNAME}(Context context, String[] args) throws Exception
+    {
+        super();
+    }
+
+    /**
+     * This method get Business Objects for the specified criteria in General Search.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args contains a Map with the following entries: txtName - a String of specified criteria name txtRev - a
+     * String of specified criteria revision txtTypeActual - a String of specified criteria type
+     * txtTypeDisplay - a String of specified criteria type vaultSelction - a String of specified criteria
+     * vault QueryLimit - a String of limit on the number of objects found latestRevision - a String
+     * containing the latestRevision info of the object criterion attribute values with name prefix txt_
+     *
+     * @return MapList containing Business objects for search result
+     *
+     * @throws Exception if the operation fails
+     */
+    @com.matrixone.apps.framework.ui.ProgramCallable
+    public MapList getGeneralSearchResult(Context context, String[] args)
+    throws Exception
+    {
+        MapList totalresultList = new MapList();
+        try
+        {
+            // Get the parameter Hashmap.
+
+            HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+            String strFromMoveProject = (String)paramMap.get( "fromMoveProject" );
+            HashMap RequestValuesMap = (HashMap) paramMap.get("RequestValuesMap");
+            String strMoveProjectToIdea = (String)paramMap.get( "moveProjectToIdea" );
+
+            // Retrieve Search criteria
+            String strObjectId = (String) paramMap.get("objectId");
+
+            String sTxtType = (String) paramMap.get("txtType");
+            //System.out.println("sTxtType"+sTxtType);
+            //String sTxtOwnership = (String) paramMap.get("Ownership");
+            // Added for new enhancements in Response
+            String strTxtTitle = (String) paramMap.get("txtTitle");
+
+            String strName = (String) paramMap.get("txtName");
+            // below two lines make as a  comment for fixing the bug  bug id 11510
+            String sTxtRev = (String) paramMap.get("txtRevision");
+            //System.out.println("sTxtRev"+sTxtRev);
+            //modified for fixing the query limit in search
+            //String strQueryLimit = (String) paramMap.get("QueryLimit");
+            String strQueryLimit = (String) paramMap.get("queryLimit");
+            // String strLatestRevision = (String) paramMap.get("latestRevision");
+            String sTxtVaultOption = (String) paramMap.get("vaultSelction");
+
+            // OCD to select only the selected Owners items
+            String sTxtOwner = DomainConstants.QUERY_WILDCARD;
+            // DCO Search extension #7903
+            String sParamOwner = (String) paramMap.get("txt_Owner");
+            if (null!=sParamOwner && !sParamOwner.equals(""))
+            {
+                sTxtOwner = sParamOwner;
+            }
+            String sFolderAccess = (String) paramMap.get("folderaccess");
+            if (null!=sFolderAccess)
+            {
+                sTxtOwner = context.getUser();
+            }
+            StringBuffer strWhereExp = new StringBuffer();
+            String strTxtFormat = DomainConstants.QUERY_WILDCARD;
+            String strTxtSearch = DomainConstants.EMPTY_STRING;
+            String sTxtVault = DomainConstants.EMPTY_STRING;
+            String strWhAttrs = "";
+            String strReqParam = "";
+            String strKeyName = "";
+            String strStateClause = "";
+            String strState = "";
+            String strAttrName = "";
+            char chDblQuotes = '\"';
+            int iStateCount = 0;
+            StringBuffer strBufferState = new StringBuffer();
+
+            // Added by OCD to get values of multiselect list box
+            String strAttrVal[] ;
+
+            String strMQLCommand = "";
+            String strIsParentType = "";
+            String sTypeDocuments = PropertyUtil.getSchemaProperty("type_DOCUMENTS");
+            String sAttrIsVersionObject = PropertyUtil.getSchemaProperty(context, "attribute_IsVersionObject");
+            String sAttrCategories = PropertyUtil.getSchemaProperty(context, "attribute_Categories");
+
+            StringList sListIsParentType = new StringList();
+            String strType = "";
+            if (null==sTxtType || sTxtType.equals(""))
+            {
+                // get the type name when not selected from type chooser
+                sTxtType = (String) paramMap.get("type");
+            }
+
+            if (sTxtType.equals(DomainConstants.QUERY_WILDCARD))
+            {
+                sListIsParentType.add("TRUE");
+            }
+            else
+            {
+                StringTokenizer sTokType = new StringTokenizer(sTxtType, ",");
+                while (sTokType.hasMoreTokens())
+                {
+                    strType = (String) sTokType.nextElement();
+                    // Command to check if selected type is derived from main type "DOCUMENTS"
+                    strMQLCommand = "print type '" + strType + "' select kindof[" + sTypeDocuments + "]";
+                    strIsParentType = MqlUtil.mqlCommand(context, strMQLCommand);
+
+                    // Add all the results "TRUE/FALSE" in a StringList
+                    sListIsParentType.add(strIsParentType.substring(strIsParentType.indexOf("=") + 1).trim());
+                }
+            }
+
+            // construct vault search criteria
+            if (null==sTxtVaultOption)
+            {
+                sTxtVaultOption = "";
+            }
+
+            // get the vaults based upon vault option selection.
+            sTxtVault = PersonUtil.getSearchVaults(context, true, sTxtVaultOption);
+
+            sTxtVault = sTxtVault.trim();
+
+            if ("".equals(sTxtVault))
+            {
+                sTxtVault = PersonUtil.getDefaultVault(context);
+            }
+
+
+            // get Query Limit
+            if (null==strQueryLimit || strQueryLimit.equals("null") || strQueryLimit.equals(""))
+            {
+                strQueryLimit = "0";
+            }
+
+            if (sTxtRev == null || sTxtRev.equalsIgnoreCase("null") || sTxtRev.length() <= 0)
+            {
+                sTxtRev = DomainConstants.QUERY_WILDCARD;
+            }
+            if(null != sTxtRev && !"".equals( sTxtRev ) && !"null".equals( sTxtRev ) && !DomainConstants.QUERY_WILDCARD.equals( sTxtRev ))
+            {
+                if(null != strWhereExp && !"null".equals( strWhereExp ) && !"".equals( strWhereExp ))
+                {
+                    strWhereExp.append(" && Revision ~~ '");
+                    strWhereExp.append(sTxtRev );
+                    strWhereExp.append("' ");
+                }else
+                {
+                    strWhereExp.append(" Revision ~~ '");
+                    strWhereExp.append(sTxtRev );
+                    strWhereExp.append("' ");
+                }
+            }
+
+            //Build where expresstion
+
+            if(null != strName && !"".equals( strName ) && !"null".equals( strName ) && !DomainConstants.QUERY_WILDCARD.equals( strName ))
+            {
+                if(null != strWhereExp && !"null".equals( strWhereExp ) && !"".equals( strWhereExp ))
+                {
+                	strWhereExp.append(" && Name ~~ '" );
+                	strWhereExp.append(strName );
+                	strWhereExp.append("' ");
+                }else
+                {
+                	strWhereExp.append( " Name ~~ '" );
+                	strWhereExp.append(strName );
+                	strWhereExp.append("' ");
+                }
+            }
+
+            if(null!=strWhereExp && !"".equals( strWhereExp ))
+            {
+            	strWhereExp.append(AuditConstants.STR_AND) ;
+            }
+            // Iterate through input param map & build Where Clause for search query
+            Set paramSet = paramMap.keySet();
+            Iterator paramItr = paramSet.iterator();
+            // Looking for attributes and adding them to where Clause
+            while (paramItr.hasNext())
+            {
+                strKeyName = (String) paramItr.next();
+                strWhAttrs = "";
+                if (strKeyName.length() > 4)
+                {
+                    strReqParam = strKeyName.substring(0, 4);
+                    if (strReqParam.equals("txt_"))
+                    {
+
+                        // Added by OCD to get values of multiselect list box
+                        strAttrVal = (String[]) RequestValuesMap.get(strKeyName);
+                        if (null==strAttrVal)
+                        {
+                            strWhAttrs = (String) paramMap.get(strKeyName);
+                        }
+                        // Make comma seperated selected value
+                        else
+                        {
+                            for (int iAttrCnt = 0; iAttrCnt < strAttrVal.length; iAttrCnt++)
+                            {
+                                if (!strWhAttrs.equalsIgnoreCase(""))
+                                {
+                                    strWhAttrs += "," + strAttrVal[iAttrCnt];
+                                }
+                                else
+                                {
+                                    strWhAttrs = strAttrVal[iAttrCnt];
+                                }
+
+                            }
+                        }
+                        // End of Additions
+                        if (null!=strWhAttrs && !strWhAttrs.equalsIgnoreCase("null") && strWhAttrs.equals(DomainConstants.QUERY_WILDCARD))
+                        {
+                            strWhAttrs = "";
+                        }
+
+                        // To check if it is not state
+                        if (!strKeyName.equals("txt_State"))
+                        {
+                            strAttrName = strKeyName.substring(4, strKeyName.length());
+                            System.out.println("strAttrName"+strAttrName);
+                            if (strAttrName.equals("originated") && !strWhAttrs.equals("null") && !strWhAttrs.equals(""))
+                            {
+
+                            	strWhereExp.append("( originated >=\"" );
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "12:00:00 AM") );
+                            	strWhereExp.append("\" && originated <=\"");
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "11:59:59 PM") );
+                            	strWhereExp.append("\" ) &&");
+                            }
+                            else if (strAttrName.equals("modified") && !strWhAttrs.equals("null") && !strWhAttrs.equals(""))
+                            {
+
+                            	strWhereExp.append("( modified >=\"" );
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "12:00:00 AM") );
+                            	strWhereExp.append("\" && modified <=\"");
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "11:59:59 PM") );
+                            	strWhereExp.append("\" ) &&");
+                            }
+                            strAttrName = PropertyUtil.getSchemaProperty("attribute_" + strAttrName);
+                            String sAttrNamePlannedED = PropertyUtil.getSchemaProperty("attribute_PlannedEffectiveDate");
+                            // Handle special case for attribute "categories" which is consists comma seperated
+                            // range values
+                            if (sAttrCategories.equals(strAttrName) && !strWhAttrs.equals("null") && !strWhAttrs.equals(""))
+                            {
+                            	strWhereExp.append("(attribute[" );
+                            	strWhereExp.append(strAttrName );
+                            	strWhereExp.append("] ~~ " );
+                            	strWhereExp.append(chDblQuotes );
+                            	strWhereExp.append(DomainConstants.QUERY_WILDCARD );
+                            	strWhereExp.append(strWhAttrs );
+                            	strWhereExp.append(DomainConstants.QUERY_WILDCARD );
+                            	strWhereExp.append(chDblQuotes );
+                            	strWhereExp.append(") &&");
+                            }
+                            else if (sAttrNamePlannedED.equals(strAttrName) && !strWhAttrs.equals("null") && !strWhAttrs.equals(""))
+                            {
+                            	strWhereExp.append("(attribute[");
+                            	strWhereExp.append(strAttrName );
+                            	strWhereExp.append("] >= '" );
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "12:00:00 AM") );
+                            	strWhereExp.append("' && ");
+                            	strWhereExp.append("attribute[" );
+                            	strWhereExp.append(strAttrName );
+                            	strWhereExp.append("] <= '" );
+                            	strWhereExp.append(setDateFormatForDCOform(strWhAttrs, "11:59:59 PM") );
+                            	strWhereExp.append("') &&");
+
+                            }
+                            //modified for Owner search
+                            else if (!(strWhAttrs == null || strWhAttrs.equalsIgnoreCase("null") || strWhAttrs.length() <= 0)
+                                    && !(strAttrName == null || strAttrName.equalsIgnoreCase("null") || strAttrName.length() <= 0) && !strAttrName.equalsIgnoreCase("Owner"))
+                            {
+                                // Added by OCD to get values of multiselect list box
+                                // Tokenize through each value to form a where clause
+                                StringTokenizer sTok = new StringTokenizer(strWhAttrs, ",");
+                                while (sTok.hasMoreTokens())
+                                {
+                                    String strAttrEachValue = sTok.nextToken();
+                                    //strWhereExp += "(attribute[" + strAttrName + "] ~~ " + chDblQuotes + strAttrEachValue + chDblQuotes + ") ||";
+                                    strWhereExp.append( " (attribute[" );
+                                    strWhereExp.append(strAttrName );
+                                    strWhereExp.append("] ~~ " );
+                                    strWhereExp.append(chDblQuotes );
+                                    strWhereExp.append(strAttrEachValue );
+                                    strWhereExp.append(chDblQuotes);
+                                    strWhereExp.append(") &&");
+                                }
+                                strWhereExp=new StringBuffer(strWhereExp.substring(0, strWhereExp.length() - 2));
+                                strWhereExp.append("&&");
+                            }
+                        }
+                    }
+                }
+            }
+            if(strWhereExp.toString().endsWith( "&& " ))
+            {
+                strWhereExp = new StringBuffer(strWhereExp.substring(0, strWhereExp.length() - 3));
+            }
+
+            // Added by OCD to search for multiple selected State values
+            String sTxtState = "";
+            int iAttrCnt = 0;
+            strAttrVal = (String[]) RequestValuesMap.get("txt_State");
+            if (null==strAttrVal)
+            {
+                sTxtState = (String) paramMap.get("txt_State");
+            }
+            // Make comma seperated selected value
+            else
+            {
+                for (iAttrCnt = 0; iAttrCnt < strAttrVal.length; iAttrCnt++)
+                {
+                    if (!sTxtState.equalsIgnoreCase(""))
+                    {
+                        sTxtState += "," + strAttrVal[iAttrCnt];
+                    }
+                    else
+                    {
+                        sTxtState = strAttrVal[iAttrCnt];
+                    }
+
+                }
+            }
+            // End of Additions
+
+            if ((null == (sTxtState)) || ("null".equals(sTxtState)) || (DomainConstants.QUERY_WILDCARD.equals(sTxtState)))
+            {
+                sTxtState = "";
+            }
+
+            if (!(sTxtState == null || sTxtState.equalsIgnoreCase("null") || sTxtState.length() <= 0))
+            {
+
+                // support DomainConstants.QUERY_WILDCARD character in state search criteria
+                if (sTxtState.indexOf(DomainConstants.QUERY_WILDCARD) != -1)
+                {
+                	strWhereExp.append("(current ~~'" );
+                	strWhereExp.append(sTxtState );
+                	strWhereExp.append("')");
+                }
+                else if ("Current".equals(sTxtState) || "Exists".equals(sTxtState))
+                {
+                    // state name "Current" is reserved key word
+                    // use "const" key word to append search criteria
+                	strWhereExp.append("(current == const '" );
+                	strWhereExp.append(sTxtState );
+                	strWhereExp.append("')");
+                }
+                else
+                {
+                    // support search objects with comma separated State search criteria
+                    StringTokenizer stateToken = new StringTokenizer(sTxtState, ",");
+                    strBufferState = new StringBuffer();
+                    strBufferState.append("(");
+                    while (stateToken.hasMoreTokens())
+                    {
+                        strState = stateToken.nextToken();
+                        if (iStateCount > 0)
+                        {
+                            strBufferState.append("||");
+                        }
+                        strBufferState.append("(current== const '" + strState + "')");
+                        iStateCount++;
+                    }
+                    strBufferState.append(")");
+                    strStateClause = strBufferState.toString();
+                    strWhereExp.append(strStateClause);
+                }
+            }
+            else
+            {
+                if (strWhereExp.toString().endsWith("&&"))
+                {
+                    strWhereExp = new StringBuffer(strWhereExp.substring(0, (strWhereExp.length() - 2)));
+                }
+            }
+            // construct description search clause
+            String sTxtDescription = (String) paramMap.get("txtDescription");
+            System.out.println("\n sTxtDescription.........."+sTxtDescription);
+            if (null!=sTxtDescription && !sTxtDescription.equalsIgnoreCase("null") && sTxtDescription.equals(DomainConstants.QUERY_WILDCARD))
+            {
+                sTxtDescription = "";
+            }
+            if (!(sTxtDescription == null || sTxtDescription.equalsIgnoreCase("null") || sTxtDescription.length() <= 0))
+            {
+                // take care of blank WhereClause Expression
+                if (strWhereExp.equals(""))
+                {
+                	strWhereExp.append("(description ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(sTxtDescription );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+
+                else
+                {
+                	strWhereExp.append("&& (description ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(sTxtDescription );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+            }
+            //modified for Owner search
+            // construct Owner search clause
+            String sTxtOwner1 = (String) paramMap.get("txt_Owner");
+            if (null!=sTxtOwner && !sTxtOwner.equalsIgnoreCase("null") && sTxtOwner.equals(DomainConstants.QUERY_WILDCARD))
+            {
+                sTxtOwner1 = "";
+            }
+            if (!(sTxtOwner1 == null || sTxtOwner1.equalsIgnoreCase("null") || sTxtOwner1.length() <= 0))
+            {
+                // take care of blank WhereClause Expression
+                if (strWhereExp.equals(""))
+                {
+                	strWhereExp.append("(owner ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(sTxtOwner1);
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+
+                else
+                {
+                	strWhereExp.append( "&& (owner ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(sTxtOwner1);
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+            }
+            // Filter Version objects from search results
+            if (sListIsParentType.contains("TRUE"))
+            {
+                if (strWhereExp.equals(""))
+                {
+                	strWhereExp.append("(!attribute[");
+                	strWhereExp.append(sAttrIsVersionObject );
+                	strWhereExp.append("] == " );
+                	strWhereExp.append(chDblQuotes);
+                	strWhereExp.append("True" );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+                else
+                {
+                	strWhereExp.append("&& (!attribute[" );
+                	strWhereExp.append(sAttrIsVersionObject);
+                	strWhereExp.append("] == " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append("True" );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+            }
+
+            // To ensure that the object calling this method doesn't get selected
+            if (sTxtType.equals(DomainConstants.TYPE_WORKSPACE_VAULT))
+            {
+                if (strWhereExp.equals("") && !(strObjectId.equals("null") || strObjectId == null || strObjectId.equals("")))
+                {
+                	strWhereExp.append( "(" );
+                	strWhereExp.append(DomainConstants.SELECT_ID );
+                	strWhereExp.append(" != ");
+                	strWhereExp.append(strObjectId );
+                	strWhereExp.append(" )");
+                }
+                else
+                {
+                	strWhereExp.append("&& (" );
+                	strWhereExp.append(DomainConstants.SELECT_ID );
+                	strWhereExp.append(" != ");
+                	strWhereExp.append(strObjectId );
+                	strWhereExp.append(" )");
+                }
+            }
+
+            // Filter Version objects from search results
+            if (null!=strTxtTitle && !strTxtTitle.equalsIgnoreCase("null") && strTxtTitle.equals(DomainConstants.QUERY_WILDCARD))
+            {
+                strTxtTitle = "";
+            }
+            if (!(strTxtTitle == null || strTxtTitle.equalsIgnoreCase("null") || strTxtTitle.length() <= 0))
+            {
+                if (strWhereExp.equals(DomainConstants.QUERY_WILDCARD))
+                {
+                	strWhereExp.append("(attribute[" );
+                	strWhereExp.append(DomainConstants.ATTRIBUTE_TITLE );
+                	strWhereExp.append("] ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(strTxtTitle );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+                else
+                {
+                	strWhereExp.append( "&& (attribute[" );
+                	strWhereExp.append(DomainConstants.ATTRIBUTE_TITLE );
+                	strWhereExp.append("] ~~ " );
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(strTxtTitle);
+                	strWhereExp.append(chDblQuotes );
+                	strWhereExp.append(")");
+                }
+            }
+            // Selectlist for Search
+            SelectList resultSelects = new SelectList();
+            resultSelects.add(DomainConstants.SELECT_ID);
+            resultSelects.add(DomainConstants.SELECT_OWNER);
+            resultSelects.add(DomainConstants.SELECT_TYPE);
+            resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+            resultSelects.add(DomainConstants.SELECT_CURRENT);
+            resultSelects.add(DomainConstants.SELECT_POLICY);
+
+            // Searching for business objects and storing it in a MapList
+            totalresultList = new MapList();
+            totalresultList = DomainObject.findObjects(context, sTxtType, DomainConstants.QUERY_WILDCARD, DomainConstants.QUERY_WILDCARD, sTxtOwner, sTxtVault, strWhereExp.toString(), null, true,
+                    resultSelects, Short.parseShort(strQueryLimit), strTxtFormat, strTxtSearch);
+            return totalresultList;
+
+        }
+        catch (Exception objException)
+        {
+            System.out.println("Exception Occured:" + objException.toString());
+            throw objException;
+        }
+    }
+
+
+
+
+
+    /**
+     * Formats a date to the predefined format.
+     *
+     * @param date the date
+     * @param endStr the end str
+     *
+     * @return formatted date
+     */
+    public String setDateFormatForDCOform(String date, String endStr)
+    {
+        String sReturnString = DomainConstants.EMPTY_STRING;
+        Date oldDate = new Date(date);
+        SimpleDateFormat sdfFormatter = new SimpleDateFormat("MM/dd/yyyy", Locale.US);
+        sReturnString = sdfFormatter.format(oldDate) + " " + endStr;
+
+        return sReturnString;
+    }
+
+
+
+}
+
+

@@ -1,0 +1,1703 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+import java.util.stream.Stream;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPAProjectService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService.CAPARequestFilter;
+import com.dassault_systemes.enovia.lsa.services.PNOService;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws QICException
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws QICException {
+		super();
+	}
+
+	/**
+	 * Get the CAPARequestService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARequestService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARequestService getCAPARequestService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARequestService service = (CAPARequestService) LSAQICCore.getService(CAPARequestService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Get the PNOService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return PNOService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static PNOService getPNOService(Context context) throws QICException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			PNOService service = (PNOService) component.getService(PNOService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets CAPAProjectService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return CAPAProjectService implementation reference
+	 * @throws QICException
+	 *             if operation fails
+	 */
+	private static CAPAProjectService getCAPAProjectService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPAProjectService service = (CAPAProjectService) LSAQICCore.getService(CAPAProjectService.class);
+			return service;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the CAPA Requests based on selected filter.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Map containing CAPA Requests.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getMyCAPARequests(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			List<Map<?, ?>> returnMap = null;
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && !Helper.isNullOrEmpty(strQMFilterValue)) {
+				switch (strQMFilterValue) {
+				case QICConstants.FILTER_VALUE_ASSIGNED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.ASSIGNED);
+					break;
+				case QICConstants.FILTER_VALUE_UNASSIGNED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.UNASSIGNED);
+					break;
+				case QICConstants.FILTER_VALUE_OPENED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.OPENED);
+					break;
+				case QICConstants.FILTER_VALUE_CLOSED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.CLOSED);
+					break;
+				default:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.ASSIGNED);
+				}
+			}
+			else if (!Helper.isNullOrEmpty(strFilterValue)) {
+				switch (strFilterValue) {
+				case QICConstants.FILTER_VALUE_ASSIGNED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.ASSIGNED);
+					break;
+				case QICConstants.FILTER_VALUE_OPENED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.OPENED);
+					break;
+				case QICConstants.FILTER_VALUE_CLOSED:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.CLOSED);
+					break;
+				default:
+					returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.ASSIGNED);
+				}
+			}
+			else {
+				returnMap = CAPA_REQUEST_SERVICE.getMyWorkQueueCAPARequests(context, CAPARequestFilter.ASSIGNED);
+			}
+			return new MapList(returnMap);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets appropriate icon indicating the status of CAPA Request in Work Queue
+	 * table colomn.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 */
+	public List<String> getTableQICCPRSummaryColumnStatus(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcStatus = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Iterator<Map<?, ?>> iterator = ObjList.iterator(); iterator.hasNext();) {
+					Map<?, ?> object = iterator.next();
+					String strCAPARequestId = (String) object.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						List<Map<?, ?>> lmCAPARequestInfo = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+								Helper.stringList(DomainConstants.SELECT_POLICY, DomainConstants.SELECT_CURRENT));
+						if (lmCAPARequestInfo.size() > 0) {
+							Map mpCAPARequestInfo = (Map) lmCAPARequestInfo.get(0);
+							String strPolicy = (String) mpCAPARequestInfo.get(DomainConstants.SELECT_POLICY);
+							String strState = (String) mpCAPARequestInfo.get(DomainConstants.SELECT_CURRENT);
+							if (!Helper.isNullOrEmpty(strPolicy) && !Helper.isNullOrEmpty(strState)) {
+								StringBuilder sbStatus = new StringBuilder();
+								String strSymbolicPolicy = FrameworkUtil.getAliasForAdmin(context, DomainConstants.SELECT_POLICY, strPolicy, true);
+								if (!Helper.isNullOrEmpty(strSymbolicPolicy)) {
+									String strSymbolicState = QICUtil.getSymbolicStateName(context, strSymbolicPolicy, strState);
+									if (!Helper.isNullOrEmpty(strSymbolicState)) {
+										switch (strSymbolicState) {
+										case QICConstants.SYMBOLIC_STATE_PRELIMINARY:
+											sbStatus.append("<img src=\"../common/images/iconStatusYellow.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_REQUESTED:
+											sbStatus.append("<img src=\"../common/images/iconStatusYellow.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_REVIEW:
+											sbStatus.append("<img src=\"../common/images/iconStatusYellow.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_APPROVED:
+											sbStatus.append("<img src=\"../common/images/iconStatusGreen.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_NOT_APPROVED:
+											sbStatus.append("<img src=\"../common/images/iconStatusRed.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_COMMITTED:
+											sbStatus.append("<img src=\"../common/images/iconStatusGreen.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_FULFILLED:
+											sbStatus.append("<img src=\"../common/images/iconStatusGreen.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										case QICConstants.SYMBOLIC_STATE_DUPLICATE:
+											sbStatus.append("<img src=\"../common/images/iconActionCopy.gif\" border=\"0\" />");
+											vcStatus.add(sbStatus.toString());
+											break;
+										default:
+											vcStatus.add(DomainConstants.EMPTY_STRING);
+										}
+									}
+									else
+										vcStatus.add(DomainConstants.EMPTY_STRING);
+								}
+								else
+									vcStatus.add(DomainConstants.EMPTY_STRING);
+							}
+							else
+								vcStatus.add(DomainConstants.EMPTY_STRING);
+						}
+						else
+							vcStatus.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcStatus;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets the number of days (Age) of the CAPA Request
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return String value for Age.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public List<String> getTableQICCPRSummaryColumnAge(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcAge = new Vector<String>();
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				String strCAPARequestId = (String) objectMap.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+					String strNumberOfDays = CAPA_REQUEST_SERVICE.getCAPARequestAge(context, DomainObject.newInstance(context, strCAPARequestId));
+					vcAge.add(strNumberOfDays);
+				}
+				else
+					vcAge.add(DomainConstants.EMPTY_STRING);
+			}
+			return vcAge;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public void updateQICCPRSummaryColumnProblemStatement(Context context, String[] args) throws QICException {
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> mpParamMap = (HashMap<?, ?>) programMap.get(QICConstants.PARAM_MAP);
+			String strNewVal = (String) mpParamMap.get(QICConstants.NEW_VALUE);
+			String strCAPARequestId = (String) mpParamMap.get(QICConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strNewVal)) {
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				attributeMap.put(DomainObject.ATTRIBUTE_COMMENTS, strNewVal);
+				QICUtil.setAttributeValues(context, DomainObject.newInstance(context, strCAPARequestId), attributeMap);
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public String reloadQICCPRSummaryColumnProblemStatement(Context context, String[] args) throws QICException {
+		try {
+			String strProblemStatement = DomainObject.EMPTY_STRING;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+			return strProblemStatement;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Associated Route Icon showing Owner of Route on Tool Tip and opening
+	 * Route's properties page on click of that icon in CAPA Request Work Queue
+	 * table column.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCPRSummaryColumnApprovalRoute(Context context, String[] args) throws QICException {
+		final ReviewRouteService REVIEW_ROUTE_SERVICE = QICUtil.getReviewRouteService(context);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcApprovalRoute = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strRouteId = DomainObject.EMPTY_STRING;
+					String strRouteOwner = DomainObject.EMPTY_STRING;
+					String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						Map<?, ?> returnMap = REVIEW_ROUTE_SERVICE.getCurrentReviewRoute(context, DomainObject.newInstance(context, strCAPARequestId),
+								Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_OWNER), null);
+						if (!Helper.isNullOrEmpty(returnMap)) {
+							strRouteId = (String) returnMap.get(DomainConstants.SELECT_ID);
+							strRouteOwner = (String) returnMap.get(DomainConstants.SELECT_OWNER);
+						}
+						if (!Helper.isNullOrEmpty(strRouteId) && !Helper.isNullOrEmpty(strRouteOwner)) {
+							StringBuilder sbImage = new StringBuilder();
+							sbImage.append("<img src=\"../common/images/iconSmallRoute.gif\" border=\"0");
+							sbImage.append("\" alt=\"");
+							sbImage.append(XSSUtil.encodeForHTML(context, strRouteOwner));
+							sbImage.append("\" title=\"");
+							sbImage.append(XSSUtil.encodeForHTML(context, strRouteOwner));
+							sbImage.append("\"/>");
+
+							StringBuilder sbHref = new StringBuilder();
+							sbHref.append("<a href=\"javascript:showModalDialog('../common/emxTree.jsp?mode=insert");
+							sbHref.append("&amp;objectId=");
+							sbHref.append(XSSUtil.encodeForHTML(context, (String) strRouteId));
+							sbHref.append("'");
+							sbHref.append(",'','', true, 'popup')\">");
+							sbHref.append(sbImage);
+							sbHref.append("</a>");
+							vcApprovalRoute.add(sbHref.toString());
+						}
+						else {
+							vcApprovalRoute.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcApprovalRoute;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Associated Route Icon showing Owner of Route on Tool Tip and opening
+	 * Route's properties page on click of that icon in CAPA Request Work Queue
+	 * table column.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCPRSummaryColumnTransferNotes(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_NOTES = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_attribute_Notes);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcTransferNotes = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strTransferNotes = DomainObject.EMPTY_STRING;
+					String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+								Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES)));
+						if (!Helper.isNullOrEmpty(returnMap)) {
+							Map requestInfoMap = (Map) returnMap.get(0);
+							strTransferNotes = (String) requestInfoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES));
+						}
+						if (!Helper.isNullOrEmpty(strTransferNotes)) {
+							StringBuilder sbImage = new StringBuilder();
+							sbImage.append("<img src=\"../common/images/iconSmallAttachment.gif\" border=\"0");
+							sbImage.append("\" alt=\"");
+							sbImage.append(XSSUtil.encodeForHTML(context, strTransferNotes));
+							sbImage.append("\" title=\"");
+							sbImage.append(XSSUtil.encodeForHTML(context, strTransferNotes));
+							sbImage.append("\"/>");
+							vcTransferNotes.add(sbImage.toString());
+						}
+						else {
+							vcTransferNotes.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+				}
+			}
+			return vcTransferNotes;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Originator of the Object and opening Originator's properties page on
+	 * click of that Originator Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCPRSummaryColumnOriginator(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOriginator = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strRequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strRequestOriginatorHyperLink = QICUtil.getOriginatorHyperlink(context, strRequestId);
+					if (!Helper.isNullOrEmpty(strRequestOriginatorHyperLink)) {
+						vcOriginator.add(strRequestOriginatorHyperLink);
+					}
+					else {
+						vcOriginator.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOriginator;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Organization of the Object and opening Organization's properties
+	 * page on click of that Organization Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCPRSummaryColumnOrganization(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOrganization = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strRequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strRequestOrganizationHyperLink = QICUtil.getOrganizationHyperlink(context, strRequestId);
+					if (!Helper.isNullOrEmpty(strRequestOrganizationHyperLink)) {
+						vcOrganization.add(strRequestOrganizationHyperLink);
+					}
+					else {
+						vcOrganization.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOrganization;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gets Owner of the Object and opening Owner's properties page on click of
+	 * that Owner Name HyperLink.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws QICException
+	 * 
+	 */
+	public List<String> getTableQICCPRSummaryColumnOwner(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> ObjList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			List<String> vcOwner = new Vector<String>();
+			if (!Helper.isNullOrEmpty(ObjList)) {
+				for (Object obj : ObjList) {
+					Map requestMap = (Map) obj;
+					String strRequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+					String strRequestOwnerHyperLink = QICUtil.getOwnerHyperlink(context, strRequestId);
+					if (!Helper.isNullOrEmpty(strRequestOwnerHyperLink)) {
+						vcOwner.add(strRequestOwnerHyperLink);
+					}
+					else {
+						vcOwner.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			return vcOwner;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Accept" command and "Accept Ownership" Column on
+	 * CAPA Request WorkQueue Table for "Unassigned" filter.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewTableQICCPRSummaryActionAcceptOwnership(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && !Helper.isNullOrEmpty(strQMFilterValue)
+					&& strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)) {
+				blAccess = true;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Submit" command from CAPA Request WorkQueue
+	 * Actions. It is visible in "Assigned" and "My Opened" Filters only.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummarySubmit(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = true;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && !Helper.isNullOrEmpty(strQMFilterValue)
+					&& (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+							|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			else if (!Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager, QICConstants.SYMBOLIC_role_VPLMProjectLeader)
+					&& !Helper.isNullOrEmpty(strFilterValue) && (strFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Needs Information" command from CAPA Request
+	 * WorkQueue Actions. It is visible in "Assigned" and "My Opened" Filters
+	 * only.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummaryNeedsInformation(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				blAccess = true;
+			}
+			if (!Helper.isNullOrEmpty(strQMFilterValue) && (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+					|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Change Owner" command from CAPA Request WorkQueue
+	 * Actions. It is visible in "Assigned" and "My Opened" Filters only.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummaryChangeOwner(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = true;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && !Helper.isNullOrEmpty(strQMFilterValue)
+					&& (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+							|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			else if (!Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager, QICConstants.SYMBOLIC_role_VPLMProjectLeader)
+					&& !Helper.isNullOrEmpty(strFilterValue) && (strFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Create CAPA" command from CAPA Request WorkQueue
+	 * Actions. It is visible to only "Project Lead" in "Assigned" and "My
+	 * Opened" Filters.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummaryCreateCAPA(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_ProjectLead)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				blAccess = true;
+			}
+			if (!Helper.isNullOrEmpty(strQMFilterValue) && (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+					|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			else if (!Helper.isNullOrEmpty(strFilterValue) && (strFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Associate CAPA" command from CAPA Request WorkQueue
+	 * Actions. It is visible to only "Project Lead" or "Quality Manger" in
+	 * "Assigned" and "My Opened" Filters.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummaryAssociateCAPA(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_ProjectLead)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				blAccess = true;
+			}
+			if (!Helper.isNullOrEmpty(strQMFilterValue) && (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+					|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			else if (!Helper.isNullOrEmpty(strFilterValue) && (strFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Set Duplicate" command from CAPA Request WorkQueue
+	 * Actions. It is visible to only "Quality Manger" in "Assigned" and "My
+	 * Opened" Filters only.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummarySetDuplicate(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				blAccess = true;
+			}
+			if (!Helper.isNullOrEmpty(strQMFilterValue) && (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+					|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Delete" command from CAPA Request WorkQueue
+	 * Actions. It is visible in "Assigned" and "My Opened" Filters only.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandQICCPRSummaryDelete(Context context, String[] args) throws QICException {
+		try {
+			boolean blAccess = true;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER);
+			String strQMFilterValue = (String) programMap.get(QICConstants.QIC_CPR_FILTER_FOR_QM);
+			if ((Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) && !Helper.isNullOrEmpty(strQMFilterValue)
+					&& (strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_UNASSIGNED)
+							|| strQMFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			else if (!Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager, QICConstants.SYMBOLIC_role_VPLMProjectLeader)
+					&& !Helper.isNullOrEmpty(strFilterValue) && (strFilterValue.equalsIgnoreCase(QICConstants.FILTER_VALUE_CLOSED))) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Edit Access Function to restrict or enable access for the column "CAPA
+	 * Type" in CAPA Request WorkQueue Table.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of boolean values for each Cell.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public static StringList canEditTableQICCPRSummaryColumnCAPAType(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			ArrayList<String> returnList = new ArrayList<String>();
+			for (Object object : objectList) {
+				Map<?, ?> objectMap = (Map<?, ?>) object;
+				String strCurrent = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+				String strOwner = (String) objectMap.get(DomainConstants.SELECT_OWNER);
+				if (context.getUser().equalsIgnoreCase(strOwner) && !Helper.isNullOrEmpty(strCurrent)
+						&& strCurrent.equalsIgnoreCase(STATE_PRELIMINARY)) {
+					returnList.add(Boolean.TRUE.toString());
+				}
+				else {
+					returnList.add(Boolean.FALSE.toString());
+				}
+			}
+			// StringList returnStringList = !Helper.isNullOrEmpty(returnList) ?
+			// new StringList(returnList) : new StringList();
+			return new StringList(returnList);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Edit Access Function to restrict or enable access for the cells in CAPA
+	 * Request WorkQueue Table.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of boolean values for each Cell.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public static StringList canEditTableQICCPRSummaryColumns(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REVIEW);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(QICConstants.OBJECT_LIST);
+			ArrayList<String> returnList = new ArrayList<String>();
+			for (Object object : objectList) {
+				Map<?, ?> objectMap = (Map<?, ?>) object;
+				String strCurrent = (String) objectMap.get(DomainConstants.SELECT_CURRENT);
+				String strOwner = (String) objectMap.get(DomainConstants.SELECT_OWNER);
+				if (context.getUser().equalsIgnoreCase(strOwner) && !Helper.isNullOrEmpty(strCurrent)
+						&& (strCurrent.equalsIgnoreCase(STATE_PRELIMINARY) || strCurrent.equalsIgnoreCase(STATE_REVIEW))) {
+					returnList.add(Boolean.TRUE.toString());
+				}
+				else {
+					returnList.add(Boolean.FALSE.toString());
+				}
+			}
+			// StringList returnStringList = !Helper.isNullOrEmpty(returnList) ?
+			// new StringList(returnList) : new StringList();
+			return new StringList(returnList);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Accept CAPARequests.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return JavaScript Function.
+	 * @throws QICException
+	 *             if operation fails.
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAcceptCAPARequests(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			if (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+					|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader)) {
+				ArrayList<String> alRequestIds = new ArrayList<String>();
+				Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+				String[] arrObjectId = (String[]) programMap.get(QICConstants.OBJECT_ID);
+				String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+				if (!Helper.isNullOrEmpty(tableRowIds)) {
+					List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+					for (EmxTableRowId rowId : emxTableRowIds) {
+						alRequestIds.add(rowId.getObjectId());
+					}
+				}
+				else if (!Helper.isNullOrEmpty(arrObjectId) && !Helper.isNullOrEmpty(arrObjectId[0])) {
+					CAPA_REQUEST_SERVICE.acceptCAPARequests(context, arrObjectId[0]);
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpenerWindow");
+				}
+				if (!Helper.isNullOrEmpty(alRequestIds)) {
+					CAPA_REQUEST_SERVICE.acceptCAPARequests(context, alRequestIds.toArray(new String[alRequestIds.size()]));
+				}
+			}
+			else {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForAcceptCAPARequestsUserNotQualityManager");
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshOpenerWindow");
+		}
+		catch (Exception e) {
+			throw new QICException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Pre-Checks to Submit the selected CAPA Requests.If all CAPA Requests are
+	 * not in "Preliminary" state or if Logged-in User is not the Owner for all,
+	 * then a JavaScript function is called to show appropriate error message
+	 * alert otherwise JavaScript function to show "Submit" form is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForSubmitCAPARequests(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds, Helper.stringList(DomainConstants.SELECT_ID,
+							DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+						if (!Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_PRELIMINARY)
+								&& context.getUser().equalsIgnoreCase(strOwner)) {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedRequestIds.add(strName);
+						}
+					}
+				}
+			}
+			if (arrFailedRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.CanNotSubmitError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionSubmitCAPARequests", sbSuccessRequestIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Submits the CAPA Requests to "Requested" or "Review" state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function for WorkQueu Table refresh.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSubmitCAPARequests(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRequestIds = (String[]) programMap.get(QICConstants.CAPA_REQUEST_IDS);
+			String[] arrOwnerOID = (String[]) programMap.get(QICConstants.FIELD_OWNER_OID);
+			String[] arrResponsibleOrg = (String[]) programMap.get(QICConstants.FIELD_RESPONSIBLE_ORGANIZATION_OID);
+			if (Helper.isNullOrEmpty(arrResponsibleOrg) || Helper.isNullOrEmpty(arrResponsibleOrg[0])) {
+				arrResponsibleOrg[0] = PersonUtil.getUserCompanyId(context);
+			}
+			DomainObject dmoReviewer = (!Helper.isNullOrEmpty(arrOwnerOID) && !Helper.isNullOrEmpty(arrOwnerOID[0]))
+					? DomainObject.newInstance(context, arrOwnerOID[0])
+					: null;
+			if (!Helper.isNullOrEmpty(arrRequestIds) && !Helper.isNullOrEmpty(arrRequestIds[0])) {
+				StringList slRequestIds = FrameworkUtil.split(arrRequestIds[0], QICConstants.COMMA);
+				String[] requestIds = (String[]) slRequestIds.toArray(new String[slRequestIds.size()]);
+				if (!Helper.isNullOrEmpty(arrResponsibleOrg) && !Helper.isNullOrEmpty(arrResponsibleOrg[0])) {
+					DomainObject dmoResponsibleOrg = DomainObject.newInstance(context, arrResponsibleOrg[0]);
+					CAPA_REQUEST_SERVICE.submitCAPARequests(context, dmoResponsibleOrg, dmoReviewer, requestIds);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshCAPARequestWorkQueue");
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks to Promote the selected CAPA Requests back to "Preliminary"
+	 * State.If all CAPA Requests are not in "Review" state or if Logged-in User
+	 * is not the Owner for all, then a JavaScript function is called to show
+	 * appropriate error message alert otherwise JavaScript function to show
+	 * "Needs Information" form is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForNeedsInfoForCAPARequests(Context context, String[] args) throws QICException {
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REVIEW);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds, Helper.stringList(DomainConstants.SELECT_ID,
+							DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+						if (!Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_REVIEW) && context.getUser().equalsIgnoreCase(strOwner)
+								&& (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+										|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader))) {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedRequestIds.add(strName);
+						}
+					}
+				}
+
+			}
+			if (arrFailedRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.NeedsInformation.Failed.Error"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionNeedsInfoForCAPARequests", sbSuccessRequestIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Demotes CAPA Requests to "Preliminary" state for getting more
+	 * Information.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function for WorkQueu Table refresh.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionNeedsInfoForCAPARequests(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRequestIds = (String[]) programMap.get(QICConstants.CAPA_REQUEST_IDS);
+			String[] arrTransferNotes = (String[]) programMap.get(QICConstants.FIELD_TRANSFER_NOTES);
+			if (!Helper.isNullOrEmpty(arrRequestIds) && !Helper.isNullOrEmpty(arrRequestIds[0]) && !Helper.isNullOrEmpty(arrTransferNotes)
+					&& !Helper.isNullOrEmpty(arrTransferNotes[0])) {
+				StringList slRequestIds = FrameworkUtil.split(arrRequestIds[0], QICConstants.COMMA);
+				String[] requestIds = (String[]) slRequestIds.toArray(new String[slRequestIds.size()]);
+				for (String strCAPARequestId : requestIds) {
+					String strTransferNotes = QICUtil.appendTransferNotesValue(context, arrTransferNotes[0], strCAPARequestId);
+					// String strTransferNotes = arrTransferNotes[0];
+					CAPA_REQUEST_SERVICE.needsInfoForCAPARequests(context, strTransferNotes, strCAPARequestId);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshCAPARequestWorkQueue");
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Changes the Owner of CAPA Requests.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForChangeCAPARequestsOwner(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REVIEW);
+		final String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_APPROVED);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			String requestId = DomainConstants.EMPTY_STRING;
+			HashSet<String> hsState = new HashSet<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String strContextUserOrg = PersonUtil.getPersonObject(context).getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORGANIZATION));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+						String strOrganization = (String) requestMap.get(DomainConstants.SELECT_ORGANIZATION);
+						hsState.add(strState);
+						if ((context.getUser().equalsIgnoreCase(strOwner)
+								|| (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager, QICConstants.SYMBOLIC_role_VPLMProjectLeader)
+										&& strContextUserOrg.equalsIgnoreCase(strOrganization)))
+								&& !Helper.isNullOrEmpty(strState) && Stream.of(STATE_PRELIMINARY, STATE_REVIEW, STATE_APPROVED).parallel()
+										.anyMatch(x -> x.equalsIgnoreCase(strState))) {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedRequestIds.add(strName);
+						}
+					}
+				}
+			}
+			if (hsState.size() > 1) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "alertForCAPARequestChangeOwnerAllStateNotUnique");
+			}
+			else if (arrFailedRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.CanNotChangeOwnerError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			requestId = sbSuccessRequestIds.substring(0, sbSuccessRequestIds.indexOf(","));
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionChangeCAPARequestsOwner", sbSuccessRequestIds.toString(),
+					requestId);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Changes the Owner for CAPA Requests.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function for WorkQueu Table refresh.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionChangeCAPARequestsOwner(Context context, String[] args) throws QICException {
+		final PNOService PNO_SERVICE = getPNOService(context);
+		try {
+			String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+					QICConstants.SYMBOLIC_STATE_APPROVED);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRequestIds = (String[]) programMap.get(QICConstants.CAPA_REQUEST_IDS);
+			String[] arrTransferNotes = (String[]) programMap.get(QICConstants.FIELD_TRANSFER_NOTES);
+			String[] arrOwnerOID = (String[]) programMap.get(QICConstants.FIELD_OWNER_OID);
+			if (!Helper.isNullOrEmpty(arrRequestIds) && !Helper.isNullOrEmpty(arrRequestIds[0]) && !Helper.isNullOrEmpty(arrOwnerOID)
+					&& !Helper.isNullOrEmpty(arrOwnerOID[0])) {
+				StringList slRequestIds = FrameworkUtil.split(arrRequestIds[0], QICConstants.COMMA);
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				String[] requestIds = (String[]) slRequestIds.toArray(new String[slRequestIds.size()]);
+				for (String strCAPARequestId : requestIds) {
+					if (!Helper.isNullOrEmpty(arrTransferNotes) && !Helper.isNullOrEmpty(arrTransferNotes[0])) {
+
+						String strTransferNotes = QICUtil.appendTransferNotesValue(context, arrTransferNotes[0], strCAPARequestId);
+						StringList slTransferData = new StringList();
+						slTransferData.add(strTransferNotes);
+						slTransferData.add(strCAPARequestId);
+						if (DomainObject.newInstance(context, strCAPARequestId).getInfo(context, DomainConstants.SELECT_CURRENT)
+								.equals(STATE_APPROVED)) {
+							JPO.invoke(context, "com.dassault_systemes.enovia.lsa.qic.services.ui.Admin", null,
+									"modifyTransferNotesAttributeOnChangeOwnerInApprovedState", (String[]) slTransferData.toArray());
+						}
+						else {
+							attributeMap.put(DomainObject.ATTRIBUTE_NOTES, strTransferNotes);
+						}
+					}
+					DomainObject dmoOwner = DomainObject.newInstance(context, arrOwnerOID[0]);
+					PNO_SERVICE.changeAssignment(context, dmoOwner, attributeMap, strCAPARequestId);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshCAPARequestWorkQueue");
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before showing search page to select an CAPA. All selected
+	 * CAPA Requests should not have already an CAPA. They must be in approved
+	 * state and CAPA Type for all must be same.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForQICCPRSummaryCreateCAPA(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_CAPA_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_TYPE);
+		final String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_APPROVED);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				String strCAPAReqType = DomainConstants.EMPTY_STRING;
+				String strCurrentUser = context.getUser();
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE)));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strCAPAType = (String) requestMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE));
+
+						if (Helper.isNullOrEmpty(strCAPAReqType)) {
+							strCAPAReqType = strCAPAType;
+						}
+						if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strCAPARequestId),
+								QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, "to") > 0) {
+							arrFailedRequestIds.add(strName);
+						}
+						else if (!Helper.isNullOrEmpty(strState) && !strState.equalsIgnoreCase(STATE_APPROVED)) {
+							arrFailedRequestIds.add(strName);
+						}
+						else if (!strCAPAReqType.equals(strCAPAType)) {
+							arrFailedRequestIds.add(strName);
+						}
+						else if (!strCurrentUser.equalsIgnoreCase(DomainObject.newInstance(context, strCAPARequestId).getOwner(context).getName())) {
+							arrFailedRequestIds.add(strName);
+						}
+						else {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+					}
+				}
+			}
+			StringBuilder sbReturn = new StringBuilder();
+			if (arrFailedRequestIds.size() > 0) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.CreateCAPA.Failed.Error"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionCommandQICCPRSummaryCreateCAPA", sbSuccessRequestIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Pre-Checks before showing search page to select an CAPA. All selected
+	 * CAPA Requests should not have already an CAPA. They must be in approved
+	 * state and CAPA Type for all must be same.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForQICCPRSummaryAssociateCAPA(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_CAPA_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_TYPE);
+		final String STATE_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_APPROVED);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				String strCAPAReqType = DomainConstants.EMPTY_STRING;
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE)));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strCAPAType = (String) requestMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE));
+
+						if (Helper.isNullOrEmpty(strCAPAReqType)) {
+							strCAPAReqType = strCAPAType;
+						}
+						if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strCAPARequestId),
+								QICConstants.SYMBOLIC_RELATIONSHIP_INPUT_REQUEST, "to") > 0) {
+							arrFailedRequestIds.add(strName);
+						}
+						else if (!Helper.isNullOrEmpty(strState) && !strState.equalsIgnoreCase(STATE_APPROVED)) {
+							arrFailedRequestIds.add(strName);
+						}
+						else if (!strCAPAReqType.equals(strCAPAType)) {
+							arrFailedRequestIds.add(strName);
+						}
+						else {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+					}
+				}
+			}
+			StringBuilder sbReturn = new StringBuilder();
+			if (arrFailedRequestIds.size() > 0) {
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.AssociateCAPA.Failed.Error"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessageAndCloseParentWindow", sbReturn.toString());
+			}
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionCommandQICCPRSummaryAssociateCAPA",
+					sbSuccessRequestIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Associates CAPA Requests to CAPA.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAssociateCAPARequestsToCAPA(Context context, String[] args) throws QICException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get(QICConstants.CAPA_REQUEST_IDS);
+			String[] objList = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			String[] parentObjectId = (String[]) programMap.get(QICConstants.PARENT_OID);
+			if (Helper.isNullOrEmpty(objectIds)) {
+				objectIds = (String[]) programMap.get(QICConstants.OBJECT_ID);
+			}
+
+			if (!Helper.isNullOrEmpty(objectIds) && !Helper.isNullOrEmpty(objList)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(objList);
+				String strCapaId = emxTableRowIds.get(0).getObjectId();
+				String strObjectIds = objectIds[0];
+				StringList lstCapaReqIds = FrameworkUtil.split(strObjectIds, QICConstants.COMMA);
+				String[] capaReqIds = (String[]) lstCapaReqIds.toArray(new String[lstCapaReqIds.size()]);
+
+				CAPAProjectService capaProjectService = getCAPAProjectService(context);
+				capaProjectService.associateCAPARequest(context, DomainObject.newInstance(context, strCapaId), capaReqIds);
+			}
+			// if called from properties tab of CAPA Request refresh opener.
+			if (!Helper.isNullOrEmpty(parentObjectId)) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, QICConstants.REFRESH_OPENER);
+			}
+			// if called from summary view, refresh frame(parent OID is null in
+			// this case)
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, QICConstants.REFRESH_CPR_SUMMARY_FRAME_CLOSE_TOP_WINDOW,
+					"QICCPRSummaryDisplay");
+		}
+		catch (Exception e) {
+			throw new QICException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Pre-Checks to Set the selected CAPA Requests as Duplicate. If all CAPA
+	 * Requests are not in "Review" state or if Logged-in User is not the Owner
+	 * for all or is not not having "Quality Manger" role or is already set as
+	 * Duplicate(i.e. already connected with "Duplicate Request" relationship),
+	 * then a JavaScript function is called to show appropriate error message
+	 * alert otherwise JavaScript function to show Master CAPA Request search
+	 * form is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preChecksForSetDuplicateCAPARequests(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_CAPA_TYPE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_TYPE);
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REVIEW);
+		try {
+			ArrayList<String> arrCAPARequestIds = new ArrayList<String>();
+			ArrayList<String> arrDuplicateRequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			StringBuilder sbSuccessRequestIds = new StringBuilder();
+			HashSet<String> hsCAPAType = new HashSet<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					arrCAPARequestIds.add(rowId.getObjectId());
+				}
+				if (!Helper.isNullOrEmpty(arrCAPARequestIds)) {
+					String[] strArrayCAPARequestIds = arrCAPARequestIds.toArray(new String[arrCAPARequestIds.size()]);
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, strArrayCAPARequestIds,
+							Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+									DomainConstants.SELECT_OWNER, DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE)));
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strCAPARequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+						String strCAPAType = (String) requestMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_TYPE));
+						hsCAPAType.add(strCAPAType);
+						if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strCAPARequestId),
+								QICConstants.SYMBOLIC_RELATIONSHIP_DUPLICATE_REQUEST, "to") > 0) {
+							arrDuplicateRequestIds.add(strName);
+						}
+						else if (!Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_REVIEW)
+								&& context.getUser().equalsIgnoreCase(strOwner)
+								&& (Helper.hasRoles(context, QICConstants.SYMBOLIC_role_QualityManager)
+										|| Helper.hasRoles(context, QICConstants.SYMBOLIC_role_VPLMProjectLeader))) {
+							sbSuccessRequestIds.append(strCAPARequestId);
+							sbSuccessRequestIds.append(QICConstants.COMMA);
+						}
+						else {
+							arrFailedRequestIds.add(strName);
+						}
+					}
+				}
+			}
+			if (arrDuplicateRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.AlreadyDuplicateError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrDuplicateRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessageAndCloseParentWindow", sbReturn.toString());
+			}
+			else if (hsCAPAType.size() > 1) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.Duplicate.CAPATypeNotUniqueError"));
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessageAndCloseParentWindow", sbReturn.toString());
+			}
+			else if (arrFailedRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.Duplicate.Failed.Error"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessageAndCloseParentWindow", sbReturn.toString());
+			}
+			sbSuccessRequestIds.deleteCharAt(sbSuccessRequestIds.length() - 1);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionSetDuplicateCAPARequests", sbSuccessRequestIds.toString());
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Sets CAPA Requests as Duplicate.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function for WorkQueu Table refresh.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSetDuplicateCAPARequests(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			String strMasterCAPARequestId = DomainObject.EMPTY_STRING;
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrRequestIds = (String[]) programMap.get(QICConstants.CAPA_REQUEST_IDS);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				if (!emxTableRowIds.isEmpty())
+					strMasterCAPARequestId = emxTableRowIds.get(0).getObjectId();
+			}
+			if (!Helper.isNullOrEmpty(arrRequestIds) && !Helper.isNullOrEmpty(arrRequestIds[0]) && !Helper.isNullOrEmpty(strMasterCAPARequestId)) {
+				StringList slRequestIds = FrameworkUtil.split(arrRequestIds[0], QICConstants.COMMA);
+				String[] requestIds = (String[]) slRequestIds.toArray(new String[slRequestIds.size()]);
+				CAPA_REQUEST_SERVICE.setDuplicateCAPARequests(context, DomainObject.newInstance(context, strMasterCAPARequestId), requestIds);
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, QICConstants.REFRESH_CPR_SUMMARY_FRAME_CLOSE_TOP_WINDOW,
+					"QICCPRSummaryDisplay");
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Deletes the selected CAPA Requests.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function to refresh WorkQueue table.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionDeleteCAPARequests(Context context, String[] args) throws QICException {
+		final String STATE_PRELIMINARY = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_PRELIMINARY);
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		try {
+			ArrayList<String> arrSuccessRequestIds = new ArrayList<String>();
+			ArrayList<String> arrFailedRequestIds = new ArrayList<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(QICConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strCAPARequestId = rowId.getObjectId();
+					if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+						List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+								Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+						for (Object obj : returnMap) {
+							Map requestMap = (Map) obj;
+							String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+							String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+							String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+							if (!Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_PRELIMINARY)
+									&& context.getUser().equalsIgnoreCase(strOwner)) {
+								arrSuccessRequestIds.add(strCAPARequestId);
+							}
+							else {
+								arrFailedRequestIds.add(strName);
+							}
+						}
+					}
+				}
+			}
+			if (arrFailedRequestIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.QIC, "QIC.CAPARequest.CanNotDeletedError"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedRequestIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			else if (arrSuccessRequestIds.size() > 0) {
+				CAPA_REQUEST_SERVICE.deleteCAPARequests(context, arrSuccessRequestIds.toArray(new String[arrSuccessRequestIds.size()]));
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, QICConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+}
+

@@ -1,0 +1,729 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import com.dassault_systemes.enovia.actiontasks.ActionTasks;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ReviewRoute.RouteCompletionAction;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants.NCRRecordPolicyState;
+import com.dassault_systemes.enovia.lsa.ncr.NCRException;
+import com.dassault_systemes.enovia.lsa.ncr.NCRUtil;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCAllowedItems;
+import com.dassault_systemes.enovia.lsa.ncr.services.NCRProductControlService;
+import com.dassault_systemes.enovia.lsa.ncr.services.admin.impacteditems.ImpactedItems.ControlItem;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws NCRException {
+	}
+
+	private ComplaintProductEvaluationService getComplaintProductEvaluationService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			return (ComplaintProductEvaluationService) component.getService(ComplaintProductEvaluationService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			return (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private ReviewRouteService getReviewRouteService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			return  (ReviewRouteService) component.getService(ReviewRouteService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Gets NCRProductControl implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws NCRException
+	 *             if operation fails
+	 */
+	private NCRProductControlService getNCRProductControlService(Context context) throws NCRException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSANCRCoreComponent");
+			return  (NCRProductControlService) component.getService(NCRProductControlService.class);
+		}
+		catch (ComponentException exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * creates an Investigation object and connects it to the NCR object on its
+	 * promotion.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void createAndConnectInvestigationObject(Context context, String[] args) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			DomainObject domOBJNC = DomainObject.newInstance(context, strNCRId);
+			if (domOBJNC.checkAccess(context, (short) AccessConstants.cModify)) {
+				String strPolicy = args[1];
+				String strCurrentState = args[2];
+				String POLICY_SYMBOLIC = NCRUtil.getAliasForAdmin(context, NCRConstants.POLICY, strPolicy);
+					if(!Helper.isNullOrEmpty(POLICY_SYMBOLIC) && strCurrentState.equalsIgnoreCase(NCRUtil.getStateName(context, POLICY_SYMBOLIC, NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW))) {
+						ComplaintProductEvaluationService complaintProductEvaluationService = getComplaintProductEvaluationService(context);
+						String strProductEvaluationId = Helper.autoName(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION,
+								TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION);
+						Helper.ensureNotEmpty("strProductEvaluationId", "strProductEvaluationId");
+						complaintProductEvaluationService.addProductEvaluationsToComplaint(context, new String[] { strNCRId },
+								strProductEvaluationId);
+					}
+			}
+		}
+		catch (Exception exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+	/**
+	 * Creates Route On NCR Object when it is promoted from Create to Review
+	 * state.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void createRouteOnNCR(Context context, String[] args) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String strType = args[3];
+			String strOwner = args[4];
+			String strEnableReview = new String();
+			String TYPE_SYMBOLIC = NCRUtil.getAliasForAdmin(context, NCRConstants.TYPE, strType);
+			String POLICY_SYMBOLIC = NCRUtil.getAliasForAdmin(context, NCRConstants.POLICY, strPolicy);
+			DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+			if ((!Helper.isNullOrEmpty(TYPE_SYMBOLIC)) && TYPE_SYMBOLIC.equalsIgnoreCase(NCRConstants.SYMBOLIC_TYPE_NCR)) {
+					strEnableReview = Helper.getProperty(context, "LQINCR.NCR.EnableReviewProcess");
+				}
+			if (strCurrentState.equalsIgnoreCase(NCRUtil.getStateName(context, POLICY_SYMBOLIC, NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW))
+					&& NCRConstants.TRUE.equalsIgnoreCase(strEnableReview)) {
+				ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+				List<Map<?, ?>> mlAssignees = complaintTicketService.getAssignees(context, dmoNCR);
+				String strApproverId = DomainConstants.EMPTY_STRING;
+				String strApproverName = DomainConstants.EMPTY_STRING;
+				String strAttributeValue = DomainConstants.EMPTY_STRING;
+				ArrayList<Map<String, String>> routeMemberIdList = new ArrayList<Map<String, String>>();
+				for (Map<?, ?> mapAssignees : mlAssignees) {
+					strAttributeValue = (String) mapAssignees.get(DomainRelationship
+							.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_TEAM_ROLE)));
+					if (NCRConstants.APPROVER.equalsIgnoreCase(strAttributeValue)) {
+						Map<String, String> membersMap = new HashMap<String, String>();
+						strApproverId = (String) mapAssignees.get(DomainConstants.SELECT_ID);
+						strApproverName = (String) mapAssignees.get(DomainConstants.SELECT_NAME);
+						membersMap.put(DomainConstants.SELECT_NAME, strApproverName);
+						membersMap.put(DomainConstants.SELECT_ID, strApproverId);
+						routeMemberIdList.add(membersMap);
+					}
+				}
+
+				Helper.runWithUser(context, strOwner, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws NCRException {
+						final DomainObject DOOBJNCR = (DomainObject) args[0];
+						final ArrayList<Map<String, String>> ROUTEMEMBERIDLIST = (ArrayList<Map<String, String>>) args[1];
+						try {
+							ReviewRouteService reviewRouteService = getReviewRouteService(context);
+							return reviewRouteService.createReviewRoute(context, DOOBJNCR, DomainConstants.EMPTY_STRING, DomainConstants.EMPTY_STRING,
+									ROUTEMEMBERIDLIST, NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW,
+									RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+						}
+						catch (final Exception e) {
+							throw new NCRException(e);
+						}
+					}
+				}, dmoNCR, routeMemberIdList);
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Checks if the connected route is completed before NCR object is promoted
+	 * from Review to Closed state
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation succesfull else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+
+	public int checkForConnectedRouteState(Context context, String[] args) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			Helper.ensureNotNull(strNCRId, "NCR id");
+			String strCurrentState = args[1];
+			Helper.ensureNotNull(strCurrentState, "Current State");
+			String strNextState = args[2];
+			Helper.ensureNotNull(strNextState, "Next State");
+			String strTargetCurrentState = PropertyUtil.getSchemaProperty(context, NCRConstants.POLICY,
+					PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD), NCRConstants.SYMBOLIC_POLICY_STATE_REVIEW);
+			String strTargetNextState = PropertyUtil.getSchemaProperty(context, NCRConstants.POLICY,
+					PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD), NCRConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			if (strTargetCurrentState.equalsIgnoreCase(strCurrentState) && strTargetNextState.equalsIgnoreCase(strNextState)) {
+				DomainObject doObjNCR = DomainObject.newInstance(context, strNCRId);
+				ReviewRouteService reviewRouteService = getReviewRouteService(context);
+				Map<?, ?> mapRoute=reviewRouteService.getCurrentReviewRoute(context, doObjNCR, Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID));
+				if (!mapRoute.isEmpty()) {
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.PromoteNCR.ConnectedRouteNotComplete"));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Checks if all connected Product Control(s) is complete before closing NCR
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int checkForProductControlCompletion(Context context, String args[]) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			String strNCRTargetState = args[2];
+			if (!Helper.isNullOrEmpty(strNCRTargetState) && strNCRTargetState.equalsIgnoreCase(NCRUtil.getActualStateName(context, NCRRecordPolicyState.INVALID))) {
+				return 0;
+			}
+			DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+			final String STR_COMPLAINT_INVESTIGATION_REQUIRED_ATTRIBUTE = PropertyUtil.getSchemaProperty(context,
+					NCRConstants.SYMBOLIC_ATTRIBUTE_INVESTIGATION_REQUIRED);
+			String strWherExpression = DomainObject.getAttributeSelect(STR_COMPLAINT_INVESTIGATION_REQUIRED_ATTRIBUTE)+" == No";
+			int connectionsProductEvaluation = Helper.countConnectionsOnObject(context, dmoNCR,
+					TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION, "from", strWherExpression);
+			if (connectionsProductEvaluation > 0) {
+				return 0;
+			}
+
+			NCRProductControlService service = getNCRProductControlService(context);
+			StringList selectBus = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_TYPE,
+					DomainConstants.SELECT_POLICY);
+			List<Map<?, ?>> ncrControls = service.getNCRProductControl(context, dmoNCR, selectBus, null);
+			NCAllowedItems ncAllowedItems = NCAllowedItems.getInstance(context);
+			for (Map<?, ?> ncrControl : ncrControls) {
+				String objectId = (String) ncrControl.get(DomainConstants.SELECT_ID);
+				String type = (String) ncrControl.get(DomainConstants.SELECT_TYPE);
+				String policy = (String) ncrControl.get(DomainConstants.SELECT_POLICY);
+				ControlItem item = ncAllowedItems.getControlItem(type, policy);
+				Boolean isClosed = false;
+				isClosed = PolicyUtil.checkState(context, objectId, item.getResolvedReleaseState(), PolicyUtil.EQ);
+				if (!isClosed) {
+					throw new NCRException(Helper.getI18NString(context, Helper.StringResource.NCR,
+							"LQINCR.NCR.PromoteToClose.ConnectedProductControlsNotComplete"));
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Checks atleast one Product Control is connected to the NCR before closing
+	 * it
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int checkForProductControlCount(Context context, String args[]) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			String strNextState = args[2];
+
+			DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+
+			final String STR_NCR_RECORD_POLICY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD);
+			final String STR_TARGET_NEXT_STATE = PropertyUtil.getSchemaProperty(context, NCRConstants.POLICY, STR_NCR_RECORD_POLICY,
+					NCRConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+
+			if (!Helper.isNullOrEmpty(strNCRId) && STR_TARGET_NEXT_STATE.equalsIgnoreCase(strNextState)) {
+
+				StringBuilder SB_REL_PATTERN = new StringBuilder();
+				SB_REL_PATTERN.append(NCRConstants.SYMBOLIC_RELATIONSHIP_IMPACTED_ITEM);
+
+				final int COUNT = Helper.countConnectionsOnObject(context, dmoNCR, SB_REL_PATTERN.toString(),
+						NCRConstants.RELATIONSHIP_DIRECTION_FROM, null);
+				if (COUNT == 0)
+					throw new NCRException(
+							Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.PromoteToClose.AtleastOneProductControlRequired"));
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Notifies Originator of the NCR when it is closed.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int sendNotificationToOriginator(Context context, String args[]) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			String strCurrentState = args[1];
+
+			DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+
+			final String STR_NCR_RECORD_POLICY = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_POLICY_NCR_RECORD);
+			final String STR_TARGET_STATE = PropertyUtil.getSchemaProperty(context, NCRConstants.POLICY, STR_NCR_RECORD_POLICY,
+					NCRConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+
+			if (!Helper.isNullOrEmpty(strNCRId) && STR_TARGET_STATE.equalsIgnoreCase(strCurrentState)) {
+				String NCROriginator = dmoNCR.getAttributeValue(context,
+						PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_attribute_Originator));
+				String strSubject = MessageUtil.getMessage(context, null, "LQINCR.NCR.Subject.NCRClosed", new String[] { strCurrentState }, null,
+						context.getLocale(), Helper.StringResource.NCR.toString());
+				String strMessage = MessageUtil.getMessage(context, null, "LQINCR.NCR.Message.NCRClosed", new String[] { strCurrentState }, null,
+						context.getLocale(), Helper.StringResource.NCR.toString());
+				MailUtil.sendNotification(context, Helper.stringList(NCROriginator), null, null, strSubject, null, null, strMessage, null, null,
+						Helper.stringList(strNCRId), null);
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+
+	/**
+	 * Check all mandatory attributes are filled for NC - validation for process
+	 * steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if all mandatory fields on NC are completed else
+	 *         false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfNCMandatoryFieldsFilled(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> progMap = JPO.unpackArgs(args);
+			String strNCRId = (String) progMap.get("objectId");
+			String NCR_CATEGORY = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_CATEGORY));
+			String NCR_NC_TYPE = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_NC_TYPE));
+			String NCR_SEVERITY = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_SEVERITY));
+			String NCR_FUNCTIONAL_AREA = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_FUNCTIONAL_AREA));
+			String NCR_DEFECT_TYPE = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_DEFECT_TYPE));
+			String RELATIONSHIP_NCR_SITE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SITE);
+			String NCR_SITE = "from[" + RELATIONSHIP_NCR_SITE + "].to.name";
+			String RELATIONSHIP_NCR_SUPPLIER = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER);
+			String NCR_SUPPLIER = "from[" + RELATIONSHIP_NCR_SUPPLIER + "].to.name";
+			String RELATIONSHIP_NCR_SUPPLIER_LOCATION = PropertyUtil.getSchemaProperty(context,
+					NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_SUPPLIER_LOCATION);
+			String NCR_SUPPLIER_LOCATION = "from[" + RELATIONSHIP_NCR_SUPPLIER_LOCATION + "].to.name";
+
+			StringList busSelect = Helper.stringList(NCRConstants.DESCRIPTION, NCR_CATEGORY, NCR_NC_TYPE, NCR_SEVERITY, NCR_FUNCTIONAL_AREA,
+					NCR_DEFECT_TYPE, NCR_SITE, NCR_SUPPLIER, NCR_SUPPLIER_LOCATION);
+
+			List<Map<?, ?>> listMapInfo = QueryUtil.getInfo(context, new String[] { strNCRId }, busSelect);
+			Map<?, ?> info = listMapInfo.get(0);
+
+			List<String> mandList = new ArrayList<>();
+			mandList.add(NCRConstants.DESCRIPTION);
+			mandList.add(NCR_CATEGORY);
+			mandList.add(NCR_NC_TYPE);
+			mandList.add(NCR_SEVERITY);
+			mandList.add(NCR_FUNCTIONAL_AREA);
+			mandList.add(NCR_DEFECT_TYPE);
+
+			String NCR_DEFECT_TYPE_VALUE = (String) info.get(NCR_DEFECT_TYPE);
+			List<String> defectTypeDependency = new ArrayList<>();
+			defectTypeDependency.add(NCR_SITE);
+			defectTypeDependency.add(NCR_SUPPLIER);
+			defectTypeDependency.add(NCR_SUPPLIER_LOCATION);
+
+			if (!info.keySet().containsAll(mandList) || (info.values().contains(null) || info.values().contains(DomainConstants.EMPTY_STRING))) {
+				return false;
+			}
+
+			if (NCR_DEFECT_TYPE_VALUE.equalsIgnoreCase(NCRConstants.NCR_DEFECT_TYPE_RANGE_EXTERNAL)
+					&& (!info.keySet().containsAll(defectTypeDependency))
+					|| (info.values().contains(null) || info.values().contains(DomainConstants.EMPTY_STRING))) {
+				return false;
+			}
+
+			return true;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if NC need to be accepted - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfNCAccepted(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> progMap = JPO.unpackArgs(args);
+			String strNCRId = (String) progMap.get("objectId");
+			DomainObject ncrObject = DomainObject.newInstance(context, strNCRId);
+			return Helper.countConnectionsWithRel(context, ncrObject, NCRConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION, "from") > 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if NC has action tasks assigned - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfActionTasksAssigned(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> progMap = JPO.unpackArgs(args);
+			String strNCRId = (String) progMap.get("objectId");
+			ActionTasks actionTasks = ActionTasks.getInstance();
+			List<Map<?, ?>> tasks = actionTasks.getAllActionTask(context, DomainObject.newInstance(context, strNCRId),
+					Helper.stringList(DomainConstants.SELECT_ID), null, null);
+			return !tasks.isEmpty();
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if NC has action tasks assigned - validation for process steps
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public boolean checkIfAssigneeAdded(Context context, String args[]) throws NCRException {
+		try {
+			Map<?, ?> progMap = JPO.unpackArgs(args);
+			String strNCRId = (String) progMap.get("objectId");
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			List<Map<?, ?>> returnMap = complaintTicketService.getAssignees(context, DomainObject.newInstance(context, strNCRId));
+			return !returnMap.isEmpty();
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Promote Controls to their respective states when NC is promote to Review
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public void promoteControlsToReview(Context context, String[] args) throws NCRException {
+		String strNCRId = args[0];
+		String currentStateNC = args[1];
+		try {
+			DomainObject domOBJNC = DomainObject.newInstance(context, strNCRId);
+
+			if (!currentStateNC.equalsIgnoreCase("Invalid")) {
+
+				NCRProductControlService service = getNCRProductControlService(context);
+				StringList selectBus = Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_TYPE,
+						DomainConstants.SELECT_POLICY);
+				List<Map<?, ?>> ncrControls = service.getNCRProductControl(context, domOBJNC, selectBus, null);
+				NCAllowedItems ncAllowedItems = NCAllowedItems.getInstance(context);
+				for (Map<?, ?> ncrControl : ncrControls) {
+					String objectId = (String) ncrControl.get(DomainConstants.SELECT_ID);
+					String type = (String) ncrControl.get(DomainConstants.SELECT_TYPE);
+					String policy = (String) ncrControl.get(DomainConstants.SELECT_POLICY);
+					ControlItem item = ncAllowedItems.getControlItem(type, policy);
+					Boolean belowReview = false;
+					belowReview = PolicyUtil.checkState(context, objectId, item.getResolvedReviewState(), PolicyUtil.LT);
+					if (belowReview) {
+						DomainObject.newInstance(context, objectId).setState(context, item.getResolvedReviewState());
+					}
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new NCRException(exception);
+		}
+	}
+
+
+
+	/**
+	 * Checks NCR connected to Issue should be in Complete State else promotion
+	 * fails.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int checkIfNCRelatedToIssueIsCompleted(Context context, String args[]) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			final DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+			StringBuilder busWhere = new StringBuilder();
+			busWhere.append("(type==NCR) && ((current!= Invalid) && (current != Closed))");
+			final int COUNT = Helper.countConnectionsOnObject(context, dmoNCR, NCRConstants.SYMBOLIC_relationship_ResolvedTo,
+					NCRConstants.RELATIONSHIP_DIRECTION_FROM, busWhere.toString());
+			if (COUNT > 0)
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.Message.checkIfNCRelatedToIssueIsCompleted"));
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+
+	/**
+	 * Check if CAPA or Change does not exists on NC for NC Closure Type
+	 * attribute change
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return true if owner of NC has either CI or QM role else false
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int checkAssociatedCAPAorChange(Context context, String args[]) throws NCRException {
+		try {
+			String objectId = args[0];
+			String newVal = args[3];
+
+			final String TYPE_CAPA = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_CAPA);
+			final String TYPE_CAPA_REQUEST = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+			final String ATTRIBUTE_COMPLAINT_INVESTIGATION_REQUIRED = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVESTIGATION_REQUIRED));
+			DomainObject domObj = DomainObject.newInstance(context, objectId);
+			String strErrorMsg = DomainConstants.EMPTY_STRING;
+			StringBuilder strBusWhere= new StringBuilder();
+			strBusWhere.append(ATTRIBUTE_COMPLAINT_INVESTIGATION_REQUIRED).append("!=Yes");
+			boolean isAssociatedCPERequired = getComplaintProductEvaluationService(context)
+					.getComplaintAssociatedProductEvaluations(context, domObj, strBusWhere.toString()).isEmpty();
+			if (!isAssociatedCPERequired && !Helper.isNullOrEmpty(newVal)) {
+				Helper.mqlError(context, Helper.StringResource.NCR, "LQINCR.NCR.ErrorMessage.ClosureType.checkCPENotRequired");
+				throw new NCRException(
+						Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.NCR.ErrorMessage.ClosureType.checkCPENotRequired"));
+			}
+			StringBuilder busWhere = new StringBuilder();
+
+			if (newVal.equals(NCRConstants.ClosureType.CAPA.toString())) {
+				busWhere.append("type=='").append(ChangeConstants.TYPE_CHANGE_REQUEST).append('\'').append("||").append("type=='")
+						.append(ChangeConstants.TYPE_CHANGE_ORDER).append('\'');
+				strErrorMsg = "LQINCR.NCR.ErrorMessage.ClosureType.CAPA";
+			}
+			else if (newVal.equals(NCRConstants.ClosureType.CHANGE.toString())) {
+				busWhere.append("type==").append(TYPE_CAPA).append("||").append("type=='").append(TYPE_CAPA_REQUEST).append('\'');
+				strErrorMsg = "LQINCR.NCR.ErrorMessage.ClosureType.Change";
+			}
+			else if (Helper.isNullOrEmpty(newVal)) {
+				busWhere.append("type==").append(TYPE_CAPA).append("||").append("type=='").append(TYPE_CAPA_REQUEST).append('\'');
+				busWhere.append("||");
+				busWhere.append("type=='").append(ChangeConstants.TYPE_CHANGE_REQUEST).append('\'').append("||").append("type=='")
+						.append(ChangeConstants.TYPE_CHANGE_ORDER).append('\'');
+				strErrorMsg = "LQINCR.NCR.ErrorMessage.ClosureType.Empty";
+			}
+
+			int COUNT = Helper.countConnectionsOnObject(context, domObj, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE,
+					NCRConstants.RELATIONSHIP_DIRECTION_TO, busWhere.toString());
+			if (COUNT > 0) {
+				throw new NCRException(Helper.getI18NString(context, Helper.StringResource.NCR, strErrorMsg));
+			}
+
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+	/**
+	 * Checks CAPA Request OR CAPA connected should be inComplaete State else
+	 * promotion fails.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return return 0 if operation successful else 1
+	 * @throws NCRException
+	 *             if operation fails.
+	 */
+	public int checkIfRelatedDataSourcesAreCompleted(Context context, String args[]) throws NCRException {
+		try {
+			String strNCRId = args[0];
+			final DomainObject dmoNCR = DomainObject.newInstance(context, strNCRId);
+			final String NCCLOSURETYPE = DomainObject
+					.getAttributeSelect(PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_ATTRIBUTE_NC_CLOSURE_TYPE));
+			final String DATA_SOURCE = PropertyUtil.getSchemaProperty(context, NCRConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE);
+		    final String relDataSource="to["+DATA_SOURCE+"].from";
+			Map ncInfo = dmoNCR.getInfo(context, Helper.stringList(NCCLOSURETYPE,relDataSource));
+			if (!ncInfo.isEmpty() && ncInfo.containsKey(NCCLOSURETYPE) && ncInfo.get(NCCLOSURETYPE)!= null && !ncInfo.get(NCCLOSURETYPE).toString().isEmpty() && (ncInfo.get(relDataSource)==null ||ncInfo.get(relDataSource).toString().isEmpty()) ) {
+				MqlUtil.mqlCommand(context, "error $1", Helper.getI18NString(context, Helper.StringResource.NCR,
+						"LQINCR.NCR.ErrorMessage.ClosureType.CheckAtleastOneDataSourceMustBeAssociated"));
+				return 1;
+				
+			}
+			ComplaintTicketService service = getComplaintTicketService(context);
+			StringBuilder busWhere= new StringBuilder();
+			busWhere.append("(current != Complete) && ");
+			busWhere.append("(current != Archive) &&");
+			busWhere.append("(current != Fulfilled) &&");
+			busWhere.append("(current != Duplicate) &&");
+			busWhere.append("(current != Hold) &&");
+			busWhere.append("(current != Cancel) && ");
+			busWhere.append("(current != Implemented) &&");
+			busWhere.append("(current != \"On Hold\") &&");
+			busWhere.append("(current != Cancelled)");
+			List<Map<?, ?>> relatedDataSource = service.getRelatedDataSource(context, dmoNCR,busWhere.toString());
+			if (!relatedDataSource.isEmpty()) {
+				StringBuilder rawDataSource = new StringBuilder();
+				relatedDataSource.parallelStream().map(map -> map.get(DomainObject.SELECT_NAME)).collect(Collectors.toSet()).forEach(dataSource -> {
+					rawDataSource.append(dataSource);
+					rawDataSource.append(",");
+				});
+				String dataSourceString = rawDataSource.substring(0, rawDataSource.length() - 1);
+				MqlUtil.mqlCommand(context, "error $1",
+						new StringBuilder()
+						.append(Helper.getI18NString(context, Helper.StringResource.NCR,
+								"LQINCR.NCR.PromoteToClose.checkAssociatedDataSourceCompleted"))
+						.append(System.lineSeparator()).append(dataSourceString).toString());
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new NCRException(e);
+		}
+	}
+}
+

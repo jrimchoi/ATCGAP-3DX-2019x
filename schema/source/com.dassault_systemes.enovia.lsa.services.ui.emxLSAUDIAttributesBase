@@ -1,0 +1,143 @@
+
+import java.util.HashMap;
+import java.util.Map;
+
+import matrix.db.BusinessInterface;
+import matrix.db.BusinessInterfaceList;
+import matrix.db.Context;
+import matrix.db.JPO;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.InterfaceAttributesService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	final String	MODEL_NUMBER	= "ModelNumber";
+	final String	CATALOG_NUMBER	= "CatalogNumber";
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		// super(context, args);
+	}
+
+	private InterfaceAttributesService getInterfaceAttributesService(Context context) throws LSAException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			InterfaceAttributesService submissionService = (InterfaceAttributesService) component.getService(InterfaceAttributesService.class);
+			return submissionService;
+		}
+		catch (ComponentException exception) {
+			throw new LSAException(exception);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public void addInterfaceAttributeValuesToModelObjects(Context context, String[] args) throws Throwable {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			String newObjID = (String) paramMap.get("objectId");
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+
+			DomainObject dObj = DomainObject.newInstance(context, newObjID);
+			if (!dObj.exists(context)) {
+				return;
+			}
+			// Calling Model's JPO for existing attributes
+			JPO.invokeLocal(context, "${CLASS:emxModel}", null, "copyModelAttributesToProduct", args, null);
+
+			String strAttributeModelNumber = PropertyUtil.getSchemaProperty(context, "attribute_ModelNumber");
+			String strCatalogNumber = PropertyUtil.getSchemaProperty(context, "attribute_CatalogNumber");
+
+			// Fetching attributes from form appended
+			String txt_ModelNumber = getValue(requestMap.get(MODEL_NUMBER));
+			String txt_CatalogNumber = getValue(requestMap.get(CATALOG_NUMBER));
+
+			Map<String, String> mapOfAttributeNameAndValue = new HashMap<>();
+			mapOfAttributeNameAndValue.put(strAttributeModelNumber, txt_ModelNumber);
+			mapOfAttributeNameAndValue.put(strCatalogNumber, txt_CatalogNumber);
+
+			// Calling API to set these attributes on object
+			InterfaceAttributesService service = getInterfaceAttributesService(context);
+			service.setAttributeValuesToInterface(context, dObj, "ILSA_AttributesOnTypeModel", mapOfAttributeNameAndValue);
+		}
+		catch (Exception e) {
+			throw new LSAException(e.getLocalizedMessage());
+		}
+	}
+
+	private String getValue(Object object) throws LSAException {
+		String returnString = DomainConstants.EMPTY_STRING;
+		if (object instanceof String[]) {
+			String stringArray[] = (String[]) object;
+			returnString = stringArray[0];
+		}
+		else if (object instanceof String) {
+			returnString = (String) object;
+		}
+		else {
+			throw new IllegalArgumentException();
+		}
+		return returnString;
+	}
+
+	public Map getRangeValues(Context context, String[] args) throws LSAException {
+		Map<?, ?> programMap = null;
+		Map<?, ?> mapOfAttributeRanges = null;
+		try {
+			programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> fieldMap = (Map<?, ?>) programMap.get("fieldMap");
+			Map<?, ?> settings = (Map<?, ?>) fieldMap.get("settings");
+			String strAttributeName = (String) settings.get("Admin Type");
+
+			mapOfAttributeRanges = Helper.getAttributeRanges(context, strAttributeName);
+		}
+		catch (Exception e) {
+			throw new LSAException(e.getLocalizedMessage());
+		}
+		return mapOfAttributeRanges;
+	}
+
+	public boolean isInterfaceAdded(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String newObjID = (String) programMap.get("parentOID");
+			if (UIUtil.isNullOrEmpty(newObjID)) {
+				newObjID = (String) programMap.get("objectId");
+			}
+
+			final String TYPE_MODEL = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Model);
+			final String INTERFACE_ILSA_ATTRIBUTES_ON_TYPE_MODEL = PropertyUtil.getSchemaProperty(context, "interface_ILSA_AttributesOnTypeModel");
+
+			DomainObject dObj = DomainObject.newInstance(context, newObjID);
+			String strObjectType = dObj.getInfo(context, DomainConstants.SELECT_TYPE);
+			if (TYPE_MODEL.equals(strObjectType)) {
+				BusinessInterfaceList bInterfaceList = dObj.getBusinessInterfaces(context);
+				java.util.Iterator<BusinessInterface> itr = bInterfaceList.iterator();
+				while (itr.hasNext()) {
+					String strInterface = itr.next().toString();
+					if (INTERFACE_ILSA_ATTRIBUTES_ON_TYPE_MODEL.equalsIgnoreCase(strInterface)) {
+						return true;
+					}
+					else {
+						return false;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e.getLocalizedMessage());
+		}
+		return false;
+	}
+
+}
+

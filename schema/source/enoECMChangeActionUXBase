@@ -1,0 +1,684 @@
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.dassault_systemes.enovia.changeaction.factory.ChangeActionFactory;
+import com.dassault_systemes.enovia.changeaction.interfaces.IChangeAction;
+import com.dassault_systemes.enovia.changeaction.interfaces.IChangeActionServices;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeAction;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil;
+
+
+
+public class ${CLASSNAME} extends ${CLASS:emxDomainObject} {
+
+	public static final String SUITE_KEY = "EnterpriseChangeMgt";
+	
+	public ${CLASSNAME}(Context context, String[] args)throws Exception {
+		super(context, args);
+		// TODO Auto-generated constructor stub
+	}
+	/**
+	 * To create the Change Action from Create Component
+	 *
+	 * @author
+	 * @param context the eMatrix code context object
+	 * @param args packed hashMap of request parameter
+	 * @return Map contains change object id
+	 * @throws Exception if the operation fails
+	 * @Since ECM R420
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createChangeAction(Context context, String[] args) throws Exception {
+
+	    HashMap programMap   = (HashMap) JPO.unpackArgs(args);
+	    HashMap requestValue = (HashMap) programMap.get(ChangeConstants.REQUEST_VALUES_MAP);
+	    HashMap requestMap   = (HashMap) programMap.get(ChangeConstants.REQUEST_MAP);
+	    Map sAttritubeMap				  = new HashMap();
+
+	    String strTimeZone = getStringFromArr((String[])requestValue.get("timeZone"),0);
+	    double clientTZOffset = Double.parseDouble(strTimeZone);
+	    Locale local = context.getLocale();
+
+	    String sType   = getStringFromArr((String[])requestValue.get("TypeActual"),0);
+	    String sEstimatedCompletionDate   = getStringFromArr((String[])requestValue.get("Estimated Completion Date"),0);
+	    String sEstimatedStartDate   = getStringFromArr((String[])requestValue.get("EstimatedStartDate"),0);
+	    String sDescription   = getStringFromArr((String[])requestValue.get("Description"),0);
+	    String sContributor   = getStringFromArr((String[])requestValue.get("ContributorHidden"),0);
+	    String sReviewers   = getStringFromArr((String[])requestValue.get("ReviewersHidden"),0);
+	    String sFollower   = getStringFromArr((String[])requestValue.get("FollowerHidden"),0);
+	    String sGoverningCO   = getStringFromArr((String[])requestValue.get("GoverningCOOID"),0);
+	    String sAbstract   = getStringFromArr((String[])requestValue.get("Abstract"),0);
+	    String sSeverity   = getStringFromArr((String[])requestValue.get("Severity"),0);
+	    String sReviewersType   = getStringFromArr((String[])requestValue.get("ReviewersHiddenType"),0);
+	    String sEstimatedCompletionDate_msvalue   = getStringFromArr((String[])requestValue.get("Estimated Completion Date_msvalue"),0);
+	    sEstimatedCompletionDate_msvalue = eMatrixDateFormat.getDateValue(context,sEstimatedCompletionDate_msvalue,strTimeZone,local);
+	    if(!ChangeUtil.isNullOrEmpty(sEstimatedCompletionDate_msvalue))
+	    	sEstimatedCompletionDate_msvalue = com.matrixone.apps.domain.util.eMatrixDateFormat.getFormattedInputDate(context,sEstimatedCompletionDate_msvalue,clientTZOffset,local);
+
+	    String sEstimatedStartDate_msvalue   = getStringFromArr((String[])requestValue.get("EstimatedStartDate_msvalue"),0);
+	    sEstimatedStartDate_msvalue = eMatrixDateFormat.getDateValue(context,sEstimatedStartDate_msvalue,strTimeZone,local);
+	    if(!ChangeUtil.isNullOrEmpty(sEstimatedStartDate_msvalue))
+	    	sEstimatedStartDate_msvalue = com.matrixone.apps.domain.util.eMatrixDateFormat.getFormattedInputDate(context,sEstimatedStartDate_msvalue,clientTZOffset,local);
+
+	    String sOwner = context.getUser();
+
+	    sAttritubeMap.put(ATTRIBUTE_ORIGINATOR, sOwner);
+		sAttritubeMap.put(ChangeConstants.ATTRIBUTE_ESTIMATED_COMPLETION_DATE, sEstimatedCompletionDate_msvalue);
+		sAttritubeMap.put(ChangeConstants.ATTRIBUTE_ESTIMATED_START_DATE, sEstimatedStartDate_msvalue);
+		sAttritubeMap.put(ATTRIBUTE_SEVERITY, sSeverity);
+		sAttritubeMap.put(ChangeConstants.ATTRIBUTE_SYNOPSIS, sAbstract);
+		String changeId   = "";
+	    Map returnMap     = new HashMap();
+
+	    try {
+	    	//Check license
+			String[] app = { "ENO_ECM_TP"};
+			ComponentsUtil.checkLicenseReserved(context, app);
+			
+			String strType=ChangeConstants.TYPE_CHANGE_ACTION;
+			IChangeActionServices iCaServices = ChangeActionFactory.CreateChangeActionFactory();
+			String newCAId = iCaServices.CreateChangeAction(context,strType, null, null).getCaBusinessObject().getObjectId(context);
+
+	    	ChangeAction changeAction = new ChangeAction(newCAId);
+	    	changeAction.setAttributeValues(context, sAttritubeMap);
+	    	changeAction.setDescription(context, sDescription);
+
+	        returnMap.put(ChangeConstants.ID, newCAId);
+
+	    } catch (Exception e) {
+	        e.printStackTrace();
+	        throw new FrameworkException(e);
+	    }
+
+	    return returnMap;
+	}
+	private String getStringFromArr(String[] StringArr, int intArrIndex) {
+		return (StringArr != null) ? (String)StringArr[intArrIndex] : EMPTY_STRING;
+	}
+	
+	/**
+  	 * Select the Follower Field
+  	 * @param Context context
+  	 * @param args holds information about object.
+  	 * @return Follower Field.
+  	 * @throws Exception if operation fails.
+  	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String selectFollower(Context context,String[] args)throws Exception
+	{
+		boolean isEditable = false;
+		boolean isMobileDevice = false;
+		StringBuilder sb = new StringBuilder();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strMode = (String) requestMap.get("mode");
+		String changeActionId = (String) requestMap.get("objectId");
+		String followers = DomainObject.EMPTY_STRING;
+		StringList finalFollowerList=new StringList();
+		String functionality = (String) requestMap.get("functionality");
+		if("edit".equalsIgnoreCase(strMode))
+		isEditable = isTeamEditable(context, "AddFollower",changeActionId);
+
+		String userAgentString = (String)requestMap.get("User-Agent");
+		//if(!ChangeUtil.isNullOrEmpty(userAgentString) && userAgentString.indexOf("Mobile") != -1)
+		//	isMobileDevice = true;
+
+		// For export to CSV
+		String exportFormat = null;
+		boolean exportToExcel = false;
+		if(requestMap!=null && requestMap.containsKey("reportFormat")){
+			exportFormat = (String)requestMap.get("reportFormat");
+		}
+		if("CSV".equals(exportFormat)){
+			exportToExcel = true;
+		}
+
+		if("AddToNewChangeAction".equals(functionality) || "AddToNewCA".equals(functionality)||"addChangeActionUnderChangeOrder".equalsIgnoreCase(functionality)){
+			changeActionId = null;
+		}
+
+		if(null != changeActionId){
+		IChangeAction mChangeAction=ChangeAction.getChangeAction(context, changeActionId);
+		String strCAOwner = mChangeAction.getOwner(context);
+		String currentUser = context.getUser();
+		List followerNameList=mChangeAction.GetFollowers(context);
+		Iterator followersList=followerNameList.iterator();
+		while(followersList.hasNext()){
+			String followerName=(String)followersList.next();
+			String followerId=PersonUtil.getPersonObjectID(context, followerName);
+			followers=followers.concat(followerId+",");
+			finalFollowerList.addElement(followerId);
+		}
+		}
+
+
+		if(followers.length()>0&&!followers.isEmpty()){
+			followers = followers.substring(0,followers.length()-1);
+			}
+		if(!isMobileDevice && ("edit".equalsIgnoreCase(strMode) && isEditable)|| "create".equalsIgnoreCase(strMode))
+		{
+			String addFollower= EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.AddFollower", context.getSession().getLanguage());
+			String remove = EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.Remove", context.getSession().getLanguage());
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"IsFollowerFieldModified\" id=\"IsFollowerFieldModified\" value=\"false\" readonly=\"readonly\" />"); 
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"FollowerHidden\" id=\"FollowerHidden\" value=\""+followers+"\" readonly=\"readonly\" />");
+			sb.append("<table>");
+			sb.append("<tr>");
+			sb.append("<th rowspan=\"2\">");
+			sb.append("<select name=\"Follower\" style=\"width:200px\" multiple=\"multiple\">");
+
+			if (finalFollowerList!=null && !finalFollowerList.isEmpty()){
+				for (int i=0;i<finalFollowerList.size();i++) {
+					String followersId = (String) finalFollowerList.get(i);
+					if (followersId!=null && !followersId.isEmpty()) {
+						String followerName = new DomainObject(followersId).getInfo(context, DomainConstants.SELECT_NAME);
+						String followerFullName = PersonUtil.getFullName(context, followerName);
+						if (followerName!=null && !followerName.isEmpty()) {
+							//XSSOK
+							sb.append("<option value=\""+followersId+"\" >");
+							//XSSOK
+							sb.append(followerFullName);
+							sb.append("</option>");
+
+						}
+					}
+				}
+			}
+
+			sb.append("</select>");
+			sb.append("</th>");
+			sb.append("<td>");
+			sb.append("<a href=\"javascript:addPersonAsFollower()\">");
+			sb.append("<img src=\"../common/images/iconStatusAdded.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:addPersonAsFollower()\">");
+			//XSSOK
+			sb.append(addFollower);
+			sb.append("</a>");
+			//sb.append("</div>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("<tr>");
+			sb.append("<td>");
+			sb.append("<a href=\"javascript:removeFollower()\">");
+			sb.append("<img src=\"../common/images/iconStatusRemoved.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:removeFollower()\">");
+			//XSSOK
+			sb.append(remove);
+			sb.append("</a>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("</table>");
+		}else
+		{
+			if(!exportToExcel)
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"FollowerHidden\" id=\"FollowerHidden\" value=\""+followers+"\" readonly=\"readonly\" />");
+			if (finalFollowerList!=null && !finalFollowerList.isEmpty()){
+				for (int i=0;i<finalFollowerList.size();i++) {
+					String  lastFollowerId=(String)finalFollowerList.get(finalFollowerList.size()-1);
+					String followersId = (String) finalFollowerList.get(i);
+					if (followersId!=null && !followersId.isEmpty()) {
+						String followerName = new DomainObject(followersId).getInfo(context, DomainConstants.SELECT_NAME);
+						String followerFullName = PersonUtil.getFullName(context, followerName);
+						if (followerName!=null && !followerName.isEmpty()) {
+							if(!exportToExcel)
+							//XSSOK
+							sb.append("<input type=\"hidden\" name=\""+followerFullName+"\" value=\""+followersId+"\" />");
+							//XSSOK
+							sb.append(followerFullName);
+							if(!lastFollowerId.equalsIgnoreCase(followersId))
+								if(!exportToExcel)
+								sb.append("<br>");
+								else
+									sb.append("\n");
+						}
+					}
+				}
+			}
+		}
+		return sb.toString();
+	}
+	/**
+  	 * Select the Contributor Field
+  	 * @param Context context
+  	 * @param args holds information about object.
+  	 * @return Contributor Field.
+  	 * @throws Exception if operation fails.
+  	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String selectContributor(Context context,String[] args)throws Exception
+	{
+		boolean isEditable = false;
+		boolean isMobileDevice = false;
+		StringBuilder sb = new StringBuilder();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strMode = (String) requestMap.get("mode");
+		String changeActionId = (String) requestMap.get("objectId");
+		String contributors = DomainObject.EMPTY_STRING;
+		StringList finalContributorList=new StringList();
+		String functionality = (String) requestMap.get("functionality");
+		if("edit".equalsIgnoreCase(strMode))
+		isEditable = isTeamEditable(context,"AddContributor",changeActionId);
+
+		String userAgentString = (String)requestMap.get("User-Agent");
+		//if(!ChangeUtil.isNullOrEmpty(userAgentString) && userAgentString.indexOf("Mobile") != -1)
+		//	isMobileDevice = true;
+		
+
+		// For export to CSV
+		String exportFormat = null;
+		boolean exportToExcel = false;
+		if(requestMap!=null && requestMap.containsKey("reportFormat")){
+			exportFormat = (String)requestMap.get("reportFormat");
+		}
+		if("CSV".equals(exportFormat)){
+			exportToExcel = true;
+		}
+
+
+
+		if("AddToNewChangeAction".equals(functionality) || "AddToNewCA".equals(functionality)||"addChangeActionUnderChangeOrder".equalsIgnoreCase(functionality)){
+			changeActionId = null;
+		}
+
+		if(null != changeActionId){
+		IChangeAction mChangeAction=ChangeAction.getChangeAction(context, changeActionId);
+		String strCAOwner = mChangeAction.getOwner(context);
+		String currentUser = context.getUser();
+		
+		List contributorNameList=mChangeAction.GetContributors(context);
+		Iterator contributorsItr=contributorNameList.iterator();
+		while(contributorsItr.hasNext()){
+			String contributorName=(String)contributorsItr.next();
+			String contributorId=PersonUtil.getPersonObjectID(context, contributorName);
+			contributors=contributors.concat(contributorId+",");
+			finalContributorList.addElement(contributorId);
+		}
+		}
+
+		if(contributors.length()>0&&!contributors.isEmpty()){
+			contributors = contributors.substring(0,contributors.length()-1);
+			}
+		if(!isMobileDevice && ("edit".equalsIgnoreCase(strMode) && isEditable)|| "create".equalsIgnoreCase(strMode))
+		{
+			String addContributor= EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.AddContributor", context.getSession().getLanguage());
+
+			String remove = EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.Remove", context.getSession().getLanguage());
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"IsContributorFieldModified\" id=\"IsContributorFieldModified\" value=\"false\" readonly=\"readonly\" />"); 
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"ContributorHidden\" id=\"ContributorHidden\" value=\""+contributors+"\" readonly=\"readonly\" />");
+			sb.append("<table>");
+			sb.append("<tr>");
+			sb.append("<th rowspan=\"2\">");
+			sb.append("<select name=\"Contributor\" style=\"width:200px\" multiple=\"multiple\">");
+
+			if (finalContributorList!=null && !finalContributorList.isEmpty()){
+				for (int i=0;i<finalContributorList.size();i++) {
+					String contributorsId = (String) finalContributorList.get(i);
+					if (contributorsId!=null && !contributorsId.isEmpty()) {
+						String contributorName = new DomainObject(contributorsId).getInfo(context, DomainConstants.SELECT_NAME);
+						String contributorFullName = PersonUtil.getFullName(context, contributorName);
+						if (contributorName!=null && !contributorName.isEmpty()) {
+							//XSSOK
+							sb.append("<option value=\""+contributorsId+"\" >");
+							//XSSOK
+							sb.append(contributorFullName);
+							sb.append("</option>");
+
+						}
+					}
+				}
+			}
+
+			sb.append("</select>");
+			sb.append("</th>");
+			sb.append("<td>");
+			sb.append("<a href=\"javascript:addPersonAsContributor()\">");
+			sb.append("<img src=\"../common/images/iconStatusAdded.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:addPersonAsContributor()\">");
+			//XSSOK
+			sb.append(addContributor);
+			sb.append("</a>");
+			//sb.append("</div>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("<tr>");
+			sb.append("<td>");
+			sb.append("<a href=\"javascript:removeContributor()\">");
+			sb.append("<img src=\"../common/images/iconStatusRemoved.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:removeContributor()\">");
+			//XSSOK
+			sb.append(remove);
+			sb.append("</a>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("</table>");
+		}else
+		{
+			if(!exportToExcel)
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"ContributorHidden\" id=\"ContributorHidden\" value=\""+contributors+"\" readonly=\"readonly\" />");
+			if (finalContributorList!=null && !finalContributorList.isEmpty()){
+				for (int i=0;i<finalContributorList.size();i++) {
+				String  lastContributorId=(String)finalContributorList.get(finalContributorList.size()-1);
+					String contributorsId = (String) finalContributorList.get(i);
+					if (contributorsId!=null && !contributorsId.isEmpty()) {
+						String contributorName = new DomainObject(contributorsId).getInfo(context, DomainConstants.SELECT_NAME);
+						String contributorFullName = PersonUtil.getFullName(context, contributorName);
+						if (contributorName!=null && !contributorName.isEmpty()) {
+							if(!exportToExcel)
+							//XSSOK
+							sb.append("<input type=\"hidden\" name=\""+contributorFullName+"\" value=\""+contributorsId+"\" />");
+							//XSSOK
+							sb.append(contributorFullName);
+							if(!lastContributorId.equalsIgnoreCase(contributorsId))
+								if(!exportToExcel)
+							sb.append("<br>");
+								else
+									sb.append("\n");
+						}
+					}
+				}
+			}
+		}
+		return sb.toString();
+	}
+ 	/**
+  	 * Get Reviewers Field
+  	 * @param Context context
+  	 * @param args holds information about object.
+  	 * @return Reviewers Field.
+  	 * @throws Exception if operation fails.
+  	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String selectReviewers(Context context,String[] args)throws Exception
+	{
+		boolean isEditable = false;
+		boolean isMobileDevice = false;
+		StringBuilder sb = new StringBuilder();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strMode = (String) requestMap.get("mode");
+		String changeActionId = (String) requestMap.get("objectId");
+		String styleDisplayPerson="block";
+		String styleDisplayRouteTemplate="block";
+		StringList finalReviewersList=new StringList();
+		String relPattern =  new StringBuffer(ChangeConstants.RELATIONSHIP_CHANGE_REVIEWER).append(",").append(ChangeConstants.RELATIONSHIP_OBJECT_ROUTE).toString();
+		String typePattern =  new StringBuffer(ChangeConstants.TYPE_PERSON).append(",").append(ChangeConstants.TYPE_ROUTE_TEMPLATE).toString();
+		StringList objectSelects=new StringList(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_TYPE);
+		StringList personReviewersList=new StringList();
+		StringList routeTemplateReviewersList=new StringList();
+		String functionality = (String) requestMap.get("functionality");
+		if("edit".equalsIgnoreCase(strMode))
+		isEditable = isTeamEditable(context, "AddReviewer",changeActionId);
+
+		String userAgentString = (String)requestMap.get("User-Agent");
+		//if(!ChangeUtil.isNullOrEmpty(userAgentString) && userAgentString.indexOf("Mobile") != -1)
+		//	isMobileDevice = true;
+
+		// For export to CSV
+		String exportFormat = null;
+		boolean exportToExcel = false;
+		if(requestMap!=null && requestMap.containsKey("reportFormat")){
+			exportFormat = (String)requestMap.get("reportFormat");
+		}
+		if("CSV".equals(exportFormat)){
+			exportToExcel = true;
+		}
+
+
+		if("AddToNewChangeAction".equals(functionality) || "AddToNewCA".equals(functionality)||"addChangeActionUnderChangeOrder".equalsIgnoreCase(functionality)){
+			changeActionId = null;
+		}
+
+		if(null != changeActionId){
+			IChangeAction iCa=ChangeAction.getChangeAction(context, changeActionId);
+			String strCAOwner = iCa.getOwner(context);
+			String currentUser = context.getUser();
+		DomainObject changeAction = new DomainObject(changeActionId);
+		MapList mapList=changeAction.getRelatedObjects(context,
+				  relPattern,
+				  typePattern,
+				  objectSelects,
+				  new StringList(DomainRelationship.SELECT_ID),
+				  false,
+				  true,
+				  (short) 2,
+				  null, null, (short) 0);
+
+		if(!mapList.isEmpty()){
+			Iterator iterator=mapList.iterator();
+			while(iterator.hasNext()){
+				Map dataMap=(Map)iterator.next();
+				String objectType=(String)dataMap.get(DomainObject.SELECT_TYPE);
+				String objectId=(String)dataMap.get(DomainObject.SELECT_ID);
+				if(objectType.equalsIgnoreCase(ChangeConstants.TYPE_PERSON)){
+					personReviewersList.add(objectId);
+				}else if(objectType.equalsIgnoreCase(ChangeConstants.TYPE_ROUTE_TEMPLATE)){
+					routeTemplateReviewersList.add(objectId);
+				}
+			}
+		}
+		}
+
+
+		String reviewers = DomainObject.EMPTY_STRING;
+		String reviewerstype = DomainObject.EMPTY_STRING;
+		if(!routeTemplateReviewersList.isEmpty() && personReviewersList.isEmpty())
+		{
+			 styleDisplayPerson="none";
+		}
+		else if(routeTemplateReviewersList.isEmpty() && !personReviewersList.isEmpty())
+		{
+			styleDisplayRouteTemplate="none";
+		}
+		else if(!routeTemplateReviewersList.isEmpty() && !personReviewersList.isEmpty()){
+			styleDisplayPerson="none";
+		}
+		if (personReviewersList!=null && !personReviewersList.isEmpty() && routeTemplateReviewersList.isEmpty()){
+			for (int i=0;i<personReviewersList.size();i++) {
+				String reviewersId = (String) personReviewersList.get(i);
+				String reviewerType = new DomainObject(reviewersId).getInfo(context, DomainConstants.SELECT_TYPE);
+				reviewers=reviewers.concat(reviewersId+",");
+				reviewerstype=reviewerstype.concat(reviewerType+",");
+				finalReviewersList.addElement(reviewersId);
+			}
+		}
+			if (routeTemplateReviewersList!=null && !routeTemplateReviewersList.isEmpty()){
+				for (int i=0;i<routeTemplateReviewersList.size();i++) {
+					String reviewersId = (String) routeTemplateReviewersList.get(i);
+					String reviewerType = new DomainObject(reviewersId).getInfo(context, DomainConstants.SELECT_TYPE);
+					reviewers=reviewers.concat(reviewersId+",");
+					reviewerstype=reviewerstype.concat(reviewerType+",");
+					finalReviewersList.addElement(reviewersId);
+				}
+
+		}
+
+		if(reviewers.length()>0&&!reviewers.isEmpty()){
+			reviewers = reviewers.substring(0,reviewers.length()-1);
+			reviewerstype = reviewerstype.substring(0,reviewerstype.length()-1);
+		}
+		if(!isMobileDevice && ("edit".equalsIgnoreCase(strMode) && isEditable)|| "create".equalsIgnoreCase(strMode))
+		{
+			String addRouteTemplate= EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.AddRouteTemplate", context.getSession().getLanguage());
+			String addPeople= EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.AddPeople", context.getSession().getLanguage());
+			String remove = EnoviaResourceBundle.getProperty(context,SUITE_KEY,
+					"EnterpriseChangeMgt.Command.Remove", context.getSession().getLanguage());
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"IsReviewerFieldModified\" id=\"IsReviewerFieldModified\" value=\"false\" readonly=\"readonly\" />");
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"ReviewersHidden\" id=\"ReviewersHidden\" value=\""+reviewers+"\" readonly=\"readonly\" />");
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"ReviewersHiddenType\" id=\"ReviewersHiddenType\" value=\""+reviewerstype+"\" readonly=\"readonly\" />");
+			sb.append("<table>");
+			sb.append("<tr>");
+			sb.append("<th rowspan=\"3\">");
+			sb.append("<select name=\"Reviewers\" style=\"width:200px\" multiple=\"multiple\">");
+
+			if (finalReviewersList!=null && !finalReviewersList.isEmpty()){
+				for (int i=0;i<finalReviewersList.size();i++) {
+					String reviewersId = (String) finalReviewersList.get(i);
+					if (reviewersId!=null && !reviewersId.isEmpty()) {
+						String reviewerName = new DomainObject(reviewersId).getInfo(context, DomainConstants.SELECT_NAME);
+						String reviewerFullName = PersonUtil.getFullName(context, reviewerName);
+						if (reviewerName!=null && !reviewerName.isEmpty()) {
+
+							sb.append("<option value=\""+reviewersId+"\" >");
+							//XSSOK
+							sb.append(reviewerFullName);
+							sb.append("</option>");
+
+						}
+					}
+				}
+			}
+
+			sb.append("</select>");
+			sb.append("</th>");
+			sb.append("<td>");
+			sb.append("<div style=\"display:"+styleDisplayPerson+"\" name=\"ReviewrHidePerson\" id=\"ReviewrHidePerson\">");
+			sb.append("<a href=\"javascript:addReviewSelectors()\">");
+			sb.append("<img src=\"../common/images/iconStatusAdded.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:addReviewSelectors()\">");
+			//XSSOK
+			sb.append(addPeople);
+			sb.append("</a>");
+			sb.append("</div>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("<tr>");
+			sb.append("<td>");
+			sb.append("<div style=\"display:"+styleDisplayRouteTemplate+"\" name=\"ReviewrHideRouteTemplate\" id=\"ReviewrHideRouteTemplate\">");
+			sb.append("<a href=\"javascript:addRouteSelectors()\">");
+			sb.append("<img src=\"../common/images/iconStatusAdded.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:addRouteSelectors()\">");
+			//XSSOK
+			sb.append(addRouteTemplate);
+			sb.append("</a>");
+			sb.append("</div>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("<tr>");
+			sb.append("<td>");
+			sb.append("<a href=\"javascript:removeReviewers()\">");
+			sb.append("<img src=\"../common/images/iconStatusRemoved.gif\" width=\"12\" height=\"12\" border=\"0\" />");
+			sb.append("</a>");
+			sb.append("<a href=\"javascript:removeReviewers()\">");
+			//XSSOK
+			sb.append(remove);
+			sb.append("</a>");
+			sb.append("</td>");
+			sb.append("</tr>");
+			sb.append("</table>");
+		}else
+		{
+			if(!exportToExcel)
+			//XSSOK
+			sb.append("<input type=\"hidden\" name=\"ReviewersHidden\" id=\"ReviewersHidden\" value=\""+reviewers+"\" readonly=\"readonly\" />");
+			if (finalReviewersList!=null && !finalReviewersList.isEmpty()){
+				for (int i=0;i<finalReviewersList.size();i++) {
+				String  lastReviewerId=(String)finalReviewersList.get(finalReviewersList.size()-1);
+					String reviewersId = (String) finalReviewersList.get(i);
+					if (reviewersId!=null && !reviewersId.isEmpty()) {
+						String reviewerName = new DomainObject(reviewersId).getInfo(context, DomainConstants.SELECT_NAME);
+						String reviewerFullName = PersonUtil.getFullName(context, reviewerName);
+						if (reviewerName!=null && !reviewerName.isEmpty()) {
+							if(!exportToExcel)
+							//XSSOK
+							sb.append("<input type=\"hidden\" name=\""+reviewerFullName+"\" value=\""+reviewersId+"\" />");
+							//XSSOK
+							sb.append(reviewerFullName);
+							if(!lastReviewerId.equalsIgnoreCase(reviewersId))
+								if(!exportToExcel)
+							sb.append("<br>");
+								else
+									sb.append("\n");
+						}
+					}
+				}
+			}
+		}
+		return sb.toString();
+	}
+	/**
+	 * This method is used as access function for add/remove Team .
+	 * @param context
+	 * @param String Function name
+	 * @param Change Action id
+	 * @return True or False
+	 * @throws Exception
+	 */
+	public boolean isTeamEditable(Context context,String functionName,String objectID) throws Exception {
+		return ChangeAction.getAccess(context, functionName, objectID);		
+	}
+
+	/**Method to transfer the ownership of CA from properties page
+    *
+    */
+    @com.matrixone.apps.framework.ui.PostProcessCallable
+    public void transferOwnership(Context context, String[] args) throws Exception {
+
+        HashMap programMap = (HashMap) JPO.unpackArgs(args);
+        HashMap requestMap = (HashMap) programMap.get(ChangeConstants.REQUEST_MAP);
+
+        String transferReason = (String)requestMap.get(ChangeConstants.TRANSFER_REASON);
+        String objectId 		 = (String)requestMap.get(ChangeConstants.OBJECT_ID);
+        String newOwner 		 = (String)requestMap.get(ChangeConstants.NAME);
+        String Organization   = (String) requestMap.get("Organization");
+        String project        = (String) requestMap.get("Project");
+        String []params 	     = {transferReason,newOwner};
+       
+        try{
+      	    //To transfer the ownership
+      	    DomainObject domainObject = new DomainObject(objectId);
+            domainObject.TransferOwnership(context, newOwner, project, Organization);
+             
+            //To update reason of transfer
+            ChangeAction caObj = new ChangeAction(objectId);
+            caObj.transferOwnership(context, transferReason, newOwner);
+             
+        } catch(Exception e){
+            ${CLASS:emxContextUtil}.mqlNotice(context,e.getMessage());
+        }
+    }
+
+}
+

@@ -1,0 +1,125 @@
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.Policy;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.EFormService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+	
+	/**
+	 * Cannot connect eFormTemplate on to side of eForm Template relationship
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args 
+	 * @return 0 if eForm policy is not eForm Template
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public int checkConnectEFormTemplateToEForm(Context context,String args[])throws DCLException
+	{
+		try {
+			String strToObjectId= args[0];
+			String strPolicyName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+			DomainObject dobj =DomainObject.newInstance(context,strToObjectId);
+			Policy policy =dobj.getPolicy(context);
+			if(!strPolicyName.equalsIgnoreCase(policy.toString()))
+			{
+				String strErrorMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Alert.CannotConnectEForm");
+				throw new DCLException(strErrorMessage);
+			}
+			return 0;
+		
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	/**
+	 * check all mandatory eForm are completed before CO goes to complete state
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args objectId of eForm
+	 * @return 0 if all eForm are complete
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public int checkAllEFormsCompleted(Context context,String args[])throws DCLException
+	{
+		try {
+			String strObjectId= args[0];
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+			String strTypeChangeRequest=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_REQUEST);
+			String strStateComplete = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			String strTaskrequirement =PropertyUtil.getSchemaProperty(context,DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			EFormService eFormService= DCLServiceUtil.getEFormService(context);
+			List<Map> mlEForms = eFormService.getObjectRelatedEForms(context, strObjectId);
+			for(Object objEForm:mlEForms)
+			{
+				Map mEform=(Map) objEForm;
+				String strCurrent = (String) mEform.get(DomainConstants.SELECT_CURRENT);
+				String strTaskRequirement = (String) mEform.get("attribute["+strTaskrequirement+"]");
+				if(strTaskRequirement.equals(DCLConstants.MANDATORY)&&!strStateComplete.equals(strCurrent))
+				{
+					DomainObject dobj=DomainObject.newInstance(context,strObjectId);
+					String strErrorMessage="";
+					if(dobj.isKindOf(context, strTypeChangeRequest))
+					{
+						 strErrorMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Alert.CREFormNotCompleted");
+					}
+					else{
+						strErrorMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Alert.EFormNotCompleted");	
+					}
+							
+					 
+					throw new DCLException(strErrorMessage);
+				}
+			}
+			return 0;
+
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	/**
+	 * change Interface name of eForm object when eForm name is changed
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args new eForm name,objectId of eForm
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public void changeEFormInterfaceName(Context context,String args[])throws DCLException
+	{
+		try {
+			String strId =args[0];
+			String strNewName =args[1];
+			String strPolicy =PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			StringList slSelects =new StringList();
+			slSelects.add(DomainConstants.SELECT_POLICY);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			Map mEFormInfo =DCLUtil.getInfo(context, strId, slSelects);
+			String strInterface = DCLUtil.mqlCommand(context, "print bus $1 select $2 dump $3", true,strId, "interface", "|" );
+			if(UIUtil.isNotNullAndNotEmpty(strInterface)&&mEFormInfo.get(DomainConstants.SELECT_POLICY).toString().equals(strPolicy))
+			{
+				String strRevision=(String) mEFormInfo.get(DomainConstants.SELECT_REVISION);
+				DCLUtil.mqlCommand(context, "modify interface $1 name $2", true, strInterface,strNewName+"-"+strRevision);
+			}
+	
+		} catch (FrameworkException e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+}
+

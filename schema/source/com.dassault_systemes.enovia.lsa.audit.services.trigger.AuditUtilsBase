@@ -1,0 +1,2947 @@
+/************************************************************************************************************
+ * /* AuditUtilsBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes. All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditUtilsBase program to handle Audit type
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.dassault_systemes.enovia.lsa.audit.AuditUtil;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Company;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.AttributeType;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+// TODO: Auto-generated Javadoc
+/**
+ * The Class ${CLASSNAME}.
+ */
+public class ${CLASSNAME} implements DomainConstants {
+
+	/**
+	 * Constructor.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @throws Exception
+	 *             if the operation fails
+	 * 
+	 * @since AEF 10.5.0.0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * 
+	 * @return always 0
+	 * 
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * This method should be called from a form and returns the range values for
+	 * the attribute specified by the "IW Attribute Name" setting on the form
+	 * field.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            , Needs "IW Attribute Name" set in the settings
+	 * 
+	 * @return StringList, List of values for the range.
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Object getAttributeChoices(Context context, String[] args) throws Exception {
+
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		HashMap fieldMap = (HashMap) paramMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings");
+		String sAttrName = (String) settingsMap.get("IW_Attr_Name");
+		try {
+			if (sAttrName == null || "".equals(sAttrName)) {
+				// IW Attribute Name is not set on the form field
+				throw new Exception("iwAuditUtil:getAttributeChoices - IW_Attr_Name not set on form field");
+			}
+			AttributeType attr = new AttributeType(sAttrName);
+			attr.open(context);
+			StringList choices = attr.getChoices(context);
+			attr.close(context);
+
+			// Add a blank at the front so the list doesn't default to showing a
+			// value
+			choices.add(0, "");
+			return choices;
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	public static StringList getI18AttributeChoices(Context context, String[] args) throws Exception {
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		HashMap fieldMap = (HashMap) paramMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings");
+		String sAttrName = (String) settingsMap.get("IW_Attr_Name");
+		try {
+			if (sAttrName == null || "".equals(sAttrName)) {
+				// IW Attribute Name is not set on the form field
+				throw new Exception("iwAuditUtil:getAttributeChoices - IW_Attr_Name not set on form field");
+			}
+			AttributeType attr = new AttributeType(sAttrName);
+			attr.open(context);
+			StringList choices = attr.getChoices(context);
+			attr.close(context);
+
+			// Add a blank at the front so the list doesn't default to showing a
+			// value
+			choices.add(0, "");
+			return i18nNow.getAttrRangeI18NStringList(sAttrName, choices, context.getSession().getLanguage());
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	public HashMap getAttributeChoicesDisplay(Context context, String[] args) throws Exception {
+
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		HashMap fieldMap = (HashMap) paramMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings");
+		// String sAttrName = (String) settingsMap.get("IW_Attr_Name");
+
+		StringList getListDisplay = getI18AttributeChoices(context, args);
+		StringList getList = (StringList) getAttributeChoices(context, args);
+
+		HashMap map = new HashMap();
+		map.put("field_display_choices", getListDisplay);
+		map.put("field_choices", getList);
+
+		return map;
+	}
+
+	/**
+	 * Connect supporting document.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hash map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public HashMap connectSupportingDocument(Context context, String[] args) throws Exception {
+		HashMap hmReturnVal = new HashMap();
+		HashMap hmObjectIds = new HashMap();
+		boolean bContextPushed = false;
+		try {
+			// Getting the object ids
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strParentId = (String) programMap.get("parentOID");
+			String[] strObjectId = (String[]) programMap.get("objectId");
+
+			String[] strObjectId1 = new String[10];
+			String strObjectIdofArray = DomainConstants.EMPTY_STRING;
+			String strResultObjectId = DomainConstants.EMPTY_STRING;
+			String strName = DomainConstants.EMPTY_STRING;
+			int icount = 0;
+			int i = 0;
+			Map element;
+			DomainObject doParentFindingtId = new DomainObject();
+
+			// Setting the attributes to be selected
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+
+			if (null != strParentId && !"".equals(strParentId)) {
+				doParentFindingtId = new DomainObject(strParentId);
+				// Getting the related Project Objects
+				MapList mlFindingObject = doParentFindingtId.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT), DomainConstants.QUERY_WILDCARD, true,
+						false, 1, sListSelects, null, null, "", null, null, null);
+
+				// iterate through the Projects to check whether the Ids are
+				// same.
+				for (Iterator iter = mlFindingObject.iterator(); iter.hasNext();) {
+					element = (Map) iter.next();
+					strResultObjectId = (String) element.get(DomainConstants.SELECT_ID);
+					strName = (String) element.get(DomainConstants.SELECT_NAME);
+					// putting the related object Ids into map for comparing
+					hmObjectIds.put("" + icount, strResultObjectId);
+					hmObjectIds.put(strResultObjectId, strName);
+					icount++;
+				}
+			} // if ends
+			for (i = 0; i < strObjectId.length; i++) {
+				strObjectIdofArray = strObjectId[i];
+				// Comparing the values
+				if (hmObjectIds.containsValue(strObjectIdofArray)) {
+					strName = (String) hmObjectIds.get(strObjectIdofArray);
+					strObjectId1[i] = strName;
+					hmReturnVal.put("" + i, strName);
+				}
+				else {
+					DomainObject dostrObjectIdofArray = new DomainObject(strObjectIdofArray);
+
+					ContextUtil.pushContext(context);
+					bContextPushed = true;
+					if (!strObjectIdofArray.equals(strParentId)) {
+						// doParentProjectId.addToObject(context,
+						// "Audit Supporting Document", strObjectIdofArray);
+						dostrObjectIdofArray.addToObject(context,
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT)),
+								strParentId);
+						// doParentProjectId.addToObject(context, new
+						// RelationshipType(${CLASS:AuditConstants}.REL_AUDITSUPPORTINGDOCUMENT),
+						// strObjectIdofArray);
+					}
+
+					ContextUtil.popContext(context);
+					bContextPushed = false;
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+		// logger.error("Exit");
+		return hmReturnVal;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getGeneralSearchResult(Context context, String[] args) throws Exception {
+		// ${CLASS:emxSearch} search = new ${CLASS:emxSearch}(context, args);
+
+		// MapList result = search.getGeneralSearchResult(context, args);
+		MapList result = (MapList) JPO.invoke(context, "emxSearch", null, "getGeneralSearchResult", args, MapList.class);
+		MapList returnResult = new MapList();
+
+		for (int i = 0; i < result.size(); i++) {
+			HashMap map = (HashMap) result.get(i);
+
+			String type = (String) map.get(DomainConstants.SELECT_TYPE);
+
+			if (!(type.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_ACTION_TASK)) == 0
+					|| type.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPLY)) == 0
+					|| type.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK)) == 0)) {
+				returnResult.add(map);
+			}
+		}
+
+		return returnResult;
+	}
+
+	/**
+	 * Deletes all objects selected from a table. May be called directly.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hash map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String deleteFromTable(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String SELECT_TYPE_KIND_OF_AUDIT_TEMPLATE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREQUESTTEMPLATE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPLY = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREPLY);
+		final String SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSCHEDULE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSUPPLIER);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY);
+		final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		final String STATE_AUDIT_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_PLAN);
+		final String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+		final String STATE_AUDITREQUEST_NEW = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+				AuditConstants.SYM_STATE_NEW);
+		final String STATE_AUDITREQUEST_INPROGRESS = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+				AuditConstants.SYM_STATE_INPROGRESS);
+		final String POLICY_AUDITFINDING = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITFINDING);
+		final String STATE_AUDITFINDING_OPEN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITFINDING,
+				AuditConstants.SYM_STATE_OPEN);
+		final String POLICY_AUDITREPORTSUMMARY = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREPORTSUMMARY);
+		final String STATE_AUDITREPORTSUMMARY_DRAFT = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,
+				POLICY_AUDITREPORTSUMMARY, AuditConstants.SYM_STATE_DRAFT);
+		final String POLICY_AUDITSCHEDULE = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITSCHEDULE);
+		final String STATE_AUDITSCHEDULE_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITSCHEDULE,
+				AuditConstants.SYM_STATE_PLAN);
+		HashMap returnMap = new HashMap();
+		int retVal = 0;
+		boolean bContextPushed = false;
+		try {
+			boolean canDelete = false;
+			String strParentTypeKindOfAuditTemplate = DomainConstants.EMPTY_STRING;
+			String strObjectId = DomainConstants.EMPTY_STRING;
+			String strMessage = DomainConstants.EMPTY_STRING;
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get(AuditConstants.EMX_TABLE_ROW_ID);
+
+			// Getting the parent OID ,Read Input Parent OID into an Array
+			String strParentId = getParentID(context, args);
+			if (!Helper.isNullOrEmpty(strParentId)) {
+				DomainObject doParent = DomainObject.newInstance(context, strParentId);
+				// Getting the parent OID
+				strParentTypeKindOfAuditTemplate = doParent.getInfo(context, SELECT_TYPE_KIND_OF_AUDIT_TEMPLATE);
+
+			}
+
+			int noOfObjecttoBeDelete = 0;
+			noOfObjecttoBeDelete = emxTableRowId.length;
+
+			// iterate through the selected list of objects to delete
+			for (int j = 0; j < noOfObjecttoBeDelete; j++) {
+				// modified for refreshing the navigation tree after deleting
+				// the Object
+				strObjectId = emxTableRowId[j];
+				if (strObjectId.indexOf("|") != -1) {
+					strObjectId = strObjectId.substring(strObjectId.indexOf("|") + 1, strObjectId.length());
+				}
+
+				if (!Helper.isNullOrEmpty(strObjectId)) {
+					DomainObject doChild = new DomainObject(strObjectId);
+					List<Map<?, ?>> lmChildObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+							Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER,
+									SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_REQUEST, SELECT_TYPE_KIND_OF_AUDIT_FINDING,
+									SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE, SELECT_TYPE_KIND_OF_AUDIT_REPLY, SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE,
+									SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER, SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY));
+					if (!Helper.isNullOrEmpty(lmChildObjectInfo)) {
+						Map<?, ?> mpChildObjectInfo = lmChildObjectInfo.get(0);
+						if (!Helper.isNullOrEmpty(mpChildObjectInfo)) {
+							String strName = (String) mpChildObjectInfo.get(DomainConstants.SELECT_NAME);
+							String strCurrentState = (String) mpChildObjectInfo.get(DomainConstants.SELECT_CURRENT);
+							String strOwner = (String) mpChildObjectInfo.get(DomainConstants.SELECT_OWNER);
+							String strTypeKindOfAudit = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+							String strTypeKindOfAuditRequest = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST);
+							String strTypeKindOfAuditFinding = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+							String strTypeKindOfAuditRequestTemplate = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE);
+							String strTypeKindOfAuditReply = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPLY);
+							String strTypeKindOfAuditSchedule = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE);
+							String strTypeKindOfAuditSupplier = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER);
+							String strTypeKindOfAuditReportSummary = (String) mpChildObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY);
+
+							// Checking Dependecies before Audit Delete
+							// Audit can be deleted only when it is in "Plan"
+							// state
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+								// Checking the state for Audit
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDIT_PLAN)) {
+									// Calling the method to check Audit
+									// dependencies
+									canDelete = isDeletAudit(context, doChild);
+									if (canDelete) {
+										// modified for refreshing the
+										// navigation tree after
+										// deleting the Object
+										// deleting the object
+										doChild.deleteObject(context);
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.AuditCannotDelete");
+										retVal = 1;
+									}
+								}
+								else {
+									strMessage = new StringBuilder().append(strName).append("; ")
+											.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.AuditCannotNotPlan"))
+											.toString();
+									retVal = 1;
+								}
+							}
+							// Checking Dependencies for Request Template
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequestTemplate)) {
+								// Push context to Delete the object
+								if (!bContextPushed) {
+									ContextUtil.pushContext(context);
+									bContextPushed = true;
+								}
+								// Calling the method to check Request
+								// dependencies
+								canDelete = canDeleteAuditRequest(context, doChild);
+								if (canDelete) {
+									// deleting the object
+									doChild.deleteObject(context);
+								}
+								else {
+									strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.RequestCannotDelete");
+									retVal = 1;
+								}
+								if (bContextPushed) {
+									ContextUtil.popContext(context);
+									bContextPushed = false;
+								}
+							}
+
+							// Checking Dependecies for Audit Delete -ends here
+							// Checking Dependencies for Request
+							// Request can be deleted only when that is in 'New
+							// State
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)) {
+								// Checking Dependencies for Request
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDITREQUEST_NEW)) {
+
+									// Calling the method to check Request
+									// dependencies
+									canDelete = canDeleteAuditRequest(context, doChild);
+									// Push context to Delete the object
+									if (!bContextPushed) {
+										ContextUtil.pushContext(context);
+										bContextPushed = true;
+									}
+									if (canDelete) {
+										// //modified for refreshing the
+										// navigation tree
+										// after deleting the Object
+										// deleting the object
+										doChild.deleteObject(context);
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.RequestCannotDelete");
+										retVal = 1;
+									}
+									if (bContextPushed) {
+										ContextUtil.popContext(context);
+										bContextPushed = false;
+									}
+								}
+								else {
+									strMessage = new StringBuffer().append(strName).append("; ").append(
+											Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.RequestCannotNotNew"))
+											.toString();
+									retVal = 1;
+								}
+							}
+
+							// Checking Dependencies for Response
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReply)) {
+								// Calling the method to check Response
+								// dependencies
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDITREQUEST_INPROGRESS)) {
+									canDelete = isDeletResponse(context, doChild);
+									if (canDelete) {
+										// modified for refreshing the
+										// navigation tree after
+										// deleting the Object
+										// deleting the object
+
+										StringList objSelects = new StringList(2);
+										objSelects.addElement(DomainConstants.SELECT_ID);
+										StringList relSelects = new StringList(1);
+										relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+										MapList relList = doChild.getRelatedObjects(context, DomainConstants.QUERY_WILDCARD,
+												DomainConstants.QUERY_WILDCARD, objSelects, relSelects, true, true, (short) 1, "", "", 0);
+
+										try {
+											ContextUtil.pushContext(context);
+											for (int k = 0; k < relList.size(); k++) {
+												String rd = ((String) ((Map) relList.get(k)).get(DomainConstants.SELECT_RELATIONSHIP_ID)).trim();
+												DomainRelationship.disconnect(context, rd, false);
+											}
+											doChild.deleteObject(context);
+										}
+										finally {
+											ContextUtil.popContext(context);
+										}
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.ResponseCannotDelete");
+										retVal = 1;
+									}
+								}
+								else {
+									strMessage = new StringBuffer().append(strName).append("; ")
+											.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.ReplyNotInProgress"))
+											.toString();
+									retVal = 1;
+								}
+							}
+
+							// Checking Dependencies for Findings
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+								// Calling the method to check Findings
+								// dependencies
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDITFINDING_OPEN)) {
+									canDelete = isDeletFinding(context, doChild);
+									if (canDelete) {
+										// deleting the object
+										doChild.deleteObject(context);
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.FindingCannotDelete");
+										retVal = 1;
+									}
+								}
+								else {
+									strMessage = new StringBuffer().append(strName).append("; ")
+											.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.FindingNotInOpen"))
+											.toString();
+									retVal = 1;
+								}
+							}
+							// Checking Dependencies for Audit Schedule
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSchedule)) {
+								// Calling the method to check Audit Schedule
+								// dependencies
+
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDITSCHEDULE_PLAN)) {
+									canDelete = isDeletAuditSchedule(context, doChild);
+
+									if (context.getUser().compareTo(strOwner) != 0) {
+										strMessage = new StringBuilder().append("Only owner can delete Audit Schedule. ").append(context.getUser())
+												.append(" is not owner for ").append(doChild.getName()).toString();
+										retVal = 1;
+
+									}
+
+									else if (canDelete) {
+										// deleting the object
+										doChild.deleteObject(context);
+									}
+									else {
+										strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT,
+												"LQIAudit.Message.AScheduleCannotDelete");
+										retVal = 1;
+									}
+								}
+								else {
+									strMessage = new StringBuffer().append(strName).append("; ")
+											.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.ScheduleNotInPlan"))
+											.toString();
+									retVal = 1;
+								}
+							}
+
+							// Checking Dependencies for Audit Supplier--Deletes
+							// only if
+							// Supplier is not associated with Audit
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSupplier)) {
+								// Calling the method to check Audit Supplier
+								// dependencies
+								canDelete = isDeletAuditSupplier(context, doChild);
+								if (canDelete) {
+									// deleting the object
+									doChild.deleteObject(context);
+								}
+								else {
+									strMessage = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.ASupplierCannotDelete");
+									retVal = 1;
+								}
+							}
+
+							// Audit Report Summary can be deleted only when
+							// that is in
+							// '"Draft' State
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReportSummary)) {
+
+								if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_AUDITREPORTSUMMARY_DRAFT)) {
+									// deleting the object
+									doChild.deleteObject(context);
+								}
+								else {
+									strMessage = new StringBuffer().append(strName).append("; ").append(Helper.getI18NString(context,
+											Helper.StringResource.AUDIT, "LQIAudit.Message.AuditReportSummaryCannotDelete")).toString();
+									retVal = 1;
+								}
+							}
+
+						}
+
+					}
+				}
+
+			} // end For loop
+			if (retVal != 1) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+			}
+			else {
+				throw new AuditException(strMessage);
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			String strError = e.toString();
+			// make the error more user friendly
+			int colonIndex = strError.lastIndexOf(":");
+			if (colonIndex != -1) {
+				strError = strError.substring(colonIndex + 2);
+			}
+			throw new AuditException(strError);
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+	}
+
+	/**
+	 * This method checks the Audit dependencies Checks for the related objects
+	 * with corresponding relations and if it has no connection with other
+	 * objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doChild
+	 *            the do child
+	 * 
+	 * @return boolean true if Audit has no Dependencies else false
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isDeletAudit(Context context, DomainObject doChild) throws Exception {
+
+		boolean isDelete = false;
+		try {
+			MapList mListRelationRequest = new MapList();
+			MapList mListRelationTemplate = new MapList();
+			MapList mListRelationFindings = new MapList();
+			MapList mListRelationASchedule = new MapList();
+			MapList mListASummaryReport = new MapList();
+
+			// Getting the related Objects...
+			mListRelationRequest = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			mListRelationTemplate = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITTEMPLATE),
+					DomainConstants.QUERY_WILDCARD, true, false, 1, new StringList(), null, "", "", null, null, null);
+			mListRelationFindings = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			mListRelationASchedule = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+					DomainConstants.QUERY_WILDCARD, true, false, 1, new StringList(), null, "", "", null, null, null);
+			mListASummaryReport = doChild.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREPORTSUMMARY), DomainConstants.QUERY_WILDCARD, false, true,
+					1, new StringList(), null, "", "", null, null, null);
+
+			int insize = mListRelationRequest.size();
+			int insizeT = mListRelationTemplate.size();
+			int insizeF = mListRelationFindings.size();
+			int insizeAS = mListRelationASchedule.size();
+			int insizeASR = mListASummaryReport.size();
+
+			if (insize == 0 && insizeT == 0 && insizeF == 0 && insizeAS == 0 && insizeASR == 0) {
+				isDelete = true;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return isDelete;
+	}
+
+	/**
+	 * This method checks the Request dependencies Checks for the related
+	 * objects with corresponding relations and if it has no connection with
+	 * other objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param auditRequestObject
+	 *            the do child
+	 * @return boolean true if Request has no Dependencies else false
+	 * @throws AuditException
+	 *             the exception
+	 */
+	public boolean canDeleteAuditRequest(Context context, DomainObject auditRequestObject) throws AuditException {
+		try {
+			boolean canDelete = false;
+			List<Map<?, ?>> mListRelationResponse = new ArrayList<Map<?, ?>>();
+			List<Map<?, ?>> mListRelationAuditRequest = new ArrayList<Map<?, ?>>();
+			StringList slSelects = new StringList();
+			slSelects.add(DomainObject.SELECT_ID);
+
+			mListRelationResponse = QueryUtil.getRelatedObjects(context, auditRequestObject, AuditConstants.SYM_REL_AUDITREQUESTREPLY,
+					DomainConstants.QUERY_WILDCARD, slSelects, null, false, true, (short) 0, DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+			mListRelationAuditRequest = QueryUtil.getRelatedObjects(context, auditRequestObject, AuditConstants.SYM_REL_AUDITREQUEST,
+					DomainConstants.QUERY_WILDCARD, slSelects, null, false, true, (short) 0, DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+			if (Helper.isNullOrEmpty(mListRelationResponse) && Helper.isNullOrEmpty(mListRelationAuditRequest)) {
+				canDelete = true;
+			}
+			return canDelete;
+		}
+		catch (Exception ex) {
+			throw new AuditException(ex);
+		}
+	}
+
+	/**
+	 * This method checks the Response dependencies Checks for the related
+	 * objects with corresponding relations and if it has no connection with
+	 * other objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doChild
+	 *            the do child
+	 * 
+	 * @return boolean true if Response has no Dependencies else false
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isDeletResponse(Context context, DomainObject doChild) throws Exception {
+
+		boolean isDelete = false;
+		// String strType = "";
+		try {
+			MapList mListRelationResponse = new MapList();
+
+			// Getting the related Objects...
+			mListRelationResponse = doChild.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.REG_TYPE_AUDITREQUSET), true, false, 1, new StringList(), null, "", "",
+					null, null, null);
+
+			if (mListRelationResponse.size() == 1) {
+				isDelete = true;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return isDelete;
+	}
+
+	/**
+	 * This method checks the Finding dependencies Checks for the related
+	 * objects with corresponding relations and if it has no connection with
+	 * other objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doChild
+	 *            the do child
+	 * 
+	 * @return boolean true if Finding has no Dependencies else false
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isDeletFinding(Context context, DomainObject doChild) throws Exception {
+
+		boolean isDelete = false;
+		// String strType = "";
+		try {
+			MapList mListRelationASupportingDoc = new MapList();
+			MapList mListRelationATask = new MapList();
+
+			// Getting the related Objects...
+			mListRelationASupportingDoc = doChild.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPORTINGDOCUMENT), DomainConstants.QUERY_WILDCARD, true,
+					false, 1, new StringList(), null, "", "", null, null, null);
+			mListRelationATask = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITTASK),
+					DomainConstants.QUERY_WILDCARD, true, false, 1, new StringList(), null, "", "", null, null, null);
+
+			if (mListRelationASupportingDoc.size() == 0 && mListRelationATask.size() == 0) {
+				isDelete = true;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return isDelete;
+	}
+
+	/**
+	 * This method checks the Audit Schedule dependencies Checks for the related
+	 * objects with corresponding relations and if it has no connection with
+	 * other objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doChild
+	 *            the do child
+	 * 
+	 * @return boolean true if Audit Schedule has no Dependencies else false
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isDeletAuditSchedule(Context context, DomainObject doChild) throws Exception {
+
+		boolean isDelete = false;
+		try {
+			MapList mListRelationASchedule = new MapList();
+			// Getting the related Objects...
+			mListRelationASchedule = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+
+			if (mListRelationASchedule.size() == 0) {
+				isDelete = true;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return isDelete;
+	}
+
+	/**
+	 * This method checks the Audit Supplier dependencies Checks for the related
+	 * objects with corresponding relations and if it has no connection with
+	 * other objects It will return true so that the object will get deleted.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doChild
+	 *            the do child
+	 * 
+	 * @return boolean true if Audit Supplier has no Dependencies else false
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isDeletAuditSupplier(Context context, DomainObject doChild) throws Exception {
+
+		boolean isDelete = false;
+		try {
+			MapList mListRelationSupplier = new MapList();
+
+			// Getting the related Objects...
+			mListRelationSupplier = doChild.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			// If there is Related Audits
+			if (mListRelationSupplier.size() < 1) {
+				isDelete = true;
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return isDelete;
+	}
+
+	/**
+	 * This is generic method to generate html output for listbox corresponding
+	 * to web form field Default mode is single select listbox. To make it
+	 * multiselect add web form field setting "multiselect" = true This function
+	 * works is 4 different modes : view, create, edit, search
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return String containing listbox HMTL-Output
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getListBoxFieldHTML(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		try {
+			// Get all the arguments
+			HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) mapProgram.get("requestMap");
+			HashMap mapField = (HashMap) mapProgram.get("fieldMap");
+			Map mapSettings = (Map) mapField.get("settings");
+			String strAttrSymbolicName = (String) mapSettings.get("Admin Type");// attribute
+																				// for
+																				// which
+																				// listbox
+																				// html
+			// is generated
+			String strMultiSelect = (String) mapSettings.get("multiselect"); // true
+																				// if
+																				// multiselect
+																				// listbox
+			String strMode = (String) mapRequest.get("mode");// create/edit/search
+																// mode
+			String strObjectId = (String) mapRequest.get("objectId");
+			String strAuditId = "";
+			String strTypeFromCommand = (String) mapRequest.get("type");// attribute
+																		// for
+																		// which
+																		// listbox
+																		// html
+			if (strMode == null) {
+				strMode = DomainConstants.EMPTY_STRING;
+			}
+			String strRelationName = (String) mapRequest.get("connect_rel");
+
+			// StringBuffer for programHTML output,
+			StringBuffer strBufferOutput = new StringBuffer();
+			String strLocale = context.getSession().getLanguage();
+			Vector vecSelectedRanges = new Vector();
+			String strSelectedValue = DomainConstants.EMPTY_STRING;
+			String strAuditSubSystemValue = DomainConstants.EMPTY_STRING;
+			Vector vecAuditSubSystemRanges = new Vector();
+			String strType = DomainConstants.EMPTY_STRING;
+			Map parentMap;
+			// get all the range values defined for the attribute
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, strAttrSymbolicName);
+			String strFieldName = strAttributeName.replaceAll(" ", "");// remove
+																		// all
+																		// space
+																		// characters
+																		// from
+																		// name
+			AttributeType attrType = new AttributeType(strAttributeName);
+			attrType.open(context);
+			String strDefaultAttrValue = attrType.getDefaultValue(context);
+			StringList listChoices = (StringList) getAttributeChoices(context, args);
+
+			listChoices.sort();// sort list of range values
+			attrType.close(context);
+
+			StringList sListObjSelects = new StringList(); // object selects
+			sListObjSelects.addElement(DomainConstants.SELECT_ID);
+
+			// get current attribute value(s)
+			DomainObject doObject = null;
+			DomainObject doAudit;
+			if (null != strObjectId && !"null".equalsIgnoreCase(strObjectId) && !"".equalsIgnoreCase(strObjectId)) {
+				doObject = new DomainObject(new BusinessObject(strObjectId));
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT_REQUEST, SELECT_TYPE_KIND_OF_AUDIT_FINDING));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAuditRequest = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST);
+						String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)
+								|| AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+							strSelectedValue = doObject.getAttributeValue(context, strAttributeName);
+							// Code for Request
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)) {
+								parentMap = doObject.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST), false, sListObjSelects, null);
+								if (null != parentMap && parentMap.size() > 0) {
+									strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									doAudit = new DomainObject(new BusinessObject(strAuditId));
+									strAuditSubSystemValue = doAudit.getAttributeValue(context, strAttributeName);
+								}
+							}
+
+						}
+						else {
+							strAuditSubSystemValue = doObject.getAttributeValue(context, strAttributeName);
+						}
+					}
+
+				}
+
+			}
+
+			/*
+			 * Sub-System attribute on Create Finding screen
+			 */
+
+			if (PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING).equalsIgnoreCase(strTypeFromCommand)
+					|| PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST).equalsIgnoreCase(strTypeFromCommand)) {
+				// Get the parent Audit Id and its attribute value for
+				// Sub-System while create
+				if (null != strRelationName && !"null".equals(strRelationName)
+						&& PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS).equalsIgnoreCase(strRelationName)) {
+					parentMap = doObject.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+							false, sListObjSelects, null);
+
+					if (null != parentMap && parentMap.size() > 0) {
+						strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+						doAudit = new DomainObject(new BusinessObject(strAuditId));
+						// strSelectedValue = doAudit.getAttributeValue(context,
+						// strAttributeName);
+						strAuditSubSystemValue = doAudit.getAttributeValue(context, strAttributeName);
+					}
+
+				}
+				// Get the parent Audit Id and its attribute value for
+				// Sub-System while create
+				else if (null != strRelationName && !"null".equals(strRelationName)
+						&& PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST).equalsIgnoreCase(strRelationName)) {
+					parentMap = doObject.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+							false, sListObjSelects, null);
+
+					if (null != parentMap && parentMap.size() > 0) {
+						strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+						doAudit = new DomainObject(new BusinessObject(strAuditId));
+						strAuditSubSystemValue = doAudit.getAttributeValue(context, strAttributeName);
+					}
+
+				}
+				if (null != strSelectedValue && !"null".equals(strSelectedValue) && !"".equals(strSelectedValue)) {
+					strMode = "edit";
+				}
+			}
+			if (strMode.equals("edit")) {
+				// tokenizers for attribute range & current ranges on object
+				StringTokenizer strSelectRanges = new StringTokenizer(strSelectedValue, ",");
+
+				// define vector of list of selected attribute values
+				while (strSelectRanges.hasMoreTokens()) {
+					vecSelectedRanges.addElement(strSelectRanges.nextToken());
+				}
+				if (PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING).equalsIgnoreCase(strTypeFromCommand)
+						|| PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST).equalsIgnoreCase(strType)
+						|| PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST).equalsIgnoreCase(strTypeFromCommand)) {
+					// tokenizers for attribute range & current ranges on object
+					StringTokenizer strSystemSelectRanges = new StringTokenizer(strAuditSubSystemValue, ",");
+
+					// define vector of list of selected attribute values
+					while (strSystemSelectRanges.hasMoreTokens()) {
+						vecAuditSubSystemRanges.addElement(strSystemSelectRanges.nextToken());
+					}
+
+				}
+			}
+			// if mode is create then set default attribute value
+			else if ("create".equalsIgnoreCase(strMode) && null != strDefaultAttrValue && !"null".equals(strDefaultAttrValue)
+					&& !"".equals(strDefaultAttrValue)) {
+				// add single default value
+				vecSelectedRanges = new Vector();
+				vecSelectedRanges.addElement(strDefaultAttrValue);
+			}
+			// if mode is search then add blank range value to option list
+			else if ("search".equalsIgnoreCase(strMode)) {
+				strFieldName = "txt_" + strFieldName; // in search mode change
+														// field name to prepend
+														// "txt_"
+				if (!listChoices.contains("")) {
+					listChoices.addElement("");
+					listChoices.sort();
+				}
+			}
+
+			String strChoice = "";
+			// Check mode of form & display either current value or listbox
+			if ("create".equalsIgnoreCase(strMode) || "edit".equalsIgnoreCase(strMode) || "search".equalsIgnoreCase(strMode)) {
+				if ("true".equals(strMultiSelect)) {
+					strBufferOutput.append("<select multiple ");
+				}
+				else {
+					strBufferOutput.append("<select ");
+				}
+				strBufferOutput.append("name=\"");
+				strBufferOutput.append(strFieldName);
+				strBufferOutput.append("\"");
+				strBufferOutput.append(" id=\"");
+				strBufferOutput.append(strFieldName + "Id");
+				strBufferOutput.append("\"");
+				strBufferOutput.append(">");
+				// Added blank field
+				strBufferOutput.append("<option value=\"");
+
+				for (int iLoop = 0; iLoop < listChoices.size(); iLoop++) {
+					strChoice = (String) listChoices.get(iLoop);
+					if (vecSelectedRanges.contains(strChoice)) {
+						strBufferOutput.append("<option selected value=\"");
+					}
+					else if (vecAuditSubSystemRanges.contains(strChoice)) {
+						strBufferOutput.append("<option value=\"");
+					}
+
+					strBufferOutput.append(strChoice + "\"" + ">");
+					// get i18n range values for attribute
+					strBufferOutput.append(i18nNow.getRangeI18NString(strAttributeName, strChoice, strLocale));
+					strBufferOutput.append("</option>");
+				}
+				strBufferOutput.append("</select>");
+			}
+			else {
+				// View Mode only show the value
+				return strSelectedValue;
+			}
+			return strBufferOutput.toString();
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			StringBuffer sbOutput = new StringBuffer();
+			return sbOutput.toString();
+		}
+	}
+
+	/**
+	 * Removes the from table.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the HashMap
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String removeFromTable(Context context, String[] args) throws Exception {
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			String strAudScheduleObjectId = (String) ((String[]) mapArgs.get("objectId"))[0];
+			DomainObject doObjectAudSchedule = new DomainObject(strAudScheduleObjectId);
+			String callback = "javascript: getTopWindow().refreshTablePage();";
+
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+			for (int i = 0; i < emxTableRowId.length; ++i) {
+				String strAuditId = emxTableRowId[i];
+				if (strAuditId.indexOf("|") != -1) {
+					strAuditId = strAuditId.substring(strAuditId.indexOf("|") + 1, strAuditId.length());
+				}
+				// creating business Object for Audit
+				BusinessObject boAudit = new BusinessObject(strAuditId);
+				// creating the relationship type
+				RelationshipType relType = new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE));
+				// removing the Audit from Audit Schedule
+				doObjectAudSchedule.disconnect(context, relType, true, boAudit);
+			}
+			return callback;
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			context.abort();
+
+			String strError = e.toString();
+			// make the error more user friendly
+			int colonIndex = strError.lastIndexOf(":");
+			if (colonIndex != -1)
+				strError = strError.substring(colonIndex + 2);
+			String strURL = "javascript:alert('" + strError.trim() + "');";
+			return strURL;
+		}
+	}
+
+	/**
+	 * Utility method to get the list of obejct ids from the mapList.
+	 * 
+	 * @param mapListObjects
+	 *            the map list objects
+	 * 
+	 * @return StringList
+	 */
+	public static StringList getIdsFromMapList(MapList mapListObjects) {
+		StringList slistIds = new StringList();
+
+		Iterator itrMap = mapListObjects.iterator();
+		Map tempMap = null;
+		while (itrMap.hasNext()) {
+			tempMap = (Map) itrMap.next();
+			slistIds.add((String) tempMap.get(DomainConstants.SELECT_ID));
+		}
+		return slistIds;
+	}
+
+	/**
+	 * This method is to check for file checkin access.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean showFileCheckin(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String SELECT_TYPE_KIND_OF_AUDIT_TEMPLATE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITTEMPLATE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREQUESTTEMPLATE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPLY = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREPLY);
+		final String SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSCHEDULE);
+		final String SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITSUPPLIER);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY);
+		final String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		final String STATE_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT, AuditConstants.SYM_STATE_PLAN);
+		final String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_ACTIVE);
+		final String STATE_FINALIZATION = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+				AuditConstants.SYM_STATE_FINALIZATION);
+		final String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+		final String STATE_NEW = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+				AuditConstants.SYM_STATE_NEW);
+		final String STATE_AUDITREQUEST_INPROGRESS = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+				AuditConstants.SYM_STATE_INPROGRESS);
+		final String POLICY_AUDITFINDING = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITFINDING);
+		final String STATE_OPEN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITFINDING,
+				AuditConstants.SYM_STATE_OPEN);
+		final String STATE_RESOLUTION = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITFINDING,
+				AuditConstants.SYM_STATE_RESOLUTION);
+		final String POLICY_AUDITREPORTSUMMARY = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREPORTSUMMARY);
+		final String STATE_DRAFT = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREPORTSUMMARY,
+				AuditConstants.SYM_STATE_DRAFT);
+		final String POLICY_AUDITSCHEDULE = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITSCHEDULE);
+		final String STATE_AUDITSCHEDULE_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITSCHEDULE,
+				AuditConstants.SYM_STATE_PLAN);
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			boolean bshowFileCheckin = false;
+			String currentUser = context.getUser();
+			// needs an user name
+			String strCurrentOwner = currentUser;
+			// required full name of the user for matching
+			// currentUser = PersonUtil.getFullName(context, currentUser);
+			Map parentMap = null;
+			String strAuditId = "";
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_REQUEST,
+								SELECT_TYPE_KIND_OF_AUDIT_FINDING, SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE, SELECT_TYPE_KIND_OF_AUDIT_REPLY,
+								SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE, SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER, SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY,
+								SELECT_TYPE_KIND_OF_AUDIT_TEMPLATE));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strCurrentState = (String) mpObjectInfo.get(DomainConstants.SELECT_CURRENT);
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditRequest = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST);
+						String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+						String strTypeKindOfAuditRequestTemplate = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST_TEMPLATE);
+						String strTypeKindOfAuditReply = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPLY);
+						String strTypeKindOfAuditSchedule = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_SCHEDULE);
+						String strTypeKindOfAuditSupplier = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_SUPPLIER);
+						String strTypeKindOfAuditReportSummary = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY);
+						String strTypeKindOfAuditTemplate = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_TEMPLATE);
+
+						StringList sListObjSelects = new StringList();
+						sListObjSelects.addElement(DomainConstants.SELECT_ID);
+
+						// Getting Current user
+						com.matrixone.apps.common.Person currUser = com.matrixone.apps.common.Person.getPerson(context);
+
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit) && (STATE_PLAN.equalsIgnoreCase(strCurrentState)
+								|| STATE_ACTIVE.equalsIgnoreCase(strCurrentState) || STATE_FINALIZATION.equalsIgnoreCase(strCurrentState))) {
+							if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && strCurrentOwner.equals(doObj.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && currentUser.equals(doObj.getInfo(context,
+									DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR))))) {
+								bshowFileCheckin = true;
+							}
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)
+								&& (STATE_NEW.equalsIgnoreCase(strCurrentState))) {
+							parentMap = doObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+									false, sListObjSelects, null);
+
+							if (null != parentMap && parentMap.size() > 0) {
+								strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+								if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+									bshowFileCheckin = true;
+								}
+								else {
+									bshowFileCheckin = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)
+								&& (STATE_OPEN.equalsIgnoreCase(strCurrentState) || STATE_RESOLUTION.equalsIgnoreCase(strCurrentState))) {
+							// get the parent Audit object id
+							parentMap = doObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+									false, sListObjSelects, null);
+							// check for null
+							if (null != parentMap && parentMap.size() > 0) {
+								strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+								// check admin or not
+								if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+									bshowFileCheckin = true;
+								}
+								// CHECK AUDIT OBJECT TO HAVE CHECKIN ACCESS FOR
+								// THE
+								// LOGGED
+								// IN
+								// USER(member)
+								else {
+									bshowFileCheckin = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReply)
+								&& STATE_AUDITREQUEST_INPROGRESS.equalsIgnoreCase(strCurrentState)) {
+							Map requestMap = doObj.getRelatedObject(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY), false, sListObjSelects, null);
+							if (null != requestMap && requestMap.size() > 0) {
+								String strRequestId = (String) requestMap.get(DomainConstants.SELECT_ID);
+								DomainObject doRequest = DomainObject.newInstance(context, new BusinessObject(strRequestId));
+								parentMap = doRequest.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST), false, sListObjSelects, null);
+								if (null != parentMap && parentMap.size() > 0) {
+									strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// check admin or not
+									if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+										bshowFileCheckin = true;
+									}
+									// check access at Audit object level
+									else {
+										bshowFileCheckin = hasAccess(context, strAuditId, true, true, true);
+									}
+								}
+							}
+						}
+						// If the object is of type Audit Supplier
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSupplier)) {
+							// Roles permitted to upload file are Audit Admin or
+							// Audit
+							// Supplier
+							// Manager
+							if ((currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN)))
+									|| (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, "role_AuditSupplierManager")))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && strCurrentOwner.equals(doObj.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bshowFileCheckin = true;
+							}
+						}
+						// If the object is of type Audit Template
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditTemplate)) {
+							// Roles permitted to upload file are Audit Admin or
+							// Audit
+							// Template
+							// Manager
+							if ((currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN)))
+									|| (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, "role_AuditTemplateManager")))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && strCurrentOwner.equals(doObj.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bshowFileCheckin = true;
+							}
+						}
+
+						// If the object is of type Audit Request Template
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequestTemplate)) {
+							// Roles permitted to upload file are Audit Admin or
+							// Audit
+							// Template
+							// Manager
+							if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))
+									|| currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, "role_AuditTemplateManager"))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && strCurrentOwner.equals(doObj.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bshowFileCheckin = true;
+							}
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditSchedule)
+								&& STATE_AUDITSCHEDULE_PLAN.equalsIgnoreCase(strCurrentState)) {
+							// Roles permitted to upload file are Audit Admin or
+							// Schedule
+							// Owner
+							if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+								bshowFileCheckin = true;
+							}
+							else if (!bshowFileCheckin && strCurrentOwner.equals(doObj.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bshowFileCheckin = true;
+							}
+						}
+						else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReportSummary)
+								&& STATE_DRAFT.equalsIgnoreCase(strCurrentState)) {
+							if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+								return true;
+							}
+							else {
+								// get the parent Audit object id
+								parentMap = doObj.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE), false, sListObjSelects, null);
+								// check for null
+								if (null != parentMap && parentMap.size() > 0) {
+									strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// CHECK AUDIT OBJECT TO HAVE CHECKIN ACCESS
+									// FOR THE
+									// LOGGED
+									// IN USER
+									bshowFileCheckin = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+						}
+						else {
+							bshowFileCheckin = false;
+						}
+					}
+				}
+			}
+			return bshowFileCheckin;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * checks for the accesses at Policy Level.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if check access at policy
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessAtPolicyForMember(Context context, String[] args) throws Exception {
+		boolean bShowHasAccess = false;
+
+		try {
+			if (args == null || args.length == 0) {
+				throw new IllegalArgumentException("Exception in method checkAccessAtPolicy: Arguments are " + args.toString());
+			}
+
+			String strObjectId = args[0];
+
+			// call this to check whether the user has access to this type
+			bShowHasAccess = checkAccessforAllTypes(context, strObjectId);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	/**
+	 * Wrapper method to check accesses at UI Level.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if check access at ui
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessAtUI(Context context, String[] args) throws Exception {
+		boolean bShowHasAccess = false;
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			if (null != strObjectId && !"null".equalsIgnoreCase(strObjectId) && !"".equals(strObjectId)) {
+				// call this to check whether the user has access to this type
+				bShowHasAccess = checkAccessforAllTypes(context, strObjectId);
+			}
+			else {
+				bShowHasAccess = false;
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	/**
+	 * Its a wrapper method for UI level accesses Its a general method which
+	 * checks for access for all the types.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strObjectId
+	 *            the str object id
+	 * 
+	 * @return true, if check accessfor all types
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessforAllTypes(Context context, String strObjectId) throws AuditException {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPLY = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREPLY);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY);
+		final String SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT_ACTION_TASK);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK);
+		final String POLICY_AUDIT_FINDING_ACTION_TASK = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT_FINDING_ACTION_TASK);
+		final String STATE_CREATE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT_FINDING_ACTION_TASK,
+				AuditConstants.SYM_STATE_CREATE);
+		boolean bShowHasAccess = false;
+
+		try {
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+
+				DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER, SELECT_TYPE_KIND_OF_AUDIT,
+								SELECT_TYPE_KIND_OF_AUDIT_REQUEST, SELECT_TYPE_KIND_OF_AUDIT_FINDING, SELECT_TYPE_KIND_OF_AUDIT_REPLY,
+								SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY, SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK,
+								SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strCurrentState = (String) mpObjectInfo.get(DomainConstants.SELECT_CURRENT);
+						String strObjectOwner = (String) mpObjectInfo.get(DomainConstants.SELECT_OWNER);
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+						String strTypeKindOfAuditReportSummary = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REPORT_SUMMARY);
+						String strTypeKindOfAuditActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK);
+						String strTypeKindOfAuditFindingActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK);
+
+						StringList sListObjSelects = new StringList(); // object
+																		// selects
+						sListObjSelects.addElement(DomainConstants.SELECT_ID);
+
+						Map parentMap = new HashMap();
+						/*
+						 * if user is Audit Admin then return true Audit Admin
+						 * role has all the rights else check as per respective
+						 * types
+						 */
+						com.matrixone.apps.common.Person currUser = com.matrixone.apps.common.Person.getPerson(context);
+						if (Helper.hasRoles(context, AuditConstants.SYM_ROLE_AUDITADMIN)) {
+							bShowHasAccess = true;
+						}
+						else {
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+								// check access at Audit object level
+
+								bShowHasAccess = hasAccess(context, strObjectId, true, true, true);
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+
+								parentMap = doObj.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS), false, sListObjSelects, null);
+
+								if (null != parentMap && parentMap.size() > 0) {
+									String strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// check access at Audit object level
+									bShowHasAccess = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditReportSummary)) {
+								// if its request object then get its parent
+								// Audit
+								// Object
+								parentMap = doObj.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREPORTSUMMARY), false, sListObjSelects,
+										null);
+
+								if (null != parentMap && parentMap.size() > 0) {
+									String strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// check access at Audit object level
+									bShowHasAccess = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditActionTask)) {
+								// if its Action Item object then get its parent
+								// Audit
+								// Object
+								parentMap = doObj.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false, sListObjSelects, null);
+
+								if (null != parentMap && parentMap.size() > 0) {
+									String strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// check access at Audit object level
+									bShowHasAccess = hasAccess(context, strAuditId, true, true, true);
+								}
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFindingActionTask)
+									&& STATE_CREATE.equalsIgnoreCase(strCurrentState)) {
+								if (!Helper.isNullOrEmpty(strObjectOwner) && strObjectOwner.equalsIgnoreCase(currUser.getName())) {
+									bShowHasAccess = true;
+								}
+								else {
+									String strFindingId = DomainConstants.EMPTY_STRING;
+									Map auditMap;
+									DomainObject doFinding;
+									String strAuditId = DomainConstants.EMPTY_STRING;
+
+									parentMap = doObj.getRelatedObject(context,
+											PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false, sListObjSelects,
+											null);
+									if (null != parentMap && parentMap.size() > 0) {
+										strFindingId = (String) parentMap.get(DomainConstants.SELECT_ID);
+										doFinding = DomainObject.newInstance(context, strFindingId);
+										auditMap = doFinding.getRelatedObject(context,
+												PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS), false, sListObjSelects,
+												null);
+										if (null != auditMap && auditMap.size() > 0) {
+											strAuditId = (String) auditMap.get(DomainConstants.SELECT_ID);
+											// check access at Audit object
+											// level
+											// based on use case, owner, lead
+											// auditor
+											// and
+											// members can modify Audit Finding
+											// Action Item
+											bShowHasAccess = hasAccess(context, strAuditId, true, true, true);
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+		}
+
+		return bShowHasAccess;
+	}
+
+	/**
+	 * Its a general method which checks Lead Auditor access for the types.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public boolean checkAccessforLeadAudit(Context context, String[] args) throws Exception {
+		boolean bShowHasAccess = false;
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			if (null != strObjectId && !"null".equalsIgnoreCase(strObjectId) && !"".equals(strObjectId)) {
+				// call this to check whether the user has access to this type
+				bShowHasAccess = checkAccessforLeadAudit(context, strObjectId);
+			}
+			else {
+				bShowHasAccess = false;
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	/**
+	 * Its a wrapper method for command level accesses Its a general method
+	 * which checks for access for all the types.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strObjectId
+	 *            the str object id
+	 * 
+	 * @return true, if check accessfor all types
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessforLeadAudit(Context context, String strObjectId) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT_ACTION_TASK);
+		boolean bShowHasAccess = false;
+
+		try {
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK);
+
+						StringList sListObjSelects = new StringList(); // object
+																		// selects
+						sListObjSelects.addElement(DomainConstants.SELECT_ID);
+
+						Map parentMap = new HashMap();
+						// if user is Audit Admin then return true
+						// Audit Admin role has all the rights
+						com.matrixone.apps.common.Person currUser = com.matrixone.apps.common.Person.getPerson(context);
+						if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+							bShowHasAccess = true;
+						} // if user is not Audit Admin then check as per
+							// respective
+							// types
+						else {
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+								// check access at Audit object level
+								bShowHasAccess = isLeadAuditorOrOwner(context, strObjectId);
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditActionTask)) {
+								// if its Action Item object then get its parent
+								// Audit Object
+								parentMap = doObj.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false, sListObjSelects, null);
+
+								if (null != parentMap && parentMap.size() > 0) {
+									String strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									// check access at Audit object level
+									bShowHasAccess = isLeadAuditorOrOwner(context, strAuditId);
+								}
+							}
+						}
+					}
+				}
+
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+
+		return bShowHasAccess;
+	}
+
+	/**
+	 * checks whether logged in user is part of below three attributes from the
+	 * Audit object Audit Owner Lead Auditor Audit Member.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strAuditId
+	 *            ( Audit Object Id)
+	 * @param bCheckOwner
+	 *            the b check owner
+	 * @param bCheckLead
+	 *            the b check lead
+	 * @param bCheckMembers
+	 *            the b check members
+	 * 
+	 * @return true if condition satisfied
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean isLeadAuditorOrOwner(Context context, String strAuditId) throws Exception {
+		boolean showAccess = false;
+		try {
+			showAccess = AuditUtil.hasAccessOnAudit(context, strAuditId, true, true, false);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return showAccess;
+	}
+
+	/**
+	 * checks whether logged in user is part of below three attributes from the
+	 * Audit object Audit Owner Lead Auditor Audit Member.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strAuditId
+	 *            ( Audit Object Id)
+	 * @param bCheckOwner
+	 *            the b check owner
+	 * @param bCheckLead
+	 *            the b check lead
+	 * @param bCheckMembers
+	 *            the b check members
+	 * 
+	 * @return true if condition satisfied
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean hasAccess(Context context, String strAuditId, boolean bCheckOwner, boolean bCheckLead, boolean bCheckMembers) throws Exception {
+		boolean showAccess = false;
+		try {
+			showAccess = AuditUtil.hasAccessOnAudit(context, strAuditId, bCheckOwner, bCheckLead, bCheckMembers);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return showAccess;
+	}
+
+	/**
+	 * This method Deletes all objects selected from a table. This method is
+	 * invoked only when SuperUser is Deleting Audit. This will call method to
+	 * delete all the related objects till leaf node.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return HashMap
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public HashMap deleteAuditBySuperUser(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+
+			DomainObject doAuditObject = null;
+			String strObjectId = DomainConstants.EMPTY_STRING;
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+
+			int noOfObjecttoBeDelete = 0;
+			noOfObjecttoBeDelete = emxTableRowId.length;
+
+			// iterate through the selected list of objects to delete
+			for (int j = 0; j < noOfObjecttoBeDelete; j++) {
+				strObjectId = emxTableRowId[j];
+				if (strObjectId.indexOf("|") != -1) {
+					strObjectId = strObjectId.substring(strObjectId.indexOf("|") + 1, strObjectId.length());
+				}
+				doAuditObject = DomainObject.newInstance(context, strObjectId);
+
+				// calling methods to dlete Leaf Objects.
+				deleteLeafObjects(context, doAuditObject);
+
+				// Calling method to Delete Reference Files
+				deleteFileReferences(context, doAuditObject);
+
+				// Calling method to Delete Action Tasks
+				deleteActionTask(context, doAuditObject);
+
+				// Deleting Audit Object
+				doAuditObject.deleteObject(context);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return returnMap;
+	}
+
+	/**
+	 * This method itereate till the leaf node of each objects and Deletes them
+	 * This call methods to delete reference files as well as Action Task.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doObject
+	 *            -- is the Domain Object
+	 * 
+	 * @return void
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public void deleteLeafObjects(Context context, DomainObject doObject) throws Exception {
+
+		try {
+			String strRequestId = DomainConstants.EMPTY_STRING;
+			String strReplyId = DomainConstants.EMPTY_STRING;
+			String strFindingId = DomainConstants.EMPTY_STRING;
+			String strReportSummary = DomainConstants.EMPTY_STRING;
+			String strScoreCard = DomainConstants.EMPTY_STRING;
+			MapList mListRelationRequest = new MapList();
+			MapList mListRelationReply = new MapList();
+			MapList mListRelationFindings = new MapList();
+			MapList mlRelatedAuditScoreCard = new MapList();
+			MapList mListASummaryReport = new MapList();
+			Map requestObjectMap = null;
+			Map replyMap = null;
+			Map findingMap = null;
+			Map reportSummarygMap = null;
+			Map auditScoreCardMap = null;
+			DomainObject dobjRequest = null;
+			DomainObject dobjReply = null;
+			DomainObject dobjFinding = null;
+			DomainObject dobjReportSummary = null;
+			DomainObject dobjAuditScoreCard = null;
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+
+			// Getting the related Objects...
+			/*
+			 * Step 1:Getting related Request Objects if there are objects Step
+			 * 2:Getting the Reply objects Step 3:Delete Reply object Step
+			 * 4:Delete Request Object
+			 */
+			mListRelationRequest = doObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			for (Iterator iter = mListRelationRequest.iterator(); iter.hasNext();) {
+				requestObjectMap = (Map) iter.next();
+				strRequestId = (String) requestObjectMap.get(DomainConstants.SELECT_ID);
+				if (null != strRequestId && !" ".equals(strRequestId)) {
+					dobjRequest = DomainObject.newInstance(context, strRequestId);
+					mListRelationReply = dobjRequest.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY), DomainConstants.QUERY_WILDCARD, false,
+							true, 1, new StringList(), null, "", "", null, null, null);
+					for (iter = mListRelationReply.iterator(); iter.hasNext();) {
+						replyMap = (Map) iter.next();
+						strReplyId = (String) replyMap.get(DomainConstants.SELECT_ID);
+						if (null != strReplyId && !" ".equals(strReplyId)) {
+							dobjReply = DomainObject.newInstance(context, strReplyId);
+							// Calling method to Delete Reference Files
+							deleteFileReferences(context, dobjReply);
+							// Deleting Audit Rely object
+							dobjReply.deleteObject(context);
+						}
+					} // Closing Reply for loop
+
+					// Calling method to Delete Reference Files
+					deleteFileReferences(context, dobjRequest);
+
+					// Calling method to Delete Action Tasks
+					deleteActionTask(context, dobjRequest);
+					// Deleting Audit request object
+					dobjRequest.deleteObject(context);
+				}
+			} // Closing request for loop
+
+			/** Code to Delete Finding Object **/
+
+			// Getting related Finding Objects if there are objects
+			mListRelationFindings = doObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			for (Iterator iter = mListRelationFindings.iterator(); iter.hasNext();) {
+				findingMap = (Map) iter.next();
+				strFindingId = (String) findingMap.get(DomainConstants.SELECT_ID);
+				if (null != strFindingId && !" ".equals(strFindingId)) {
+					dobjFinding = DomainObject.newInstance(context, strFindingId);
+
+					// Calling method to Delete Reference Files
+					deleteFileReferences(context, dobjFinding);
+
+					// Calling method to Delete Action Tasks
+					deleteActionTask(context, dobjFinding);
+
+					// Delete Finding Object
+					dobjFinding.deleteObject(context);
+				}
+			}
+
+			/** Code to Delete Finding Object ends here **/
+
+			/** Code to Delete Audit Report Summary Object **/
+
+			// Getting related Audit report Summary
+			mListASummaryReport = doObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+					DomainConstants.QUERY_WILDCARD, false, true, 1, new StringList(), null, "", "", null, null, null);
+			for (Iterator iter = mListASummaryReport.iterator(); iter.hasNext();) {
+				reportSummarygMap = (Map) iter.next();
+				strReportSummary = (String) reportSummarygMap.get(DomainConstants.SELECT_ID);
+				if (null != strReportSummary && !" ".equals(strReportSummary)) {
+					dobjReportSummary = DomainObject.newInstance(context, strReportSummary);
+
+					// Calling method to Delete Reference Files
+					deleteFileReferences(context, dobjReportSummary);
+					// Deleting Audit report Summary object
+					dobjReportSummary.deleteObject(context);
+				}
+			}
+			/** Code to Delete Audit Report Summary Object ends here **/
+
+			/** Code to Delete Audit Score Card Object **/
+
+			// Getting related Audit Score Card
+			mlRelatedAuditScoreCard = doObject.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCORECARD), DomainConstants.QUERY_WILDCARD, true, false, 1,
+					sListSelects, null, null, "", null, null, null);
+			for (Iterator iter = mlRelatedAuditScoreCard.iterator(); iter.hasNext();) {
+				auditScoreCardMap = (Map) iter.next();
+				strScoreCard = (String) auditScoreCardMap.get(DomainConstants.SELECT_ID);
+				if (null != strScoreCard && !" ".equals(strScoreCard)) {
+					dobjAuditScoreCard = DomainObject.newInstance(context, strScoreCard);
+					// Deleting Audit Score card object
+					dobjAuditScoreCard.deleteObject(context);
+				}
+			}
+			/** Code to Delete Audit Score Card Object ends here **/
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		// return isDelete;
+	}
+
+	/**
+	 * This method itereate till the leaf node of each objects and Deletes them
+	 * This call methods to delete reference files.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doObject
+	 *            -- is the Domain Object
+	 * 
+	 * @return void
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public void deleteFileReferences(Context context, DomainObject doObject) throws Exception {
+		String strFileId = DomainConstants.EMPTY_STRING;
+		Map fileReferenceMap = null;
+		DomainObject dobjFileReference = null;
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+		try {
+			// Getting Related File Reference Objects
+			MapList mListFileAttachments = doObject.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_FILEREFERENCE),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_FILEATTACHMENT), false, true, 1, sListSelects, null, null, "",
+					null, null, null);
+			for (Iterator iter = mListFileAttachments.iterator(); iter.hasNext();) {
+				fileReferenceMap = (Map) iter.next();
+				strFileId = (String) fileReferenceMap.get(DomainConstants.SELECT_ID);
+				if (null != strFileId && !" ".equals(strFileId)) {
+					dobjFileReference = DomainObject.newInstance(context, strFileId);
+					// Deleting File reference object
+					dobjFileReference.deleteObject(context);
+				}
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	/**
+	 * This method itereate till the leaf node of each objects and Deletes them
+	 * This call methods to delete Action Task as well as reference files.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param doObject
+	 *            -- is the Domain Object
+	 * 
+	 * @return void
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+
+	public void deleteActionTask(Context context, DomainObject doObject) throws Exception {
+		String strActionTaskId = DomainConstants.EMPTY_STRING;
+		Map actionTaskMap = null;
+		DomainObject dobjActionTask = null;
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+		try {
+			// Getting Related Action Item Objects
+			MapList mListTemplateTasks = doObject.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), DomainConstants.QUERY_WILDCARD, false, true, 1,
+					sListSelects, null, null, "", null, null, null);
+			for (Iterator iter = mListTemplateTasks.iterator(); iter.hasNext();) {
+				actionTaskMap = (Map) iter.next();
+				strActionTaskId = (String) actionTaskMap.get(DomainConstants.SELECT_ID);
+				if (null != strActionTaskId && !" ".equals(strActionTaskId)) {
+					dobjActionTask = DomainObject.newInstance(context, strActionTaskId);
+					// Calling method to Delete Reference Files
+					deleteFileReferences(context, dobjActionTask);
+					// Deleting Action Item Object
+					dobjActionTask.deleteObject(context);
+				}
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	/**
+	 * This is access method for Request Demote at Complete State. This checks
+	 * whether logged in user is Audit Owner if so show demote
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true if condition satisfied
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	/**
+	 * comments out this method because not used any more for bug #19949, may
+	 * remove for clean up work. public boolean
+	 * checkAccessForDemoteComplete(Context context, String args[]) throws
+	 * Exception { boolean showDemoteComplete = false; try { HashMap programMap
+	 * = (HashMap)JPO.unpackArgs(args); String strObjectId = (String)
+	 * programMap.get("objectId"); String strAuditOwner =""; String
+	 * strCurrentUser= (String) (context.getUser()); if(null != strObjectId &&
+	 * !"null".equalsIgnoreCase( strObjectId ) && !"".equals( strObjectId )) {
+	 * //create an Audit Request StringList strObjectSelects = new
+	 * StringList(1); strObjectSelects.addElement(DomainConstants.SELECT_ID);
+	 * DomainObject doAuditRequest = new DomainObject(strObjectId);
+	 * 
+	 * //Getting parent Audit Object Map parentMap =
+	 * doAuditRequest.getRelatedObject( context,
+	 * ${CLASS:AuditConstants}.REL_AUDITREQUEST, false, strObjectSelects, null
+	 * );
+	 * 
+	 * if ( null != parentMap && parentMap.size()>0) { String strAuditId =
+	 * (String) parentMap.get(DomainConstants.SELECT_ID);
+	 * 
+	 * if(null != strAuditId && !"null".equalsIgnoreCase( strAuditId ) &&
+	 * !"".equals( strAuditId )) { DomainObject doAuditObject = new
+	 * DomainObject(strAuditId); strAuditOwner = doAuditObject.getInfo(context,
+	 * DomainConstants.SELECT_OWNER);
+	 * 
+	 * //If logged in user is Audit Owner if(null != strAuditOwner &&
+	 * !"null".equalsIgnoreCase( strAuditOwner ) && strCurrentUser.equals(
+	 * strAuditOwner )) { showDemoteComplete=true; } } } } } catch (Exception e)
+	 * { e.printStackTrace(); throw e; } return showDemoteComplete; }
+	 */
+
+	/**
+	 * Delete audit. this method will delete only Audit when it will be in Plan
+	 * State ans no other object is connected to it. else it will give alert
+	 * message to user.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the String
+	 * 
+	 * @throws Exception
+	 *             the deleteAudit
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String deleteAudit(Context context, String[] args) throws AuditException {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		try {
+			ArrayList<String> arrSuccessAuditIds = new ArrayList<String>();
+			ArrayList<String> arrFailedAuditIds = new ArrayList<String>();
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strAuditId = rowId.getObjectId();
+					if (!Helper.isNullOrEmpty(strAuditId)) {
+						List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strAuditId },
+								Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, SELECT_TYPE_KIND_OF_AUDIT,
+										DomainConstants.SELECT_OWNER));
+						for (Object obj : returnMap) {
+							Map requestMap = (Map) obj;
+							String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+							String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+							String strTypeKindOfAudit = (String) requestMap.get(SELECT_TYPE_KIND_OF_AUDIT);
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)
+									&& isDeletAudit(context, DomainObject.newInstance(context, strAuditId))
+									&& checkAccessToDeleteAudit(context, strAuditId, requestMap)) {
+								arrSuccessAuditIds.add(strAuditId);
+							}
+							else {
+								arrFailedAuditIds.add(strName);
+							}
+						}
+					}
+				}
+			}
+
+			if (arrFailedAuditIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.AuditCannotDelete"));
+				sbReturn.append("\n");
+				sbReturn.append(arrFailedAuditIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			else if (arrSuccessAuditIds.size() > 0) {
+				ContextUtil.startTransaction(context, Boolean.TRUE);
+				try {
+					DomainObject.deleteObjects(context, arrSuccessAuditIds.toArray(new String[arrSuccessAuditIds.size()]));
+					ContextUtil.commitTransaction(context);
+				}
+				catch (Exception e) {
+					ContextUtil.abortTransaction(context);
+					throw new AuditException(e);
+				}
+			}
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Cascade delete audit. this method will delete audit and related object to
+	 * that audit
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the String
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String cascadeDeleteAudit(Context context, String[] args) throws AuditException {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		try {
+			ArrayList<String> arrSuccessAuditIds = new ArrayList<String>();
+			ArrayList<String> arrFailedAuditIds = new ArrayList<String>();
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId tableRowId : emxTableRowIds) {
+					String strAuditId = tableRowId.getObjectId();
+					List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strAuditId }, Helper.stringList(DomainConstants.SELECT_NAME,
+							DomainConstants.SELECT_CURRENT, SELECT_TYPE_KIND_OF_AUDIT, DomainConstants.SELECT_OWNER));
+
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						String strTypeKindOfAudit = (String) requestMap.get(SELECT_TYPE_KIND_OF_AUDIT);
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)
+								&& checkAccessToDeleteAudit(context, strAuditId, requestMap)) {
+							arrSuccessAuditIds.add(strAuditId);
+						}
+						else {
+							arrFailedAuditIds.add(strName);
+						}
+					}
+				}
+
+				if (arrFailedAuditIds.size() > 0) {
+					StringBuilder sbReturn = new StringBuilder();
+					sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.AuditCannotDeleteAccessIssue"));
+					sbReturn.append("\n");
+					sbReturn.append(arrFailedAuditIds.toString());
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+				}
+				else if (arrSuccessAuditIds.size() > 0) {
+					for (EmxTableRowId rowId : emxTableRowIds) {
+						String strAuditObjId = rowId.getObjectId();
+						if (!Helper.isNullOrEmpty(strAuditObjId)) {
+							DomainObject auditObject = DomainObject.newInstance(context, strAuditObjId);
+							ContextUtil.startTransaction(context, Boolean.TRUE);
+							try {
+								// calling methods to delete Leaf Objects.
+								deleteLeafObjects(context, auditObject);
+
+								// Calling method to Delete Action Tasks
+								deleteActionTask(context, auditObject);
+
+								// Deleting Audit Object
+								auditObject.deleteObject(context);
+
+								ContextUtil.commitTransaction(context);
+							}
+							catch (Exception e) {
+								ContextUtil.abortTransaction(context);
+								throw new AuditException(e);
+							}
+						}
+					}
+
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * This method is invoked from Audit Policy for Public Modify access. This
+	 * is used for allowing various file modify permissions like lock, upload,
+	 * checkout, checkin. It validates if the logged in user is the Lead Auditor
+	 * for the given Audit object, then returns true else false.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessAtPolicyForLeadAuditor(Context context, String[] args) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_REQUEST = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITREQUEST);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		final String SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT_ACTION_TASK);
+		final String SELECT_ATTRIBUTE_LEAD_AUDITOR = AuditUtil.getObjectAttributeSelectable(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+		boolean bShowHasAccess = false;
+		try {
+			if (args == null || args.length == 0) {
+				throw new IllegalArgumentException("Exception in method checkAccessForFiles: Arguments are " + args.toString());
+			}
+
+			String strObjectId = args[0];
+
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doAudit = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(DomainConstants.SELECT_OWNER, SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_REQUEST,
+								SELECT_TYPE_KIND_OF_AUDIT_FINDING, SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK, SELECT_ATTRIBUTE_LEAD_AUDITOR));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditRequest = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_REQUEST);
+						String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING);
+						String strTypeKindOfAuditActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK);
+
+						String strParentType = DomainConstants.EMPTY_STRING;
+						String strParentObjectId = DomainConstants.EMPTY_STRING;
+						String strParentObjectOwner = DomainConstants.EMPTY_STRING;
+						DomainObject doParent = null;
+						String strCurrentUser = context.getUser();
+
+						/*
+						 * If type is Findings or Request or Action Item get the
+						 * Parent object type i.e. Audit
+						 */
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+							String strOwner = (String) mpObjectInfo.get(DomainConstants.SELECT_OWNER);
+							String strAuditLeadAuditor = (String) mpObjectInfo.get(SELECT_ATTRIBUTE_LEAD_AUDITOR);
+
+							if (strCurrentUser.equals(strOwner) || strCurrentUser.equals(strAuditLeadAuditor)) {
+								bShowHasAccess = true;
+							}
+						}
+						else {
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)) {
+								strParentObjectId = doAudit.getInfo(context,
+										"to[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS) + "].from.id");
+
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditRequest)) {
+								strParentObjectId = doAudit.getInfo(context,
+										"to[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST) + "].from.id");
+
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditActionTask)) {
+								strParentObjectId = doAudit.getInfo(context,
+										"to[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM) + "].from.id");
+
+							}
+							if (!Helper.isNullOrEmpty(strParentObjectId)) {
+								List<Map<?, ?>> lmParentObjectInfo = QueryUtil.getInfo(context, new String[] { strParentObjectId },
+										Helper.stringList(DomainConstants.SELECT_OWNER, SELECT_ATTRIBUTE_LEAD_AUDITOR));
+								if (!Helper.isNullOrEmpty(lmParentObjectInfo)) {
+									Map<?, ?> mpParentObjectInfo = lmParentObjectInfo.get(0);
+									if (!Helper.isNullOrEmpty(mpParentObjectInfo)) {
+										String strOwner = (String) mpParentObjectInfo.get(DomainConstants.SELECT_OWNER);
+										String strAuditLeadAuditor = (String) mpParentObjectInfo.get(SELECT_ATTRIBUTE_LEAD_AUDITOR);
+										if (strCurrentUser.equals(strOwner) || strCurrentUser.equals(strAuditLeadAuditor)) {
+											bShowHasAccess = true;
+										}
+									}
+								}
+							}
+
+						}
+
+					}
+				}
+
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	/**
+	 * This method is invoked from Command
+	 * "checkActionItemModifyAccessForCommand". This is used for allowing
+	 * various file modify permissions like lock, upload, checkout, checkin. It
+	 * validates if the logged in user is the Lead Auditor or owner for the
+	 * parent Audit object or the Audit Admin, then returns true else false.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkActionItemModifyAccessForCommand(Context context, String[] args) throws Exception {
+		if (args == null || args.length == 0) {
+			throw new IllegalArgumentException("Exception in method checkLeadAuditor: Arguments are " + args.toString());
+		}
+		HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+		String strObjectId = (String) mapProgram.get("objectId");
+		boolean bShowHasAccess = checkActionItemAccess(context, strObjectId);
+		return bShowHasAccess;
+	}
+
+	/**
+	 * This method is invoked from Audit Action Task Policy for Public Modify
+	 * access. This is used for allowing various file modify permissions like
+	 * lock, upload, checkout, checkin. It validates if the logged in user is
+	 * the Lead Auditor or owner for the parent Audit object or the Audit Admin,
+	 * then returns true else false.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkActionItemModifyAccess(Context context, String[] args) throws Exception {
+		if (args == null || args.length == 0) {
+			throw new IllegalArgumentException("Exception in method checkLeadAuditor: Arguments are " + args.toString());
+		}
+		String strObjectId = args[0];
+		boolean bShowHasAccess = checkActionItemAccess(context, strObjectId);
+		return bShowHasAccess;
+	}
+
+	/**
+	 * This method is invoked from
+	 * "checkActionItemModifyAccessForCommand(context,args[]) method or "
+	 * checkActionItemModifyAccess (context,args[]) method. This is used for
+	 * allowing various file modify permissions like lock, upload, checkout,
+	 * checkin. It validates if the logged in user is the Lead Auditor or owner
+	 * for the parent Audit object or the Audit Admin, then returns true else
+	 * false.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param strObjectId
+	 *            the str object id
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkActionItemAccess(Context context, String strObjectId) throws Exception {
+		final String SELECT_TYPE_KIND_OF_AUDIT = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT);
+		final String SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDIT_ACTION_TASK);
+		final String SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK = AuditUtil.getTypeKindOfSelectable(context,
+				AuditConstants.SYM_TYPE_AUDIT_FINDING_ACTION_TASK);
+		boolean bShowHasAccess = false;
+
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+		sListSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList sListTaskAssignee = new StringList();
+		String userName = context.getUser();
+		String strFullName = PersonUtil.getFullName(context, userName);
+		try {
+			if (!Helper.isNullOrEmpty(strObjectId)) {
+				DomainObject doAudit = DomainObject.newInstance(context, strObjectId);
+
+				List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { strObjectId },
+						Helper.stringList(DomainConstants.SELECT_OWNER, SELECT_TYPE_KIND_OF_AUDIT, SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK,
+								SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK));
+				if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+					Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+					if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+						String strTypeKindOfAudit = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT);
+						String strTypeKindOfAuditActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_ACTION_TASK);
+						String strTypeKindOfAuditFindingActionTask = (String) mpObjectInfo.get(SELECT_TYPE_KIND_OF_AUDIT_FINDING_ACTION_TASK);
+
+						/*
+						 * If the current user is the Lead Auditor for the Audit
+						 * object or is the Audit Owner then access is given
+						 */
+						if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAudit)) {
+							bShowHasAccess = AuditUtil.hasAccessOnAudit(context, strObjectId, true, true, false);
+						}
+						else {
+							String strAuditId = DomainConstants.EMPTY_STRING;
+							if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditActionTask)) {
+
+								Map parentMap = doAudit.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false, sListSelects, null);
+								if (null != parentMap && parentMap.size() > 0) {
+									strAuditId = (String) parentMap.get(DomainConstants.SELECT_ID);
+								}
+							}
+							else if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFindingActionTask)) {
+
+								Map parentMap = doAudit.getRelatedObject(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_ACTION_ITEM), false, sListSelects, null);
+								if (null != parentMap && parentMap.size() > 0) {
+									String strFindingId = (String) parentMap.get(DomainConstants.SELECT_ID);
+									DomainObject doFinding = DomainObject.newInstance(context, strFindingId);
+									Map auditMap = doFinding.getRelatedObject(context,
+											PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS), false, sListSelects, null);
+									if (null != auditMap && auditMap.size() > 0) {
+										strAuditId = (String) auditMap.get(DomainConstants.SELECT_ID);
+									}
+								}
+							}
+
+							DomainObject doObjAudit = DomainObject.newInstance(context, strAuditId);
+							MapList routeObjectList = doAudit.getRelatedObjects(context,
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_OBJECTROUTE),
+									PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_ROUTE), true, true, 1, null, null, null, "", null,
+									null, null);
+							for (Iterator iterRoute = routeObjectList.iterator(); iterRoute.hasNext();) {
+								Map routeElement = (Map) iterRoute.next();
+								String strRouteObjectId = (String) routeElement.get(DomainConstants.SELECT_ID);
+								DomainObject doRouteTask = DomainObject.newInstance(context, strRouteObjectId);
+
+								MapList personMapList = doRouteTask.getRelatedObjects(context,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_PROJECTROUTE) + ","
+												+ DomainConstants.RELATIONSHIP_ROUTE_NODE,
+										PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_PERSON), true, true, 1, sListSelects, null,
+										null, "", null, null, null);
+								for (Iterator iterPerson = personMapList.iterator(); iterPerson.hasNext();) {
+									Map personMap = (Map) iterPerson.next();
+									sListTaskAssignee.add((String) personMap.get(DomainConstants.SELECT_NAME));
+								}
+							}
+
+							if (sListTaskAssignee.contains(userName)
+									|| userName.equals(doObjAudit.getInfo(context,
+											DomainObject.getAttributeSelect(
+													PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR))))
+									|| userName.equals(doObjAudit.getInfo(context, DomainConstants.SELECT_OWNER))) {
+								bShowHasAccess = true;
+							}
+							else {
+								bShowHasAccess = false;
+							}
+						}
+
+					}
+				}
+
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	/**
+	 * This method verifies access for editing a scorecard. The Lead Auditor,
+	 * Owner or Audit Administrator are allowed to edit the Scorecard.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public boolean checkAccessForScorecardEdit(Context context, String[] args) throws Exception {
+		boolean bShowHasAccess = false;
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			if (null != strObjectId && !"null".equalsIgnoreCase(strObjectId) && !"".equals(strObjectId)) {
+
+				DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+				// String strObjectType = doObj.getInfo(context,
+				// DomainConstants.SELECT_TYPE);
+				StringList sListObjSelects = new StringList(); // object selects
+				sListObjSelects.addElement(DomainConstants.SELECT_ID);
+				// String strCurrent = doObj.getInfo(context,
+				// DomainConstants.SELECT_CURRENT);
+				// if user is Audit Admin then return true
+				// Audit Admin role has all the rights
+				com.matrixone.apps.common.Person currUser = com.matrixone.apps.common.Person.getPerson(context);
+				if (currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+					bShowHasAccess = true;
+				} // if user is not Audit Admin then check as per respective
+					// types
+				else {
+					bShowHasAccess = hasAccess(context, strObjectId, true, true, false);
+				}
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public static String deleteFindingReferences(Context context, String[] args) throws Exception {
+		final String TYPE_KIND_OF_AUDIT_FINDING = AuditUtil.getTypeKindOfSelectable(context, AuditConstants.SYM_TYPE_AUDITFINDING);
+		HashMap returnMap = new HashMap();
+
+		HashMap paramMap = JPO.unpackArgs(args);
+
+		// get selected rows.
+		String[] emxTableRowId = (String[]) paramMap.get("emxTableRowId");
+		DomainObject domObj;
+		String[] revArr;
+		String objId;
+		String POLICY_AUDITFINDING = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITFINDING);
+		String STATE_OPEN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITFINDING,
+				AuditConstants.SYM_STATE_OPEN);
+
+		// remove selected relationships and delete objects
+		for (int i = 0; i < emxTableRowId.length; i++) {
+
+			if (emxTableRowId[i].indexOf("|") > 0) {
+				// rowIds are of the form relId |objId
+				StringList rowId = FrameworkUtil.splitString(emxTableRowId[i], "|");
+				objId = (String) rowId.get(1);
+
+			}
+			else {
+				objId = emxTableRowId[i];
+			}
+
+			domObj = DomainObject.newInstance(context, objId);
+
+			List<Map<?, ?>> lmObjectInfo = QueryUtil.getInfo(context, new String[] { objId },
+					Helper.stringList(DomainConstants.SELECT_CURRENT, TYPE_KIND_OF_AUDIT_FINDING));
+			if (!Helper.isNullOrEmpty(lmObjectInfo)) {
+				Map<?, ?> mpObjectInfo = lmObjectInfo.get(0);
+				if (!Helper.isNullOrEmpty(mpObjectInfo)) {
+					String strTypeKindOfAuditFinding = (String) mpObjectInfo.get(TYPE_KIND_OF_AUDIT_FINDING);
+					String strCurrentState = (String) mpObjectInfo.get(DomainConstants.SELECT_CURRENT);
+					if (AuditConstants.STR_TRUE.equalsIgnoreCase(strTypeKindOfAuditFinding)
+							&& (!Helper.isNullOrEmpty(strCurrentState) && !strCurrentState.equals(STATE_OPEN))) {
+						throw new AuditException(
+								Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.FindingCanBeDeletedInOpenState"));
+					}
+
+				}
+			}
+
+			StringList singleSelects = new StringList();
+			StringList multiSelects = new StringList();
+			multiSelects.addElement(DomainConstants.SELECT_REVISION);
+
+			MapList revisions = domObj.getRevisionsInfo(context, singleSelects, multiSelects);
+			revArr = new String[revisions.size()];
+
+			for (int j = 0; j < revisions.size(); j++) {
+				String revId = (String) ((Map) revisions.get(j)).get(DomainConstants.SELECT_ID);
+				revArr[j] = revId;
+
+				CommonDocument revisionObj = new CommonDocument(revId);
+				revisionObj.purge(context, null);// remove all files
+
+			}
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(DomainConstants.SELECT_ID);
+			StringList relSelects = new StringList(1);
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+			relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_NAME);
+			MapList relList = domObj.getRelatedObjects(context, DomainConstants.QUERY_WILDCARD, DomainConstants.QUERY_WILDCARD, objSelects,
+					relSelects, true, true, (short) 1, "", "", 0);
+
+			try {
+				ContextUtil.pushContext(context);
+				for (int k = 0; k < relList.size(); k++) {
+					String rd = ((String) ((Map) relList.get(k)).get(DomainConstants.SELECT_RELATIONSHIP_ID)).trim();
+					String name = ((String) ((Map) relList.get(k)).get(DomainConstants.SELECT_RELATIONSHIP_NAME)).trim();
+
+					if (name.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS)) != 0)
+						DomainRelationship.disconnect(context, rd, false);
+
+				}
+			}
+			finally {
+				ContextUtil.popContext(context);
+			}
+
+			if (revArr != null)
+				DomainObject.deleteObjects(context, revArr);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_TABLE_PAGE);
+
+	}
+
+	public static String getParentID(Context context, String[] args) throws Exception {
+
+		HashMap programMap;
+
+		programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		try {
+			if (paramMap == null)
+				paramMap = programMap;
+
+			String objectId = DomainConstants.EMPTY_STRING;
+
+			if (requestMap != null) {
+				objectId = (String) paramMap.get("parentOID");
+			}
+
+			if (requestMap == null || objectId == null) {
+				try {
+					objectId = (String) paramMap.get("parentOID");
+
+					if (objectId == null)
+						objectId = (String) paramMap.get("objectId");
+
+				}
+				catch (Exception e) {
+					String[] objectIdArr = (String[]) paramMap.get("objectId");
+					objectId = objectIdArr[0];
+				}
+			}
+
+			return objectId;
+
+		}
+		catch (Exception e) {
+			throw new Exception(e.getMessage());
+		}
+
+	}
+
+	/**
+	 * Utility method to check duplicate TNR Check duplicate TNR, including case
+	 * of the name, and returns true if its unique and false if its not unique
+	 * 
+	 * @param context
+	 * @param strType
+	 * @param strName
+	 * @return true if its unique and false if its not unique
+	 * @throws Exception
+	 */
+	public static boolean checkDuplicateTNR(Context context, String strType, String strName) throws Exception {
+		boolean isUnique = true;
+		try {
+			StringList selectList = new StringList();
+			selectList.add(DomainConstants.SELECT_ID);
+
+			// Finding the objects
+			MapList queryResultList = DomainObject.findObjects(context, strType, // type
+					strName, // name
+					DomainObject.QUERY_WILDCARD, // rev
+					DomainObject.QUERY_WILDCARD, // ownerPattern
+					null, // vaultPattern
+					"name ~~ '" + strName + "'", // whereExpression
+					false, // expandType
+					selectList);
+
+			// If findObjects has results Display Trigger message.
+			if (!queryResultList.isEmpty()) {
+				isUnique = false;
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return isUnique;
+	}
+
+	private boolean checkAccessToDeleteAudit(Context context, String auditId, Map<?, ?> infoMap) throws AuditException {
+		boolean isAccess = false;
+		try {
+			final String STATE_PLAN = FrameworkUtil.lookupStateName(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT),
+					AuditConstants.SYM_STATE_PLAN);
+			String strState = (String) infoMap.get(DomainConstants.SELECT_CURRENT);
+			String strOwner = (String) infoMap.get(DomainConstants.SELECT_OWNER);
+			String strUserName = context.getUser();
+
+			if (!Helper.isNullOrEmpty(strState) && strState.equalsIgnoreCase(STATE_PLAN)
+					&& (strUserName.equalsIgnoreCase(strOwner) || Helper.hasRoles(context, AuditConstants.SYM_ROLE_AUDITADMIN))) {
+				isAccess = true;
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+		return isAccess;
+	}
+
+	/**
+	 * Gets Organization of the person.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return List of Strings.
+	 * @throws AuditException
+	 * 
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static StringList getOrganizationOfPerson(Context context, String[] args) throws AuditException {
+		try {
+			StringList organizationList = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			MapList personInfoList = (MapList) programMap.get("objectList");
+			for (Object object : personInfoList) {
+				Map personInfo = (Map) object;
+				String personId = (String) personInfo.get(DomainConstants.SELECT_ID);
+				if (!Helper.isNullOrEmpty(personId)) {
+					Person person = new Person(personId);
+					Company company = person.getCompany(context);
+					if (null != company) {
+						String organization = company.getName();
+
+						if (!Helper.isNullOrEmpty(organization)) {
+							organizationList.add(organization);
+						}
+						else {
+							organizationList.add(DomainConstants.EMPTY_STRING);
+						}
+					}
+					else {
+						organizationList.add(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+
+			return organizationList;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	public static Boolean canDeleteAuditTemplate(Context context, DomainObject auditTemplateObject) throws AuditException {
+		try {
+			Boolean canDelete = false;
+			String currentState = auditTemplateObject.getInfo(context, DomainObject.SELECT_CURRENT);
+			List<Map<?, ?>> relatedAudits = (List<Map<?, ?>>) QueryUtil.getRelatedObjects(context, auditTemplateObject,
+					AuditConstants.REG_POLICY_AUDITTEMPLATE, AuditConstants.REG_TYPE_AUDIT, Helper.stringList(DomainObject.SELECT_ID), null, true,
+					false, (short) 0, DomainObject.EMPTY_STRING, DomainObject.EMPTY_STRING);
+			final String state_Active = AuditUtil.getActualStateName(context, AuditConstants.SYM_POLICY_AUDITTEMPLATE,
+					AuditConstants.SYM_STATE_ACTIVE);
+			if (currentState.equals(state_Active) && Helper.isNullOrEmpty(relatedAudits)) {
+				canDelete = true;
+			}
+			return canDelete;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+}
+

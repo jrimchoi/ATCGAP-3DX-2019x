@@ -1,0 +1,170 @@
+/*
+*	 emxQuickFileAccess
+*
+*   Copyright (c) 1992-2012 Dassault Systemes.
+*   All Rights Reserved.
+*   This program contains proprietary and trade secret information of MatrixOne,
+*   Inc.  Copyright notice is precautionary only
+*   and does not evidence any actual or intended publication of such program
+*
+*   This JPO to implement quick file access feature
+*
+*/
+
+import matrix.db.*;
+import matrix.util.*;
+import java.util.*;
+
+import com.matrixone.apps.domain.*;
+import com.matrixone.apps.domain.util.*;
+import com.matrixone.apps.common.Document;
+import com.matrixone.apps.common.util.DocumentUtil;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+
+/**
+ * The <code>emxCommonClearTrustAuthentication</code> jpo contains Trust Aunthentication methods.
+ *
+ * @version EC 10.5.0.0 - Copyright (c) 2003, MatrixOne, Inc.
+ */
+
+
+public class ${CLASSNAME} extends ${CLASS:emxQuickFileAccessBase}
+{
+    /**
+     * Constructor.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since EC 10.0.0.0
+     */
+
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+        super(context, args);
+    }
+	
+	    /**
+    *  Get Vector of Strings for Action Icons for both vertionable and non vertionable files
+    *  @param context the eMatrix <code>Context</code> object
+    *  @param args an array of String arguments for this method
+    *  @return Vector object that contains a vector of html code to
+    *        construct the Actions Column.
+    *  @throws Exception if the operation fails
+    *
+    *  @since Common 10.6.SP1
+    */
+    public static Vector getQuickFileActions(Context context, String[] args) throws Exception
+    {
+        Vector fileActionsVector = new Vector();
+        try
+        {
+          HashMap programMap = (HashMap) JPO.unpackArgs(args);
+          MapList objectList = (MapList)programMap.get("objectList");
+
+          Map paramList      = (Map)programMap.get("paramList");
+          MapList vertionableObjList = new MapList();
+          MapList nonVertionableObjList = new MapList();
+          MapList vcFileObjList = new MapList();
+          Boolean BVertionable = null;
+          String isVCFile = "FALSE";
+          String strRowCnt = "rowNum";
+          int intRows = objectList.size();
+          //Iterating thro the object list and building the versionable and non versionable lists
+          for(int i=0;i<objectList.size(); i++){
+            fileActionsVector.add(DomainConstants.EMPTY_STRING);
+            Map objMap = (Map)objectList.get(i);
+            if(objMap != null){
+              objMap.put(strRowCnt,Integer.toString(i));
+
+              BVertionable = (Boolean)objMap.get(SETTING_QF_VERSIONABLE);
+              isVCFile = (String)objMap.get("isVCFile");
+              if (isVCFile != null && isVCFile.equals("TRUE")){
+                  vcFileObjList.add(objMap);
+              }
+              else if(BVertionable != null && BVertionable.booleanValue()){
+                  vertionableObjList.add(objMap);
+              } else {
+                  nonVertionableObjList.add(objMap);
+              }
+            }//end of if loop
+          }//end of for loop
+          String strCount = "";
+          int rowCount=0;
+          HashMap tempProgramMap = new HashMap();
+          tempProgramMap.put("paramList",paramList);
+          tempProgramMap.put("refreshTableContent","true");
+		  
+		  //DRL - Column Map is required for the drV6Tools Dynamic Actions columns
+		  if (programMap.containsKey("columnMap")) {
+			HashMap columnMap = (HashMap) programMap.get("columnMap");
+			if (columnMap != null) {
+				tempProgramMap.put("columnMap", columnMap);
+			}
+		  }
+			
+          //If there are versionable files retrieve the column data from the getFileActions method
+          if(vertionableObjList.size()>0){
+            tempProgramMap.put("objectList",vertionableObjList);
+            Vector vertionableVector = ${CLASS:drlTools_emxCommonFileUI}.getFileActions(context,JPO.packArgs(tempProgramMap));
+            for(int j=0; j<vertionableObjList.size(); j++){
+              Map objMap =(Map)vertionableObjList.get(j);
+              if(objMap != null){
+                strCount = (String)objMap.get(strRowCnt);
+                if(strCount != null && strCount.trim().length()>0){
+                  rowCount = Integer.parseInt(strCount);
+                  if(rowCount <= intRows){
+                  fileActionsVector.setElementAt((String)vertionableVector.get(j),rowCount);
+                  }//end of if loop
+                }//end of if loop
+              }//end of if loop
+            }//end of for loop
+          }//end of if loop
+
+          //If there are non versionable files retrieve the column data from the getNonVersionableFileActions method
+          if(nonVertionableObjList.size()>0){
+            tempProgramMap.put("objectList",nonVertionableObjList);
+            Vector nonVertionableVector = ${CLASS:drlTools_emxCommonFileUI}.getNonVersionableFileActions(context,JPO.packArgs(tempProgramMap));
+            for(int j=0; j<nonVertionableObjList.size(); j++){
+              Map objMap = (Map)nonVertionableObjList.get(j);
+              if(objMap != null){
+                strCount = (String)objMap.get(strRowCnt);
+                if(strCount != null && strCount.trim().length()>0){
+                  rowCount = Integer.parseInt(strCount);
+                  if(rowCount <= intRows){
+                      fileActionsVector.setElementAt((String)nonVertionableVector.get(j),rowCount);
+                  }//end of if loop
+                }//end of if loop
+              }//end of if loop
+            }//end of for loop
+          }//end of if loop
+
+          //If there are VC files retrieve the column data from the getVCFileVersionActions method
+          if(vcFileObjList.size()>0){
+            tempProgramMap.put("objectList",vcFileObjList);
+            Vector vcFileVector = ${CLASS:emxVCDocumentUI}.getVCFileActions(context,JPO.packArgs(tempProgramMap));
+            for(int j=0; j<vcFileObjList.size(); j++){
+              Map objMap = (Map)vcFileObjList.get(j);
+              if(objMap != null){
+                strCount = (String)objMap.get(strRowCnt);
+                if(strCount != null && strCount.trim().length()>0){
+                  rowCount = Integer.parseInt(strCount);
+                  if(rowCount <= intRows){
+                      fileActionsVector.setElementAt((String)vcFileVector.get(j),rowCount);
+
+                  }//end of if loop
+                }//end of if loop
+              }//end of if loop
+            }//end of for loop
+          }//end of if loop
+
+        } catch(Exception ex) {
+          throw new FrameworkException(ex);
+        }
+
+        return fileActionsVector;
+    }
+}
+

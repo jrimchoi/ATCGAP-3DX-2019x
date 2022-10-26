@@ -1,0 +1,1508 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.text.DateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.StringResource;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ContactService;
+import com.dassault_systemes.enovia.lsa.services.CorrespondenceService;
+import com.dassault_systemes.enovia.lsa.services.RelatedItemsService;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UITableIndented;
+import com.matrixone.jdom.Element;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public static final String	SYMBOLIC_TYPE_CORRESPONDENCE					= "type_Correspondence";
+	public static final String	SYMBOLIC_TYPE_CONTACT							= "type_Contact";
+	public static final String	SYMBOLIC_POLICY_CORRESPONDENCE					= "policy_Correspondence";
+	public static final String	SYMBOLIC_POLICY_CONFIDENTIAL_CORRESPONDENCE		= "policy_ConfidentialCorrespondence";
+	public static final String	SYMBOLIC_RELATIONSHIP_CORRESPONDENCE			= "relationship_Correspondence";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_DATE			= "attribute_CorrespondenceDate";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR	= "attribute_CorrespondenceCommunicator";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_METHOD		= "attribute_CorrespondenceMethod";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_SOURCE		= "attribute_CorrespondenceSource";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TIME			= "attribute_CorrespondenceTime";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMENTS		= "attribute_CorrespondenceComments";
+	public static final String	SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TYPE			= "attribute_CorrespondenceType";
+	public static final String	SYMBOLIC_ATTRIBUTE_TIITLE						= "attribute_Title";
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	private static CorrespondenceService getCorrespondenceService(Context context) throws ComponentException {
+		Component LSACommonCore = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		CorrespondenceService service = (CorrespondenceService) LSACommonCore.getService(CorrespondenceService.class);
+		return service;
+	}
+
+	private static ContactService getContactService(Context context) throws ComponentException {
+		Component LSACommonCore = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		ContactService service = (ContactService) LSACommonCore.getService(ContactService.class);
+		return service;
+	}
+
+	/**
+	 * Returns the implementation reference for RelatedItemsService
+	 * 
+	 * @param context
+	 *            the eMatrix Context object
+	 * @return implementation reference for the service
+	 * @throws ComponentException
+	 *             if operation fails
+	 */
+	private static RelatedItemsService getRelatedItemsService(Context context) throws ComponentException {
+		Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		RelatedItemsService relatedItemsService = (RelatedItemsService) component.getService(RelatedItemsService.class);
+		return relatedItemsService;
+	}
+
+	public Map<?, ?> getCorrespondenceCommunicationMethodChoices(Context context, String[] args) throws Exception {
+		Map<?, ?> mpRangeValues = Helper.getAttributeRanges(context, SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_METHOD);
+		return mpRangeValues;
+	}
+
+	public static Map<?, ?> getCorrespondenceContactChoices(Context context, String[] args) throws Exception {
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> hmRequest = (HashMap<?, ?>) hmProgram.get("requestMap");
+			String sObjectId = (String) hmRequest.get("objectId");
+
+			Map slContacts = new HashMap();
+			CorrespondenceService correspondenceService = getCorrespondenceService(context);
+			List<Map<?, ?>> mlContextObj = correspondenceService.getRelatedContextObjects(context, DomainObject.newInstance(context, sObjectId),
+					new StringList(DomainConstants.SELECT_ID), "");
+			if (Helper.isNullOrEmpty(mlContextObj)) {
+				ContactService contactService = getContactService(context);
+				final String TYPE_REVIEWER = PropertyUtil.getSchemaProperty(context, "type_Reviewer");
+				StringBuilder strWhereExpression = new StringBuilder("!type.kindof[").append(TYPE_REVIEWER).append("]");
+				StringList busSelects = Helper.stringList(
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")), DomainConstants.SELECT_ID);
+				List<Map<?, ?>> mlContacts = contactService.getContacts(context, busSelects, strWhereExpression.toString());
+
+				StringList parentContactNames = Helper.stringList();
+				StringList parentContactIds = Helper.stringList();
+
+				for (Map<?, ?> mInfo : mlContacts) {
+					String sFirstName = (String) mInfo.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+							"attribute_FirstName")));
+					String sLastName = (String) mInfo.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+							"attribute_LastName")));
+					String sID = (String) mInfo.get(DomainConstants.SELECT_ID);
+					parentContactNames.add(new StringBuilder(sLastName).append(" ").append(sFirstName).toString());
+					parentContactIds.add(sID);
+				}
+				slContacts.put("field_choices", parentContactIds);
+				slContacts.put("field_display_choices", parentContactNames);
+			}
+			else {
+				String parentId = (String) mlContextObj.get(0).get(DomainConstants.SELECT_ID);
+				slContacts = getParentContacts(context, parentId);
+			}
+			return slContacts;
+		}
+		catch (Exception excp) {
+			throw new LSAException(excp);
+		}
+	}
+
+	private static Map<?, ?> getParentContacts(Context context, String sParentId) throws Exception {
+		try {
+			Map<String, StringList> mpContacts = new HashMap<String, StringList>();
+
+			ContactService service = getContactService(context);
+			List<Map<?, ?>> mlContacts = service.getContactsOfParent(context, DomainObject.newInstance(context, sParentId), Helper.stringList(
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+					DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")), DomainConstants.SELECT_ID), "",
+					Helper.stringList(), "");
+
+			Iterator<Map<?, ?>> itr = mlContacts.iterator();
+			StringList parentContactNames = Helper.stringList();
+			StringList parentContactIds = Helper.stringList();
+			Map<?, ?> m = null;
+			while (itr.hasNext()) {
+				m = itr.next();
+				String sFirstName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")));
+				String sLastName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")));
+				String sID = (String) m.get(DomainConstants.SELECT_ID);
+				parentContactNames.add(new StringBuilder(sLastName).append(" ").append(sFirstName).toString());
+				parentContactIds.add(sID);
+			}
+			mpContacts.put("field_choices", parentContactIds);
+			mpContacts.put("field_display_choices", parentContactNames);
+			return mpContacts;
+		}
+		catch (Exception e) {
+			throw e;
+		}
+	}
+
+	/**
+	 * Delete a Contact or Correspondence
+	 * 
+	 * @param context
+	 *            Enovia context
+	 * @param args
+	 *            Contact or Correspondence Object Id array
+	 * 
+	 * @return Map
+	 * 
+	 * @throws Exception
+	 *             Exception
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String delete(Context context, String[] args) throws Exception {
+		try {
+			CorrespondenceService service = getCorrespondenceService(context);
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) hmProgram.get("emxTableRowId");
+			StringList correspondences = new StringList(emxTableRowId.length);
+			List<EmxTableRowId> rodIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+			for (EmxTableRowId row : rodIds) {
+				String sObjectID = row.getObjectId();
+				correspondences.add(sObjectID);
+			}
+			service.delete(context, correspondences);
+			return "alertObjectsSuccessfullyDeleted()";
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
+	/**
+	 * Check Contacts exists or not before create correspondence
+	 * 
+	 * @param context
+	 *            the Enovia context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hash map
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	// TODO check for add new row case for no contacts: achieved in
+	// preProcessCkeckForEdit method.
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public static HashMap<?, ?> checkCorrespondenceCreatePreProcess(Context context, String[] args) throws Exception {
+		HashMap<String, String> hmReturn = new HashMap<String, String>();
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> hmRequest = (HashMap<?, ?>) hmProgram.get("requestMap");
+			String sObjectId = (String) hmRequest.get("objectId");
+			ContactService service = getContactService(context);
+			List<Map<?, ?>> mlContacts = service.getContactsOfParent(context, DomainObject.newInstance(context, sObjectId),
+					Helper.stringList(DomainConstants.SELECT_ID), "", Helper.stringList(), "");
+			if (mlContacts == null || mlContacts.isEmpty()) {
+				String sMessage = Helper.getI18NString(context, Helper.StringResource.LSA, "LSACommonFramework.Message.CreateCorrespondenceCheck");
+				throw new MatrixException(sMessage);
+			}
+		}
+		catch (Exception e) {
+			String sMessage = e.toString();
+			hmReturn.put("Message", sMessage);
+			hmReturn.put("Action", "STOP");
+		}
+		return hmReturn;
+	}
+
+	public void updateCorrespondenceContact(Context context, String[] args) throws LSAException {
+		Map<?, ?> inputMap;
+		try {
+			inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) inputMap.get("paramMap");
+			String CorrespondenceId = (String) paramMap.get("objectId");
+			String contactId = (String) paramMap.get("New Value");
+
+			CorrespondenceService service = getCorrespondenceService(context);
+			service.updateCorrespondenceContact(context, DomainObject.newInstance(context, CorrespondenceId),
+					DomainObject.newInstance(context, contactId));
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	public Map<?, ?> getDefaultCorrespondenceType(Context context, String[] args) throws LSAException {
+		Map<String, String> mpType = new HashMap<String, String>();
+		mpType.put("Default_AddNewRow", PropertyUtil.getSchemaProperty(context, "type_Correspondence"));
+		return mpType;
+	}
+
+	public static String getCorrespondenceContactForWebform(Context context, String[] args) throws Exception {
+		String sContact = "";
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) hmProgram.get("paramMap");
+			String sObjectId = (String) paramMap.get("objectId");
+			DomainObject parentObject = new DomainObject(sObjectId);
+			List<Map<?, ?>> mlReturn = QueryUtil.getRelatedObjects(
+					context,
+					parentObject,
+					"relationship_Contact",
+					"type_Contact",
+					Helper.stringList(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+							DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName"))), Helper.stringList(),
+					true, true, (short) 0, "", "");
+			if (null != mlReturn && !mlReturn.isEmpty()) {
+				Map<?, ?> m = mlReturn.get(0);
+				String sFirstName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")));
+				String sLastName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")));
+				sContact = new StringBuilder(sLastName).append(" ").append(sFirstName).toString();
+			}
+			return sContact;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	public String getCorrespondenceContactForSearch(Context context, String args[]) throws Exception {
+		String correspondenceId = args[0];
+		String correspondenceContact = "";
+		try {
+			DomainObject parentObject = new DomainObject(correspondenceId);
+			List<Map<?, ?>> mlReturn = QueryUtil.getRelatedObjects(
+					context,
+					parentObject,
+					"relationship_Contact",
+					"type_Contact",
+					Helper.stringList(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+							DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName"))), Helper.stringList(),
+					true, true, (short) 0, "", "");
+			Map<?, ?> m = mlReturn.get(0);
+			String sFirstName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")));
+			String sLastName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")));
+			correspondenceContact = new StringBuilder(sLastName).append(" ").append(sFirstName).toString();
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return correspondenceContact;
+	}
+
+	public HashMap getContactChooserValues(Context context, String[] args) throws LSAException {
+		HashMap<String, String> returnMap = new HashMap();
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			ContactService service = getContactService(context);
+			String selectFirstName = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName"));
+			String selectLastName = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName"));
+			List<Map<?, ?>> mlContacts = service.getContacts(context, Helper.stringList(selectFirstName, selectLastName, DomainConstants.SELECT_ID),
+					"");
+			for (Map mpContact : mlContacts) {
+				returnMap.put(new StringBuilder((String) mpContact.get(selectLastName)).append(" ").append((String) mpContact.get(selectFirstName))
+						.toString(), new StringBuilder((String) mpContact.get(selectLastName)).append(" ").append(mpContact.get(selectFirstName))
+						.toString());
+			}
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+		return returnMap;
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String submitCorrespondenceCommunicator(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] fieldNameActual = (String[]) inputMap.get("fieldNameActual");
+			String personId = ((String[]) inputMap.get("emxTableRowId"))[0];
+			if (FrameworkUtil.split(personId, "|").size() > 1) {
+				EmxTableRowId folderRowId = new EmxTableRowId(personId);
+				personId = folderRowId.getObjectId();
+			}
+
+			List<Map<?, ?>> mlFoldes = QueryUtil.getInfo(
+					context,
+					new String[] { personId },
+					Helper.stringList(DomainConstants.SELECT_ID, DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_LAST_NAME),
+							DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_FIRST_NAME)));
+
+			StringBuilder fullName = new StringBuilder((String) mlFoldes.get(0).get(
+					DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_LAST_NAME)));
+			fullName.append(", ");
+			fullName.append((String) mlFoldes.get(0).get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_FIRST_NAME)));
+
+			return Helper.encodeFunctionForJavaScript(context, false, "setStructureBrowserCellValue", fieldNameActual[0], fullName.toString(),
+					fullName.toString());
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Create a Correspondence
+	 * 
+	 * @param context
+	 * @param args
+	 *            String[] containing a HashMap of parameters
+	 * @return HashMap returning objectid on success or a Key(message type) and
+	 *         Value(message) on failure of the create.
+	 */
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map<?, ?> create(Context context, String[] args) throws LSAException {
+		Map hmReturn = new HashMap();
+		try {
+			CorrespondenceService service = getCorrespondenceService(context);
+
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> hmRequest = (HashMap<?, ?>) programMap.get("paramMap");
+
+			Element rootElement = (Element) programMap.get("contextData");
+			MapList chgRowsMapList = UITableIndented.getChangedRowsMapFromElement(context, rootElement);
+			String sParentID = (String) hmRequest.get("objectId");
+			MapList mlChangedRows = new MapList();
+
+			final String ATTRIBUTE_CORRESPONDENCE_DATE = PropertyUtil.getSchemaProperty(context, SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_DATE);
+			final String ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR = PropertyUtil.getSchemaProperty(context,
+					SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR);
+			ContextUtil.startTransaction(context, true);
+			for (Object obj : chgRowsMapList) {
+				Map<?, ?> contactMap = (Map<?, ?>) obj;
+				Map<?, ?> newCorrespondence = (Map<?, ?>) contactMap.get("columns");
+
+				StringList attributeList = Helper.stringList();
+				HashMap<String, String> hmAttributes = new HashMap<String, String>();
+
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_SOURCE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_METHOD);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_DATE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TIME);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMENTS);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TYPE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_TIITLE);
+
+				for (Object objAttr : attributeList) {
+					String strAttr = (String) objAttr;
+					String attrName = PropertyUtil.getSchemaProperty(context, strAttr);
+					if (attrName != null && !"".equalsIgnoreCase(attrName)) {
+						String attributeValue = (String) newCorrespondence.get(attrName);
+						if (attributeValue != null && !"".equals(attributeValue)) {
+							if (attrName.equals(ATTRIBUTE_CORRESPONDENCE_DATE)) {
+								hmAttributes.put(attrName, Helper.getFormattedDate(context, attributeValue));
+							}
+							else if (attrName.equals(ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR)) {
+								DomainObject communicatorDO = PersonUtil.getPersonObject(context, attributeValue);
+								String name = communicatorDO.getInfo(context, DomainObject.SELECT_NAME);
+								String commDisplayName = Person.getDisplayName(context, name);
+								hmAttributes.put(attrName, commDisplayName);
+							}
+							else {
+								hmAttributes.put(attrName, attributeValue);
+							}
+						}
+					}
+				}
+
+				String modePublic = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic");
+				String attrCorrespondenceMode = (String) newCorrespondence.get("Correspondence Mode");
+
+				String selPolicy = (modePublic.equalsIgnoreCase(attrCorrespondenceMode)) ? "policy_Correspondence"
+						: SYMBOLIC_POLICY_CONFIDENTIAL_CORRESPONDENCE;
+
+				String sCorrespondenceContact = (String) newCorrespondence.get("Correspondence Contact");
+				String newObjectId = service.create(context, DomainObject.newInstance(context, sParentID),
+						DomainObject.newInstance(context, sCorrespondenceContact), selPolicy, hmAttributes);
+				List<Map<?, ?>> relIds = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, newObjectId),
+						SYMBOLIC_RELATIONSHIP_CORRESPONDENCE, DomainConstants.QUERY_WILDCARD, Helper.stringList(),
+						Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), true, true, (short) 0, "", "");
+				String relId = (String) relIds.get(0).get(DomainConstants.SELECT_RELATIONSHIP_ID);
+				DomainObject objNew = new DomainObject(newObjectId);
+				objNew.setDescription(context, (String) newCorrespondence.get("Description"));
+
+				DomainObject objParent = new DomainObject(sParentID);
+				String strType = objParent.getInfo(context, DomainConstants.SELECT_TYPE);
+				strType = strType.replace(" ", "");
+				String strPropertyKey = "";
+				try {
+					strPropertyKey = Helper.getProperty(context,
+							new StringBuilder("LSACommonFramework.Correspondence.RelatedItem.Default.").append(strType).append(".RelatedItems")
+									.toString());
+				}
+				catch (Exception e) {
+				}
+				List<String> slTypes = FrameworkUtil.split(strPropertyKey, ",");
+				for (String strTypePattern : slTypes) {
+					String typePattern = PropertyUtil.getSchemaProperty(context, (String) FrameworkUtil.split(strTypePattern, ":").get(0));
+					String relationshipPattern = PropertyUtil.getSchemaProperty(context, (String) FrameworkUtil.split(strTypePattern, ":").get(1));
+					MapList mlRelatedItems = new MapList(QueryUtil.getRelatedObjects(context, objParent, relationshipPattern, typePattern,
+							Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(), true, true, (short) 1, "", ""));
+					Iterator<HashMap<?, ?>> itr = mlRelatedItems.iterator();
+					List<String> relatedItemsIds = Helper.stringList();
+
+					while (itr.hasNext()) {
+						Map<?, ?> temp = itr.next();
+						relatedItemsIds.add((String) temp.get(DomainConstants.SELECT_ID));
+					}
+
+					if (!Helper.isNullOrEmpty(relatedItemsIds))
+						service.addRelatedItems(context, objNew, relatedItemsIds);
+
+				}
+
+				Map mReturn = new HashMap();
+				mReturn.put("rowId", contactMap.get("rowId"));
+				mReturn.put("oid", newObjectId);
+				mReturn.put("pid", newObjectId);
+				mReturn.put("markup", "new");
+				mReturn.put("relid", relId);
+				mReturn.put("columns", newCorrespondence);
+
+				mlChangedRows.add(mReturn);
+			}
+			ContextUtil.commitTransaction(context);
+			hmReturn.put("Action", "success");
+			hmReturn.put("changedRows", mlChangedRows);
+
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new LSAException(e);
+		}
+		return hmReturn;
+	}
+
+	/**
+	 * Returns Correspondence Mode for Table Column
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static List<String> getCorrespondenceMode(Context context, String[] args) throws Exception {
+
+		String modePublic = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic");
+		String modeConfidential = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModeConfidential");
+
+		String policyCorrespondence = PropertyUtil.getSchemaProperty(context, SYMBOLIC_POLICY_CORRESPONDENCE);
+
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) hmProgram.get("objectList");
+			List<String> returnContacts = new Vector<String>(objectList.size());
+
+			for (Object objCorr : objectList) {
+				Map<?, ?> mpCorr = (Map<?, ?>) objCorr;
+				String sObjectId = (String) mpCorr.get(DomainConstants.SELECT_ID);
+				DomainObject parentObject = new DomainObject(sObjectId);
+
+				String sPolicy = parentObject.getInfo(context, "policy");
+				String selMode = (sPolicy.equalsIgnoreCase(policyCorrespondence)) ? modePublic : modeConfidential;
+
+				returnContacts.add(selMode);
+			}
+			return returnContacts;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Gets Correspondence Mode to be displayed on WebForm
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getCorrespondenceModeForWebform(Context context, String[] args) throws Exception {
+
+		String modePublic = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic");
+		String modeConfidential = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModeConfidential");
+		String policyCorrespondence = PropertyUtil.getSchemaProperty(context, SYMBOLIC_POLICY_CORRESPONDENCE);
+
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) hmProgram.get("paramMap");
+			String sObjectId = (String) paramMap.get("objectId");
+			DomainObject objCorrespondence = new DomainObject(sObjectId);
+
+			String sPolicy = objCorrespondence.getInfo(context, "policy");
+			return (sPolicy.equalsIgnoreCase(policyCorrespondence)) ? modePublic : modeConfidential;
+
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+
+	}
+
+	/**
+	 * Get Correspondence Mode Range for Table
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static Map<?, ?> getCorrespondenceModeRange(Context context, String[] args) throws Exception {
+		try {
+			Map<String, StringList> mpContacts = new HashMap<String, StringList>();
+
+			StringList fieldDisplay = Helper.stringList();
+			StringList fieldChoices = Helper.stringList();
+
+			fieldChoices.add("Public");
+			fieldChoices.add("Confidential");
+
+			fieldDisplay.add(Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic"));
+			fieldDisplay.add(Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModeConfidential"));
+
+			mpContacts.put("field_choices", fieldChoices);
+			mpContacts.put("field_display_choices", fieldDisplay);
+			return mpContacts;
+		}
+		catch (Exception e) {
+			throw e;
+		}
+	}
+
+	/**
+	 * Get Correspondence Mode Range for Chooser
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static HashMap<?, ?> getCorrespondenceModeChooserValues(Context context, String[] args) throws Exception {
+		try {
+			HashMap<String, String> mpMode = new HashMap<String, String>();
+			mpMode.put("Public", Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic"));
+			mpMode.put("Confidential", Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModeConfidential"));
+
+			return mpMode;
+		}
+		catch (Exception e) {
+			throw e;
+		}
+	}
+
+	/**
+	 * Gets Correspondence Mode of passed Correspondence
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public String getCorrespondenceModeForSearch(Context context, String args[]) throws Exception {
+		String correspondenceId = args[0];
+		String modePublic = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic");
+		String modeConfidential = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModeConfidential");
+		String policyCorrespondence = PropertyUtil.getSchemaProperty(context, SYMBOLIC_POLICY_CORRESPONDENCE);
+
+		try {
+			DomainObject objCorrespondence = new DomainObject(correspondenceId);
+			String sPolicy = objCorrespondence.getInfo(context, "policy");
+			return (sPolicy.equalsIgnoreCase(policyCorrespondence)) ? modePublic : modeConfidential;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Updates Correspondence Mode
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws LSAException
+	 */
+	public void updateCorrespondenceMode(Context context, String[] args) throws LSAException {
+		Map<?, ?> inputMap;
+		try {
+			inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) inputMap.get("paramMap");
+			String CorrespondenceId = (String) paramMap.get("objectId");
+			String sMode = (String) paramMap.get("New Value");
+
+			CorrespondenceService service = getCorrespondenceService(context);
+			service.updateMode(context, DomainObject.newInstance(context, CorrespondenceId), sMode);
+
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Checks for required accesses before Edit action can be performed on
+	 * Submission Correspondences Table
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws LSAException
+	 */
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public HashMap<?, ?> preProcessCheckForEdit(Context context, String[] args) throws LSAException {
+		try {
+			HashMap returnMap = new HashMap();
+			HashMap<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> paramMap = (HashMap<?, ?>) inputMap.get("paramMap");
+			HashMap<?, ?> tableData = (HashMap<?, ?>) inputMap.get("tableData");
+			MapList objectList = (MapList) tableData.get("ObjectList");
+			String strObjectId = (String) paramMap.get("objectId");
+
+			DomainObject parentObj = new DomainObject(strObjectId);
+			ContactService service = getContactService(context);
+			final String TYPE_REVIEWER = PropertyUtil.getSchemaProperty(context, "type_Reviewer");
+			StringBuilder strWhereExpression = new StringBuilder("!type.kindof[").append(TYPE_REVIEWER).append("]");
+			List<Map<?, ?>> mlContacts = service.getContacts(context, Helper.stringList(DomainConstants.SELECT_ID), strWhereExpression.toString());
+			if (mlContacts == null || mlContacts.isEmpty()) {
+				String sMessage = Helper.getI18NString(context, Helper.StringResource.LSA, "LSACommonFramework.Message.CreateCorrespondenceCheck");
+				returnMap = new HashMap(3);
+				returnMap.put("Action", "Stop");
+				returnMap.put("Message", "LSACommonFramework.Message.CreateCorrespondenceCheck");
+				returnMap.put("ObjectList", objectList);
+				return returnMap;
+			}
+			else if (parentObj.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_Submission"))) {
+
+				DomainObject submission = new DomainObject(strObjectId);
+				boolean editFlag = false;
+
+				final String RELATIONSHIP_MEMBER = PropertyUtil.getSchemaProperty(context, "relationship_Member");
+				final String SELECT_PROJECT_ACCESS = new StringBuilder("from[").append(RELATIONSHIP_MEMBER).append("|to.name=='")
+						.append(context.getUser()).append("'].to.name").toString();
+				String projectAccess = MqlUtil.mqlCommand(context, "print bus $1 select $2 dump", strObjectId, SELECT_PROJECT_ACCESS);
+
+				editFlag = submission.checkAccess(context, (short) AccessConstants.cFromConnect) && (!Helper.isNullOrEmpty(projectAccess));
+
+				if (editFlag) {
+					returnMap = new HashMap(2);
+					returnMap.put("Action", "Continue");
+					returnMap.put("ObjectList", objectList);
+				}
+				else {
+					returnMap = new HashMap(3);
+					returnMap.put("Action", "Stop");
+					returnMap.put("Message", "LSACommonFramework.Message.CreateCorrespondenceMemberCheck");
+					returnMap.put("ObjectList", objectList);
+				}
+
+			}
+			else if (parentObj.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_Complaint"))) {
+
+			}
+			else {
+				returnMap = new HashMap(2);
+				returnMap.put("Action", "Continue");
+				returnMap.put("ObjectList", objectList);
+			}
+			return returnMap;
+		}
+		catch (Exception exp) {
+			throw new LSAException(exp);
+		}
+	}
+
+	/**
+	 * Gets current date for default Inserted new Row of correspondence.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public List<String> getCorrespondenceDelivarablesIcon(Context context, String[] args) throws LSAException {
+		List<String> vecIconList = new Vector<String>();
+
+		String RELATIONSHIP_REFERENCE_DOCUMENT = PropertyUtil.getSchemaProperty(context, "relationship_ReferenceDocument");
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramList = (HashMap) programMap.get("paramList");
+			MapList objectList = (MapList) programMap.get("objectList");
+			Map objectMap = null;
+			int i = 0;
+			Iterator objectListIterator = objectList.iterator();
+			String[] objIdArr = new String[objectList.size()];
+
+			while (objectListIterator.hasNext()) {
+				objectMap = (Map) objectListIterator.next();
+				objIdArr[i] = (String) objectMap.get(DomainObject.SELECT_ID);
+				i++;
+			}
+
+			String strLanguage = context.getSession().getLanguage();
+			String SELECT_DELEVERABLE_POLICY = new StringBuilder("from[").append(RELATIONSHIP_REFERENCE_DOCUMENT).append("].to.policy").toString();
+			String SELECT_DELEVERABLE = new StringBuilder("from[").append(RELATIONSHIP_REFERENCE_DOCUMENT).append("].to.id").toString();
+			String SELECT_DELEVERABLE_NAME = new StringBuilder("from[").append(RELATIONSHIP_REFERENCE_DOCUMENT).append("].to.name").toString();
+			String SELECT_DELEVERABLE_STATE = new StringBuilder("from[").append(RELATIONSHIP_REFERENCE_DOCUMENT).append("].to.current").toString();
+			String SELECT_DELEVERABLE_MD = new StringBuilder("from[").append(RELATIONSHIP_REFERENCE_DOCUMENT).append("].to.modified").toString();
+
+			StringList busSelect = new StringList(7);
+			busSelect.add(DomainConstants.SELECT_ID);
+			busSelect.add(SELECT_DELEVERABLE_POLICY);
+			busSelect.add(DomainConstants.SELECT_TYPE);
+			busSelect.add(SELECT_DELEVERABLE);
+			busSelect.add(SELECT_DELEVERABLE_NAME);
+			busSelect.add(SELECT_DELEVERABLE_STATE);
+			busSelect.add(SELECT_DELEVERABLE_MD);
+
+			List<Map<?, ?>> mlTaskDetails = QueryUtil.getInfo(context, objIdArr, busSelect);
+
+			int actionListSize = 0;
+			if (mlTaskDetails != null) {
+				actionListSize = mlTaskDetails.size();
+			}
+
+			String strI18nAddDeliverable = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Tooltip.AddDeliverable");
+
+			// Strings for Delivarables and Tooltip
+			String strIcon = "";
+			StringBuilder strToolTip;
+
+			// Variables for Delivarables and Tooltip
+			StringList strDelvarables = Helper.stringList();
+			String strCorrespondenceId = "";
+			String strCorrespondenceType = "";
+			String strHref = "";
+			String strDelNames = "";
+			String strDelState = "";
+			String strModifiedDate = "";
+			StringBuilder iconDeliverable;
+			String strPolicy = "";
+			String strIntState = "";
+			StringList slDelNames = new StringList();
+			StringList slDelState = new StringList();
+			StringList slDelModDate = new StringList();
+			StringList slPolicy = new StringList();
+
+			// Variables for building the href
+			StringBuilder sbHrefMaker = new StringBuilder();
+			StringBuilder sbLinkMaker = new StringBuilder();
+
+			Date dtModifiedDate;
+			String strInternationalDate = "";
+			DateFormat formatter;
+			formatter = DateFormat.getDateInstance(eMatrixDateFormat.getEMatrixDisplayDateFormat(), context.getLocale());
+			for (i = 0; i < actionListSize; i++) {
+				Map mpObjDetails = mlTaskDetails.get(i);
+				strDelvarables = (StringList) mpObjDetails.get(SELECT_DELEVERABLE);
+				strCorrespondenceId = (String) mpObjDetails.get(DomainConstants.SELECT_ID);
+				strCorrespondenceType = (String) mpObjDetails.get(DomainConstants.SELECT_TYPE);
+				strToolTip = new StringBuilder("");
+
+				if (!Helper.isNullOrEmpty(strDelvarables)) {
+					strDelNames = (String) mpObjDetails.get(SELECT_DELEVERABLE_NAME);
+					slDelNames = FrameworkUtil.splitString(strDelNames, matrix.db.SelectConstants.cSelectDelimiter);
+					strDelState = (String) mpObjDetails.get(SELECT_DELEVERABLE_STATE);
+					slDelState = FrameworkUtil.splitString(strDelState, matrix.db.SelectConstants.cSelectDelimiter);
+					strModifiedDate = (String) mpObjDetails.get(SELECT_DELEVERABLE_MD);
+					slDelModDate = FrameworkUtil.splitString(strModifiedDate, matrix.db.SelectConstants.cSelectDelimiter);
+					strPolicy = (String) mpObjDetails.get(SELECT_DELEVERABLE_POLICY);
+					slPolicy = FrameworkUtil.splitString(strPolicy, matrix.db.SelectConstants.cSelectDelimiter);
+
+					for (int j = 0; j < slDelModDate.size(); j++) {
+						dtModifiedDate = new Date(slDelModDate.get(j).toString());
+						strInternationalDate = formatter.format(dtModifiedDate);
+						strIntState = i18nNow.getStateI18NString((String) slPolicy.get(j), (String) slDelState.get(j), strLanguage);
+						if (j == 0)
+							strToolTip.append(slDelNames.get(j)).append(" ").append(strIntState).append(" ").append(strInternationalDate);
+						else
+							strToolTip.append("&#xD; ").append(slDelNames.get(j)).append(" ").append(strIntState).append(" ")
+									.append(strInternationalDate);
+					}
+					strIcon = "iconSmallDocumentAttachment";
+				}
+				else {
+					strToolTip.append(strI18nAddDeliverable);
+					strIcon = "utilTreeLineNodeClosedSBDisabled";
+				}
+
+				sbHrefMaker = new StringBuilder();
+				iconDeliverable = new StringBuilder("");
+				iconDeliverable.append("<img src=\"../common/images/").append(strIcon).append(".gif\" border=\"0\" alt=\"")
+						.append(strToolTip.toString()).append("\" title=\"").append(strToolTip.toString()).append("\"/>");
+
+				sbHrefMaker.append("../common/emxIndentedTable.jsp?program=emxCommonDocumentUI:getDocuments&amp;");
+				sbHrefMaker.append("table=APPDocumentSummary&amp;selection=multiple&amp;sortColumnName=Name&amp;sortDirection=ascending&amp;");
+				sbHrefMaker.append("toolbar=APPObjectDocumentSummaryToolBar&amp;header=emxComponents.Menu.Documents&amp;");
+				sbHrefMaker.append("HelpMarker=emxhelpcontentlist&amp;freezePane=Name&amp;suiteKey=Components&amp;objectId=");
+				sbHrefMaker.append(strCorrespondenceId);
+
+				strHref = sbHrefMaker.toString();
+				sbLinkMaker = new StringBuilder();
+				sbLinkMaker.append("<a href=\"javascript:emxTableColumnLinkClick('").append(strHref);
+				sbLinkMaker.append("', '600', '600', 'false', 'popup','')\"  class='object'>");
+				sbLinkMaker.append(iconDeliverable);
+				sbLinkMaker.append("</a>");
+				vecIconList.add(sbLinkMaker.toString());
+			}
+			return vecIconList;
+		}
+		catch (Exception ex) {
+			throw new LSAException();
+		}
+	}
+
+	public Map<?, ?> getDefaultValueForCorrespondenceMode(Context context, String args[]) throws LSAException {
+		Map<String, String> returnMap = new HashMap<String, String>();
+
+		returnMap.put("Default_AddNewRow", "Public");
+		return returnMap;
+	}
+
+	public Map<?, ?> getDefaultValueForCorrespondenceDateCurrentDate(Context context, String args[]) throws LSAException {
+		Map<String, String> returnMap = new HashMap<String, String>();
+
+		DateFormat dateFormat = DateFormat.getDateInstance(eMatrixDateFormat.getEMatrixDisplayDateFormat(), context.getLocale());
+		returnMap.put("Default_AddNewRow", dateFormat.format(new Date()));
+		return returnMap;
+	}
+
+	/**
+	 * Get Parent Correspondences
+	 * 
+	 * @param context
+	 *            : Enovia defined context
+	 * @param args
+	 *            : Contains data to process this request
+	 * @return MapList: Correspondence IDs
+	 * 
+	 * @throws: Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getGlobalCorrespondences(Context context, String[] args) throws Exception {
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+
+			StringList slSelects = new StringList(1);
+			slSelects.add(DomainConstants.SELECT_ID);
+			CorrespondenceService service = getCorrespondenceService(context);
+			return new MapList(service.getCorrespondences(context, Helper.stringList(), ""));
+		}
+		catch (Exception ex) {
+			throw ex;
+		}
+	}
+
+	/**
+	 * Create a Correspondence
+	 * 
+	 * @param context
+	 * @param args
+	 *            String[] containing a HashMap of parameters
+	 * @return HashMap returning objectid on success or a Key(message type) and
+	 *         Value(message) on failure of the create.
+	 */
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map<?, ?> createGlobalCorrespondence(Context context, String[] args) throws LSAException {
+		Map hmReturn = new HashMap();
+		try {
+			CorrespondenceService service = getCorrespondenceService(context);
+			final String ATTRIBUTE_CORRESPONDENCE_DATE = PropertyUtil.getSchemaProperty(context, SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_DATE);
+			final String ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR = PropertyUtil.getSchemaProperty(context,
+					SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR);
+
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+
+			Element rootElement = (Element) programMap.get("contextData");
+			MapList chgRowsMapList = UITableIndented.getChangedRowsMapFromElement(context, rootElement);
+			MapList mlChangedRows = new MapList();
+
+			for (Object obj : chgRowsMapList) {
+				Map<?, ?> contactMap = (Map<?, ?>) obj;
+				Map<?, ?> newCorrespondence = (Map<?, ?>) contactMap.get("columns");
+
+				StringList attributeList = Helper.stringList();
+				HashMap<String, String> hmAttributes = new HashMap<String, String>();
+
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_SOURCE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_METHOD);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_DATE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TIME);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_COMMENTS);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_CORRESPONDENCE_TYPE);
+				attributeList.add(SYMBOLIC_ATTRIBUTE_TIITLE);
+
+				for (Object objAttr : attributeList) {
+					String strAttr = (String) objAttr;
+					String attrName = PropertyUtil.getSchemaProperty(context, strAttr);
+					if (attrName != null && !"".equalsIgnoreCase(attrName)) {
+						String attributeValue = (String) newCorrespondence.get(attrName);
+						if (attributeValue != null && !"".equals(attributeValue)) {
+							if (attrName.equals(ATTRIBUTE_CORRESPONDENCE_DATE)) {
+								hmAttributes.put(attrName, Helper.getFormattedDate(context, attributeValue));
+							}
+							else if (attrName.equals(ATTRIBUTE_CORRESPONDENCE_COMMUNICATOR)) {
+								DomainObject communicatorDO = PersonUtil.getPersonObject(context, attributeValue);
+								String name = communicatorDO.getInfo(context, DomainObject.SELECT_NAME);
+								String commDisplayName = Person.getDisplayName(context, name);
+								hmAttributes.put(attrName, commDisplayName);
+							}
+							else {
+								hmAttributes.put(attrName, (String) newCorrespondence.get(attrName));
+							}
+						}
+					}
+				}
+
+				String modePublic = Helper.getI18NString(context, StringResource.LSA, "LSACommonFramework.Range.CorrespondenceModePublic");
+				String attrCorrespondenceMode = (String) newCorrespondence.get("Correspondence Mode");
+
+				String selPolicy = (modePublic.equalsIgnoreCase(attrCorrespondenceMode)) ? SYMBOLIC_POLICY_CORRESPONDENCE
+						: SYMBOLIC_POLICY_CONFIDENTIAL_CORRESPONDENCE;
+
+				String sCorrespondenceContact = (String) newCorrespondence.get("Correspondence Contact");
+				String newCorrespondenceId = service.create(context, null, DomainObject.newInstance(context, sCorrespondenceContact), selPolicy,
+						hmAttributes);
+
+				DomainObject objNew = new DomainObject(newCorrespondenceId);
+				objNew.setDescription(context, (String) newCorrespondence.get("Description"));
+
+				Map mReturn = new HashMap();
+				mReturn.put("rowId", contactMap.get("rowId"));
+				mReturn.put("oid", newCorrespondenceId);
+				mReturn.put("markup", "new");
+				mReturn.put("columns", newCorrespondence);
+
+				mlChangedRows.add(mReturn);
+			}
+			ContextUtil.commitTransaction(context);
+			hmReturn.put("Action", "success");
+			hmReturn.put("changedRows", mlChangedRows);
+
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new LSAException(e);
+		}
+		return hmReturn;
+	}
+
+	/**
+	 * Connects selected Objectss in Table to Correspondence
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String connectCorrespondenceRelatedContextObject(Context context, String[] args) throws Exception {
+
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = ((String[]) programMap.get("objectId"))[0];
+			String[] sTableRowIds = (String[]) programMap.get("emxTableRowId");
+			DomainObject correspondenceObj = new DomainObject(sObjectId);
+
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			for (int i = 0; i < sTableRowIds.length; i++) {
+				String[] strIds = sTableRowIds[i].split("\\|");
+				relatedItemsService.addRelatedItem(context, correspondenceObj, DomainObject.newInstance(context, strIds[1]), "");
+			}
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshRelatedItemsSBAfterAddingItem");
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList excludeAlreadyRelatedContextObjects(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String correspondenceId = (String) programMap.get("objectId");
+			CorrespondenceService correspondenceService = getCorrespondenceService(context);
+
+			DomainObject dmoParent = null;
+			StringList excludeOIDs = new StringList();
+			if (!Helper.isNullOrEmpty(correspondenceId)) {
+				dmoParent = DomainObject.newInstance(context, correspondenceId);
+				RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+				MapList mlRelatedItems = relatedItemsService.getRelatedItems(context, dmoParent, Helper.stringList(DomainConstants.SELECT_ID), null,
+						null, null);
+				for (Object objRelatedItem : mlRelatedItems) {
+					Map mapRelatedItem = (Map) objRelatedItem;
+					String relatedItemId = (String) mapRelatedItem.get(DomainConstants.SELECT_ID);
+					excludeOIDs.add(relatedItemId); // Already related id
+				}
+
+			}
+			return excludeOIDs;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String disConnectCorrespondenceRelatedContextObject(Context context, String[] args) throws Exception {
+
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String portalCmdName = ((String[]) programMap.get("portalCmdName"))[0];
+			String sObjectId = ((String[]) programMap.get("objectId"))[0];
+			String[] sTableRowIds = (String[]) programMap.get("emxTableRowId");
+
+			DomainObject correspondenceObj = new DomainObject(sObjectId);
+
+			List<DomainObject> ids = new ArrayList<>();
+			for (int i = 0; i < sTableRowIds.length; i++) {
+				String[] strIds = sTableRowIds[i].split("\\|");
+				ids.add(DomainObject.newInstance(context, strIds[1]));
+			}
+
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+			relatedItemsService.removeRelatedItems(context, correspondenceObj, ids);
+
+			return Helper.encodeFunctionForJavaScript(context, false, "refreshFrame", portalCmdName);
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getCorrespondenceRelatedContextObjects(Context context, String[] args) throws Exception {
+
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+			DomainObject correspondenceObj = new DomainObject(sObjectId);
+
+			RelatedItemsService relatedItemsService = getRelatedItemsService(context);
+
+			List<Map<String, String>> mlRelated = relatedItemsService.getRelatedItems(context, correspondenceObj,
+					Helper.stringList(DomainObject.SELECT_ID), Helper.stringList(), "", "");
+			return new MapList(mlRelated);
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+	}
+
+	@ProgramCallable
+	public static Map<?, ?> getCorrespondenceContactChoicesReload(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> hmRowValues = (HashMap<?, ?>) hmProgram.get("rowValues");
+			String sObjectId = (String) hmRowValues.get("objectId");
+			Map slContacts = new HashMap();
+
+			CorrespondenceService correspondenceService = getCorrespondenceService(context);
+			List<Map<?, ?>> mlContextObj = null;
+			if (!Helper.isNullOrEmpty(sObjectId)) {
+				StringList busSelects = new StringList(DomainConstants.SELECT_ID);
+				mlContextObj = correspondenceService.getRelatedContextObjects(context, DomainObject.newInstance(context, sObjectId), busSelects, "");
+			}
+
+			if (mlContextObj != null && mlContextObj.size() > 0) {
+				Map<?, ?> slContainerContacts = getParentContacts(context, (String) mlContextObj.get(0).get(DomainObject.SELECT_ID));
+				slContacts.put("RangeValues", slContainerContacts.get("field_choices"));
+				slContacts.put("RangeDisplayValue", slContainerContacts.get("field_display_choices"));
+			}
+			else {
+				ContactService contactService = getContactService(context);
+				final String TYPE_REVIEWER = PropertyUtil.getSchemaProperty(context, "type_Reviewer");
+				StringBuilder strWhereExpression = new StringBuilder("!type.kindof[").append(TYPE_REVIEWER).append("]");
+				StringList busSelects = Helper.stringList(
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")), DomainConstants.SELECT_ID);
+				List<Map<?, ?>> mlContacts = contactService.getContacts(context, busSelects, strWhereExpression.toString());
+
+				StringList parentContactNames = new StringList();
+				StringList parentContactIds = new StringList();
+
+				for (Map<?, ?> mInfo : mlContacts) {
+					String sFirstName = (String) mInfo.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+							"attribute_FirstName")));
+					String sLastName = (String) mInfo.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+							"attribute_LastName")));
+					String sID = (String) mInfo.get(DomainConstants.SELECT_ID);
+					parentContactNames.add(new StringBuilder(sLastName).append(" ").append(sFirstName).toString());
+					parentContactIds.add(sID);
+				}
+				slContacts.put("RangeValues", parentContactIds);
+				slContacts.put("RangeDisplayValue", parentContactNames);
+			}
+			return slContacts;
+		}
+		catch (Exception exp) {
+			throw new LSAException(exp);
+		}
+	}
+
+	public static List<String> getCorrespondenceContact(Context context, String[] args) throws Exception {
+		String sContact = "";
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) hmProgram.get("objectList");
+			List<String> returnContacts = new Vector<String>(objectList.size());
+
+			for (Object objCorr : objectList) {
+				Map<?, ?> mpCorr = (Map<?, ?>) objCorr;
+				String sObjectId = (String) mpCorr.get(DomainConstants.SELECT_ID);
+
+				DomainObject parentObject = new DomainObject(sObjectId);
+
+				List<Map<?, ?>> mlReturn = QueryUtil.getRelatedObjects(context, parentObject, "relationship_Contact", "type_Contact", Helper
+						.stringList(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")),
+								DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName"))), Helper.stringList(),
+						true, true, (short) 0, "", "");
+				if (mlReturn.size() > 0) {
+					Map<?, ?> m = mlReturn.get(0);
+					String sFirstName = (String) m
+							.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_FirstName")));
+					String sLastName = (String) m.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, "attribute_LastName")));
+					sContact = new StringBuilder(sLastName).append(" ").append(sFirstName).toString();
+					returnContacts.add(sContact);
+				}
+				else
+					returnContacts.add("");
+			}
+			return returnContacts;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddRelatedItemURL(Context context, String[] args) throws LSAException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] sObjectId = (String[]) programMap.get("parentOID");
+
+			StringList busSelects = new StringList();
+			busSelects.add(DomainConstants.SELECT_TYPE);
+
+			CorrespondenceService correspondenceService = getCorrespondenceService(context);
+			List<Map<?, ?>> mlContextObject = correspondenceService.getRelatedContextObjects(context,
+					DomainObject.newInstance(context, sObjectId[0]), busSelects, "");
+
+			String typeList = "";
+			String includeOID = "";
+			String excludeOID = "";
+
+			if (mlContextObject != null && mlContextObject.size() > 0) {
+				String type = (String) mlContextObject.get(0).get(DomainObject.SELECT_TYPE);
+				type = FrameworkUtil.Replace(type, " ", "");
+				StringBuilder strType = new StringBuilder();
+				strType.append("LSACommonFramework.Correspondence.RelatedItem.Default.");
+				strType.append(type);
+
+				StringBuilder strInclude = new StringBuilder();
+				strInclude.append("LSACommonFramework.Correspondence.RelatedItem.Default.");
+				strInclude.append(type);
+				strInclude.append(".IncludeOID");
+
+				StringBuilder strExclude = new StringBuilder();
+				strExclude.append("LSACommonFramework.Correspondence.RelatedItem.Default.");
+				strExclude.append(type);
+				strExclude.append(".ExcludeOID");
+
+				typeList = getProperty(context, strType.toString());
+				includeOID = getProperty(context, strInclude.toString());
+				excludeOID = getProperty(context, strExclude.toString());
+			}
+			else {
+				typeList = getProperty(context, "LSACommonFramework.Correspondence.RelatedItem.Global.type");
+				excludeOID = getProperty(context, "LSACommonFramework.Correspondence.RelatedItem.Global.ExcludeOID");
+			}
+
+			return Helper.encodeFunctionForJavaScript(context, false, "addRelatedItems", typeList, includeOID, excludeOID, sObjectId[0]);
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+	}
+
+	private String getProperty(Context context, String key) {
+		try {
+			return Helper.getProperty(context, key);
+		}
+		catch (Exception e) {
+			return "";
+		}
+	}
+
+	/**
+	 * Get All related Correspondences
+	 * 
+	 * @param context
+	 *            : Enovia defined context
+	 * @param args
+	 *            : Contains data to process this request
+	 * @return MapList: Correspondence IDs
+	 * 
+	 * @throws: Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getCorrespondences(Context context, String[] args) throws Exception {
+		try {
+			HashMap<?, ?> hmProgram = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String sParentId = (String) hmProgram.get("objectId");
+
+			StringList busSelects = new StringList(1);
+			busSelects.add(DomainConstants.SELECT_ID);
+			CorrespondenceService service = getCorrespondenceService(context);
+			List<Map<?, ?>> mlReturn = service.getCorrespondences(context, DomainObject.newInstance(context, sParentId), busSelects, "",
+					Helper.stringList(), "");
+
+			mlReturn.addAll(QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, sParentId), "relationship_RelatedItems",
+					"type_Correspondence", busSelects, Helper.stringList(), true, false, (short) 1, "", ""));
+
+			return new MapList(mlReturn);
+		}
+		catch (Exception ex) {
+			throw ex;
+		}
+	}
+
+	/**
+	 * 
+	 * This API to be used for table column to display linked person object with
+	 * image icon. It returns the Full name of Owner/Assignee/or any Person
+	 * Object which can be selected on business object or relationship. String
+	 * provided in Expression field of Column will be used as a Key to fetch
+	 * Person value which had been stored in object map against this key. Value
+	 * of Person Object must be stored in object map against this key only.(In
+	 * Table or Expand Table method.)
+	 * 
+	 * 
+	 * @param context
+	 *            The Matrix Context object
+	 * @param args
+	 *            Packed program and request maps for the table
+	 * @return Vector of owners full name
+	 * @throws Exception
+	 *             if operation fails
+	 */
+	public Vector<String> getPersonFullName(Context context, String[] args) throws LSAException {
+		Vector<String> vcPersonFullName = new Vector();
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			Map<?, ?> mapColumnMap = (Map<?, ?>) programMap.get("columnMap");
+
+			Map<?, ?> paramListMap = (Map<?, ?>) programMap.get("paramList");
+			String reportFormat = (String) paramListMap.get("reportFormat");
+			String exportFormat = (String) paramListMap.get("exportFormat");
+
+			String strBusExpression = (String) mapColumnMap.get("expression_businessobject");
+			String strRelExpression = (String) mapColumnMap.get("expression_relationship");
+			String strExpressionData = null;
+
+			if (null != strBusExpression && !"".equals(strBusExpression)) {
+				strExpressionData = strBusExpression;
+			}
+			else if (null != strRelExpression && !"".equals(strRelExpression)) {
+				strExpressionData = strRelExpression;
+			}
+			else if ((null == strBusExpression && null == strRelExpression) || ("".equals(strBusExpression) && "".equals(strRelExpression))) {
+				throw new MatrixException("Invalid Key in Expression  " + strBusExpression + " : " + strRelExpression);
+			}
+
+			Map<?, ?> mapObjects = null;
+			String strObjectId = null;
+			DomainObject dmoObject = null;
+			String strOwnerLoginName = null;
+			String strLanguage = context.getSession().getLanguage();
+			String imageStr = null;
+			String strPersonFullName = null;
+			String strPersonId = null;
+			boolean isPersonType = false;
+			boolean isRoleType = false;
+			boolean isGroupType = false;
+			String imgRole = "<img src=\"../common/images/iconSmallRole.gif\" border=\"0\" id=\"\" title=\"\"></img>";
+			String imgPerson = "<img src=\"../common/images/iconSmallPerson.gif\" border=\"0\" id=\"\" title=\"\"></img>";
+			String imgGroup = "<img src=\"../common/images/iconSmallGroup.gif\" border=\"0\" id=\"\" title=\"\"></img>";
+
+			for (Iterator itrObjects = objectList.iterator(); itrObjects.hasNext();) {
+				StringBuffer strPersonFullNameBuffer = new StringBuffer();
+				mapObjects = (Map<?, ?>) itrObjects.next();
+
+				strOwnerLoginName = (String) mapObjects.get(strExpressionData);
+				isPersonType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isaperson")) ? true : false;
+				isRoleType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isarole")) ? true : false;
+				isGroupType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isagroup")) ? true : false;
+
+				if (Helper.isNullOrEmpty(strOwnerLoginName)) {
+					strObjectId = (String) mapObjects.get(DomainConstants.SELECT_ID);
+					StringList selectList = new StringList();
+					selectList.add(strExpressionData);
+					selectList.add(strExpressionData + ".isaperson");
+					selectList.add(strExpressionData + ".isagroup");
+					selectList.add(strExpressionData + ".isarole");
+					Map objectMap = dmoObject.newInstance(context, strObjectId).getInfo(context, selectList);
+					strOwnerLoginName = (String) objectMap.get(strExpressionData);
+					isPersonType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isaperson")) ? true : false;
+					isRoleType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isarole")) ? true : false;
+					isGroupType = "true".equalsIgnoreCase((String) mapObjects.get(strExpressionData + ".isagroup")) ? true : false;
+					if (Helper.isNullOrEmpty(strOwnerLoginName)) {
+						vcPersonFullName.add(DomainConstants.EMPTY_STRING);
+						continue;
+					}
+				}
+
+				if (isRoleType) {
+					strPersonFullName = i18nNow.getRoleI18NString(strOwnerLoginName, strLanguage);
+					strPersonFullNameBuffer.append(imgRole + " ");
+					strPersonFullNameBuffer.append(strPersonFullName);
+				}
+				else if (isGroupType) {
+					strPersonFullName = i18nNow.getMXI18NString(strOwnerLoginName, "", strLanguage, "Group");
+					strPersonFullNameBuffer.append(imgGroup + " ");
+					strPersonFullNameBuffer.append(strPersonFullName);
+				}
+
+				// Code for Export bug fix for Owner Column
+				else if ("CSV".equalsIgnoreCase(reportFormat) && "CSV".equalsIgnoreCase(exportFormat)) {
+					strPersonFullName = PersonUtil.getFullName(context, strOwnerLoginName);
+					strPersonFullNameBuffer.append(XSSUtil.encodeForHTML(context, strPersonFullName));
+				}
+				else {
+					// This code is written to check for person object having
+					// admin object but no business object.
+					// PersonUtil.getPersonObjectID() is only giving value if
+					// business object exist.
+					String sCommandStatement = "temp query bus $1 $2 $3 select $4 dump $5";
+					String result = MqlUtil.mqlCommand(context, sCommandStatement, DomainConstants.TYPE_PERSON, strOwnerLoginName, "*", "id", "|");
+					StringList slResult = FrameworkUtil.splitString(result, "|");
+					if (!Helper.isNullOrEmpty(result) && slResult.size() > 0) {
+						strPersonId = (String) slResult.get(3);
+						// strPersonId= PersonUtil.getPersonObjectID(context,
+						// strOwnerLoginName);
+						strPersonFullName = PersonUtil.getFullName(context, strOwnerLoginName);
+						strPersonFullNameBuffer.append(imgPerson);
+						strPersonFullNameBuffer.append("<a href=\"JavaScript:showModalDialog('../common/emxTree.jsp?objectId=");
+						strPersonFullNameBuffer.append(strPersonId);
+						strPersonFullNameBuffer.append("','700','600','false','popup')\">");
+						// Added for special character.
+						strPersonFullNameBuffer.append(XSSUtil.encodeForXML(context, strPersonFullName));
+						strPersonFullNameBuffer.append("</a>");
+					}
+					else {
+						strPersonFullNameBuffer.append(strOwnerLoginName);
+					}
+				}
+				vcPersonFullName.add(strPersonFullNameBuffer.toString());
+			}
+		}
+		catch (Exception ex) {
+			throw new LSAException(ex);
+		}
+		return vcPersonFullName;
+	}
+
+	public HashMap<?, ?> getCorrespondenceContextObjectsChooserValues(Context context, String[] args) throws Exception {
+		try {
+			HashMap<String, String> mpContextObjects = new HashMap<String, String>();
+			String strContextObjectTypes = "";
+			try {
+				strContextObjectTypes = Helper.getProperty(context, "LSACommonFramework.Correspondence.RelatedItem.GlobalSearch.ContextObjectTypes");
+			}
+			catch (Exception e) {
+			}
+			List<Map<?, ?>> mlContextObjects = QueryUtil.findObjects(
+					context,
+					strContextObjectTypes,
+					"",
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME,
+							DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)));
+			for (Map<?, ?> mpContextObject : mlContextObjects) {
+				String name = (String) mpContextObject.get(DomainConstants.SELECT_NAME);
+				String title = null;
+				if (mpContextObject.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)) != null) {
+					title = (String) mpContextObject.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+				}
+				if (!Helper.isNullOrEmpty(title))
+					mpContextObjects.put(name, (String) mpContextObject.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)));
+				else
+					mpContextObjects.put(name, name);
+			}
+			return mpContextObjects;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	public HashMap<?, ?> getCorrespondenceRelatedObjectsChooserValues(Context context, String[] args) throws Exception {
+		try {
+			HashMap<String, String> mpRelatedItems = new HashMap<String, String>();
+			String strRelatedItemTypes = "";
+			try {
+				strRelatedItemTypes = Helper.getProperty(context, "LSACommonFramework.Correspondence.RelatedItem.GlobalSearch.RelatedItemsTypes");
+			}
+			catch (Exception e) {
+			}
+			List<Map<?, ?>> mlRelatedItems = QueryUtil.findObjects(
+					context,
+					strRelatedItemTypes,
+					"",
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME,
+							DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)));
+			for (Map<?, ?> mpRelatedItem : mlRelatedItems) {
+				String name = (String) mpRelatedItem.get(DomainConstants.SELECT_NAME);
+				String title = null;
+				if (mpRelatedItem.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)) != null) {
+					title = (String) mpRelatedItem.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+				}
+				if (!Helper.isNullOrEmpty(title))
+					mpRelatedItems.put(name, (String) mpRelatedItem.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE)));
+				else
+					mpRelatedItems.put(name, name);
+
+			}
+			return mpRelatedItems;
+		}
+		catch (Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+}
+

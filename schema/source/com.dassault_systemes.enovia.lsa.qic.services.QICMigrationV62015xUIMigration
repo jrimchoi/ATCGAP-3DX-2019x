@@ -1,0 +1,89 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+import matrix.db.Context;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MqlUtil;
+
+public class ${CLASSNAME} {
+
+	public void migrateUI(Context context, Logger logger) throws QICException {
+		logger.log(Level.INFO, "Executing QIC UI Migration");
+		try {
+			mqlCommand(context, "verb on", logger);
+			
+			String command = "QICCPASearchDisplay";
+			String label = "LQICAPA.Command.SearchLegacyCAPAs";
+			mqlCommand(context, "modify command $1 label $2", logger, command, label);
+			
+			command = "QICCPAMyCAPADisp";
+			label = "LQICAPA.Header.LegacyCAPA";
+			String href = "${COMMON_DIR}/emxIndentedTable.jsp?header=LQICAPA.Header.LegacyCAPA&table=QICCPAMyCAPA&program=iwCAPA:getMyCAPAs&HelpMarker=capa1&sortColumnName=CAPA Number&showRMB=true&freezePane=CAPA Number&relationship=relationship_CAPAToCAPAComment,relationship_CAPAToCAPAEffectivity,relationship_CAPAToRootCause,relationship_CAPAToTeamMember,relationship_CAPAToExternalReference,relationship_CAPAToCompany,relationship_CAPAToBusinessUnit,relationship_CAPAToSiteOfOrigination,relationship_CAPAToSiteOfAccountability&selection=multiple";
+			mqlCommand(context, "modify command $1 label $2 href $3", logger, command, label, href);
+			
+			command = "QICCPATeamMembersDisp";
+			href = "${COMMON_DIR}/emxTable.jsp?HelpMarker=capa16&header=LQICAPA.Header.TeamMembersHeader&subHeader=LQICAPA.Header.StateSubheader&table=QICCPATeamMembers&program=iwCAPATeam:getTeamMembers&headerRepeat=0&selection=multiple&pagination=0&chart=false&calculations=false&objectCompare=false";
+			mqlCommand(context, "modify command $1 href $2", logger, command, href);
+			
+			command = "QICCPALifecycleDisp";
+			href = "${COMMON_DIR}/emxLifecycle.jsp?header=LQICAPA.Header.LifecycleHeader&export=false&HelpMarker=capa4&suiteKey=LQICAPA";
+			mqlCommand(context, "modify command $1 href $2", logger, command, href);
+			
+			command = "QICCPAExternalReferencesDisp";
+			href = "${COMMON_DIR}/emxTable.jsp?table=QICCPAExternalReferences&program=iwCAPAExternalReferences:getReferencesForTable&header=LQICAPA.Header.ExternalReferencesHeader&subHeader=LQICAPA.Header.StateSubheader&selection=multiple&HelpMarker=capa46";
+			mqlCommand(context, "modify command $1 href $2", logger, command, href);
+
+			String[] argListForQICActions = {"QICActions", "QICCPAActions", "QICCAPAActions", "1","QICAUDActions", "2"};
+			mqlCommand(context, "modify menu $1 remove menu $2 order menu $3 $4 order menu $5 $6", logger, argListForQICActions);
+			
+			String[] argListForQICMyDesk = {"QICMyDesk", "QICCPAMyDesk", "QICAUDMyDesk"};
+			mqlCommand(context, "modify menu $1 !hidden remove menu $2 remove menu $3", logger, argListForQICMyDesk);
+			
+			String[] argListForAEFGlobalSearch = {"AEFGlobalSearch", "QICSearch"};
+			mqlCommand(context, "modify menu $1 remove menu $2", logger, argListForAEFGlobalSearch);
+			
+			String[] argListForQICGlobalSearchMenu = {"QICGlobalSearchMenu", "QICCPASearchDisplay", "QICCPASearchDisplay", "1"};
+			mqlCommand(context, "modify menu $1 add command $2 order command $3 $4", logger, argListForQICGlobalSearchMenu);
+			
+			String menu = "type_CAPA";
+			href = "${COMMON_DIR}/emxForm.jsp?form=QICCPASummaryReport&formHeader=LQICAPA.Header.SummaryReport&HelpMarker=capa6\" remove command QICCPARiskAssessmentDisp remove command QICCPAInvestigationDisp remove command QICCPARootCauseDisp remove command QICCPAEffectivityDisp remove command QICCPACommentsDisp remove command QICCPATeamMembersDisp remove command QICCPAActionTasksDisp remove command QICCPAExternalReferencesDisp remove command QICCPALifecycleDisp remove command QICCPAHistoryDisp remove command LSABPIRelatedProcessDisplay add command QICCPAHistoryDisp add command QICCPALifecycleDisp add command QICCPATeamMembersDisp";
+			mqlCommand(context, "modify menu $1 href $2", logger, menu, href);
+			
+			String[] argListFortype_CAPARMB = {"type_CAPARMB", "QICCPABasicInfoEdit", "QICCPAMakeCAPA", "QICCPATeamLeaderReassign", "iwObjectEmail"};
+			mqlCommand(context, "modify menu $1 remove command $2 remove command $3 remove command $4 remove command $5", logger, argListFortype_CAPARMB);
+
+			String[] argListForQICPowerViewChannel = {"QICPowerViewChannel", "QICCPAMyCAPADisp", "QICAuditHomePage"};
+			mqlCommand(context, "modify channel $1 place $2 after $3", logger, argListForQICPowerViewChannel);
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		finally {
+			mqlCommand(context, "verb off", logger);
+		}
+		logger.log(Level.INFO, "QIC UI Migration Completed");
+	}
+
+	protected String mqlCommand(Context context, String command, Logger logger, String... args) throws QICException {
+		String uiVerbose = new String();
+		try {
+			uiVerbose = MqlUtil.mqlCommand(context, command, true, args);
+			logger.log(Level.INFO, uiVerbose);
+		}
+		catch (FrameworkException e) {
+			throw new QICException(e);
+		}
+		return uiVerbose;
+
+	}
+}
+

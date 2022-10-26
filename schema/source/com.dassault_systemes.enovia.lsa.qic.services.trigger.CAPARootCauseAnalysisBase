@@ -1,0 +1,472 @@
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARootCauseAnalysisService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARootCauseAnalysisService.CAPACauseFilter;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARootCauseAnalysisService.CauseTargetState;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws QICException {
+		super();
+	}
+
+	/**
+	 * Get the CAPARootCauseAnalysisService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARootCauseAnalysisService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARootCauseAnalysisService getCAPARootCauseAnalysisService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARootCauseAnalysisService service = (CAPARootCauseAnalysisService) LSAQICCore.getService(CAPARootCauseAnalysisService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	private boolean isPrimaryCause(Context context, String causeId) throws QICException {
+		final String ATTRIBUTE_PRIMARY_CAUSE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_CAUSE);
+		try {
+			boolean blPrimaryCause = false;
+			if (!Helper.isNullOrEmpty(causeId)) {
+				List<Map<?, ?>> parentCauseRelMap = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, causeId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, DomainObject.QUERY_WILDCARD,
+						Helper.stringList(DomainConstants.SELECT_ID),
+						Helper.stringList(DomainRelationship.getAttributeSelect(ATTRIBUTE_PRIMARY_CAUSE)), true, false, (short) 1, null, null);
+				for (Map<?, ?> parentCauseMap : parentCauseRelMap) {
+					String strPrimaryCause = (String) parentCauseMap.get(DomainRelationship.getAttributeSelect(ATTRIBUTE_PRIMARY_CAUSE));
+					if (!Helper.isNullOrEmpty(strPrimaryCause) && strPrimaryCause.equalsIgnoreCase(QICConstants.TRUE)) {
+						blPrimaryCause = true;
+					}
+				}
+			}
+			return blPrimaryCause;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static List<Map<?, ?>> getParentCause(Context context, String strCauseId) throws QICException {
+		try {
+			List<Map<?, ?>> causeListMap = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strCauseId),
+					QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT), Helper.stringList(DomainRelationship.SELECT_ID),
+					true, false, (short) 1, null, null);
+			return causeListMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	private static List<Map<?, ?>> getTaskCause(Context context, String strTaskId) throws QICException {
+		try {
+			List<Map<?, ?>> causeListMap = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strTaskId),
+					QICConstants.SYMBOLIC_RELATIONSHIP_RELATED_TASK, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT), Helper.stringList(DomainRelationship.SELECT_ID),
+					true, false, (short) 1, null, null);
+			return causeListMap;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * To check if every Primary Cause has at least a Task associated.To check
+	 * if all associated Tasks must be complete for Primary Cause.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int checkTaskCompletion(Context context, String[] args) throws QICException {
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		final String STATE_COMPLETE = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_policy_ProjectTask,
+				QICConstants.SYMBOLIC_STATE_COMPLETE);
+		try {
+			String strCauseId = args[0];
+			if (!Helper.isNullOrEmpty(strCauseId)) {
+				DomainObject dmoCause = DomainObject.newInstance(context, strCauseId);
+				List<Map<?, ?>> taskListMap = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauseTasks(context, dmoCause);
+				if (isPrimaryCause(context, strCauseId)
+						&& Helper.countConnectionsWithRel(context, dmoCause, QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, "from") < 1
+						&& taskListMap.size() < 1) {
+					Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARootCauseAnalysis.PrimaryCauseMustHaveTaskAssociatedError");
+					return 1;
+				}
+				for (Map<?, ?> taskMap : taskListMap) {
+					String strCurrentState = (String) taskMap.get(DomainConstants.SELECT_CURRENT);
+					if (!(!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_COMPLETE))) {
+						Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARootCauseAnalysis.AllAssociatedTasksMustBeCompleteError");
+						return 1;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Checks if the Defect Cause is "Primary" and has Parent Defect Cause whose
+	 * all child Primary Causes are "Addressed" then promote that Parent Cause
+	 * to "Addressed".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void autoPromoteDefectCause(Context context, String[] args) throws QICException {
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		final String STATE_ADDRESSED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAUSE_ANALYSIS,
+				QICConstants.SYMBOLIC_STATE_ADDRESSED);
+		try {
+			String strCauseId = args[0];
+			if (!Helper.isNullOrEmpty(strCauseId) && isPrimaryCause(context, strCauseId)) {
+				List<Map<?, ?>> parentCauseListMap = getParentCause(context, strCauseId);
+				for (Map<?, ?> parentCauseMap : parentCauseListMap) {
+					String strParentCauseId = (String) parentCauseMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strParentCauseId)) {
+						List<Map<?, ?>> childCauseListMap = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauses(context,
+								DomainObject.newInstance(context, strParentCauseId), CAPACauseFilter.PRIMARY);
+						HashSet<String> hsCauseState = new HashSet<String>();
+						for (Map<?, ?> childCauseMap : childCauseListMap) {
+							String strState = (String) childCauseMap.get(DomainConstants.SELECT_CURRENT);
+							hsCauseState.add(strState);
+						}
+						if (hsCauseState.size() == 1 && hsCauseState.contains(STATE_ADDRESSED)) {
+							CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.setCauseState(context, CauseTargetState.ADDRESSED, strParentCauseId);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * To check if Cause is Primary and having Parent Cause as "Addressed", it
+	 * can't be demoted. Error message to be displayed as
+	 * "First demote Parent Cause".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int blockPrimaryCauseDemotionIfParentCauseIsAddressed(Context context, String[] args) throws QICException {
+		final String STATE_ADDRESSED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAUSE_ANALYSIS,
+				QICConstants.SYMBOLIC_STATE_ADDRESSED);
+		try {
+			String strCauseId = args[0];
+			if (!Helper.isNullOrEmpty(strCauseId) && isPrimaryCause(context, strCauseId)) {
+				List<Map<?, ?>> parentCauseListMap = getParentCause(context, strCauseId);
+				for (Map<?, ?> parentCauseMap : parentCauseListMap) {
+					String strCauseState = (String) parentCauseMap.get(DomainConstants.SELECT_CURRENT);
+					if (!Helper.isNullOrEmpty(strCauseState) && strCauseState.contains(STATE_ADDRESSED)) {
+						Helper.mqlError(context, Helper.StringResource.QIC,
+								"QIC.CAPARootCauseAnalysis.CanNotDemotePrimaryCauseIfParentCauseIsAddressedError");
+						return 1;
+					}
+
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Check for associated Primary Causes and promote those to "Addressed"
+	 * whose all the associated Tasks are "Complete".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void autoPromoteDefectCauseOnAllTaskCompletion(Context context, String[] args) throws QICException {
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		final String STATE_COMPLETE = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_policy_ProjectTask,
+				QICConstants.SYMBOLIC_STATE_COMPLETE);
+		try {
+			String strTaskId = args[0];
+			if (!Helper.isNullOrEmpty(strTaskId)) {
+				List<Map<?, ?>> causeListMap = getTaskCause(context, strTaskId);
+				for (Map<?, ?> causeMap : causeListMap) {
+					String strCauseId = (String) causeMap.get(DomainConstants.SELECT_ID);
+					if (!Helper.isNullOrEmpty(strCauseId) && isPrimaryCause(context, strCauseId)) {
+						DomainObject dmoCause = DomainObject.newInstance(context, strCauseId);
+						List<Map<?, ?>> taskListMap = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauseTasks(context, dmoCause);
+						HashSet<String> hsCauseState = new HashSet<String>();
+						for (Map<?, ?> taskMap : taskListMap) {
+							String strCurrentState = (String) taskMap.get(DomainConstants.SELECT_CURRENT);
+							hsCauseState.add(strCurrentState);
+						}
+						if (hsCauseState.size() == 1 && hsCauseState.contains(STATE_COMPLETE)) {
+							CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.setCauseState(context, CauseTargetState.ADDRESSED, strCauseId);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * If there are any Tasks associated to Parent Cause, those should get
+	 * disconnected from it and should get connected to the Child Cause.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void floatTasksFromParentToChildCause(Context context, String[] args) throws QICException {
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		try {
+			ArrayList<String> alTaskIds = new ArrayList<String>();
+			ArrayList<String> alTaskRelIds = new ArrayList<String>();
+			String strParentObjectId = args[0];
+			String strChildCauseId = args[1];
+			if (!Helper.isNullOrEmpty(strParentObjectId) && !Helper.isNullOrEmpty(strChildCauseId)) {
+				DomainObject dmoParentObject = DomainObject.newInstance(context, strParentObjectId);
+				if ((Helper.getTypeKindOf(context, dmoParentObject, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE)).containsValue(Boolean.TRUE)) {
+					List<Map<?, ?>> taskListMap = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauseTasks(context, dmoParentObject);
+					for (Map<?, ?> taskMap : taskListMap) {
+						alTaskIds.add((String) taskMap.get(DomainConstants.SELECT_ID));
+						alTaskRelIds.add((String) taskMap.get(DomainRelationship.SELECT_ID));
+					}
+					if (alTaskRelIds.size() > 0 && alTaskIds.size() > 0) {
+						DomainObject dmoChildCause = DomainObject.newInstance(context, strChildCauseId);
+						CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.removeTaskFromCause(context, alTaskRelIds.toArray(new String[alTaskRelIds.size()]));
+						CAPA_ROOT_CAUSE_ANALYSIS_SERVICE
+								.associateTaskToCause(context, dmoChildCause, alTaskIds.toArray(new String[alTaskIds.size()]));
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	public int checkCAPAState(Context context, String[] args) throws QICException {
+		final String POLICY_PROJECT_SPACE = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_POLICY_PROJECT_SPACE);
+		final String POLICY_PROJECT_SPACE_HOLD_CANCEL = PropertyUtil.getSchemaProperty(context,
+				QICConstants.SYMBOLIC_POLICY_PROJECT_SPACE_HOLD_CANCEL);
+
+		final String STATE_COMPLETE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_PROJECT_SPACE,
+				QICConstants.SYMBOLIC_STATE_COMPLETE);
+		final String STATE_CANCEL = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_PROJECT_SPACE_HOLD_CANCEL,
+				QICConstants.SYMBOLIC_STATE_CANCEL);
+
+		try {
+			String fromObjectId = args[0];
+
+			boolean isCAPAType = Helper.getTypeKindOf(context, DomainObject.newInstance(context, fromObjectId), QICConstants.SYMBOLIC_TYPE_CAPA)
+					.containsValue(Boolean.TRUE);
+			String state = QICConstants.EMPTY_STRING;
+
+			if (!isCAPAType) {
+				List<Map<?, ?>> lmAssociatedCAPA = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, fromObjectId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, QICConstants.SYMBOLIC_TYPE_CAPA,
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT),
+						Helper.stringList(DomainRelationship.SELECT_ID), true, false, (short) 0, null, null);
+				if (!Helper.isNullOrEmpty(lmAssociatedCAPA)) {
+					state = (String) lmAssociatedCAPA.get(0).get(DomainConstants.SELECT_CURRENT);
+				}
+
+			}
+			else {
+				List<Map<?, ?>> lmCAPAInfo = QueryUtil.getInfo(context, new String[] { fromObjectId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT));
+				if (!Helper.isNullOrEmpty(lmCAPAInfo)) {
+					state = (String) lmCAPAInfo.get(0).get(DomainConstants.SELECT_CURRENT);
+				}
+			}
+
+			if (STATE_COMPLETE.equalsIgnoreCase(state) || STATE_CANCEL.equalsIgnoreCase(state)) {
+				throw new QICException(Helper.getI18NString(context, Helper.StringResource.QIC,
+						"QIC.CAPARootCauseAnalysis.RootCauseCanNOTCreateWhenCAPAStateCompleteOrCancel"));
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Blocks the addition Task to Defect Cause if it has any child.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int blockTaskAdditionToParentCause(Context context, String[] args) throws QICException {
+		final String RELATIONSHIP_RELATED_TASK = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_RELATIONSHIP_RELATED_TASK);
+		try {
+			String strDefectCauseId = args[0];
+			String strRelType = args[1];
+			if (!Helper.isNullOrEmpty(strRelType)
+					&& strRelType.equalsIgnoreCase(RELATIONSHIP_RELATED_TASK)
+					&& !Helper.isNullOrEmpty(strDefectCauseId)
+					&& Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strDefectCauseId),
+							QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, "from") > 0) {
+				Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARootCauseAnalysis.BlockTaskAdditionToParentCauseMessage");
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * To check if a Primary Cause has childs , at least one of them must be
+	 * Primary and all primary childs must be Addressed first.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int checksForPrimaryChilds(Context context, String[] args) throws QICException {
+		final String STATE_ADDRESSED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAUSE_ANALYSIS,
+				QICConstants.SYMBOLIC_STATE_ADDRESSED);
+		final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+		try {
+			String strCauseId = args[0];
+			if (!Helper.isNullOrEmpty(strCauseId) && isPrimaryCause(context, strCauseId)) {
+				DomainObject dmoCause = DomainObject.newInstance(context, strCauseId);
+				if (Helper.countConnectionsWithRel(context, dmoCause, QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE, "from") > 0) {
+					List<Map<?, ?>> lmChildPrimaryCauses = CAPA_ROOT_CAUSE_ANALYSIS_SERVICE.getCauses(context, dmoCause, CAPACauseFilter.PRIMARY);
+					if (lmChildPrimaryCauses.size() < 1) {
+						Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARootCauseAnalysis.BlockParentPrimaryCausePromotionMessage");
+						return 1;
+					}
+					else {
+						for (Map<?, ?> mpChildPrimaryCauses : lmChildPrimaryCauses) {
+							String strCauseState = (String) mpChildPrimaryCauses.get(DomainConstants.SELECT_CURRENT);
+							if (!Helper.isNullOrEmpty(strCauseState) && !strCauseState.equalsIgnoreCase(STATE_ADDRESSED)) {
+								Helper.mqlError(context, Helper.StringResource.QIC,
+										"QIC.CAPARootCauseAnalysis.CanNotPromotePrimaryCauseIfHasUnAddressedPrimaryChild");
+								return 1;
+							}
+						}
+					}
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+	
+	public void disconnectoConnectedCauses(Context context,String[] args) throws QICException 
+	{
+		try
+		{	for(String causeid : args)
+		{
+			List<Map<?, ?>> returnMap = QueryUtil.getRelatedObjects(context,DomainObject.newInstance(context,causeid), QICConstants.SYMBOLIC_RELATIONSHIP_IDENTIFIED_CAUSE,
+					QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE,
+					Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT),
+					Helper.stringList(DomainRelationship.SELECT_ID),true,false, (short)0, null,"");
+			final String STATE_ADDRESSED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAUSE_ANALYSIS,
+					QICConstants.SYMBOLIC_STATE_ADDRESSED);
+			if(!Helper.isNullOrEmpty(returnMap)){
+				String strparentCauseId = (String) returnMap.get(0).get(DomainObject.SELECT_ID);
+				String strrelId = (String) returnMap.get(0).get(DomainRelationship.SELECT_ID);
+				DomainObject parentObj = DomainObject.newInstance(context,strparentCauseId);
+				final CAPARootCauseAnalysisService CAPA_ROOT_CAUSE_ANALYSIS_SERVICE = getCAPARootCauseAnalysisService(context);
+				String currentState = parentObj.getInfo(context,DomainConstants.SELECT_CURRENT);
+				ContextUtil.startTransaction(context,Boolean.TRUE);
+				List<String> relIdsList = new StringList();
+				if((Helper.getTypeKindOf(context,parentObj, QICConstants.SYMBOLIC_TYPE_DEFECT_CAUSE).containsValue(Boolean.TRUE)) && currentState.equals(STATE_ADDRESSED))
+				{
+					relIdsList.add(strrelId);
+					QueryUtil.disconnectObjects(context,relIdsList);
+				}
+				ContextUtil.commitTransaction(context);
+			}
+		}
+		}		
+		catch(Exception e)
+		{
+			ContextUtil.abortTransaction(context);
+			throw new QICException(e);		
+		}
+	}
+}
+

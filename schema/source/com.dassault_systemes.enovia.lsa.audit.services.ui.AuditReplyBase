@@ -1,0 +1,719 @@
+/************************************************************************************************************
+ * /* AuditReplyBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditReplyBase program to handle Reply type
+ ************************************************************************************************************/
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.StringTokenizer;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws AuditException {
+		super();
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 */
+
+	public int mxMain(Context context, String[] args) {
+		return 0;
+	}
+
+	/**
+	 * This method checks if any active Legal Hold Object is connected to
+	 * current document object & returns either 0 or 1 based on the result This
+	 * method runs on the delete check trigger of Delete Document.
+	 * 
+	 * @param context
+	 *            , ObjectId
+	 * @param args
+	 * @return int, send 0 if the method is successful, otherwise send 1 to
+	 *         block the trigger. @also, gives an alert message if there are any
+	 *         objects found.
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAutoNamed(Context context, String[] args) throws AuditException {
+		HashMap returnMap = new HashMap();
+
+		try {
+			// Get form info
+			ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+			HashMap formMap = (HashMap) programMap.get("formMap");
+			MapList formFieldList = (MapList) formMap.get("fields");
+			String parentOID = (String) requestMap.get("objectId");
+			String relConnect = (String) paramMap.get("connect_rel");
+
+			String auditRequestCurrent = "";
+			String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+			String STATE_RESULTSREADY = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+					AuditConstants.SYM_STATE_RESULTSREADY);
+
+			// Create autonamed object
+			String sNewObjId = FrameworkUtil.autoName(context, AuditConstants.REG_TYPE_AUDITREPLY, "", AuditConstants.REG_POLICY_AUDITREPLY, "");
+			DomainObject newObj = DomainObject.newInstance(context, sNewObjId);
+			newObj.openObject(context);
+
+			for (int i = 0; i < formFieldList.size(); i++) {
+				HashMap fieldMap = (HashMap) formFieldList.get(i);
+				String fieldName = (String) fieldMap.get("name");
+				String fieldValue = (String) paramMap.get(fieldName);
+
+				if (fieldValue != null && !"".equals(fieldValue)) {
+					if ("description".equalsIgnoreCase(fieldName))
+						newObj.setDescription(context, fieldValue);
+					else {
+						newObj.setAttributeValue(context, fieldName, fieldValue);
+					}
+				}
+			}
+
+			// Check if there is a relationship passed as a parameter
+			// If so then we will connect
+
+			DomainObject parentObj = DomainObject.newInstance(context, parentOID);
+
+			// newObj.connect( context, new RelationshipType(""), boolean from,
+			// BusinessObject object)
+			newObj.connect(context, new RelationshipType(relConnect), false, parentObj);
+
+			newObj.closeObject(context, true);
+
+			// check Audit Request current state, demote if at Results Ready
+			// state
+			auditRequestCurrent = parentObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (auditRequestCurrent != null && !auditRequestCurrent.equals("") && auditRequestCurrent.equals(STATE_RESULTSREADY)) {
+				parentObj.demote(context);
+			}
+
+			// String strURL =
+			// "javascript:getTopWindow().closeWindow();javascript:getTopWindow().refreshTablePage();";
+			// returnMap.put("callback", strURL);
+			// returnMap.put("objectId", sNewObjId);
+		}
+
+		catch (Exception ex) {
+			returnMap.put("Action", "Stop");
+			String exStr = ex.toString();
+
+			if (exStr.lastIndexOf("Exception:") >= 0)
+				exStr = exStr.substring(exStr.lastIndexOf("Exception:") + 10, exStr.length());
+
+			returnMap.put("Message", exStr);
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * This method checks for the related Audit state and accordingly displayes
+	 * the Delete button
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if the Audit is before Active state
+	 * 
+	 * @throws AuditException
+	 * 
+	 */
+	public boolean canDeleteResponse(Context context, String[] args) throws AuditException {
+		try {
+			${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils} util = new ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}(
+					context, args);
+			boolean canDeleteResponse = false;
+			String strParentOId = "";
+			String strState = "";
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			DomainObject doNewObj = DomainObject.newInstance(context, strObjectId);
+			StringList sListObjSelects = new StringList(); // object selects
+			sListObjSelects.addElement(DomainConstants.SELECT_ID);
+			DomainObject doAuditObj = null;
+			Map parentMap = doNewObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST), false,
+					sListObjSelects, null);
+			com.matrixone.apps.common.Person currUser = com.matrixone.apps.common.Person.getPerson(context);
+			// If the request is connected with Audit, then allow delete only
+			// before
+			// Active state else, dont do anything
+			if (null != parentMap && !parentMap.isEmpty()) {
+				strParentOId = (String) parentMap.get(DomainConstants.SELECT_ID);
+				doAuditObj = DomainObject.newInstance(context, strParentOId);
+				strState = doAuditObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+				final String STATE_PLAN = FrameworkUtil.lookupStateName(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT), AuditConstants.SYM_STATE_PLAN);
+				final String STATE_ACTIVE = FrameworkUtil.lookupStateName(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT), AuditConstants.SYM_STATE_ACTIVE);
+
+				if (STATE_PLAN.equalsIgnoreCase(strState) || STATE_ACTIVE.equalsIgnoreCase(strState)) {
+					canDeleteResponse = true;
+
+					if (!(util.isLeadAuditorOrOwner(context, strParentOId)
+							|| currUser.hasRole(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN)))) {
+						canDeleteResponse = false;
+					}
+
+					StringList objSelects = new StringList(2);
+					objSelects.addElement(DomainConstants.SELECT_ID);
+
+					MapList relList = doNewObj.getRelatedObjects(context, "*",
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPLY), objSelects, new StringList(1), true, true,
+							(short) 1, "", "", 0);
+
+					for (int j = 0; j < relList.size(); j++) {
+						Map objmap = (Hashtable) relList.get(j);
+
+						String raplyId = (String) objmap.get(DomainConstants.SELECT_ID);
+
+						DomainObject reply = DomainObject.newInstance(context, raplyId);
+
+						// String temp1 = reply.getInfo(context,
+						// DomainConstants.SELECT_OWNER);
+						// String temp2 = currUser.getName();
+
+						if (reply.getInfo(context, DomainConstants.SELECT_OWNER).compareTo(currUser.getName()) == 0) {
+							canDeleteResponse = true;
+							break;
+						}
+					}
+
+				}
+				else {
+					canDeleteResponse = false;
+				}
+			}
+			else {
+				canDeleteResponse = true;
+			}
+			return canDeleteResponse;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method connects the given Response object with the selected
+	 * document.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the hashmap containing the selected documents id
+	 * @throws FrameworkException
+	 *             , AuditException
+	 * 
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public HashMap connectResponseDocument(Context context, String[] args) throws AuditException, FrameworkException {
+		HashMap hmReturnVal = new HashMap();
+		HashMap hmObjectIds = new HashMap();
+		boolean bContextPushed = false;
+
+		try {
+			String strMessage = i18nNow.getI18nString("LQIAudit.Message.AlreadyConnected", "LQIAuditStringResource", context.getLocale().toString());
+			// Getting the object ids
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strReqObjectId = (String) programMap.get("objectId");
+			String[] strObjectId = (String[]) programMap.get("emxTableRowId");
+			String strURL = "";
+			String[] strTempObjectId = new String[10];
+			String strObjectIdofArray = "";
+			String strResultObjectId = "";
+			String strName = "";
+			String strResponseName = "";
+			String strExistingDocuments = "";
+			int icount = 0;
+			int i = 0;
+			Map element;
+			DomainObject doResponse = DomainObject.newInstance(context);
+
+			// Setting the attributes to be selected
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+
+			if (null != strReqObjectId && !"".equals(strReqObjectId)) {
+				doResponse = DomainObject.newInstance(context, strReqObjectId);
+				strResponseName = (String) doResponse.getInfo(context, DomainConstants.SELECT_NAME);
+				// Getting the related Document Objects
+				MapList mlDocumentObject = doResponse.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITRESPONSESUPPORTINGDOCUMENT), "*", true, false, 1,
+						sListSelects, null, null, "", null, null, null);
+				// iterate through the Document to check whether the Ids are
+				// same.
+				if (null != mlDocumentObject && mlDocumentObject.size() > 0) {
+					for (Iterator iter = mlDocumentObject.iterator(); iter.hasNext();) {
+						// strExistingDocuments = "";
+						element = (Map) iter.next();
+						strResultObjectId = (String) element.get(DomainConstants.SELECT_ID);
+						strName = (String) element.get(DomainConstants.SELECT_NAME);
+						// putting the related object Ids into map for comparing
+						hmObjectIds.put("" + icount, strResultObjectId);
+						hmObjectIds.put(strResultObjectId, strName);
+						for (i = 0; i < strObjectId.length; i++) {
+							if (strResultObjectId.equals(strObjectId[i])) {
+								if (null != strExistingDocuments && !"null".equals(strExistingDocuments) && !"".equals(strExistingDocuments)) {
+									strExistingDocuments += "," + strName;
+								}
+								else {
+									strExistingDocuments = strName;
+								}
+							}
+						}
+						icount++;
+					}
+
+					if (strExistingDocuments.compareTo("") != 0)
+						hmReturnVal.put("Message", strResponseName + " and " + strExistingDocuments + " " + strMessage);
+					strURL = "javascript:getTopWindow().window.closeWindow();";
+					hmReturnVal.put("callback", strURL);
+				}
+
+			} // if ends
+			for (i = 0; i < strObjectId.length; i++) {
+				strObjectIdofArray = strObjectId[i];
+
+				// parse id
+				if (strObjectIdofArray.contains("|")) {
+					String[] parts = strObjectIdofArray.split("\\|");
+					strObjectIdofArray = parts[1];
+				}
+
+				// Comparing the values
+				if (hmObjectIds.containsValue(strObjectIdofArray)) {
+					strName = (String) hmObjectIds.get(strObjectIdofArray);
+					strTempObjectId[i] = strName;
+					hmReturnVal.put("" + i, strName);
+				}
+				else {
+					// DomainObject dostrObjectIdofArray = new
+					// DomainObject(strObjectIdofArray);
+					ContextUtil.pushContext(context);
+					bContextPushed = true;
+					if (!strObjectIdofArray.equals(strReqObjectId)) {
+						doResponse.addRelatedObject(context, // context
+								new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITRESPONSESUPPORTINGDOCUMENT)), // relationshipType
+								true, // isFrom
+								strObjectIdofArray // relatedObjectId
+						);
+						// dostrObjectIdofArray.addToObject(context, new
+						// RelationshipType(${CLASS:AuditConstants}.REL_AUDITRESPONSESUPPORTINGDOCUMENT),
+						// strReqObjectId);
+					}
+					else {
+						strMessage = i18nNow.getI18nString("LQIAudit.Message.SameObjectConnecting", "LQIAuditStringResource",
+								context.getLocale().toString());
+						hmReturnVal.put("Message", strResponseName + ", " + strMessage);
+					}
+					ContextUtil.popContext(context);
+					bContextPushed = false;
+					strURL = "javascript:getTopWindow().getWindowOpener().getTopWindow().refreshTablePage();javascript:getTopWindow().window.closeWindow();";
+					hmReturnVal.put("callback", strURL);
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			System.out.println("Exception Occured in method connectResponseDocument..." + ex.getMessage());
+			ex.printStackTrace();
+			throw new AuditException(ex);
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+		return hmReturnVal;
+	}
+
+	/**
+	 * This method Gets Response objects related to request and clones the
+	 * response object. It will connect Response Clone to the parent Request
+	 * object
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            contains the object Id
+	 * @return the hash map
+	 * 
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String copyExistingReply(Context context, String[] args) throws AuditException {
+		try {
+			String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+			String STATE_RESULTSREADY = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+					AuditConstants.SYM_STATE_RESULTSREADY);
+			String strContextUser = context.getUser();
+			// Getting the object ids
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String parentOID = (String) ((String[]) programMap.get("objectId"))[0];
+
+			String strReqObjectId = (String) ((String[]) programMap.get("parentOID"))[0];
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+
+			// Setting the attributes to be selected
+			StringList sListSelects = new StringList();
+			sListSelects.add(DomainConstants.SELECT_ID);
+
+			for (int i = 0; i < emxTableRowId.length; i++) {
+				StringTokenizer strTokenizer = new StringTokenizer(emxTableRowId[i], "|");
+				String strAuditReplyObjectId = strTokenizer.nextToken();
+
+				if (null != strAuditReplyObjectId && !"".equals(strAuditReplyObjectId)) {
+					DomainObject auditReplyDomainObject = DomainObject.newInstance(context, strAuditReplyObjectId);
+					MapList mListReqTemplateFiles = auditReplyDomainObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITRESPONSESUPPORTINGDOCUMENT), "*", true, true, 1,
+							sListSelects, null, null, "", null, null, null);
+					// Calling method to get the Next Unique number
+					String strObjectName = DomainObject.getAutoGeneratedName(context, AuditConstants.REG_TYPE_AUDITREPLY, "");
+					// String strObjectName =
+					// ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.getNextNameForObject(context,
+					// ${CLASS:AuditConstants}.REG_TYPE_AUDITREPLY);
+
+					// Calling method to create Clone of Audit Reply Object
+					DomainObject auditReplyCloneDomainObject = DomainObject.newInstance(context,
+							auditReplyDomainObject.cloneObject(context, strObjectName, "1", context.getVault().getName()));
+
+					// connect cloned reply object
+					auditReplyCloneDomainObject.addFromObject(context,
+							new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY)), strReqObjectId);
+					// modify to copy the reference file
+					${CLASS:com.dassault_systemes.enovia.lsa.audit.services.ui.AuditAuditTemplate}.copyRefrenceFileToTemplateRequest(context,
+							strAuditReplyObjectId, auditReplyCloneDomainObject, strContextUser);
+
+					// if we have external refernces of files then add those
+					// also
+					if (null != mListReqTemplateFiles && !mListReqTemplateFiles.isEmpty()) {
+						Iterator fileItr = mListReqTemplateFiles.iterator();
+
+						while (fileItr.hasNext()) {
+							Map mapFileDoc = (Map) fileItr.next();
+							String strFileDoc = (String) mapFileDoc.get(DomainConstants.SELECT_ID);
+							DomainObject doFileDoc = DomainObject.newInstance(context, strFileDoc);
+
+							// get the object generator for type File Attachment
+							String strFileAttachmentName = "";
+							try {
+								strFileAttachmentName = DomainObject.getAutoGeneratedName(context, AuditConstants.REG_TYPE_AUDITREPLY, "");
+								// strFileAttachmentName =
+								// ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.getNextNameForObject(context,
+								// sFileDocType);
+							}
+							catch (Exception e) {
+								strFileAttachmentName = DomainObject.newInstance(context).getUniqueName("");
+							}
+							// Clone the File Attachment object
+							BusinessObject boFileAttachmentClone = doFileDoc.cloneObject(context, strFileAttachmentName, null,
+									context.getVault().toString(), true, true);
+
+							if (doFileDoc.getInfo(context, DomainConstants.SELECT_TYPE)
+									.compareTo(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPORTSUMMARY)) == 0) {
+								${CLASS:com.dassault_systemes.enovia.lsa.audit.services.ui.AuditAuditTemplate}.copyRefrenceFileToTemplateRequest(context,
+										doFileDoc.getInfo(context, DomainConstants.SELECT_ID),
+										DomainObject.newInstance(context, boFileAttachmentClone.getObjectId(context)), strContextUser);
+							}
+
+							boFileAttachmentClone.setOwner(context, strContextUser);
+							// connect the Created cloned object
+							boFileAttachmentClone.connect(context,
+									new RelationshipType(
+											PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITRESPONSESUPPORTINGDOCUMENT)),
+									true, auditReplyCloneDomainObject);
+						}
+					}
+				}
+			}
+			// check Audit Request current state, demote if at Results Ready
+			// state
+			DomainObject auditReqObj = DomainObject.newInstance(context, strReqObjectId);
+			String auditRequestCurrent = auditReqObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (auditRequestCurrent != null && !auditRequestCurrent.equals("") && auditRequestCurrent.equals(STATE_RESULTSREADY)) {
+				auditReqObj.demote(context);
+			}
+
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw new AuditException(ex);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER);
+	}
+
+	/**
+	 * Gets the internal audit search result.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the internal audit search result
+	 * 
+	 * @throws AuditException
+	 * 
+	 */
+	public MapList getAuditResponseSearchResult(Context context, String[] args) throws AuditException {
+		MapList totalresultList = null;
+		try {
+			// Get the parameter Hashmap.
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			// String sSearchVault = "";
+			String sName = (String) paramMap.get("Name");
+			String sRev = (String) paramMap.get("Revision");
+
+			String sTypeAuditResponse = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREPLY);
+			String strQueryLimit = (String) paramMap.get("QueryLimit");
+			String strWhereExp = "";
+			char chDblQuotes = '\"';
+			String strTxtFormat = "*";
+			String strTxtSearch = "";
+			String sAuditExtRef = (String) paramMap.get("Audit External Reference");
+			// String sAuditType = "*";
+			String sCurrent = (String) paramMap.get("Current");
+			String sDesc = (String) paramMap.get("Description");
+
+			String sTxtVault = PersonUtil.getDefaultVault(context);
+			// setting the query limit if it is blank
+			if (strQueryLimit == null || strQueryLimit.equals("null") || strQueryLimit.equals("")) {
+				strQueryLimit = "100";
+			}
+			// if name is blank the setting the name *
+			if (sName == null || sName.equalsIgnoreCase("null") || sName.length() <= 0) {
+				sName = "*";
+			}
+
+			if (sRev == null || sRev.equalsIgnoreCase("null") || sRev.length() <= 0) {
+				sRev = "*";
+			}
+
+			if (sCurrent == null || sCurrent.equalsIgnoreCase("null") || sCurrent.length() <= 0) {
+				sCurrent = "*";
+			}
+			if (sDesc == null || sDesc.equalsIgnoreCase("null") || sDesc.length() <= 0) {
+				sDesc = "*";
+			}
+
+			if (!"*".equals(sAuditExtRef)) {
+				strWhereExp += "(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_EXTERNALREFERENCE) + "] ~~ "
+						+ chDblQuotes + sAuditExtRef + chDblQuotes + ")";
+			}
+
+			if (!"*".equals(sCurrent)) {
+				if (strWhereExp.length() > 0)
+					strWhereExp += "&&(current ~~ " + chDblQuotes + sCurrent + chDblQuotes + ")";
+				else
+					strWhereExp = "(current ~~ " + chDblQuotes + sCurrent + chDblQuotes + ")";
+			}
+
+			SelectList resultSelects = new SelectList(7);
+			resultSelects.add(DomainConstants.SELECT_ID);
+			resultSelects.add(DomainConstants.SELECT_TYPE);
+			resultSelects.add(DomainConstants.SELECT_NAME);
+			resultSelects.add(DomainConstants.SELECT_REVISION);
+			resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			resultSelects.add(DomainConstants.SELECT_CURRENT);
+			resultSelects.add(DomainConstants.SELECT_POLICY);
+
+			totalresultList = new MapList();
+			// find all object which setisfy the condition
+			totalresultList = DomainObject.findObjects(context, sTypeAuditResponse, sName, sRev, "*", sTxtVault, strWhereExp, null, true,
+					resultSelects, Short.parseShort(strQueryLimit), strTxtFormat, strTxtSearch);
+			return totalresultList;
+
+		}
+		catch (Exception objException) {
+			System.out.println("Exception Occured:" + objException.toString());
+			return totalresultList;
+		}
+	}
+
+	/**
+	 * This method will Remove the selected object from table. ie it will
+	 * disconnect the object from the related object
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return void
+	 * @throws AuditException
+	 *             ,MatrixException
+	 * 
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public void removeFromTable(Context context, String[] args) throws AuditException, MatrixException {
+		String strSupportingDocId = "";
+		BusinessObject boSupportingDoc = null;
+		boolean bContextPushed = false;
+		try {
+			// Get Parameters
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			String strResponseObjectId = (String) ((String[]) mapArgs.get("objectId"))[0];
+			DomainObject doObjectResponse = DomainObject.newInstance(context, strResponseObjectId);
+
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+			for (int i = 0; i < emxTableRowId.length; ++i) {
+				strSupportingDocId = emxTableRowId[i];
+				if (strSupportingDocId.indexOf('|') != -1) {
+					strSupportingDocId = strSupportingDocId.substring(strSupportingDocId.indexOf('|') + 1, strSupportingDocId.length());
+				}
+				// creating business Object for Supporting Docs
+				boSupportingDoc = new BusinessObject(strSupportingDocId);
+				// creating the relationship type
+				RelationshipType relType = new RelationshipType(
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITRESPONSESUPPORTINGDOCUMENT));
+
+				if (!bContextPushed) {
+					ContextUtil.pushContext(context);
+					bContextPushed = true;
+				}
+				// removing the Supporting Docs from Response/reply Object
+				doObjectResponse.disconnect(context, relType, false, boSupportingDoc);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			context.abort();
+			throw new AuditException(e);
+
+		}
+		finally {
+			if (bContextPushed) {
+				ContextUtil.popContext(context);
+				bContextPushed = false;
+			}
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String promoteComplete(Context context, String[] args) throws AuditException {
+		try {
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) ((String[]) paramMap.get("objectId"))[0];
+			DomainObject.newInstance(context, strObjectId).promote(context);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_AUDIT_REPLY_PROPERTIES_AND_HEADER);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method is to check for demote Reply Access.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return true, if successful
+	 * 
+	 * @throws AuditException
+	 * 
+	 */
+	public boolean canDemoteReply(Context context, String[] args) throws AuditException {
+		boolean canDemoteReply = false;
+		try {
+			String strParentOId = "";
+			String strState = "";
+			String POLICY_AUDITREQUEST = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITREQUEST);
+			String STATE_AUDITREQUEST_INPROGRESS = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+					AuditConstants.SYM_STATE_INPROGRESS);
+			String STATE_RESULTSREADY = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDITREQUEST,
+					AuditConstants.SYM_STATE_RESULTSREADY);
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			DomainObject doNewObj = DomainObject.newInstance(context, strObjectId);
+			StringList sListObjSelects = new StringList(); // object selects
+			sListObjSelects.addElement(DomainConstants.SELECT_ID);
+			DomainObject doObj = null;
+			Map parentMap = doNewObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUESTREPLY),
+					false, sListObjSelects, null);
+
+			// Allow Demote Reply only if the request is in In Progress or
+			// Results Ready state
+			if (null != parentMap && !parentMap.isEmpty()) {
+				strParentOId = (String) parentMap.get(DomainConstants.SELECT_ID);
+				doObj = DomainObject.newInstance(context, strParentOId);
+				strState = doObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+				if (STATE_AUDITREQUEST_INPROGRESS.equalsIgnoreCase(strState) || STATE_RESULTSREADY.equalsIgnoreCase(strState)) {
+					canDemoteReply = true;
+				}
+				else {
+					canDemoteReply = false;
+				}
+			}
+			else {
+				canDemoteReply = true;
+			}
+		}
+		catch (Exception objException) {
+			System.err.println("Exception Occured..." + objException.toString());
+			throw new AuditException(objException);
+		}
+		return canDemoteReply;
+	}
+}
+

@@ -1,0 +1,731 @@
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Calendar;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAChartsHelper;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.MyComplaintWorkQueueService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.json.JSONArray;
+import com.matrixone.json.JSONObject;
+
+public class ${CLASSNAME} {
+
+	final SimpleDateFormat	SDF		= new SimpleDateFormat("MM/dd/yyyy hh:mm:ss aaa");
+	final String			MONTH	= "12";
+
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+	}
+
+	private MyComplaintWorkQueueService getMyComplaintWorkQueueService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = (MyComplaintWorkQueueService) component
+					.getService(MyComplaintWorkQueueService.class);
+			return myComplaintWorkQueueService;
+
+		}
+		catch (ComponentException e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public Map getUserDashboardData(Context context, String[] args) throws ComplaintException {
+		final String TYPE_COMPLAINT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT);
+		final String ATTRIBUTE_SEVERITY = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		final String RELATIONSHIP_COMPLAINT_EVENT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+		final String RELATIONSHIP_COMPLAINT_EVENT_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT);
+		final String RELATIONSHIP_MAIN_PRODUCT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT);
+		final String RELATIONSHIP_PRODUCT_LINE_MODELS = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS);
+		final String RELEATED_PL = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.to["
+				+ RELATIONSHIP_MAIN_PRODUCT + "].from.to[" + RELATIONSHIP_PRODUCT_LINE_MODELS + "].from.id";
+		final String RELATED_PRODUCT = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.id";
+		try {
+			final String STATE_CLOSED = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			final String SELECTABLE_STATE_CLOSED_ACTUAL = "state[" + STATE_CLOSED + "].actual";
+			Calendar cStart = Calendar.getInstance();
+			cStart.set(Calendar.HOUR_OF_DAY, cStart.getMaximum(Calendar.HOUR_OF_DAY));
+			cStart.set(Calendar.MINUTE, cStart.getMaximum(Calendar.MINUTE));
+			cStart.set(Calendar.SECOND, cStart.getMaximum(Calendar.SECOND));
+			cStart.set(Calendar.MILLISECOND, cStart.getMaximum(Calendar.MILLISECOND));
+
+			Calendar cEnd = Calendar.getInstance();
+			cEnd.add(Calendar.MONTH, -Integer.valueOf(MONTH));
+			cEnd.set(Calendar.HOUR_OF_DAY, cEnd.getMinimum(Calendar.HOUR_OF_DAY));
+			cEnd.set(Calendar.MINUTE, cEnd.getMinimum(Calendar.MINUTE));
+			cEnd.set(Calendar.SECOND, cEnd.getMinimum(Calendar.SECOND));
+			cEnd.set(Calendar.MILLISECOND, cEnd.getMinimum(Calendar.MILLISECOND));
+
+			StringBuilder sbWhere = new StringBuilder();
+			sbWhere.append("(type == '");
+			sbWhere.append(TYPE_COMPLAINT);
+			sbWhere.append("') &&");
+			sbWhere.append(" (originated <= '");
+			sbWhere.append(SDF.format(cStart.getTime()));
+			sbWhere.append("')");
+			sbWhere.append("&& (originated >= '");
+			sbWhere.append(SDF.format(cEnd.getTime()));
+			sbWhere.append("')");
+
+			Map retMap = new HashMap<>();
+			Map m = new HashMap();
+
+			List<String> monthNames = LSAChartsHelper.getPastYearMonthNames(context, Integer.valueOf(MONTH));
+			Collections.reverse(monthNames);
+			m = new HashMap();
+			m.put("categories", monthNames.toString());
+			retMap.put("monthNames", new JSONObject(m).toString().replace("\"", ""));
+			String.valueOf(monthNames);
+			List<Map<?, ?>> openComplaints = retrieveOpenComplaintTickets(context, args, null, sbWhere.toString());
+			List<Map<?, ?>> closedComplaints = retrieveClosedTickets(context, args, null, sbWhere.toString());
+
+			List<Map<?, ?>> allComplaints = new ArrayList<>();
+			allComplaints.addAll(openComplaints);
+			allComplaints.addAll(closedComplaints);
+
+			List<String> productLineList = LSAChartsHelper.getAllDistinctValuesForKeyFromMap(context, allComplaints, RELEATED_PL);
+			List<String> productProductList = LSAChartsHelper.getAllDistinctValuesForKeyFromMap(context, allComplaints, RELATED_PRODUCT);
+
+			// code to remove model for Product as the relation ship they are
+			// connected to event is same and the node is also same.
+			List<String> tempProductList = new ArrayList<>();
+			for (String productProduct : productProductList) {
+				if (Helper.getTypeKindOf(context, DomainObject.newInstance(context, productProduct), DomainObject.SYMBOLIC_type_Products)
+						.containsValue(Boolean.TRUE)) {
+					tempProductList.add(productProduct);
+				}
+			}
+			productProductList = new ArrayList<>(tempProductList);
+
+			m = new HashMap<>();
+			Calendar cStartT = Calendar.getInstance();
+			Calendar cEndT = Calendar.getInstance();
+			List<Integer> iTempL = new ArrayList<>();
+
+			final List<String> COMPLAINT_SEVERITY = Helper.stringList("Low", "Medium", "High", "Urgent");
+
+			JSONArray tempJSONArray = new JSONArray();
+			for (String sSeverity : COMPLAINT_SEVERITY) {
+				iTempL = new ArrayList<>();
+				for (int i = 0; i < Integer.valueOf(MONTH); i++) {
+					cStartT.set(Calendar.MILLISECOND, 0);
+					cStartT.set(Calendar.SECOND, 0);
+					cStartT.set(Calendar.MINUTE, 0);
+					cStartT.set(Calendar.HOUR, 0);
+					cStartT.set(Calendar.DAY_OF_MONTH, Calendar.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+					int count = LSAChartsHelper.getAllMapForKeyValuePair(context, openComplaints,
+							DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY), sSeverity, cStartT, cEndT).size();
+					;
+					cEndT = (Calendar) cStartT.clone();
+					cEndT.add(Calendar.DAY_OF_YEAR, -1);
+					cStartT.add(Calendar.MONTH, -1);
+					cStartT.set(Calendar.DAY_OF_MONTH, cStartT.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+					iTempL.add(count);
+				}
+				cStartT = Calendar.getInstance();
+				cEndT = Calendar.getInstance();
+				m = new HashMap<>();
+				Collections.reverse(iTempL);
+				m.put(sSeverity, iTempL);
+
+				tempJSONArray.put(new JSONObject(m));
+			}
+			// Doubles quotes is replaced with blank character as after forming
+			// JSON
+			// in HTML was giving error as improper JSON object
+			retMap.put("divChartT0Status", tempJSONArray.toString().replace("\"", ""));
+
+			List<Integer> complaintTicketCountMonthWise = LSAChartsHelper.getMapCountMonthWise(context, openComplaints, Integer.valueOf(MONTH));
+			m = new HashMap<>();
+			Collections.reverse(complaintTicketCountMonthWise);
+			m.put("Complaints", complaintTicketCountMonthWise.toString());
+
+			retMap.put("OpenComplaint", (new JSONArray().put(new JSONObject(m))).toString().replace("\"", ""));
+			complaintTicketCountMonthWise = LSAChartsHelper.getMapCountMonthWise(context, allComplaints, Integer.valueOf(MONTH));
+			Collections.reverse(complaintTicketCountMonthWise);
+			m = new HashMap<>();
+			m.put("'Reported Complaint'", complaintTicketCountMonthWise.toString());
+			retMap.put("ReportedComplaint", (new JSONArray().put(new JSONObject(m))).toString().replace("\"", ""));
+
+			tempJSONArray = new JSONArray();
+			for (String sProductLine : productLineList) {
+				iTempL = new ArrayList<>();
+				for (int i = 0; i < Integer.valueOf(MONTH); i++) {
+					cStartT.set(Calendar.MILLISECOND, 0);
+					cStartT.set(Calendar.SECOND, 0);
+					cStartT.set(Calendar.MINUTE, 0);
+					cStartT.set(Calendar.HOUR, 0);
+					cStartT.set(Calendar.DAY_OF_MONTH, Calendar.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+					int count = LSAChartsHelper.getAllMapForKeyValuePair(context, openComplaints, RELEATED_PL, sProductLine, cStartT, cEndT).size();
+					;
+					cEndT = (Calendar) cStartT.clone();
+					cEndT.add(Calendar.DAY_OF_YEAR, -1);
+					cStartT.add(Calendar.MONTH, -1);
+					cStartT.set(Calendar.DAY_OF_MONTH, cStartT.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+					iTempL.add(count);
+				}
+				cStartT = Calendar.getInstance();
+				cEndT = Calendar.getInstance();
+				m = new HashMap<>();
+				Collections.reverse(iTempL);
+				m.put("'" + DomainObject.newInstance(context, sProductLine).getInfo(context, DomainConstants.SELECT_NAME) + "'", iTempL);
+				tempJSONArray.put(new JSONObject(m));
+			}
+			// Doubles quotes is replaced with blank character as after forming
+			// JSON
+			// in HTML was giving error as improper JSON object
+			retMap.put("divChartT0Brand", tempJSONArray.toString().replace("\"", ""));
+
+			iTempL = new ArrayList<>();
+			tempJSONArray = new JSONArray();
+			for (int i = 0; i < Integer.valueOf(MONTH); i++) {
+				cStartT.set(Calendar.MILLISECOND, 0);
+				cStartT.set(Calendar.SECOND, 0);
+				cStartT.set(Calendar.MINUTE, 0);
+				cStartT.set(Calendar.HOUR, 0);
+				cStartT.set(Calendar.DAY_OF_MONTH, Calendar.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, closedComplaints, DomainConstants.SELECT_CURRENT, STATE_CLOSED,
+						cStartT, cEndT, SELECTABLE_STATE_CLOSED_ACTUAL).size();
+				;
+				cEndT = (Calendar) cStartT.clone();
+				cEndT.add(Calendar.DAY_OF_YEAR, -1);
+				cStartT.add(Calendar.MONTH, -1);
+				cStartT.set(Calendar.DAY_OF_MONTH, cStartT.getInstance().getActualMinimum(Calendar.DAY_OF_MONTH));
+				iTempL.add(count);
+
+			}
+			cStartT = Calendar.getInstance();
+			cEndT = Calendar.getInstance();
+			m = new HashMap<>();
+			Collections.reverse(iTempL);
+			m.put("'Closed'", iTempL);
+			tempJSONArray.put(new JSONObject(m));
+			// Doubles quotes is replaced with blank character as after forming
+			// JSON
+			// in HTML was giving error as improper JSON object
+			retMap.put("divChartT0AvgDaysToClose1", tempJSONArray.toString().replace("\"", ""));
+
+			List<Integer> AverageClosureDaysMonthWise = LSAChartsHelper.getMonthWiseAverageDaysBetweenSelectables(context, closedComplaints,
+					Integer.valueOf(MONTH), DomainConstants.SELECT_ORIGINATED, SELECTABLE_STATE_CLOSED_ACTUAL);
+			Collections.reverse(AverageClosureDaysMonthWise);
+			m = new HashMap<>();
+			m.put("'Average Closure Days'", AverageClosureDaysMonthWise.toString());
+			retMap.put("divChartT0AvgDaysToClose2", (new JSONArray().put(new JSONObject(m))).toString().replace("\"", ""));
+
+			tempJSONArray = new JSONArray();
+			List<String> tempL = new ArrayList<>();
+			for (String sSeverity : COMPLAINT_SEVERITY) {
+				tempL = new ArrayList<>();
+				iTempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, allComplaints, DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY),
+						sSeverity).size();
+				tempL.add("'" + sSeverity + "'");
+				tempL.add(String.valueOf(count));
+
+				tempJSONArray.put(tempL);
+			}
+			retMap.put("bySeverity", tempJSONArray.toString().replace("\"", ""));
+
+			tempJSONArray = new JSONArray();
+			tempL = new ArrayList<>();
+			for (String productLine : productLineList) {
+				tempL = new ArrayList<>();
+				iTempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, allComplaints, RELEATED_PL, productLine).size();
+				tempL.add("'" + DomainObject.newInstance(context, productLine).getInfo(context, DomainConstants.SELECT_NAME) + "'");
+				tempL.add(String.valueOf(count));
+
+				tempJSONArray.put(tempL);
+			}
+			retMap.put("divChartT1PL", tempJSONArray.toString().replace("\"", ""));
+
+			tempJSONArray = new JSONArray();
+			tempL = new ArrayList<>();
+			for (String product : productProductList) {
+				tempL = new ArrayList<>();
+				iTempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, allComplaints, RELATED_PRODUCT, product).size();
+				tempL.add("'" + DomainObject.newInstance(context, product).getInfo(context, DomainConstants.SELECT_NAME) + "'");
+				tempL.add(String.valueOf(count));
+
+				tempJSONArray.put(tempL);
+			}
+			retMap.put("divChartT1Product", tempJSONArray.toString().replace("\"", ""));
+
+			retMap.put("reported_complaints_div", String.valueOf(openComplaints.size()));
+			retMap.put("closed_complaints_div", String.valueOf(closedComplaints.size()));
+
+			Integer sum = 0;
+			for (Integer i : AverageClosureDaysMonthWise) {
+				sum = sum + i;
+			}
+			retMap.put("average_days_div", String.valueOf(sum / AverageClosureDaysMonthWise.size()));
+
+			// tempJSONArray = new JSONArray();
+			// tempL = new ArrayList<>();
+			// tempL.add("divHeaderT0Status");
+			// tempL.add("'"+"Total Reported Complaints and Status"+"'");//
+			// retMap.put("i18nLabel",tempJSONArray.put(tempL).toString().replace("\"",
+			// ""));
+
+			return retMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public Map reloadUserDashboardData(Context context, String[] args) throws ComplaintException {
+		final String TYPE_COMPLAINT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT);
+		final String ATTRIBUTE_SEVERITY = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		final String RELATIONSHIP_COMPLAINT_EVENT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+		final String RELATIONSHIP_COMPLAINT_EVENT_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT);
+		final String RELATIONSHIP_MAIN_PRODUCT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT);
+		final String RELATIONSHIP_PRODUCT_LINE_MODELS = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS);
+		final String RELEATED_PL = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.to["
+				+ RELATIONSHIP_MAIN_PRODUCT + "].from.to[" + RELATIONSHIP_PRODUCT_LINE_MODELS + "].from.id";
+		final String RELATED_PRODUCT = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.id";
+		try {
+			final String STATE_CLOSED = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			final String SELECTABLE_STATE_CLOSED_ACTUAL = "state[" + STATE_CLOSED + "].actual";
+			Map retMap = new HashMap<>();
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			String[] filterCriteria = (String[]) programMap.get("filterCriteria");
+
+			Calendar cStart = Calendar.getInstance();
+			cStart.set(Calendar.HOUR_OF_DAY, cStart.getMaximum(Calendar.HOUR_OF_DAY));
+			cStart.set(Calendar.MINUTE, cStart.getMaximum(Calendar.MINUTE));
+			cStart.set(Calendar.SECOND, cStart.getMaximum(Calendar.SECOND));
+			cStart.set(Calendar.MILLISECOND, cStart.getMaximum(Calendar.MILLISECOND));
+
+			Calendar cEnd = Calendar.getInstance();
+			cEnd.add(Calendar.MONTH, -Integer.valueOf(MONTH));
+			cEnd.set(Calendar.HOUR_OF_DAY, cEnd.getMinimum(Calendar.HOUR_OF_DAY));
+			cEnd.set(Calendar.MINUTE, cEnd.getMinimum(Calendar.MINUTE));
+			cEnd.set(Calendar.SECOND, cEnd.getMinimum(Calendar.SECOND));
+			cEnd.set(Calendar.MILLISECOND, cEnd.getMinimum(Calendar.MILLISECOND));
+
+			StringBuilder sbWhere = new StringBuilder();
+			sbWhere.append("(type == '");
+			sbWhere.append(TYPE_COMPLAINT);
+			sbWhere.append("') &&");
+			sbWhere.append(" (originated <= '");
+			sbWhere.append(SDF.format(cStart.getTime()));
+			sbWhere.append("')");
+			sbWhere.append("&& (originated >= '");
+			sbWhere.append(SDF.format(cEnd.getTime()));
+			sbWhere.append("')");
+
+			List<Map<?, ?>> openComplaints = retrieveOpenComplaintTickets(context, args, null, sbWhere.toString());
+			List<Map<?, ?>> closedComplaints = retrieveClosedTickets(context, args, null, sbWhere.toString());
+
+			List<Map<?, ?>> allComplaints = new ArrayList<>();
+			allComplaints.addAll(openComplaints);
+			allComplaints.addAll(closedComplaints);
+
+			List<String> productLineList = LSAChartsHelper.getAllDistinctValuesForKeyFromMap(context, allComplaints, RELEATED_PL);
+			List<String> productProductList = LSAChartsHelper.getAllDistinctValuesForKeyFromMap(context, allComplaints, RELATED_PRODUCT);
+
+			List<String> tempProductLineList = new ArrayList<>();
+			for (String productProduct : productLineList) {
+				tempProductLineList.add(DomainObject.newInstance(context, productProduct).getInfo(context, DomainObject.SELECT_NAME));
+			}
+
+			// code to remove model for Product as the relation ship they are
+			// connected to event is same and the node is also same.
+			List<String> tempProductList = new ArrayList<>();
+			for (String productProduct : productProductList) {
+				if (Helper.getTypeKindOf(context, DomainObject.newInstance(context, productProduct), DomainObject.SYMBOLIC_type_Products)
+						.containsValue(Boolean.TRUE)) {
+					tempProductList.add(productProduct);
+				}
+			}
+
+			productProductList = new ArrayList<>(tempProductList);
+			tempProductList = new ArrayList<>();
+			for (String productProduct : productProductList) {
+				tempProductList.add(DomainObject.newInstance(context, productProduct).getInfo(context, DomainObject.SELECT_NAME));
+			}
+
+			List<Map<?, ?>> pieDataMapL = new ArrayList<>();
+
+			String[] categoryName = (String[]) programMap.get("categoryName");
+			String[] categoryFilter = (String[]) programMap.get("categoryFilter");
+			String[] categoryFilter1 = (String[]) programMap.get("categoryFilter1");
+			if (!Helper.isNullOrEmpty(categoryName[0])) {
+				pieDataMapL = new ArrayList<>();
+				switch (categoryName[0]) {
+				case "ComplaintSeverity":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1[0])));
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY),
+							categoryFilter[0]);
+					break;
+				case "ReportedComplaint":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0])));
+					break;
+				case "OpenComplaints":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, openComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0])));
+					break;
+				case "ClosedComplaints":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, closedComplaints, SELECTABLE_STATE_CLOSED_ACTUAL,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0])));
+
+					break;
+				case "AverageClosureDays":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, SELECTABLE_STATE_CLOSED_ACTUAL,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter[0])));
+					break;
+				case "brands":
+					pieDataMapL = new ArrayList<>();
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1[0]),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1[0])));
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELEATED_PL,
+							productLineList.get(tempProductLineList.indexOf(categoryFilter[0])));
+					break;
+				default:
+					// System.out.println("default Case");
+					break;
+				}
+			}
+			else {
+				pieDataMapL.addAll(allComplaints);
+			}
+
+			List<String> filterL = FrameworkUtil.split(filterCriteria[0], "|");
+			for (String filter : filterL) {
+				switch (filter) {
+				case "divChartT1PL":
+					String[] brandName = (String[]) programMap.get("brandName");
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELEATED_PL,
+							productLineList.get(tempProductLineList.indexOf(brandName[0])));
+					break;
+				case "divChartT1Product":
+					String[] productName = (String[]) programMap.get("productName");
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELATED_PRODUCT,
+							productProductList.get(tempProductList.indexOf(productName[0])));
+					break;
+				case "divChartT1Severity":
+					String[] severityType = (String[]) programMap.get("severityName");
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY),
+							severityType[0]);
+					break;
+				}
+			}
+
+			JSONArray tempJSONArray = new JSONArray();
+			List<String> tempL = new ArrayList<>();
+			for (String product : productProductList) {
+				tempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELATED_PRODUCT, product).size();
+				// if (count > 0) {
+				tempL.add("'" + DomainObject.newInstance(context, product).getInfo(context, DomainConstants.SELECT_NAME) + "'");
+				tempL.add(String.valueOf(count));
+				tempJSONArray.put(tempL);
+				// }
+			}
+			retMap.put("divChartT1Product", tempJSONArray.toString().replace("\"", ""));
+
+			tempJSONArray = new JSONArray();
+			tempL = new ArrayList<>();
+			for (String productLine : productLineList) {
+				tempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELEATED_PL, productLine).size();
+				// if (count > 0) {
+				tempL.add("'" + DomainObject.newInstance(context, productLine).getInfo(context, DomainConstants.SELECT_NAME) + "'");
+				tempL.add(String.valueOf(count));
+				tempJSONArray.put(tempL);
+				// }
+			}
+			retMap.put("divChartT1PL", tempJSONArray.toString().replace("\"", ""));
+
+			final List<String> COMPLAINT_SEVERITY = Helper.stringList("Low", "Medium", "High", "Urgent");
+			tempJSONArray = new JSONArray();
+			tempL = new ArrayList<>();
+			for (String sSeverity : COMPLAINT_SEVERITY) {
+				tempL = new ArrayList<>();
+				int count = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY),
+						sSeverity).size();
+				tempL.add("'" + sSeverity + "'");
+				tempL.add(String.valueOf(count));
+				tempJSONArray.put(tempL);
+			}
+			retMap.put("divChartT1Severity", tempJSONArray.toString().replace("\"", ""));
+			return retMap;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	protected Calendar getStartDateForMonth(Context context, Integer count, String monthName) throws ComplaintException {
+		try {
+			Calendar cStart = Calendar.getInstance();
+			cStart.set(Calendar.HOUR_OF_DAY, 0);
+			cStart.set(Calendar.MINUTE, 0);
+			cStart.set(Calendar.SECOND, 0);
+			cStart.set(Calendar.MILLISECOND, 0);
+			List<String> monthNames = LSAChartsHelper.getPastYearMonthNames(context, count);
+			count = monthNames.indexOf("'" + monthName + "'");
+			if (count > 0) {
+				while (count != 0) {
+					cStart.add(Calendar.MONTH, -1);
+					count--;
+				}
+			}
+			cStart.set(Calendar.DAY_OF_MONTH, cStart.getActualMinimum(Calendar.DAY_OF_MONTH));
+			return cStart;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	protected Calendar getEndDateForMonth(Context context, Integer count, String monthName) throws ComplaintException {
+		try {
+			Calendar cEnd = Calendar.getInstance();
+			cEnd.set(Calendar.HOUR_OF_DAY, 0);
+			cEnd.set(Calendar.MINUTE, 0);
+			cEnd.set(Calendar.SECOND, 0);
+			cEnd.set(Calendar.MILLISECOND, 0);
+			List<String> monthNames = LSAChartsHelper.getPastYearMonthNames(context, count);
+			count = monthNames.indexOf("'" + monthName + "'");
+			if (count > 0) {
+				while (count != 0) {
+					cEnd.add(Calendar.MONTH, -1);
+					count--;
+				}
+			}
+			cEnd.set(Calendar.DAY_OF_MONTH, cEnd.getActualMaximum(Calendar.DAY_OF_MONTH));
+			return cEnd;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getUserDashboardDetails(Context context, String[] args) throws ComplaintException {
+		final String TYPE_COMPLAINT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT);
+		final String ATTRIBUTE_SEVERITY = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SEVERITY);
+		final String RELATIONSHIP_COMPLAINT_EVENT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+		final String RELATIONSHIP_COMPLAINT_EVENT_PRODUCT = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT);
+		final String RELATIONSHIP_MAIN_PRODUCT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_RELATIONSHIP_MAIN_PRODUCT);
+		final String RELATIONSHIP_PRODUCT_LINE_MODELS = PropertyUtil.getSchemaProperty(context,
+				TicketConstants.SYMBOLIC_RELATIONSHIP_PRODUCT_LINE_MODELS);
+		final String RELEATED_PL = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.to["
+				+ RELATIONSHIP_MAIN_PRODUCT + "].from.to[" + RELATIONSHIP_PRODUCT_LINE_MODELS + "].from.name";
+		final String RELATED_PRODUCT = "from[" + RELATIONSHIP_COMPLAINT_EVENT + "].to.from[" + RELATIONSHIP_COMPLAINT_EVENT_PRODUCT + "].to.name";
+
+		try {
+			final String STATE_CLOSED = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			final String SELECTABLE_STATE_CLOSED_ACTUAL = "state[" + STATE_CLOSED + "].actual";
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			String filterCriteria = (String) programMap.get("filterCriteria");
+
+			Calendar cStart = Calendar.getInstance();
+			cStart.set(Calendar.HOUR_OF_DAY, cStart.getMaximum(Calendar.HOUR_OF_DAY));
+			cStart.set(Calendar.MINUTE, cStart.getMaximum(Calendar.MINUTE));
+			cStart.set(Calendar.SECOND, cStart.getMaximum(Calendar.SECOND));
+			cStart.set(Calendar.MILLISECOND, cStart.getMaximum(Calendar.MILLISECOND));
+
+			Calendar cEnd = Calendar.getInstance();
+			cEnd.add(Calendar.MONTH, -Integer.valueOf(MONTH));
+			cEnd.set(Calendar.HOUR_OF_DAY, cEnd.getMinimum(Calendar.HOUR_OF_DAY));
+			cEnd.set(Calendar.MINUTE, cEnd.getMinimum(Calendar.MINUTE));
+			cEnd.set(Calendar.SECOND, cEnd.getMinimum(Calendar.SECOND));
+			cEnd.set(Calendar.MILLISECOND, cEnd.getMinimum(Calendar.MILLISECOND));
+
+			StringBuilder sbWhere = new StringBuilder();
+			sbWhere.append("(type == '");
+			sbWhere.append(TYPE_COMPLAINT);
+			sbWhere.append("') &&");
+			sbWhere.append(" (originated <= '");
+			sbWhere.append(SDF.format(cStart.getTime()));
+			sbWhere.append("')");
+			sbWhere.append("&& (originated >= '");
+			sbWhere.append(SDF.format(cEnd.getTime()));
+			sbWhere.append("')");
+
+			List<Map<?, ?>> openComplaints = retrieveOpenComplaintTickets(context, args, null, sbWhere.toString());
+			List<Map<?, ?>> closedComplaints = retrieveClosedTickets(context, args, null, sbWhere.toString());
+
+			List<Map<?, ?>> allComplaints = new ArrayList<>();
+			allComplaints.addAll(openComplaints);
+			allComplaints.addAll(closedComplaints);
+
+			List<Map<?, ?>> pieDataMapL = new ArrayList<>();
+
+			String categoryName = (String) programMap.get("categoryName");
+			String categoryFilter = (String) programMap.get("categoryFilter");
+			String categoryFilter1 = (String) programMap.get("categoryFilter1");
+			if (!Helper.isNullOrEmpty(categoryName)) {
+				pieDataMapL = new ArrayList<>();
+				switch (categoryName) {
+				case "ComplaintSeverity":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1)));
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY),
+							categoryFilter);
+					break;
+				case "ReportedComplaint":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter)));
+					break;
+				case "OpenComplaints":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, openComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter)));
+					break;
+				case "ClosedComplaints":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, closedComplaints, SELECTABLE_STATE_CLOSED_ACTUAL,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter)));
+
+					break;
+				case "AverageClosureDays":
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, SELECTABLE_STATE_CLOSED_ACTUAL,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter)));
+					break;
+				case "brands":
+					pieDataMapL = new ArrayList<>();
+					pieDataMapL.addAll(LSAChartsHelper.getMapForDateRange(context, allComplaints, DomainConstants.SELECT_ORIGINATED,
+							getStartDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1),
+							getEndDateForMonth(context, Integer.valueOf(MONTH), categoryFilter1)));
+					pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELEATED_PL, categoryFilter);
+					break;
+				default:
+					// System.out.println("default Case");
+					break;
+				}
+			}
+
+			if (!Helper.isNullOrEmpty(filterCriteria)) {
+				if (pieDataMapL.isEmpty()) {
+					pieDataMapL.addAll(allComplaints);
+				}
+				List<String> filterL = FrameworkUtil.split(filterCriteria, "|");
+				for (String filter : filterL) {
+					switch (filter) {
+					case "divChartT1PL":
+						String brandName = (String) programMap.get("brandName");
+						pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELEATED_PL, brandName);
+						break;
+					case "divChartT1Product":
+						String productName = (String) programMap.get("productName");
+						pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL, RELATED_PRODUCT, productName);
+						break;
+					case "divChartT1Severity":
+						String severityType = (String) programMap.get("severityName");
+						pieDataMapL = LSAChartsHelper.getAllMapForKeyValuePair(context, pieDataMapL,
+								DomainObject.getAttributeSelect(ATTRIBUTE_SEVERITY), severityType);
+						break;
+					}
+				}
+			}
+			return new MapList(pieDataMapL);
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+
+	}
+
+	public List<Map<?, ?>> retrieveOpenComplaintTickets(Context context, String[] args, StringList busSelects, String sFilter)
+			throws ComplaintException {
+		final MyComplaintWorkQueueService MY_COMPLAINT_WORK_QUEUE_SERVICE = getMyComplaintWorkQueueService(context);
+		try {
+			final String STATE_CREATE = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CREATE);
+			String STATE_INPROCESS = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS);
+			StringBuilder sbWhereExpression = new StringBuilder();
+			sbWhereExpression.append("( ");
+			sbWhereExpression.append(DomainConstants.SELECT_CURRENT);
+			sbWhereExpression.append(" == \"");
+			sbWhereExpression.append(STATE_CREATE);
+			sbWhereExpression.append("\" || ");
+			sbWhereExpression.append(DomainConstants.SELECT_CURRENT);
+			sbWhereExpression.append(" == \"");
+			sbWhereExpression.append(STATE_INPROCESS);
+			sbWhereExpression.append("\"");
+			sbWhereExpression.append(") ");
+			if (!Helper.isNullOrEmpty(sFilter)) {
+				sbWhereExpression.append(" && ");
+				sbWhereExpression.append(sFilter);
+			}
+			return MY_COMPLAINT_WORK_QUEUE_SERVICE
+					.getComplaintTickets(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT, sbWhereExpression.toString());
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public List<Map<?, ?>> retrieveClosedTickets(Context context, String[] args, StringList busSelects, String sFilter) throws ComplaintException {
+		final MyComplaintWorkQueueService MY_COMPLAINT_WORK_QUEUE_SERVICE = getMyComplaintWorkQueueService(context);
+		try {
+			final String STATE_CLOSED = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD,
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			StringBuilder sbWhereExpression = new StringBuilder();
+			sbWhereExpression.append("( ");
+			sbWhereExpression.append(DomainConstants.SELECT_CURRENT);
+			sbWhereExpression.append(" == \"");
+			sbWhereExpression.append(STATE_CLOSED);
+			sbWhereExpression.append("\"");
+			sbWhereExpression.append(") ");
+			if (!Helper.isNullOrEmpty(sFilter)) {
+				sbWhereExpression.append(" && ");
+				sbWhereExpression.append(sFilter);
+			}
+			return MY_COMPLAINT_WORK_QUEUE_SERVICE
+					.getComplaintTickets(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT, sbWhereExpression.toString());
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+}
+

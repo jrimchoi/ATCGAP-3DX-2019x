@@ -1,0 +1,331 @@
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.enterprisechange.modeler.ChangeTemplate;
+import com.dassault_systemes.enovia.enterprisechangemgt.common.ChangeConstants;
+import com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil;
+import com.matrixone.apps.common.Company;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+
+public class ${CLASSNAME} extends ${CLASS:emxDomainObject} {
+
+	public ${CLASSNAME}(Context context, String[] args)
+			throws Exception {
+		super(context, args);
+		// TODO Auto-generated constructor stub
+	}
+	
+	/**
+	 * Gets the Change Templates as per the Context User Visibility. - As per "Member" relationship
+	 * @param context the eMatrix <code>Context</code> object
+	 * @param args    holds the following input arguments:
+	 *           0 -  HashMap containing one String entry for key "objectId"
+	 * @return        a <code>MapList</code> object having the list of Change Templates, Object Id of Change Template objects.
+	 * @throws        Exception if the operation fails
+	 * @since         ECM R420
+	 **
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMyTemplatesView(Context context, String[] args) throws Exception
+	{
+
+		HashSet<String> sOrgSet 		= 		new HashSet<String>();
+		MapList sTemplateList 			= 		new MapList();
+		MapList sFinalTemplateList      = 		new MapList();
+		try
+		{
+			String loggedInPersonId 	= 		PersonUtil.getPersonObjectID(context);
+			boolean isChangeAdmin 		= 		ChangeUtil.hasChangeAdministrationAccess(context);
+
+			DomainObject dmObj 			= 		DomainObject.newInstance(context);
+			sOrgSet.add(loggedInPersonId); //To get Personal Templates, adding the person ID
+
+
+			String sObjectId = "";
+			String sOwner ="";
+			String sMemberOrgId = "";
+			String sParentOrgID = "";
+			String sChildOrgID = "";
+
+
+			StringBuffer selectTemplate = 		new StringBuffer("from[");
+			selectTemplate.append(ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES);
+			selectTemplate.append("].to.id");
+
+
+			StringList sSelectList = new StringList();
+			sSelectList.add(selectTemplate.substring(0));
+			sSelectList.add(SELECT_ID);
+			sSelectList.add(SELECT_OWNER);
+
+
+			StringBuffer selectMemberOrg = 		new StringBuffer("to[");
+			selectMemberOrg.append(RELATIONSHIP_MEMBER);
+			selectMemberOrg.append("].from.id");
+
+			//Getting Member Organizations object IDs
+			dmObj.setId(loggedInPersonId);
+			StringList sMemberOrgList = dmObj.getInfoList(context, selectMemberOrg.substring(0));
+
+
+
+			Iterator sItr = sMemberOrgList.iterator();
+			while(sItr.hasNext())
+			{
+				sMemberOrgId = (String)sItr.next();
+				sOrgSet.add(sMemberOrgId);
+
+				//Getting the above Parent Organizations Object IDs
+				DomainObject orgObj = new DomainObject(sMemberOrgId);
+				MapList sParentOrgList = orgObj.getRelatedObjects(context,
+						RELATIONSHIP_DIVISION+","
+						+RELATIONSHIP_COMPANY_DEPARTMENT,
+						TYPE_ORGANIZATION,
+						new StringList(SELECT_ID),
+						null,
+						true,
+						false,
+						(short)0,
+						EMPTY_STRING,
+						EMPTY_STRING,
+						null,
+						null,
+						null);
+				Iterator sParentOrgItr = sParentOrgList.iterator();
+				while(sParentOrgItr.hasNext())
+				{
+					Map tempMap = (Map)sParentOrgItr.next();
+					sParentOrgID = (String)tempMap.get(SELECT_ID);
+					sOrgSet.add(sParentOrgID);
+				}
+
+				if(isChangeAdmin)
+				{
+					//Getting Business Units and Departments object IDs
+					Company sCompanyObj = new Company(sMemberOrgId);
+					MapList sOrgList = sCompanyObj.getBusinessUnitsAndDepartments(context, 0, new StringList(SELECT_ID), false);
+					Iterator sOrgItr = sOrgList.iterator();
+					while(sOrgItr.hasNext())
+					{
+						Map tempMap = (Map)sOrgItr.next();
+						sChildOrgID = (String)tempMap.get(SELECT_ID);
+						sOrgSet.add(sChildOrgID);
+					}
+				}
+
+			}
+			String[] arrObjectIDs = (String[])sOrgSet.toArray(new String[0]);
+
+			//getting Templates connected to each organization/person
+			sTemplateList = DomainObject.getInfo(context, arrObjectIDs, sSelectList);
+
+
+			Iterator sTempItr = sTemplateList.iterator();
+			while(sTempItr.hasNext())
+			{
+				Map newMap = (Map)sTempItr.next();
+				sObjectId = (String)newMap.get(selectTemplate.substring(0));
+				sOwner = (String)newMap.get("owner");
+				if(!UIUtil.isNullOrEmpty(sObjectId))
+				{
+					StringList sList = FrameworkUtil.split(sObjectId,"\7");
+					Iterator sListItr = sList.iterator();
+					while(sListItr.hasNext())
+					{
+						Map sTempMap = new HashMap();
+						sObjectId = (String)sListItr.next();
+						sTempMap.put("id", sObjectId);
+						sTempMap.put("owner", sOwner);
+						sFinalTemplateList.add(sTempMap);
+					}
+
+
+				}
+			}
+		}
+		catch(Exception e)
+		{
+			e.printStackTrace();
+			throw new FrameworkException(e);
+		}
+		return sFinalTemplateList;
+	}//end of method
+
+
+	/**
+	 * To create the Attribute Group on Change Template
+	 * @param context the eMatrix code context object
+	 * @param args packed hashMap of request parameter
+	 * @throws Exception if the operation fails
+	 */
+	
+	public void createAttributeGroup(Context context,String [] args) throws Exception{
+		HashMap<?, ?> programMap      = (HashMap<?, ?>)JPO.unpackArgs(args);
+		HashMap<?, ?> paramMap        = (HashMap<?, ?>)programMap.get("paramMap");
+        HashMap<?, ?> requestMap      = (HashMap<?, ?>)programMap.get("requestMap");
+        String objectId         = (String)paramMap.get("objectId");
+        String newName          = (String) paramMap.get("New Value");
+        String description      = ((String[])requestMap.get("Description"))[0];
+        String attributes       = ((String[])requestMap.get("Attributes"))[0];
+        // calling modeler API to create attribute on CHT
+        ChangeTemplate chgTemplateObj  = new ChangeTemplate(objectId);
+        chgTemplateObj.createAttributeGroup(context, newName, description, attributes);
+	}
+	
+	/**
+	 * Returns the HTML based Edit Icon in the StructureBrowser
+	 *
+	 * @param context   the eMatrix <code>Context</code> object
+	 * @param args      holds input arguments.
+	 * @return          Vector attachment as HTML
+	 * @throws          Exception if the operation fails
+	 * @since           ECM R212
+	 */
+	public Vector showEditIconforStructureBrowser(Context context, String args[])throws FrameworkException{
+		try{
+			//XSSOK
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			Vector columnVals = showEditIconforStructureBrowser(context, programMap);
+			if(columnVals.size()!=0){
+				return columnVals;
+			}
+			else{
+				return new Vector();
+			}
+		} catch (Exception e){
+			throw new FrameworkException(e);
+		}
+	}
+	
+	/**
+	 * Returns the HTML based Edit Icon in the StructureBrowser
+	 * Note - This method is replacement for same method in enoECMChangeTemplateBase
+	 * 
+	 * @param context   the eMatrix <code>Context</code> object
+	 * @param args      holds input arguments.
+	 * @return          Vector attachment as HTML
+	 * @throws          Exception if the operation fails
+	 * @since           ECM R212
+	 */
+	public Vector showEditIconforStructureBrowser(Context context, java.util.HashMap arguMap)throws FrameworkException{
+
+		//XSSOK
+		Vector columnVals = null;
+
+		try {
+
+			MapList objectList = (MapList) arguMap.get("objectList");
+			StringBuffer sbEditIcon = null;
+			DomainObject dmObj = DomainObject.newInstance(context);
+
+
+			boolean isChangeAdmin = ChangeUtil.hasChangeAdministrationAccess(context);
+			String orgId = PersonUtil.getUserCompanyId(context);
+			String loggedInPersonId = PersonUtil.getPersonObjectID(context);
+
+			boolean isBUEmployee = false;
+
+			Company companyObj = new Company();
+
+			StringList sSelectList = new StringList();
+			sSelectList.add("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.type");
+			sSelectList.add("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.name");
+			sSelectList.add("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.id");
+
+			String sConnectedType = "";
+			String sConnectedID = "";
+			String sConnectedName ="";
+			String sOwner ="";
+			String si18NEditChangeTemplate = EnoviaResourceBundle.getProperty(context,  ChangeConstants.RESOURCE_BUNDLE_ENTERPRISE_STR, context.getLocale(),"EnterpriseChangeMgt.Command.EditChangeTemplate");
+
+			StringBuffer sbStartHref = new StringBuffer();
+			sbStartHref.append("<a href=\"JavaScript:emxTableColumnLinkClick('");
+			sbStartHref.append("../common/emxForm.jsp?formHeader=Edit Change Template&amp;mode=edit");
+			sbStartHref.append("&amp;preProcessJavaScript=setOwningOrganization&amp;HelpMarker=emxhelpparteditdetails&amp;postProcessJPO=enoECMChangeUX%3AupdateRouteTemplateForChangeEdit&amp;commandName=ECMMyChangeTemplates&amp;refreshStructure=false&amp;postProcessURL=../enterprisechangemgtapp/ECMCommonRefresh.jsp&amp;suiteKey=EnterpriseChangeMgt&amp;objectId=");
+
+			StringBuffer sbEndHref = new StringBuffer();
+			sbEndHref.append("&amp;form=type_ChangeTemplate'");
+			sbEndHref.append(", '700', '600', 'true', 'slidein', '')\">");
+			sbEndHref.append("<img border=\"0\" src=\"../common/images/iconActionEdit.gif\" title=\""+XSSUtil.encodeForXML(context, si18NEditChangeTemplate)+"\" /></a>");
+
+			int listSize = 0;
+			if (objectList != null && (listSize = objectList.size()) > 0) {
+				columnVals = new Vector(objectList.size());
+				Map sTempMap = new HashMap();
+
+				Iterator objectListItr    = objectList.iterator();
+				while( objectListItr.hasNext()){
+					Map objectMap           = (Map) objectListItr.next();
+					String objectID = (String)objectMap.get("id");
+					sbEditIcon = new StringBuffer();
+
+					dmObj.setId(objectID);
+
+					Map sResultMap = dmObj.getInfo(context, sSelectList);
+					sConnectedType = (String)sResultMap.get("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.type");
+					sConnectedName = (String)sResultMap.get("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.name");
+					sConnectedID = (String)sResultMap.get("to["+ChangeConstants.RELATIONSHIP_CHANGE_TEMPLATES+"].from.id");
+
+					dmObj.setId(loggedInPersonId);
+					String sPersonBUID = dmObj.getInfo(context,"to["+RELATIONSHIP_BUSINESS_UNIT_EMPLOYEE+"].from.id");
+
+					if(sConnectedType.equals(TYPE_PERSON)){
+
+						if(sOwner.equals(context.getUser()) || sConnectedName.equals(context.getUser())){
+							sbEditIcon = new StringBuffer(sbStartHref);
+							sbEditIcon.append(XSSUtil.encodeForHTMLAttribute(context, objectID));
+							sbEditIcon.append(sbEndHref);
+						}
+					}
+					if(!UIUtil.isNullOrEmpty(sPersonBUID)){
+						isBUEmployee = true;
+						companyObj.setId(sPersonBUID);
+						sTempMap.put("id",sPersonBUID);
+					}
+					if(!isBUEmployee){
+						companyObj.setId(orgId);
+						sTempMap.put("id",orgId);
+					}
+
+					MapList sList = companyObj.getBusinessUnitsAndDepartments(context, 0, new StringList(SELECT_ID), false);
+					sList.add(sTempMap);
+					Iterator sItr = sList.iterator();
+
+					while(sItr.hasNext()){
+						Map sMap = (Map)sItr.next();
+						boolean sContains = sMap.containsValue(sConnectedID);
+						if(sContains){
+							if(isChangeAdmin){
+								sbEditIcon = new StringBuffer(sbStartHref);
+								sbEditIcon.append(XSSUtil.encodeForHTMLAttribute(context, objectID));
+								sbEditIcon.append(sbEndHref);
+							}
+						}
+					}
+					columnVals.add(sbEditIcon.toString());
+				}//end while
+
+			}//end if
+			return columnVals;
+		} catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}//end of method
+
+}
+

@@ -1,0 +1,478 @@
+/************************************************************************************************************
+ * /* AuditSupplierBase
+ **
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ **
+ *
+ * 
+ * Author Date Description
+ * 
+ * SCT 07-NOV-2006 AuditSupplierBase program to handle Audit Supplier type
+ * 
+ * 
+ ************************************************************************************************************/
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+
+import matrix.db.Attribute;
+import matrix.db.AttributeList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.Person;
+import matrix.db.Relationship;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructor.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 *
+	 * @throws Exception
+	 *             if the operation fails
+	 *
+	 * @since AEF 10.5.0.0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	/**
+	 * This method Creates Supplier Object
+	 * 
+	 * @param context
+	 * @param args
+	 * @return Map which contains Object Id
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createSupplier(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+
+		try {
+			// Get form info
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+			String strName = (String) paramMap.get("name");
+			String strPlantLoctn = (String) paramMap.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANTLOCATION));
+			String strAuditSupplierType = (String) paramMap.get("Audit Supplier Type");
+			String strCurrentAppvlStatus = (String) paramMap.get("Current Approval Status");
+			String strComments = (String) paramMap.get("Comments");
+			String strQualityRanking = (String) requestMap.get("Audit Quality Ranking");
+
+			// Getting Deafult Vault for the user
+			String strDefaultVault = PersonUtil.getDefaultVault(context);
+
+			// check name of the audit Supplier whether its unique or not
+			// if its not unique display the proper message
+			boolean isAuditSupplierNameUnique = ${CLASS:com.dassault_systemes.enovia.lsa.audit.services.trigger.AuditUtils}.checkDuplicateTNR(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITSUPPLIER), strName);
+
+			// if its unique create the object otherwise display proper error
+			// message.
+			if (isAuditSupplierNameUnique) {
+				// create new Supplier object
+				DomainObject doSupplier = DomainObject.newInstance(context);
+				doSupplier.createObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITSUPPLIER), strName, "1",
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDITSUPPLIER), strDefaultVault);
+				String strSupplierId = doSupplier.getId(context);
+
+				// Adding Attribute Values
+				Map attrListSupplier = new HashMap();
+				attrListSupplier.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANTLOCATION), strPlantLoctn);
+				attrListSupplier.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITSUPPLIERTYPE), strAuditSupplierType);
+				attrListSupplier.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_CURRENTAPPROVALSTATUS), strCurrentAppvlStatus);
+				attrListSupplier.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_QUALITYRANKING), strQualityRanking);
+				attrListSupplier.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_QUALITYRANKING), strComments);
+
+				doSupplier.setAttributeValues(context, attrListSupplier);
+				doSupplier.setOwner(context, (String) paramMap.get(DomainConstants.SELECT_OWNER));
+				returnMap.put("objectId", strSupplierId);
+			}
+			else {
+				String strMessage = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITSUPPLIER) + " Name '" + strName + "' "
+						+ i18nNow.getI18nString("LQIAudit.Message.NameNotUnique", "LQIAuditStringResource", context.getLocale().toString());
+				returnMap.put("Message", strMessage);
+			}
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+		return returnMap;
+	}
+
+	/**
+	 * This method Seraches Audits of type Supplier
+	 * 
+	 * @param context
+	 * @param args
+	 * @return MapList which contains search Results
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getSupplierAuditSearchResult(Context context, String[] args) throws Exception {
+		MapList totalresultList = null;
+		try {
+			// Get the parameter Hashmap.
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			String sName = (String) paramMap.get("txtName");
+			String sTypeAuditSchedule = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT);
+			String sQueryLimit = (String) paramMap.get("QueryLimit");
+			String sWhereExp = DomainConstants.EMPTY_STRING;
+			char chDblQuotes = '\"';
+			String sTxtFormat = AuditConstants.STR_WILD;
+			String sTxtSearch = DomainConstants.EMPTY_STRING;
+
+			String sAuditLocation = (String) paramMap.get("txtAuditLocation");
+			String sAuditType = "Supplier";
+			String sTxtVault = PersonUtil.getDefaultVault(context);
+			if (sQueryLimit == null || sQueryLimit.equals("null") || sQueryLimit.equals("")) {
+				sQueryLimit = AuditConstants.STR_QUERYLIMIT;
+			}
+
+			if (sName == null || sName.equalsIgnoreCase("null") || sName.length() <= 0) {
+				sName = DomainConstants.QUERY_WILDCARD;
+			}
+
+			// If the input is * there is no need to add to where clause
+			sWhereExp = "(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITTYPE) + "] ~~ " + chDblQuotes
+					+ sAuditType + chDblQuotes + ")";
+			if (!DomainConstants.QUERY_WILDCARD.equals(sAuditLocation))
+				sWhereExp += "&&(attribute[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITLOCATION) + "] ~~ " + chDblQuotes
+						+ sAuditLocation + chDblQuotes + ")";
+
+			// Adding the select statements
+			SelectList resultSelects = new SelectList(7);
+			resultSelects.add(DomainConstants.SELECT_ID);
+			resultSelects.add(DomainConstants.SELECT_TYPE);
+			resultSelects.add(DomainConstants.SELECT_NAME);
+			resultSelects.add(DomainConstants.SELECT_REVISION);
+			resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			resultSelects.add(DomainConstants.SELECT_CURRENT);
+			resultSelects.add(DomainConstants.SELECT_POLICY);
+
+			totalresultList = new MapList();
+			// Finding the objects
+			totalresultList = DomainObject.findObjects(context, sTypeAuditSchedule, sName, DomainConstants.QUERY_WILDCARD,
+					DomainConstants.QUERY_WILDCARD, sTxtVault, sWhereExp, null, true, resultSelects, Short.parseShort(sQueryLimit), sTxtFormat,
+					sTxtSearch);
+			// Returning the results the objects
+			return totalresultList;
+
+		}
+		catch (Exception objException) {
+			objException.printStackTrace();
+			throw objException;
+		}
+	}
+
+	/**
+	 * This method gets the supplier owner persons which are the people having
+	 * Audit admin or Audit Supplier Manager role.
+	 *
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @return the supplier owners
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public String getSupplierOwners(Context context, String[] args) throws Exception {
+		StringBuffer strBufferOutput = new StringBuffer();
+		MapList mAuditorTemp = new MapList();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap mapRequest = (HashMap) programMap.get("requestMap");
+			String strMode = (String) mapRequest.get("mode");// create/edit/search
+																// mode
+
+			String strAttribute = DomainConstants.SELECT_OWNER;
+
+			StringList sListSelects = new StringList(4);
+			sListSelects.add(DomainConstants.SELECT_ID);
+			sListSelects.add(DomainConstants.SELECT_NAME);
+			// Getting Current user
+			// String strCurrentUser= (String) (context.getUser());
+			String strObjectId = (String) mapRequest.get("objectId");
+			String strWhereExp = DomainConstants.EMPTY_STRING;
+			String strSelectedOwner = DomainConstants.EMPTY_STRING;
+			mAuditorTemp = DomainObject.findObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_PERSON), null,
+					strWhereExp, sListSelects);
+			if (null != strObjectId) {
+				DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+				strSelectedOwner = doObject.getOwner(context).getName();
+			}
+			else {
+				strSelectedOwner = context.getUser();
+			}
+			// get roles list for the attribute passed
+			StringList sListRoles = new StringList(2);
+			sListRoles.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITADMIN));
+			sListRoles.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ROLE_AUDITSUPPLIERMANAGER));
+			String strId = DomainConstants.EMPTY_STRING;
+			Map element = null;
+			Person doObject = null;
+			String strRole = DomainConstants.EMPTY_STRING;
+			Iterator iterator = null;
+			boolean bTrue = false;
+			String strDisplayName = DomainConstants.EMPTY_STRING;
+
+			if (null != strMode) {
+
+				strBufferOutput.append(" <select name='" + strAttribute + "' id='" + strAttribute + "' >");
+				// traverse through the users and check for role assignments
+				for (Iterator iter = mAuditorTemp.iterator(); iter.hasNext();) {
+					bTrue = false;
+					element = (Map) iter.next();
+					strId = (String) element.get(DomainConstants.SELECT_NAME);
+					doObject = new Person(strId);
+					if (!sListRoles.isEmpty()) {
+						for (iterator = sListRoles.iterator(); iterator.hasNext();) {
+							strRole = (String) iterator.next();
+							if (doObject.isAssigned(context, strRole)) {
+								bTrue = true;
+								break;
+							}
+						}
+					} // else if there are no roles specified then returns all
+						// users
+					else {
+						bTrue = true;
+					}
+
+					if (bTrue) {
+						strBufferOutput.append("<option value ='" + strId + "'");
+
+						if (strSelectedOwner.equalsIgnoreCase(strId)) {
+							strBufferOutput.append(" selected ");
+						}
+						strDisplayName = PersonUtil.getFullName(context, strId) + " ( " + strId + " ) ";
+						strBufferOutput.append(">" + strDisplayName + "</option>");
+					}
+				}
+				strBufferOutput.append("</select>");
+			}
+			else {
+				strBufferOutput.append(strSelectedOwner);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			System.err.println("e.getMessage()" + e.getMessage());
+		}
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * This method updates the supplier owner.
+	 *
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 *
+	 * @throws Exception
+	 *             the exception
+	 */
+	public void updateSupplierOwner(Context context, String[] args) throws Exception {
+		try {
+			// Get form info
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			String strObjectId = (String) paramMap.get("objectId");
+			DomainObject doSupplier = DomainObject.newInstance(context, strObjectId);
+			String strNewValue = (String) paramMap.get("New Value");
+			doSupplier.setOwner(context, strNewValue);
+		}
+		catch (Exception ex) {
+			ex.printStackTrace();
+			throw ex;
+		}
+	}
+
+	/**
+	 * Edit Column to update Audit Supplier rel attributes
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public Vector getEditColumn(Context context, String[] args) throws Exception {
+		String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT, AuditConstants.SYM_STATE_ACTIVE);
+		Vector<String> columnValues = new Vector<String>();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		MapList mlBusObjList = (MapList) programMap.get("objectList");
+		HashMap hmParamMap = (HashMap) programMap.get("paramList");
+
+		if (mlBusObjList == null) {
+			return null;
+		}
+
+		DomainObject objObject = null;
+		String iconToShow = "iconActionCreateMarkup.gif";
+		String registeredSuite = "LQIAudit";
+		String labelAction = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Heading.Edit.AuditSupplierBasicInfo").replace("'",
+				"&#39;");
+		String label = "<img src=\"../common/images/" + iconToShow + "\" class=\"littleOnTheBottom\" alt=\""
+				+ XSSUtil.encodeForHTMLAttribute(context, labelAction) + "\"><br>";
+		String sCompanyID = (String) hmParamMap.get("objectId");
+		if (sCompanyID != null && sCompanyID.trim().length() > 0) {
+			objObject = DomainObject.newInstance(context, sCompanyID);
+			// Show the Edit Icon
+			if (STATE_ACTIVE.equalsIgnoreCase(objObject.getInfo(context, DomainObject.SELECT_CURRENT))) {
+				// Iterate over the list of objects from the table
+				for (int i = 0; i < mlBusObjList.size(); i++) {
+					String sObjId = (String) ((Map) mlBusObjList.get(i)).get("id");
+					objObject = DomainObject.newInstance(context, sObjId);
+					String sRelId = objObject.getInfo(context,
+							"relationship[" + PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSUPPLIER) + "].id");
+					StringBuffer url = new StringBuffer();
+					url.append(
+							"../common/emxForm.jsp?form=QICAUDSupplierEdit&HelpMarker=AUD4&processJPO=com.dassault_systemes.enovia.lsa.audit.services.ui.AuditSupplier:editAuditSupplier&postProcessURL=iwFormPostProcess.jsp&close=true&complete=javascript:getTopWindow().getWindowOpener().getTopWindow().refreshTablePage();&findMxLink=false");
+					url.append("&objectId=");
+					url.append(XSSUtil.encodeForURL(context, sObjId));
+					url.append("&parentOID=");
+					url.append(XSSUtil.encodeForURL(context, sObjId));
+					url.append("&relId=");
+					url.append(XSSUtil.encodeForURL(context, sRelId));
+					url.append("&suiteKey=");
+					url.append(XSSUtil.encodeForURL(context, registeredSuite));
+					url.append("&formHeader=");
+					url.append(XSSUtil.encodeForURL(context, labelAction));
+					url.append("&mode=edit");
+
+					StringBuffer html = new StringBuffer();
+					html.append("<script type=\"text/javascript\"> addStyleSheet(\"iwCommonStyles\"); </script>");
+					html.append("<table cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td class=\"centerAlign\">");
+					html.append("<a href=\"javascript:emxTableColumnLinkClick('");
+					html.append(FrameworkUtil.encodeURL(url.toString()));
+					html.append("', '750', '750', 'false', 'popup', '')\">");
+					html.append(label);
+					html.append("</a>");
+					html.append("</td></tr></table>");
+
+					columnValues.add(html.toString());
+
+				}
+			}
+			else {
+				columnValues.add("");
+			}
+		}
+
+		return columnValues;
+	}
+
+	/**
+	 * Method to update Audit Supplier rel attributes
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 */
+	public Map editAuditSupplier(Context context, String[] args) {
+		HashMap returnMap = new HashMap();
+		try {
+			try {
+				ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+			}
+			catch (MatrixException e) {
+				throw new MatrixException(e);
+			}
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			HashMap requestMap = (HashMap) programMap.get("requestMap");
+
+			HashMap<String, String> webform2Product = new HashMap<String, String>();
+			webform2Product.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_COMMENTS), (String) paramMap.get("Comments"));
+			webform2Product.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_QUALITYRANKING),
+					(String) paramMap.get("Audit Quality Ranking"));
+			webform2Product.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANTLOCATION),
+					(String) paramMap.get("Audit Plant Location"));
+			webform2Product.put(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_CURRENTAPPROVALSTATUS),
+					(String) paramMap.get("Current Approval Status"));
+
+			// Get Company object
+			String sRelID = (String) requestMap.get("relId");
+			if (sRelID != null && sRelID.trim().length() > 0) {
+				Relationship rel = new Relationship(sRelID);
+
+				AttributeList attrList = rel.getAttributes(context);
+				AttributeList tempList = new AttributeList();
+
+				Iterator attrItr = attrList.iterator();
+
+				while (attrItr.hasNext()) {
+					Attribute attr = (Attribute) attrItr.next();
+					// make sure the webform2Product contains attribute
+					if (webform2Product.containsKey((String) attr.getName()))
+						attr.setValue((String) webform2Product.get(attr.getName()));
+
+					tempList.add(attr);
+				}
+				// Set the attributes
+				rel.setAttributes(context, tempList);
+			}
+			// returnMap.put("objectId", requestMap.get("parentOID"));
+			return returnMap;
+		}
+		catch (MatrixException e) {
+			returnMap.put("Action", "Stop");
+			returnMap.put("Message", e.getLocalizedMessage());
+			return returnMap;
+		}
+		catch (Exception e) {
+			returnMap.put("Action", "Stop");
+			returnMap.put("Message", e.getLocalizedMessage());
+			return returnMap;
+		}
+	}
+
+}
+

@@ -1,0 +1,3264 @@
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.User;
+import matrix.db.UserItr;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.enterprisechangemgt.util.ChangeUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewConstants;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewException;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewNotificationUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewServiceUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewUtil;
+import com.dassault_systemes.enovia.periodicreview.TableRowId;
+import com.dassault_systemes.enovia.periodicreview.service.HistoryAuditTrailService;
+import com.dassault_systemes.enovia.periodicreview.service.PeriodicReviewService;
+import com.dassault_systemes.enovia.periodicreview.service.impl.PeriodicReview;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.VCDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Column programHTMLOutput Show the Subject Matter Expert of Documents in
+	 * selected view of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return List of Subject Matter Expert of Documents
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public Vector<String> getDocumentsSME(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			
+			MapList objectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+
+			String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			StringList sSMEAssignmentRole=new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			StringList busSelects=new StringList(DomainConstants.SELECT_NAME);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_TYPE);
+			
+			Vector sList = new Vector<String>();
+			for (Object objMap : objectList) {
+				Map mapDocument = (Map) objMap;
+				String objId=mapDocument.get(DomainConstants.SELECT_ID).toString();
+				List<Map> mlSMEs=periodicService.getPeriodicReviewRelatedData(context, objId, sSMEAssignmentRole, strTypePerson+","+strTypeMemberList, busSelects, "");
+				
+				if(mlSMEs!=null && !mlSMEs.isEmpty())
+				{
+					Map mpSME=(Map)mlSMEs.get(0);
+					String strId=mpSME.get(DomainConstants.SELECT_ID).toString();
+					String strType=mpSME.get(DomainConstants.SELECT_TYPE).toString();
+					String strName=mpSME.get(DomainConstants.SELECT_NAME).toString();
+					DomainObject domSME=DomainObject.newInstance(context, strId);
+					if(strType.equals(strTypePerson))
+						strName=PersonUtil.getFullName(context, strName);
+
+					sList.add(PeriodicReviewUtil.getObjectLink(context, strId, strName));
+				}
+				else
+					sList.add("");
+			}
+			return sList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Access Function on Command Periodic Review Show Command Periodic Review
+	 * in Pending Review view Of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to show "Periodic Review" Command
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public boolean showPeriodicReviewCommandForPendingView(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+			boolean showCommand = false;
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strAttributePeriodicReviewEnabled = PropertyUtil.getSchemaProperty(context,
+					PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_ENABLED);
+					
+			String strFilter = (String) programMap.get("PRPendingReviewFilter");
+			if (!UIUtil.isNullOrEmpty(strFilter)) {
+				if (strFilter.equals(PeriodicReviewConstants.My_ASSIGNMENTS))
+					showCommand = true;
+			}
+			else {
+				String strUserId = PersonUtil.getPersonObjectID(context);
+				DomainObject dObjDoc = DomainObject.newInstance(context, strObjectId);
+				
+				if(!PeriodicReviewUtil.isPeriodicReviewType(context, strObjectId))
+					return false;
+				
+				String strNextRev = dObjDoc.getNextRevision(context).getObjectId(context);
+				StringList slObjectSelect = new StringList();
+				slObjectSelect.add(DomainConstants.SELECT_REVISION);
+				slObjectSelect.add(DomainConstants.SELECT_CURRENT);
+				slObjectSelect.add(DomainObject.getAttributeSelect(strAttributePeriodicReviewEnabled));
+				Map mpInfo = PeriodicReviewUtil.getInfo(context, strObjectId, slObjectSelect);
+				
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+				StringList sListValidateStates = (StringList) mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String strPRActive=mPeriodicReview.get(PeriodicReviewConstants.PRActive).toString();
+				
+				List<String> mValidStatesPeriodicReview = (List<String>)mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String currentState=DomainObject.newInstance(context,strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+				boolean boolValidState=(mValidStatesPeriodicReview!=null && !mValidStatesPeriodicReview.isEmpty()) 
+										&& mValidStatesPeriodicReview.contains(currentState);
+				
+				if(!strPRActive.equals("true") || !boolValidState)
+					return false;
+				
+				if (UIUtil.isNullOrEmpty(strNextRev)
+						&& mpInfo.get(DomainObject.getAttributeSelect(strAttributePeriodicReviewEnabled)).equals(PeriodicReviewConstants.YES)
+						&& (sListValidateStates != null ) && sListValidateStates.contains((mpInfo.get(DomainConstants.SELECT_CURRENT)))) {
+					StringList sSMEAssignmentRole = new StringList();
+					sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+					sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+					List<Map> mlPersonsOrMemberList = periodicReview.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePerson, null,
+							null);
+					List<Map> mlPersonsOrMemberListAssignee = periodicReview.getPeriodicReviewRelatedData(
+							context, strObjectId, new StringList(PeriodicReviewConstants.SMEROLE_ASSIGNED), strTypePerson, null, null);
+					boolean noAssignee=(mlPersonsOrMemberListAssignee==null || mlPersonsOrMemberListAssignee.isEmpty());
+					
+					if (mlPersonsOrMemberList != null && !mlPersonsOrMemberList.isEmpty()) {
+						for (Object object : mlPersonsOrMemberList) {
+							Map<?, ?> personMap = (Map<?, ?>) object;
+							String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+							String strProjectRole = (String) personMap.get(DomainRelationship.getAttributeSelect(PropertyUtil.getSchemaProperty(
+									context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PROJECT_ROLE)));
+							if (strPersonId.equals(strUserId) && (strProjectRole.equals(PeriodicReviewConstants.SMEROLE_TEMPORARY)
+									|| strProjectRole.equals(PeriodicReviewConstants.SMEROLE_OWNER)) && noAssignee)
+								showCommand = true;
+						}
+					}
+				}
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Access Function on Command Reassign SME of Periodic Review Show Command
+	 * Reassign SME in Awaiting Acceptance view of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to show Reassign SME Command
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public boolean showCommadReassignSME(Context context, String[] args) throws PeriodicReviewException {
+		boolean showCommand = false;
+		PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			StringList sSMEAssignmentRole = new StringList();
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+			
+			String strFilter = (String) programMap.get("PRPendingReviewFilter");
+			if (!UIUtil.isNullOrEmpty(strFilter)) {
+				if (strFilter.equals(PeriodicReviewConstants.My_ASSIGNMENTS))
+					showCommand = true;
+			}
+			else {
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+				boolean boolPRActive=false;
+				
+				if(mPeriodicReview.containsKey(PeriodicReviewConstants.PRActive))
+					boolPRActive="true".equals(mPeriodicReview.get(PeriodicReviewConstants.PRActive).toString());
+				
+				List<String> mValidStatesPeriodicReview = (List<String>)mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String currentState=DomainObject.newInstance(context,strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+				boolean boolValidState=(mValidStatesPeriodicReview!=null && !mValidStatesPeriodicReview.isEmpty()) 
+										&& mValidStatesPeriodicReview.contains(currentState);
+				
+				if(!boolPRActive || !boolValidState)
+					return false;
+				
+				Map mpCurrent = PeriodicReviewUtil.getInfo(context, strObjectId, new StringList(DomainConstants.SELECT_CURRENT));
+				String strCurrState = (String) mpCurrent.get(DomainConstants.SELECT_CURRENT);
+				
+				List<Map> mlPersons = periodicReview
+						.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePerson, null, null);
+				List<Map> mlPersonsOrMemberListAssignee = periodicReview.getPeriodicReviewRelatedData(
+						context, strObjectId, new StringList(PeriodicReviewConstants.SMEROLE_ASSIGNED), strTypePerson, null, null);
+				
+				boolean noAssignee=(mlPersonsOrMemberListAssignee==null || mlPersonsOrMemberListAssignee.isEmpty());
+				List<String> slEditingState = (List<String>) mPeriodicReview.get(PeriodicReviewConstants.EDITING_STATES);
+				boolean isEditable=(!PeriodicReviewUtil.isNullOrEmpty(slEditingState) && slEditingState.contains(strCurrState));
+				
+				if (!PeriodicReviewUtil.isNullOrEmpty(mlPersons)) 
+				{
+					Map personMap = (Map) mlPersons.get(0);
+					String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+					
+					if (strPersonId.equals(strUserId) && isEditable && noAssignee) {
+						showCommand = true;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+		return showCommand;
+	}
+
+	/**
+	 * Access Function on Command Accept Reject Temporary Assignment of Periodic
+	 * Review Show Command Accept Or Reject Assignment in Awaiting Acceptance
+	 * view of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to show "Accept Assignment"
+	 *         Command
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public boolean showAcceptCommandForAwaitingView(Context context, String[] args) throws PeriodicReviewException {
+		PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+		try {
+			boolean showCommand = false;
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+
+			String strFilter = (String) programMap.get("PRPendingReviewFilter");
+			if (!UIUtil.isNullOrEmpty(strFilter)) {
+				if (strFilter.equals(PeriodicReviewConstants.SELECT_ALL))
+					showCommand = true;
+			}
+			else {
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+				boolean boolPRActive=false;
+				
+				if(mPeriodicReview.containsKey(PeriodicReviewConstants.PRActive))
+					boolPRActive="true".equals(mPeriodicReview.get(PeriodicReviewConstants.PRActive).toString());
+				
+				List<String> mValidStatesPeriodicReview = (List<String>)mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String currentState=DomainObject.newInstance(context,strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+				boolean boolValidState=(mValidStatesPeriodicReview!=null && !mValidStatesPeriodicReview.isEmpty()) 
+										&& mValidStatesPeriodicReview.contains(currentState);
+				
+				if(!boolPRActive || !boolValidState)
+					return false;
+
+				String strUserId = PersonUtil.getPersonObjectID(context);
+				StringList sSMEAssignmentRole = new StringList();
+				sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+				List<Map> mlPersons = periodicReview
+						.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePerson, null, DomainConstants.SELECT_ID+"=="+strUserId);
+				if (mlPersons != null && !mlPersons.isEmpty()) {
+					Map personMap = (Map) mlPersons.get(0);
+					String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+					if (strUserId.equals(strPersonId))
+						showCommand = true;
+				}
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Access Function on Command Accept Reject Temporary Assignment of Periodic
+	 * Review Show Command Accept Or Reject Assignment in Awaiting Acceptance
+	 * view of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to show "Reject Assignment"
+	 *         Command
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public boolean showRejectCommandForAwaitingView(Context context, String[] args) throws PeriodicReviewException {
+		PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+		try {
+			boolean showCommand = false;
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+
+			String strFilter = (String) programMap.get("PRPendingReviewFilter");
+			if (!UIUtil.isNullOrEmpty(strFilter)) {
+				if (strFilter.equals(PeriodicReviewConstants.SELECT_ALL))
+					showCommand = true;
+			}
+			else {
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+				boolean boolPRActive=false;
+				
+				if(mPeriodicReview.containsKey(PeriodicReviewConstants.PRActive))
+					boolPRActive="true".equals(mPeriodicReview.get(PeriodicReviewConstants.PRActive).toString());
+				
+				List<String> mValidStatesPeriodicReview = (List<String>)mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String currentState=DomainObject.newInstance(context,strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+				boolean boolValidState=(mValidStatesPeriodicReview!=null && !mValidStatesPeriodicReview.isEmpty()) 
+										&& mValidStatesPeriodicReview.contains(currentState);
+				
+				if(!boolPRActive || !boolValidState)
+					return false;
+				
+				String strUserId = PersonUtil.getPersonObjectID(context);
+				StringList sSMEAssignmentRole = new StringList();
+				sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+				List<Map> mlPersons = periodicReview
+						.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePerson, null,null);
+				if (mlPersons != null && mlPersons.size()==1) {
+					Map personMap = (Map) mlPersons.get(0);
+					String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+					if (strUserId.equals(strPersonId))
+						showCommand = true;
+				}
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Column programHTMLOutput Show Periodic Review Status of Objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return StringList of "Periodic Review Status" of Documents
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public StringList getPeriodicReviewStatus(Context context, String args[]) throws PeriodicReviewException {
+
+		try {
+
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			String strAttributeNRD = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_NEXT_REVIEW_DATE);
+			StringList sReturnList = new StringList();
+			SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strType = (String) mapObject.get(DomainConstants.SELECT_TYPE);
+				String strDocId = (String) mapObject.get(DomainConstants.SELECT_ID);
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strDocId);
+
+				String strStatusInterval = (String) mPeriodicReview.get(PeriodicReviewConstants.STATUS);
+				int iStatus = 45;
+				if (UIUtil.isNotNullAndNotEmpty(strStatusInterval))
+					iStatus = Integer.parseInt(strStatusInterval);
+				String strId = (String) mapObject.get(DomainConstants.SELECT_ID);
+
+				DomainObject doDoc = DomainObject.newInstance(context, strId);
+				String strNRD = doDoc.getAttributeValue(context, strAttributeNRD);
+				if (!UIUtil.isNullOrEmpty(strNRD)) {
+					Date todayDate = new Date();
+					String strCD = sdf.format(todayDate);
+					SimpleDateFormat sdf1 = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat());
+					java.util.Date d1 = sdf1.parse(strCD);
+					java.util.Date d2 = sdf1.parse(strNRD);
+					Long timeStatus1 = d1.getTime() - d2.getTime();
+					Long timeStatus2 = d2.getTime() - d1.getTime();
+					int iDifference1 = (int) (timeStatus1 / (1000 * 60 * 60 * 24));
+					int iDifference2 = (int) (timeStatus2 / (1000 * 60 * 60 * 24));
+					String strTooltip="";
+					StringBuilder sb = new StringBuilder();
+					if (iDifference2 > iStatus) {
+						sb.append("<img border=\"0\" src=\"../common/images/iconStatusGreen.gif\" ></img>");
+						sReturnList.add(sb.toString());
+					}
+					if (iDifference1 > 0) {
+						strTooltip=XSSUtil.encodeForHTMLAttribute(context, MessageUtil.getMessage(context, null, "enoPeriodicReview.Msg.OverDueByDays", new String[]{""+iDifference1}, null, context.getLocale(),
+								PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE));
+						sb.append("<img border=\"0\" src=\"../common/images/iconStatusRed.gif\" title=\""+strTooltip+"\"></img>");
+						sReturnList.add(sb.toString());
+					}
+					if (iDifference2 <= iStatus && (iDifference2 > 0 || iDifference1 == 0)) {
+						strTooltip=XSSUtil.encodeForHTMLAttribute(context, MessageUtil.getMessage(context, null, "enoPeriodicReview.Msg.DueIn", new String[]{""+iDifference2}, null, context.getLocale(),
+								PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE));
+						sb.append("<img border=\"0\" src=\"../common/images/iconStatusYellow.gif\" title=\""+strTooltip+"\"></img>");
+						sReturnList.add(sb.toString());
+					}
+				}
+				else
+					sReturnList.add(DomainConstants.EMPTY_STRING);
+			}
+			return sReturnList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on Table Column Periodic Review Status Method to display
+	 * Periodic Review Status column in Pending Review View
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @return boolean status to show "Periodic Review Status" Column
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public Boolean showPeriodicReviewStatusColumnForPendingReview(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			boolean showColumn = false;
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strFilter = (String) programMap.get(PeriodicReviewConstants.PROGRAMLABEL);
+			String[] filterValue = strFilter.split(PeriodicReviewConstants.COMMA);
+			strFilter = filterValue[0];
+
+			if (strFilter.equals(PeriodicReviewConstants.FILTER_VALUE_PENDING_REVIEW)) {
+				showColumn = true;
+			}
+
+			return showColumn;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Column programHTMLOutput Show the Accept Or Reject Status of Temporary
+	 * Assignment of Periodic Review
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return List of "Accepted/Rejected Status" of Documents
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public List<String> identifyAcceptedRejectedSMERole(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			String strRelSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+			String strAttrProjectRole = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PROJECT_ROLE);
+			StringBuilder sbRelAttrSelect = new StringBuilder();
+			sbRelAttrSelect.append("from[");
+			sbRelAttrSelect.append(strRelSME);
+			sbRelAttrSelect.append("].attribute[").append(strAttrProjectRole).append("].value");
+			StringList sReturnList = new StringList();
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				StringList strAttrProjectRoleValue = (StringList) mapObject.get(sbRelAttrSelect.toString());
+				StringBuilder sb = new StringBuilder();
+				if (strAttrProjectRoleValue.contains(PeriodicReviewConstants.SMEROLE_TEMPORARY)) {
+					String strAcceptedTitle = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+							context.getLocale(), "enoPeriodicReview.TemporaryAssignment.Accepted");
+					sb.append("<img border=\"0\" src=\"../common/images/iconMPBCompliant.gif\" title=\"" + strAcceptedTitle + "\" ></img>");
+					sReturnList.add(sb.toString());
+				}
+				if (strAttrProjectRoleValue.contains(PeriodicReviewConstants.SMEROLE_ASSIGNED)) {
+					String strAwaitingAcceptanceTitle = EnoviaResourceBundle.getProperty(context,
+							PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+							"enoPeriodicReview.TemporaryAssignment.AwaitingAcceptance");
+					sb.append("<img border=\"0\" src=\"../common/images/iconStatusMandatory.gif\" title=\"" + strAwaitingAcceptanceTitle
+							+ "\" ></img>");
+					sReturnList.add(sb.toString());
+				}
+			}
+			return sReturnList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on Table Column Shows the Accept Or Reject Status column
+	 * in Awaiting Acceptance View
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to show "Accepted/Rejected Status" Column
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public Boolean showAcceptedRejectedStatusColumnForReassignedView(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilter = (String) programMap.get(PeriodicReviewConstants.PROGRAMLABEL);
+			boolean showColumn = false;
+			String[] filterValue = strFilter.split(PeriodicReviewConstants.COMMA);
+			strFilter = filterValue[0];
+			if (strFilter.equals(PeriodicReviewConstants.FILTER_VALUE_REASSIGNED)) {
+				showColumn = true;
+			}
+			return showColumn;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on Table Column Hide Subject Matter Expert column for
+	 * Pending Review View
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to hide Subject Matter Expert Column
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public Boolean hideAssigneeColumnForPendingReviewView(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Boolean showColumn = true;
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strPendingReviewFilterValue = (String) programMap.get("PRPendingReviewFilter");
+
+			if (PeriodicReviewConstants.My_ASSIGNMENTS.equals(strPendingReviewFilterValue)) {
+				showColumn = false;
+			}
+			return showColumn;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Accepts the Temporary Assignment for Periodic Review of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> acceptTemporarySubjectMatterExpert(Context context, String args[]) throws PeriodicReviewException {
+		PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrTableRowIds[] = (String[]) programMap.get(PeriodicReviewConstants.TABLEROWID);
+			Map<String, String> returnMap = new HashMap<String, String>();
+			String strSelectedDocId = DomainConstants.EMPTY_STRING;
+			String strRelId = DomainConstants.EMPTY_STRING;
+			StringBuilder sb = new StringBuilder();
+			StringList slDocIdList = new StringList();
+			StringList slRelIdList = new StringList();
+			boolean isRefreshTable = false;
+			if (arrTableRowIds == null) {
+				String[] arrSelectedDocId = (String[]) programMap.get(PeriodicReviewConstants.PARENT_OID);
+				slDocIdList.add(arrSelectedDocId[0]);
+				String[] arrSelectedRelId = (String[]) programMap.get("relId");
+				slRelIdList.add(arrSelectedRelId[0]);
+			}
+			else {
+				for (String strRowIds : arrTableRowIds) {
+					String strRowId = strRowIds;
+					TableRowId tableRowId = new TableRowId(strRowId);
+					slDocIdList.add(tableRowId.getObjectId());
+					slRelIdList.add(tableRowId.getRelationshipId());
+				}
+				isRefreshTable = true;
+			}
+			for (int i = 0; i < slDocIdList.size(); i++) {
+				strSelectedDocId = (String) slDocIdList.get(i);
+				strRelId = (String) slRelIdList.get(i);
+				periodicReview.acceptTemporaryAssignment(context, strRelId, strSelectedDocId);
+			}
+			String strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.MemberList.ConfirmReassignmentMessage");
+			if (isRefreshTable){
+				sb.append("this.parent.location.href=this.parent.location.href;\nalert(\"").append(XSSUtil.encodeForJavaScript(context, strMessage))
+						.append("\");");
+				sb.append("getTopWindow().opener.location.href=getTopWindow().opener.location.href;");
+			}
+			else{
+				sb.append("alert(\"").append(XSSUtil.encodeForJavaScript(context, strMessage))
+						.append("\");getTopWindow().opener.location.href=getTopWindow().opener.location.href;");
+			sb.append(" var frame=findFrame(getTopWindow(),\"content\");frame.document.location.href=\"../common/emxTree.jsp?&objectId="
+					+ XSSUtil.encodeForJavaScript(context, strSelectedDocId) + "\";");
+			}
+			returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sb.toString());
+
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Reject Temporary Assignment for Periodic Review of Documents
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> rejectTemporaryAssignment(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] arrRowID = (String[]) programMap.get(PeriodicReviewConstants.ROWIDS);
+			String[] arrRejectionSummary = (String[]) programMap.get(PeriodicReviewConstants.FIELD_REJECTION_SUMMARY);
+			String strRejectionSummary = arrRejectionSummary[0];
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			StringBuilder sb = new StringBuilder();
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			
+			String strMessageNoTemporaryAssignment = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Message.NoTemporaryReAssignment");
+			
+			boolean isRefresh = false;
+			String strRowID = "";
+			if (arrRowID != null) {
+				strRowID = arrRowID[0];
+				arrRowID = strRowID.split(PeriodicReviewConstants.COMMA);
+				isRefresh = true;
+			}
+			else {
+				arrRowID = (String[]) programMap.get(PeriodicReviewConstants.PARENT_OID);
+			}
+			
+			StringList slRoles=new StringList();
+			slRoles.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+			StringList busSelects=new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			String curPersonId=PersonUtil.getPersonObjectID(context, context.getUser());
+			Map<String, String> returnMap = new HashMap<String, String>();
+			
+			for (String strObjectId : arrRowID) {
+				List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, strObjectId, slRoles, strTypePerson, busSelects, "");
+				
+				if(mlSME!=null && mlSME.size()==1)
+				{
+					if(curPersonId.equals(((Map)mlSME.get(0)).get(DomainConstants.SELECT_ID)))
+							periodicReview.rejectTemporaryAssignment(context, strObjectId, strRejectionSummary);
+					else
+					{
+						String strRet="alert(\""+strMessageNoTemporaryAssignment+"\");";
+						returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, strRet);
+						return returnMap;
+					}
+				}
+				else
+				{
+					String strRet="alert(\""+strMessageNoTemporaryAssignment+"\");";
+					returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, strRet);
+					return returnMap;
+				}
+				
+			}
+			if (isRefresh) {
+				sb.append("getTopWindow().opener.location.href=getTopWindow().opener.location.href;\ngetTopWindow().close();");
+			}
+			else {
+				sb.append("getTopWindow().opener.getTopWindow().location.href=getTopWindow().opener.getTopWindow().location.href;");
+				sb.append("getTopWindow().close();");
+			}
+			
+			returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sb.toString());
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Completes the Periodic Review of Document
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map completePeriodicReview(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			PeriodicReviewService periodicReviewService = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			boolean isFromPropertyPage = Boolean.FALSE;
+			String strMessage = DomainObject.EMPTY_STRING;
+			Map<String, String> returnMap = new HashMap();
+			Map programMap = JPO.unpackArgs(args);
+			String[] strreadAndUnderstood = (String[]) programMap.get("readAndUnderstood");
+			String strReviewSummary = DomainObject.EMPTY_STRING;
+
+			StringBuilder sbURL = new StringBuilder();
+			String strObjectId = DomainConstants.EMPTY_STRING;
+			StringList slObjectIdList = new StringList();
+			String[] arrTempObjectId = (String[]) programMap.get(PeriodicReviewConstants.ROWIDS);
+			if (null != arrTempObjectId) {
+				strObjectId = arrTempObjectId[0];
+				slObjectIdList = FrameworkUtil.split(strObjectId, ",");
+			}
+			else {
+				isFromPropertyPage = Boolean.TRUE;
+				strObjectId = ((String[]) programMap.get(PeriodicReviewConstants.OBJECTID))[0];
+				slObjectIdList.add(strObjectId);
+			}
+
+			if (!PeriodicReviewUtil.isNullOrEmpty(strreadAndUnderstood)) {
+
+				String[] arrPeriodicReviewDisposition = (String[]) programMap.get("PeriodicReviewDisposition");
+					String[] arrCreate = (String[]) programMap.get("Create");
+					String[] arrReviewSummary = (String[]) programMap.get(PeriodicReviewConstants.FIELD_REVIEW_SUMMARY);
+
+					if (!PeriodicReviewUtil.isNullOrEmpty(arrReviewSummary))
+						strReviewSummary = arrReviewSummary[0];
+					Map<String, StringList> mpObjects = getValidObjectsForCompletePeriodicReview(context, slObjectIdList);
+					StringList slValidPeriodicReviewObjects = mpObjects.get("ValidForReview");
+					StringList slNewRevisionObjects = mpObjects.get("NewRevisionCreated");
+					StringList slDisconnectChangeObjects = mpObjects.get("DisconnectChange");
+					if (!slValidPeriodicReviewObjects.isEmpty()) {
+						periodicReviewService.completePeriodicReview(context, strReviewSummary, slValidPeriodicReviewObjects,
+								arrPeriodicReviewDisposition[0]);
+
+						if (arrPeriodicReviewDisposition[0].equals(PeriodicReviewConstants.CHANGES_REQUIRED) && !arrCreate[0].isEmpty()) {
+
+							if (arrCreate[0].equals(PeriodicReviewConstants.SELECT_CHANGE_REQUEST)) {
+								sbURL.append("var submitURL=\"../common/emxCreate.jsp?form=type_CreateChangeRequest&header=EnterpriseChangeMgt.Command.CreateChangeRequest&type=type_ChangeRequest&nameField=autoname&createJPO=enoECMChangeRequest:createChangeRequest&typeChooser=true&suiteKey=EnterpriseChangeMgt&StringResourceFileId=emxEnterpriseChangeMgtStringResource&SuiteDirectory=enterprisechangemgt&emxSuiteDirectory=enterprisechangemgt&preProcessJavaScript=setRO&postProcessURL=../periodicreview/enoPRExecute.jsp?prAction=ENOPeriodicReviewChangeUI:connectChangeOrderToObject&submitAction=refreshCaller&createObj=CR&emxTableRowId=");
+							}
+							else if (arrCreate[0].equals(PeriodicReviewConstants.SELECT_CHANGE_ORDER)) {
+								sbURL.append("var submitURL=\"../common/emxCreate.jsp?form=type_CreateChangeOrderSlidein&header=EnterpriseChangeMgt.Command.CreateChange&type=type_ChangeOrder&nameField=autoname&createJPO=enoECMChangeOrder:createChange&CreateMode=CreateCO&typeChooser=true&suiteKey=EnterpriseChangeMgt&StringResourceFileId=emxEnterpriseChangeMgtStringResource&SuiteDirectory=enterprisechangemgt&emxSuiteDirectory=enterprisechangemgt&preProcessJavaScript=preProcessInCreateCO&postProcessURL=../periodicreview/enoPRExecute.jsp?prAction=ENOPeriodicReviewChangeUI:connectChangeOrderToObject&targetRelName=relationship_ChangeAffectedItem&isFrom=false&submitAction=refreshCaller&emxTableRowId=");
+							}
+							sbURL.append(slValidPeriodicReviewObjects.get(0));
+							sbURL.append("&isFromPropertyPage=" + isFromPropertyPage + "\";");
+							if (isFromPropertyPage) {
+								sbURL.append("\n getTopWindow().opener.location.href=getTopWindow().opener.location.href;");
+								sbURL.append("\n getTopWindow().opener.getTopWindow().showSlideInDialog(submitURL,250,250,true);");
+								sbURL.append("getTopWindow().close();");
+							}
+							else
+								sbURL.append("\n getTopWindow().opener.location.href=getTopWindow().opener.location.href; "
+										+ "getTopWindow().opener.getTopWindow().showSlideInDialog(submitURL,250,250,true);"
+										+ "getTopWindow().close()");
+
+returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sbURL.toString());
+						}
+						else {
+							String strSuccessMessage = EnoviaResourceBundle.getProperty(context,
+									PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+									"enoPeriodicReview.AlertMsg.PeriodicReviewComplete");
+							if (isFromPropertyPage) {
+								sbURL.append("alert(\"" + strSuccessMessage + "\");\n");
+								sbURL.append("\n getTopWindow().opener.location.href=getTopWindow().opener.location.href;");
+								sbURL.append("getTopWindow().close();");
+								returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sbURL.toString());
+							}
+							else {
+								sbURL.append("alert(\"" + strSuccessMessage + "\");\n");
+								sbURL.append("getTopWindow().opener.location.href=getTopWindow().opener.location.href;\n" + "getTopWindow().close();");
+								returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sbURL.toString());
+							}
+						}
+					}
+					if (!slNewRevisionObjects.isEmpty()) {
+						String[] strArrTNR = ((String)slNewRevisionObjects.get(0)).split("\\|");
+						String strAlertMessage = MessageUtil.getMessage(context, null, "enoPeriodicReview.Alert.Msg.NewRevisionInstantiated",
+								strArrTNR, null, context.getLocale(),PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE);
+						throw new PeriodicReviewException(strAlertMessage);
+					}
+					if (!slDisconnectChangeObjects.isEmpty()) {
+						String strAlertMessage = MessageUtil.getMessage(context, null, "enoPeriodicReview.Alert.Msg.DisconnectOpenChange",
+								new String[] {slDisconnectChangeObjects.toString()}, null, context.getLocale(),PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE);
+						throw new PeriodicReviewException(strAlertMessage);
+					}
+				}
+				else {
+							strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+						"enoPeriodicReview.ErrorMsg.ReadUnderstoodCheckboxNotChecked");
+			}
+			if (!strMessage.isEmpty()) {
+				// alert error message & reload slide-in
+				sbURL.append("alert(\"" + strMessage + "\");\n");
+                                returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sbURL.toString());
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e);
+		}
+	}
+
+	private Map<String, StringList> getValidObjectsForCompletePeriodicReview(Context context, StringList slObjectIdList)
+			throws PeriodicReviewException {
+		try {
+			final String CHANGE_ACTION = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_POLICY_CHANGE_ACTION);
+			final String STATE_PREPARE = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.POLICY,CHANGE_ACTION,PeriodicReviewConstants.SYMBOLIC_STATE_PREPARE);
+			final String STATE_PENDING = PropertyUtil.getSchemaProperty(context,PeriodicReviewConstants.POLICY,CHANGE_ACTION,PeriodicReviewConstants.SYMBOLIC_STATE_PENDING);
+			final String STATE_COMPLETE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,CHANGE_ACTION, PeriodicReviewConstants.SYMBOLIC_STATE_COMPLETE);
+			Map<String, StringList> mpInfoMap = new HashMap<>();
+			StringList slValidObjectList = new StringList();
+			StringList slNewRevObjectList = new StringList();
+			StringList slDisconnectObjectList = new StringList();
+			StringList slObjSelect = new StringList(DomainObject.SELECT_ID);
+			slObjSelect.add(DomainObject.SELECT_CURRENT);
+			StringList slAttrSelect = new StringList(DomainObject.SELECT_TYPE);
+			slAttrSelect.add(DomainObject.SELECT_NAME);
+			slAttrSelect.add(DomainObject.SELECT_REVISION);
+			List<Map> listOfCAInfoMaps;
+			
+			for (Object objID : slObjectIdList) {
+				int countPrepareCA = 0,countInWorkCA = 0;
+				String strObjectId = (String) objID;
+				DomainObject dmoObj = DomainObject.newInstance(context, strObjectId);
+				Map mapDocInfo = dmoObj.getInfo(context, slAttrSelect);
+				listOfCAInfoMaps = getConnectedCA(context, strObjectId, true, true);
+				if(null!= listOfCAInfoMaps) {
+				for(Map mapCA : listOfCAInfoMaps){
+					String strCAid = (String)mapCA.get(DomainObject.SELECT_ID);
+					String strCAState = (String)mapCA.get(DomainObject.SELECT_CURRENT);
+					//considering Pending as well as Prepare so that this works in both GA & LA modes.
+					if(STATE_PREPARE.equalsIgnoreCase(strCAState) || STATE_PENDING.equalsIgnoreCase(strCAState))
+							countPrepareCA++;
+					else if(PolicyUtil.checkState(context, strCAid, STATE_COMPLETE, PolicyUtil.LT))
+						countInWorkCA++;
+				}
+				}
+				
+				// if(countPrepareCA > 0){
+				// slDisconnectObjectList
+				// .add(mapDocInfo.get(DomainObject.SELECT_TYPE) + " " +
+				// mapDocInfo.get(DomainObject.SELECT_NAME) + " " +
+				// mapDocInfo.get(DomainObject.SELECT_REVISION));
+				// }
+				// else if(countInWorkCA >0 ){
+				// slNewRevObjectList.add(mapDocInfo.get(DomainObject.SELECT_TYPE)
+				// + "|" + mapDocInfo.get(DomainObject.SELECT_NAME) + "|" +
+				// mapDocInfo.get(DomainObject.SELECT_REVISION));
+				// }
+				{
+				if (countPrepareCA > 0) {
+					slDisconnectObjectList.add(mapDocInfo.get(DomainObject.SELECT_TYPE) + " " + mapDocInfo.get(DomainObject.SELECT_NAME) + " "
+							+ mapDocInfo.get(DomainObject.SELECT_REVISION));
+				}
+				else if (countInWorkCA > 0) {
+					slNewRevObjectList.add(mapDocInfo.get(DomainObject.SELECT_TYPE) + "|" + mapDocInfo.get(DomainObject.SELECT_NAME) + "|"
+							+ mapDocInfo.get(DomainObject.SELECT_REVISION));
+				}
+				else {
+					slValidObjectList.add(strObjectId);
+				}
+			}
+			mpInfoMap.put("ValidForReview", slValidObjectList);
+			mpInfoMap.put("NewRevisionCreated", slNewRevObjectList);
+			mpInfoMap.put("DisconnectChange", slDisconnectObjectList);
+
+		}
+			return mpInfoMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+	
+	private List<Map> getConnectedCA(Context context, String strDocId, boolean bProposed, boolean bRealized) throws PeriodicReviewException {
+		String strEffectivityOption = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+			//getting CA from document
+		Map changeObjectsInProposedMap = null;
+		Map changeObjectsInRealizedMap = null;
+		List<Map> returnListOfChangeObjects = null;
+			try{
+				StringList slBusSelect = new StringList();
+				slBusSelect.add(DomainObject.SELECT_ID);
+				slBusSelect.add(DomainObject.SELECT_NAME);
+				slBusSelect.add(DomainObject.SELECT_DESCRIPTION);
+				slBusSelect.add(DomainObject.SELECT_TYPE);
+				slBusSelect.add(DomainObject.SELECT_CURRENT);
+				slBusSelect.add(DomainObject.SELECT_OWNER);
+				slBusSelect.add(DomainObject.getAttributeSelect(strEffectivityOption));
+				if(bProposed)	//getting CA from AffectedItems
+					changeObjectsInProposedMap = ChangeUtil.getChangeObjectsInProposed(context, slBusSelect, new String[]{strDocId}, 1);
+				if(bRealized)	//getting CA from ImplementedItems
+				{
+					try {
+						ContextUtil.pushContext(context, PeriodicReviewConstants.USER_AGENT, "","");
+						changeObjectsInRealizedMap = ChangeUtil.getChangeObjectsInRealized(context, slBusSelect, new String[]{strDocId}, 1);
+					}
+					catch(Exception e) {
+						throw new PeriodicReviewException(e.getLocalizedMessage());
+					}
+					finally {
+						ContextUtil.popContext(context);
+					}
+				}
+				if(! ((List<Map>)changeObjectsInProposedMap.get(strDocId)).isEmpty())
+					returnListOfChangeObjects = (List<Map>)changeObjectsInProposedMap.get(strDocId);
+				if(! ((List<Map>)changeObjectsInRealizedMap.get(strDocId)).isEmpty()){
+					if(null == returnListOfChangeObjects)
+						returnListOfChangeObjects = (List<Map>)changeObjectsInRealizedMap.get(strDocId);
+				}
+			}
+			catch(Exception ex){
+				throw new PeriodicReviewException(ex.getLocalizedMessage());
+			}
+			return returnListOfChangeObjects;
+	}
+
+	/**
+	 * Method to validate password
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param strPassword
+	 *            password of the User performing Periodic Review
+	 * @return boolean status to confirm Periodic Review is complete
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+
+	private boolean validatePassword(Context context, String strPassword) throws PeriodicReviewException {
+		try {
+
+			boolean isTransactionSuccess = false;
+			String sExternalAuthentication = EnoviaResourceBundle.getProperty(context, "emxFramework.External.Authentication");
+			boolean extAuth = false;
+			if (!UIUtil.isNullOrEmpty(sExternalAuthentication) && (sExternalAuthentication.equalsIgnoreCase("true")))
+				extAuth = true;
+
+			if (!UIUtil.isNullOrEmpty(strPassword) && extAuth) {
+				try {
+					Map<String, String> creds = new HashMap<String, String>();
+					creds.put("MX_PAM_USERNAME", context.getUser());
+					creds.put("MX_PAM_PASSWORD", strPassword);
+					creds.put("MX_PAM_TENANT", context.getTenant());
+					Context ctx = new Context("");
+					ctx.setCredentials(creds);
+					ctx.connect();
+				}
+				catch (Exception e) {
+					isTransactionSuccess = false;
+				}
+			}
+			if (strPassword.equals(context.getPassword())) {
+				isTransactionSuccess = true;
+			}
+			return isTransactionSuccess;
+		}
+		catch (FrameworkException e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Reassign Subject Matter Expert to Document
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> reassignSMEToDocument(Context context, String args[]) throws PeriodicReviewException {
+
+		try {
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map<String, String> returnMap = new HashMap();
+			String strObjectId = DomainConstants.EMPTY_STRING;
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			StringList slDocId = new StringList();
+			String arrObjectId[] = (String[]) programMap.get(PeriodicReviewConstants.OBJECTID);
+			if (arrObjectId != null) {
+				strObjectId = arrObjectId[0];
+				slDocId.add(strObjectId);
+			}
+			else {
+				String[] arrDocIDs = (String[]) programMap.get("appendedDocIds");
+				String strDocIds = arrDocIDs[0];
+				slDocId = FrameworkUtil.split(strDocIds, ",");
+			}
+			String arrTableRowId[] = (String[]) programMap.get(PeriodicReviewConstants.TABLEROWID);
+			String strTableRowId = arrTableRowId[0];
+			TableRowId tableRowId = new TableRowId(strTableRowId);
+			String strReassignSMEId = tableRowId.getObjectId();
+			StringBuilder sbSMEAssignmentRoles = new StringBuilder();
+			sbSMEAssignmentRoles.append(PeriodicReviewConstants.SMEROLE_ASSIGNED).append(PeriodicReviewConstants.COMMA)
+					.append(PeriodicReviewConstants.SMEROLE_TEMPORARY).append(PeriodicReviewConstants.COMMA).append(PeriodicReviewConstants.REASSIGN);
+
+			for (Object object : slDocId) {
+				String strDocumentId = (String) object;
+				periodicReview.updateSME(context, strDocumentId, strReassignSMEId, sbSMEAssignmentRoles.toString());
+			}
+
+			String strIsOneSearchEnabled = PeriodicReviewConstants.TRUE;
+			try{
+				strIsOneSearchEnabled =	EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.SEARCH_MODE);
+			}
+			catch(Exception e){}
+			if(PeriodicReviewConstants.FALSE.equalsIgnoreCase(strIsOneSearchEnabled))
+			 {
+				returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT,
+						"getTopWindow().opener.parent.location.href=getTopWindow().opener.parent.location.href;\ngetTopWindow().close();");
+				
+			 }
+			else
+			{
+				 returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT,
+						 "var frame = findFrame(getTopWindow(),\"content\");frame.location.href = frame.location.href;");
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Get Organizational Roles of a Person
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return List of Organizational Roles
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public List<String> getOrganizationalRoles(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get("objectList");
+			StringList sRoleList = new StringList();
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strPersonName = (String) mapObject.get(PeriodicReviewConstants.NAME);
+				if(UIUtil.isNullOrEmpty(strPersonName)){
+					DomainObject person = DomainObject.newInstance(context,(String)mapObject.get(PeriodicReviewConstants.NAME));
+					strPersonName =person.getInfo(context, DomainConstants.SELECT_NAME);
+				}
+				matrix.db.Person person = new matrix.db.Person(strPersonName);
+				person.open(context);
+				UserItr userItr = new UserItr(person.getAssignments(context));
+				person.close(context);
+				StringBuilder sbRoleString = new StringBuilder();
+				while (userItr.next()) {
+					User userObj = userItr.obj();
+					if (userObj instanceof matrix.db.Role) {
+						{
+							sbRoleString.append(userObj);
+							sbRoleString.append(PeriodicReviewConstants.COMMA);
+						}
+					}
+				}
+				if (sbRoleString.length() > 0)
+					sbRoleString.deleteCharAt(sbRoleString.length() - 1);
+				sRoleList.addElement(sbRoleString.toString());
+			}
+			return sRoleList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Removes the Temporary Assignment of Periodic Review of a Document
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map containing ACTION_JAVASCRIPT
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> removeTemporaryReassignment(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			
+			String strMessageNoTemporaryAssignment = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Message.NoTemporaryAssignment");
+			
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrTableRowIds[] = (String[]) programMap.get(PeriodicReviewConstants.TABLEROWID);
+			Map<String, String> returnMap = new HashMap<String, String>();
+			StringBuilder sb = new StringBuilder();
+			StringList slDocIdList = new StringList();
+			boolean isRefreshTable = false;
+			if (arrTableRowIds == null) {
+				String[] arrSelectedDocId = (String[]) programMap.get(PeriodicReviewConstants.OBJECTID);
+				slDocIdList.add(arrSelectedDocId[0]);
+			}
+			else {
+				for (String strRowIds : arrTableRowIds) {
+					String strRowId = strRowIds;
+					TableRowId tableRowId = new TableRowId(strRowId);
+					slDocIdList.add(tableRowId.getObjectId());
+				}
+				isRefreshTable = true;
+			}
+			StringBuilder sbSMEAssignmentRoles = new StringBuilder();
+			sbSMEAssignmentRoles.append(PeriodicReviewConstants.SMEROLE_ASSIGNED).append(PeriodicReviewConstants.COMMA)
+					.append(PeriodicReviewConstants.COMMA).append(PeriodicReviewConstants.REMOVE);
+			String strDocId = DomainConstants.EMPTY_STRING;
+			
+			StringList slRoles=new StringList();
+			slRoles.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+			StringList busSelects=new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			
+			for (Object object : slDocIdList) {
+				strDocId = (String) object;
+				List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, strDocId, slRoles, strTypePerson, busSelects, "");
+				
+				if(mlSME!=null && mlSME.size()==1)
+				{
+					periodicReview.updateSME(context, strDocId, null, sbSMEAssignmentRoles.toString());
+				}
+				else
+				{
+					String strRet="alert(\""+strMessageNoTemporaryAssignment+"\");";
+					returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, strRet);
+					return returnMap;
+				}
+				
+			}
+			String strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.ConfirmRemoveReassignmentMessage");
+			if (isRefreshTable) {
+				sb.append("alert(\"").append(XSSUtil.encodeForJavaScript(context, strMessage)).append("\");");
+				sb.append("this.parent.location.href=this.parent.location.href;");
+			}
+			else {
+				sb.append("alert(\"").append(XSSUtil.encodeForJavaScript(context, strMessage)).append("\");");
+				sb.append(" var frame=findFrame(getTopWindow(),\"content\");frame.document.location.href=\"../common/emxTree.jsp?&objectId="
+						+ XSSUtil.encodeForJavaScript(context, strDocId) + "\";");
+			}
+			returnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sb.toString());
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access Function on command Remove Reassignment show the command Remove
+	 * Reassignment
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return boolean status to hide Remove Assignment command
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public boolean showRemoveAssignmentCommand(Context context, String args[]) throws PeriodicReviewException {
+		try {
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+
+			boolean showCommand = false;
+			Map programMap = (Map) JPO.unpackArgs(args);
+
+			String strFilter = (String) programMap.get("PRPendingReviewFilter");
+			if (!UIUtil.isNullOrEmpty(strFilter)) {
+				if (strFilter.equals(PeriodicReviewConstants.SELECT_ALL))
+					showCommand = true;
+			}
+			else {
+				String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+				
+				Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+				boolean boolPRActive=false;
+				
+				if(mPeriodicReview.containsKey(PeriodicReviewConstants.PRActive))
+					boolPRActive="true".equals(mPeriodicReview.get(PeriodicReviewConstants.PRActive).toString());
+				
+				List<String> mValidStatesPeriodicReview = (List<String>)mPeriodicReview.get(PeriodicReviewConstants.REVIEW_STATES);
+				String currentState=DomainObject.newInstance(context,strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+				boolean boolValidState=(mValidStatesPeriodicReview!=null && !mValidStatesPeriodicReview.isEmpty()) 
+										&& mValidStatesPeriodicReview.contains(currentState);
+				
+				if(!boolPRActive || !boolValidState)
+					return false;
+				
+				StringList sSMEAssignmentRole = new StringList();
+				sSMEAssignmentRole.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+				List<Map> mlSMEOwnerPerson = periodicReview.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypePerson,
+						null, null);
+				List<Map> mlSMEOwnerMemberList = periodicReview.getPeriodicReviewRelatedData(context, strObjectId, sSMEAssignmentRole, strTypeMemberList,
+						null, null);
+				List<Map> mlSMEOwnerAssignee = periodicReview.getPeriodicReviewRelatedData(context, strObjectId, new StringList(PeriodicReviewConstants.SMEROLE_ASSIGNED), strTypePerson,
+						null, null);
+				
+				boolean isAssigned=(mlSMEOwnerAssignee!=null && mlSMEOwnerAssignee.size()==1);
+				
+				boolean memberOfMemberList=false;
+				String curPersonId=PersonUtil.getPersonObjectID(context);
+				if(mlSMEOwnerMemberList!=null && !mlSMEOwnerMemberList.isEmpty())
+				{
+					DomainObject domMemberList=DomainObject.newInstance(context,((Map)mlSMEOwnerMemberList.get(0)).get(DomainConstants.SELECT_ID).toString());
+					MapList mlMembers=periodicReview.getSMEMembersOfMemberList(context, domMemberList);
+					for(Object mpMember:mlMembers)
+					{
+						if(curPersonId.equals(((Map)mpMember).get(DomainConstants.SELECT_ID).toString()))
+						{
+							memberOfMemberList=true;
+							break;
+						}
+					}
+				}
+				if(memberOfMemberList && isAssigned)
+					return true;
+				
+				if (null != mlSMEOwnerPerson && !mlSMEOwnerPerson.isEmpty()) {
+					for (int i = 0; i < mlSMEOwnerPerson.size(); i++) {
+						Map personMap = (Map) mlSMEOwnerPerson.get(i);
+						String strSMEObjectId = (String) personMap.get(DomainConstants.SELECT_ID);
+						if (PersonUtil.getPersonObjectID(context).equals(strSMEObjectId) && mlSMEOwnerPerson.size() > 1) {
+							showCommand = true;
+							break;
+						}
+					}
+				}
+			}
+			return showCommand;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Get password field for form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return String to include password field in form
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public String getPasswordField(Context context, String args[]) {
+		StringBuilder sbPassword = new StringBuilder();
+		sbPassword.append("<input type = \"password\" name =\"password\" id=\"passid\" size=\"20\">");
+		sbPassword
+				.append("<script>var passwordField = document.getElementById('calc_Password');\npasswordField.children[0].className = 'labelRequired';</script>");
+		return sbPassword.toString();
+
+	}
+
+	/**
+	 * Get Periodic Review Deposition field for form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return String to include Periodic Review Deposition field in form
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public String getPeriodicDepositionValues(Context context, String args[]) {
+		String strKeepReleasedDisplayValue = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+				context.getLocale(), "enoPeriodicReview.Range.Periodic_Review_Disposition.Keep_Released");
+		String strChangesrequiredDisplayValue = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+				context.getLocale(), "enoPeriodicReview.Range.Periodic_Review_Disposition.Changes_Required");
+		StringBuilder sbPeriodicReviewDeposition = new StringBuilder();
+		sbPeriodicReviewDeposition.append("<input type = \"radio\" name =\"PeriodicReviewDisposition\" value=\""
+				+ PeriodicReviewConstants.KEEP_RELEASED + "\" onchange=\"addFields();\" checked=\"checked\">" + strKeepReleasedDisplayValue + "<br>");
+		sbPeriodicReviewDeposition.append("<input type = \"radio\" name =\"PeriodicReviewDisposition\" value=\""
+				+ PeriodicReviewConstants.CHANGES_REQUIRED + "\" onchange=\"addFields();\">" + strChangesrequiredDisplayValue + "<br>");
+
+		return sbPeriodicReviewDeposition.toString();
+
+	}
+
+	public boolean checkAccessOnPasswordField(Context context, String args[]) throws PeriodicReviewException {
+
+		try {
+			boolean bResult = false;
+			String strPasswordSetting = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA");
+			if (!PeriodicReviewUtil.isNullOrEmpty(strPasswordSetting)) {
+				bResult = Boolean.parseBoolean(strPasswordSetting);
+			}
+			return bResult;
+		}
+		catch (Exception exception) {
+			throw new PeriodicReviewException(exception);
+		}
+
+	}
+
+	/**
+	 * Excludes the connected SME objects to the given object Document
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return List of connected Subject Matter Expert
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public List<String> documentSMEList(Context context, String[] args) throws PeriodicReviewException {
+
+		try {
+			Map paramMap = (Map) JPO.unpackArgs(args);
+			List smeList = new StringList();
+			String objectId = (String) paramMap.get(PeriodicReviewConstants.OBJECTID);
+			if (UIUtil.isNullOrEmpty(objectId)) {
+				smeList.add(PersonUtil.getPersonObjectID(context, context.getUser()));
+			}
+			else {
+				DomainObject toObj = DomainObject.newInstance(context, objectId);
+				String strRelSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+				String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+				StringList objectSelects = new StringList();
+				objectSelects.add(DomainConstants.SELECT_ID);
+
+				MapList mlAssignMapList = toObj.getRelatedObjects(context, strRelSME, strTypePerson, objectSelects, null, false, true, (short) 1,
+						null, null, 0);
+				for (Object object : mlAssignMapList) {
+					Map assigneeMap = (Map) object;
+					String personId = (String) assigneeMap.get(DomainConstants.SELECT_ID);
+					smeList.add(personId);
+				}
+			}
+			return smeList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Send Notifications for objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public void sendNotifications(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			String strMessage = DomainConstants.EMPTY_STRING;
+			Date currentDate = new Date();
+			currentDate = PeriodicReviewUtil.cleanTime(currentDate);
+			String strDate = currentDate.toString();
+			PeriodicReview periodicReviewService = new PeriodicReview();
+			if (args.length > 1) {
+				strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+						"enoPeriodicReview.ErrorMsg.MoreInputArgumentList");
+				throw new PeriodicReviewException(strMessage);
+			}
+			else if ((args.length > 0)
+					&& (!args[0].equalsIgnoreCase(PeriodicReviewConstants.SELECT_ALL.toLowerCase())
+							&& !args[0].equalsIgnoreCase(PeriodicReviewConstants.PENDING) && !args[0]
+								.equalsIgnoreCase(PeriodicReviewConstants.OVERDUE))) {
+				strMessage = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+						"enoPeriodicReview.ErrorMsg.IncorrectInputArgument");
+				throw new PeriodicReviewException(strMessage);
+			}
+			else {
+				MapList objMapList = new MapList();
+				objMapList = periodicReviewService.getDocumentsToNotify(context);
+
+				Map<?, ?> notifyingObjMapList_SME = new HashMap();
+				notifyingObjMapList_SME = periodicReviewService.getNotificationObjectWithCriteria(context, objMapList, "sme");
+
+				Map<?, ?> notifyingObjMapList_DCA = new HashMap();
+				notifyingObjMapList_DCA = periodicReviewService.getNotificationObjectWithCriteria(context, objMapList, "dca");
+
+				MapList pendingObjMapList_SME = (MapList) notifyingObjMapList_SME.get(PeriodicReviewConstants.PENDING);
+				MapList overdueObjMapList_SME = (MapList) notifyingObjMapList_SME.get(PeriodicReviewConstants.OVERDUE);
+
+				MapList pendingObjMapList_DCA = (MapList) notifyingObjMapList_DCA.get(PeriodicReviewConstants.PENDING);
+				MapList overdueObjMapList_DCA = (MapList) notifyingObjMapList_DCA.get(PeriodicReviewConstants.OVERDUE);
+
+				if (args.length == 0 || args[0].equalsIgnoreCase(PeriodicReviewConstants.SELECT_ALL.toLowerCase())) {
+					sendNotificationForActualObjects(context, pendingObjMapList_SME, PeriodicReviewConstants.PENDING, PeriodicReviewConstants.SME);
+					sendNotificationForActualObjects(context, overdueObjMapList_SME, PeriodicReviewConstants.OVERDUE, PeriodicReviewConstants.SME);
+					sendNotificationForActualObjects(context, pendingObjMapList_DCA, PeriodicReviewConstants.PENDING, PeriodicReviewConstants.DCA);
+					sendNotificationForActualObjects(context, overdueObjMapList_DCA, PeriodicReviewConstants.OVERDUE, PeriodicReviewConstants.DCA);
+
+				}
+				else if (args[0].equalsIgnoreCase(PeriodicReviewConstants.PENDING)) {
+					sendNotificationForActualObjects(context, pendingObjMapList_SME, PeriodicReviewConstants.PENDING, PeriodicReviewConstants.SME);
+					sendNotificationForActualObjects(context, pendingObjMapList_DCA, PeriodicReviewConstants.PENDING, PeriodicReviewConstants.DCA);
+				}
+				else if (args[0].equalsIgnoreCase(PeriodicReviewConstants.OVERDUE)) {
+					sendNotificationForActualObjects(context, overdueObjMapList_SME, PeriodicReviewConstants.OVERDUE, PeriodicReviewConstants.SME);
+					sendNotificationForActualObjects(context, overdueObjMapList_DCA, PeriodicReviewConstants.OVERDUE, PeriodicReviewConstants.DCA);
+				}
+				currentDate = new Date();
+				currentDate = PeriodicReviewUtil.cleanTime(currentDate);
+				strDate = currentDate.toString();
+			}
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Send Notifications for actual objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param MapList
+	 *            holds list of all objects to be notified
+	 * @param notificationCriteria
+	 *            holds the value of the type of notification
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	private void sendNotificationForActualObjects(Context context, MapList objMapList, String notificationCriteria, String strRole)
+			throws PeriodicReviewException {
+		try {
+			final String NOTIFICATION_SENTToList = "NOTIFICATION_SentToList";
+			final String NOTIFICATION_SENTToMemberList = "NOTIFICATION_SentToMemberList";
+			final String NOTIFICATION_SENTToList_DCA = "NOTIFICATION_SentToList_DCA";
+			String subjectKey = null;
+			String bodyKey = null;
+			Iterator<Map> documentListItr = objMapList.iterator();
+			PeriodicReviewNotificationUtil PeriodicReviewNotificationUtil = new PeriodicReviewNotificationUtil();
+			PeriodicReviewService periodicService=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			
+			while (documentListItr.hasNext()) {
+				Map documentMap = (Map) documentListItr.next();
+				StringList mailSentToList = (StringList) documentMap.get(NOTIFICATION_SENTToList);
+				StringList mailSentToList_DCA = (StringList) documentMap.get(NOTIFICATION_SENTToList_DCA);
+				boolean boolMemberList=false;
+				String strMemberListId="";
+				
+				if(documentMap.containsKey(NOTIFICATION_SENTToMemberList) && 
+						UIUtil.isNotNullAndNotEmpty(documentMap.get(NOTIFICATION_SENTToMemberList).toString()))
+				{
+					boolMemberList=true;
+					strMemberListId=documentMap.get(NOTIFICATION_SENTToMemberList).toString();
+				}
+				if (strRole.equals(PeriodicReviewConstants.SME) && !mailSentToList.isEmpty()) 
+				{
+					if(boolMemberList)
+					{
+						if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.PENDING)) {
+							subjectKey = "enoPeriodicReview.Notification.MemberList.PendingReview.Subject";
+							bodyKey = "enoPeriodicReview.Notification.MemberList.PendingReview.Body";
+						}
+						else if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.OVERDUE)) {
+							subjectKey = "enoPeriodicReview.Notification.MemberList.OverdueReview.Subject";
+							bodyKey = "enoPeriodicReview.Notification.MemberList.OverdueReview.Body";
+						}
+						String strDocId=documentMap.get(DomainObject.SELECT_ID).toString();						
+						periodicService.sendNotificationToMembersOfMemberList(context, strDocId, strMemberListId,"", subjectKey, bodyKey);
+					}
+					else
+					{
+						if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.PENDING)) {
+							subjectKey = "enoPeriodicReview.Notification.PendingReview.Subject";
+							bodyKey = "enoPeriodicReview.Notification.PendingReview.Body";
+						}
+						else if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.OVERDUE)) {
+							subjectKey = "enoPeriodicReview.Notification.OverdueReview.Subject";
+							bodyKey = "enoPeriodicReview.Notification.OverdueReview.Body";
+						}
+						PeriodicReviewNotificationUtil.sendActualNotificationToUser(context, documentMap, subjectKey, bodyKey, mailSentToList);
+					}
+				}
+				if (strRole.equals(PeriodicReviewConstants.DCA) && !mailSentToList_DCA.isEmpty()) {
+					if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.PENDING)) {
+						subjectKey = "enoPeriodicReview.NotificationToDCA.PendingReview.Subject";
+						bodyKey = "enoPeriodicReview.NotificationToDCA.PendingReview.Body";
+					}
+					else if (notificationCriteria.equalsIgnoreCase(PeriodicReviewConstants.OVERDUE)) {
+						subjectKey = "enoPeriodicReview.NotificationToDCA.OverdueReview.Subject";
+						bodyKey = "enoPeriodicReview.NotificationToDCA.OverdueReview.Body";
+					}
+					PeriodicReviewNotificationUtil.sendActualNotificationToUser(context, documentMap, subjectKey, bodyKey, mailSentToList_DCA);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	public void reassignAllSelectedDocuments(Context context, String[] args) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get(PeriodicReviewConstants.PARAMMAP);
+			String strDocId = (String) paramMap.get(PeriodicReviewConstants.OBJECTID);
+			String newObjectId = (String) paramMap.get(PeriodicReviewConstants.NEW_VALUE);
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strReassignedSMEId = PersonUtil.getPersonObjectID(context, newObjectId);
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			StringBuilder sbSMEAssignmentRoles = new StringBuilder();
+			sbSMEAssignmentRoles.append(PeriodicReviewConstants.SMEROLE_ASSIGNED).append(PeriodicReviewConstants.COMMA)
+					.append(PeriodicReviewConstants.SMEROLE_TEMPORARY).append(PeriodicReviewConstants.COMMA).append(PeriodicReviewConstants.REASSIGN);
+			periodicReview.updateSME(context, strDocId, strReassignedSMEId, sbSMEAssignmentRoles.toString());
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException();
+		}
+	}
+
+	public boolean enablePeriodicReviewEdit(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(PeriodicReviewConstants.PROGRAMLABEL);
+			StringList slFilterValueList = FrameworkUtil.split(strFilterValue, PeriodicReviewConstants.COMMA);
+			strFilterValue = (String) slFilterValueList.get(0);
+			if (strFilterValue.equals(PeriodicReviewConstants.FILTER_VALUE_REASSIGNED))
+				return true;
+			else
+				return false;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Get filter values map for My Implementations table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return filter values map for Template List table
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public Map getPendingReviewFilterValues(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			StringList slChoice = new StringList(2);
+			slChoice.addElement(PeriodicReviewConstants.SELECT_ALL);
+			slChoice.addElement(PeriodicReviewConstants.My_ASSIGNMENTS);
+			slChoice.addElement(PeriodicReviewConstants.My_TEMPORARY_ASSIGNMENTS);
+
+			StringList slDisplay = new StringList(2);
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Filter.Label.AllPendingReviews"));
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Filter.Label.MyOwnReviews"));
+		
+			Map rangeMap = new HashMap();
+			rangeMap.put(PeriodicReviewConstants.FIELD_CHOICES, slChoice);
+			rangeMap.put(PeriodicReviewConstants.FIELD_DISPLAY_CHOICES, slDisplay);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean showPRPendingReviewFilter(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strFilterValue = (String) programMap.get(PeriodicReviewConstants.PROGRAMLABEL);
+			StringList slFilterValueList = FrameworkUtil.split(strFilterValue, PeriodicReviewConstants.COMMA);
+			strFilterValue = (String) slFilterValueList.get(0);
+
+			if (strFilterValue.equals(PeriodicReviewConstants.FILTER_VALUE_PENDING_REVIEW))
+				return true;
+			else
+				return false;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> preprocessReassignSME(Context context, String[] args) throws Exception {
+		String strUser = context.getUser();
+		Map prograMap = JPO.unpackArgs(args);
+		String tableRowId[] = (String[]) prograMap.get(PeriodicReviewConstants.TABLEROWID);
+		String strDocId = DomainConstants.EMPTY_STRING;
+		String strAppendDocIds = DomainConstants.EMPTY_STRING;
+		Map<String, String> mReturnMap = new HashMap<String, String>();
+		for (String strRowIds : tableRowId) {
+			String strRowId = strRowIds;
+			TableRowId tableRowID = new TableRowId(strRowId);
+			strDocId = tableRowID.getObjectId();
+			strAppendDocIds = strAppendDocIds + strDocId + ",";
+		}
+		strAppendDocIds = strAppendDocIds.substring(0, strAppendDocIds.length() - 1);
+		StringBuilder sbURL = new StringBuilder();
+		sbURL.append("var submitURL=\"../common/emxFullSearch.jsp?field=TYPES=type_Person&includeOIDprogram=ENOPeriodicReviewUI:getPersonSMEForReassign&showInitialResults=true&form=AEFSearchPersonForm&table=PRshowReassignSMESearchTable&selection=single&hideHeader=true&HelpMarker=emxhelpfullsearch&submitURL=../periodicreview/enoPRExecute.jsp?prAction=ENOPeriodicReviewUI:reassignSMEToDocument");
+		sbURL.append("&appendedDocIds=");
+		sbURL.append(XSSUtil.encodeForJavaScript(context, strAppendDocIds));
+		sbURL.append("&excludeOID=");
+		sbURL.append(PersonUtil.getPersonObjectID(context, strUser));
+		sbURL.append("\";\n showModalDialog(submitURL,250,250,true);");
+		mReturnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, sbURL.toString());
+		return mReturnMap;
+	}
+
+	public boolean showCOCRMenusPeriodicReviewTable(Context context, String[] args) throws Exception {
+		boolean showCommand = false;
+		Map programMap = (Map) JPO.unpackArgs(args);
+		String strFilter = (String) programMap.get(PeriodicReviewConstants.PROGRAMLABEL);
+		if (!UIUtil.isNullOrEmpty(strFilter)) {
+			String[] filterValue = strFilter.split(PeriodicReviewConstants.COMMA);
+			strFilter = filterValue[0];
+			if (!strFilter.equals(PeriodicReviewConstants.FILTER_VALUE_AWAITING_ACCEPTANCE))
+				showCommand = true;
+		}
+		return showCommand;
+	}
+
+	/**
+	 * Get filter values map for Changes Required for Periodic Review
+	 * Disposition
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds packed arguments
+	 * @return filter values map for Changes Required for Periodic Review
+	 *         Disposition
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public Map getPeriodicReviewChangesRequiredFilter(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			StringList slChoice = new StringList(2);
+			slChoice.addElement(PeriodicReviewConstants.SELECT_CHANGE_REQUEST);
+			slChoice.addElement(PeriodicReviewConstants.SELECT_CHANGE_ORDER);
+
+			StringList slDisplay = new StringList(2);
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Label.ChangeRequest"));
+			slDisplay.addElement(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Label.ChangeOrder"));
+
+			Map rangeMap = new HashMap();
+			rangeMap.put(PeriodicReviewConstants.FIELD_CHOICES, slChoice);
+			rangeMap.put(PeriodicReviewConstants.FIELD_DISPLAY_CHOICES, slDisplay);
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getLastReviewer(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			List<String> sList = new StringList();
+			PeriodicReviewService periodicReviewService = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			for (Object objMap : objectList) {
+				Map mapDocument = (Map) objMap;
+				String id = (String) mapDocument.get(DomainConstants.SELECT_ID);
+				Map hmaplist = new HashMap();
+				HistoryAuditTrailService historyService = PeriodicReviewServiceUtil.getHistoryAuditTrailService(context);
+				hmaplist = UINavigatorUtil.getHistoryData(context, id);
+
+				List timeArray = (List) hmaplist.get(PeriodicReviewConstants.SELECT_TIME);
+				List userArray = (List) hmaplist.get(PeriodicReviewConstants.SELECT_USER);
+				List actionArray = (List) hmaplist.get(PeriodicReviewConstants.SELECT_ACTION);
+
+				List<String> actionArrayTrim = historyService.trimCustomActionInList(actionArray);
+				List<String> slTime = new StringList();
+				List<String> slUser = new StringList();
+				if (actionArrayTrim.contains(PeriodicReviewConstants.SELECT_PERIODIC_REVIEW_DISPOSITION)) {
+					for (int i = 0; i < actionArrayTrim.size(); i++) {
+
+						if (actionArrayTrim.get(i).equalsIgnoreCase(PeriodicReviewConstants.SELECT_PERIODIC_REVIEW_DISPOSITION)) {
+
+							slTime.add(timeArray.get(i).toString().substring(6, timeArray.get(i).toString().length()));
+							slUser.add(userArray.get(i).toString().substring(6, userArray.get(i).toString().length()));
+						}
+					}
+					String strLastReviewer = slUser.get(slUser.size() - 1).toString();
+					String strName = PersonUtil.getFullName(context, strLastReviewer);
+					sList.add(PeriodicReviewUtil.getObjectLink(context, PersonUtil.getPersonObjectID(context, strLastReviewer),strName));
+				}
+				else {
+					sList.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return sList;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Get Read & Understood field for Completion of Periodic Reviews
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return String to include password field in form
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public String getReadUnderstoodField(Context context, String[] args) throws PeriodicReviewException {
+		String strLabel = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE, context.getLocale(),
+				"enoPeriodicReview.Label.ReadUnderstoodCheckbox");
+		StringBuilder sbreadAndUnderstood = new StringBuilder();
+		sbreadAndUnderstood
+				.append("<input type = \"checkbox\" id =\"readAndUnderstood\" title =\"readAndUnderstood\" name =\"readAndUnderstood\" value =\"IAgree\" required =\"true\"> "
+						+ strLabel);
+		sbreadAndUnderstood
+				.append("<script>var readUnderstoodField = document.getElementById('calc_ReadAndUnderstood');readUnderstoodField.children[0].className = 'labelRequired';</script>");
+		return sbreadAndUnderstood.toString();
+
+	}
+
+	/**
+	 * This method is replicated from emxTeamContent:getContentActions with some
+	 * modification
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            objectlist
+	 * @return list of action links
+	 * @throws FrameworkException
+	 * @exclude
+	 */
+	public List<String> getActionLinks(Context context, String[] args) throws FrameworkException {
+		List<String> lActions = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+
+			MapList objectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			Map mapParam = (Map) programMap.get(PeriodicReviewConstants.PARAMLIST);
+			boolean bPrinterFriendly = false;
+			if (mapParam.get(PeriodicReviewConstants.REPORTFORMAT) != null) {
+				bPrinterFriendly = true;
+			}
+			String strUiType = (String) mapParam.get("uiType");
+			String strCustomSortColumns = (String) mapParam.get("customSortColumns");
+			String strCustomSortDirections = (String) mapParam.get("customSortDirections");
+			String strTable = (String) mapParam.get("table");
+
+			String strTypeDocument = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_DOCUMENTS);
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String strDocType = (String) map.get(DomainConstants.SELECT_TYPE);
+				String strParentType = CommonDocument.getParentType(context, strDocType);
+				StringBuilder sbLink = new StringBuilder(1024);
+				if (!bPrinterFriendly && strTypeDocument.equals(strParentType)) {
+					String strId = (String) map.get(DomainConstants.SELECT_ID);
+					sbLink.append(getSubscriptionLink(context, strId));
+					if (CommonDocument.canView(context, map)) {
+						Object obj = map.get("format.file.name");
+						boolean bViewFlag = true;
+						if (obj != null && obj.getClass().equals(String.class)) {
+							// This check is required when selectable has
+							// multiple values
+							// And if values are not returned as StringList
+							// In such case values are separated by some special
+							// character
+							String str = (String) obj;
+							if (str.contains("\7")) {
+								bViewFlag = false;
+							}
+						}
+						if (bViewFlag) {
+							sbLink.append(getViewLink(context, map));
+						}
+					}
+					if (CommonDocument.canDownload(context, map)) {
+						sbLink.append(getDownloadLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if (CommonDocument.canCheckout(context, map)) {
+						sbLink.append(getCheckoutLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if (CommonDocument.canCheckin(context, map) || VCDocument.canVCCheckin(context, map)) {
+						sbLink.append(getCheckinLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					if (CommonDocument.canAddFiles(context, map)) {
+						sbLink.append(getAddFilesLink(context, map, strCustomSortColumns, strCustomSortDirections, strUiType, strTable));
+					}
+					lActions.add(sbLink.toString());
+				}
+				else {
+					lActions.add("");
+				}
+			}
+			return lActions;
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	/**
+	 * Method to get the hyperlink for Download
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param mContentObject
+	 *            Map with document selectables
+	 * @param strCustomSortColumns
+	 *            customSortColumns value from param map
+	 * @param strCustomSortDirections
+	 *            customSortDirections value from param map
+	 * @param strUiType
+	 *            uiType value from param map
+	 * @param strTable
+	 *            table value from param map
+	 * @return link to download document
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getDownloadLink(Context context, Map mContentObject, String strCustomSortColumns, String strCustomSortDirections,
+			String strUiType, String strTable) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(1024);
+			String strDocumentId = (String) mContentObject.get(DomainConstants.SELECT_ID);
+			String strTipDownload = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(),
+					"emxTeamCentral.ContentSummary.ToolTipDownload");
+			sbLink.append("<a href=\"javascript:callCheckout('");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+			sbLink.append("','download','', '','");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+			sbLink.append("', '");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+			sbLink.append("', '");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+			sbLink.append("', '");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+			sbLink.append("'");
+			sbLink.append(")\">");
+			sbLink.append("<img border=\"0\" src=\"../common/images/iconActionDownload.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+			sbLink.append("\" title=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+			sbLink.append("\"/></a>&#160;");
+
+			// Changes for CLC start here..
+			// Show Download Icon for ClearCase Linked Objects
+			String linkAttrName = PropertyUtil.getSchemaProperty(context, "attribute_MxCCIsObjectLinked");
+			String isObjLinked = null;
+			if (linkAttrName != null && !linkAttrName.equals("")) {
+				DomainObject docObject = DomainObject.newInstance(context, strDocumentId);
+				isObjLinked = docObject.getAttributeValue(context, linkAttrName);
+			}
+			if (isObjLinked != null && !isObjLinked.equals("")) {
+				if (isObjLinked.equalsIgnoreCase("True")) {
+					// show download icon for Linked Objects
+					sbLink.append("<a href=\"../servlet/MxCCCS/MxCCCommandsServlet.java?commandName=downloadallfiles&objectId=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+					sbLink.append("\">");
+					sbLink.append("<img border=\"0\" src=\"../common/images/iconActionDownload.gif\" alt=\"");
+					sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+					sbLink.append("\" title=\"");
+					sbLink.append(XSSUtil.encodeForXML(context, strTipDownload));
+					sbLink.append("\"/></a>&#160;");
+				}
+
+			}
+			return sbLink.toString();
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	/**
+	 * Method to get the hyperlink for checkout
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param mContentObject
+	 *            Map with document selectables
+	 * @param strCustomSortColumns
+	 *            customSortColumns value from param map
+	 * @param strCustomSortDirections
+	 *            customSortDirections value from param map
+	 * @param strUiType
+	 *            uiType value from param map
+	 * @param strTable
+	 *            table value from param map
+	 * @return link for document checkout
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getCheckoutLink(Context context, Map mContentObject, String strCustomSortColumns, String strCustomSortDirections,
+			String strUiType, String strTable) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String strTipCheckout = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(),
+					"emxTeamCentral.ContentSummary.ToolTipCheckout");
+			String strDocumentId = (String) mContentObject.get(DomainConstants.SELECT_ID);
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckout.jsp?objectId=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+			sbLink.append("&amp;action=checkout&amp;refresh=false&amp;appProcessPage=enoDCExecute.jsp?dcAction=ENODCDocument:refreshMyDocTab&amp;appDir=documentcommon&amp;customSortColumns=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+			sbLink.append("&amp;customSortDirections=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+			sbLink.append("&amp;uiType=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+			sbLink.append("&amp;table=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+			sbLink.append("',730,450);\">");
+			sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckOut.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipCheckout));
+			sbLink.append("\" title=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipCheckout));
+			sbLink.append("\"/></a>&#160;");
+
+			return sbLink.toString();
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+
+	}
+
+	/**
+	 * Method to get the hyperlink for checkin
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param mContentObject
+	 *            Map with document selectables
+	 * @param strCustomSortColumns
+	 *            customSortColumns value from param map
+	 * @param strCustomSortDirections
+	 *            customSortDirections value from param map
+	 * @param strUiType
+	 *            uiType value from param map
+	 * @param strTable
+	 *            table value from param map
+	 * @return Link for document checkin
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getCheckinLink(Context context, Map mContentObject, String strCustomSortColumns, String strCustomSortDirections, String strUiType,
+			String strTable) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String strDocumentId = (String) mContentObject.get(DomainConstants.SELECT_ID);
+			String strTipCheckin = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(),
+					"emxTeamCentral.ContentSummary.ToolTipCheckin");
+			boolean vcFile = (new Boolean((String) mContentObject.get("vcfile"))).booleanValue();
+			String INTERFACE_VC_DOCUMENT = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_MoveFilesToVersion);
+			String vcInterface = (String) mContentObject.get("interface.kindof[" + INTERFACE_VC_DOCUMENT + "]");
+			boolean vcDocument = "TRUE".equalsIgnoreCase(vcInterface) ? true : false;
+			if (!vcDocument) {
+				sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+				sbLink.append("&amp;customSortColumns=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+				sbLink.append("&amp;customSortDirections=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+				sbLink.append("&amp;uiType=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+				sbLink.append("&amp;table=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+				sbLink.append("&amp;showFormat=true&amp;showComments=required&amp;objectAction=update&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true',730,450);\">");
+				sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+				sbLink.append("\" title=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+				sbLink.append("\"/></a>&#160;");
+			}
+			else {
+				if (vcFile) {
+					sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+					sbLink.append("&amp;customSortColumns=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+					sbLink.append("&amp;customSortDirections=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+					sbLink.append("&amp;uiType=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+					sbLink.append("&amp;table=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+					sbLink.append("&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=false&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true',730,450);\">");
+					sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strTipCheckin));
+					sbLink.append("\" title=\"");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strTipCheckin));
+					sbLink.append("\"/></a>&#160;");
+				}
+				else {
+					sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+					sbLink.append("&amp;customSortColumns=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+					sbLink.append("&amp;customSortDirections=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+					sbLink.append("&amp;uiType=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+					sbLink.append("&amp;table=");
+					sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+					sbLink.append("&amp;override=false&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=true&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true',730,450);\">");
+					sbLink.append("<img border=\"0\" src=\"../common/images/iconActionCheckIn.gif\" alt=\"");
+					sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+					sbLink.append("\" title=\"");
+					sbLink.append(XSSUtil.encodeForXML(context, strTipCheckin));
+					sbLink.append("\"/></a>&#160;");
+				}
+			}
+
+			// For getting the count of files
+			String SELECT_MOVE_FILES_TO_VERSION = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+					PeriodicReviewConstants.SYMBOLIC_INTERFACE_VCDOCUMENT));
+			String RELATIONSHIP_ACTIVE_VERSION = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_ActiveVersion);
+			String SELECT_TITLE = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_attribute_Title));
+			String SELECT_FILE_NAMES_OF_ACTIVE_VERSION = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to." + SELECT_TITLE;
+			String SELECT_IDS_OF_ACTIVE_VERSION = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.id";
+			Map filemap = new HashMap();
+			filemap.put(SELECT_MOVE_FILES_TO_VERSION, mContentObject.get(SELECT_MOVE_FILES_TO_VERSION));
+			filemap.put(SELECT_FILE_NAMES_OF_ACTIVE_VERSION, mContentObject.get(SELECT_FILE_NAMES_OF_ACTIVE_VERSION));
+			filemap.put(CommonDocument.SELECT_FILE_NAME, mContentObject.get(CommonDocument.SELECT_FILE_NAME));
+			int fileCount = CommonDocument.getFileCount(context, filemap);
+
+			if ((fileCount <= 1 && !vcDocument)) {
+				String docLocker = DomainConstants.EMPTY_STRING;
+				String SELECT_ACTIVE_FILE_LOCKER = "from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.locker";
+				String strFileId;
+				try {
+					docLocker = (String) mContentObject.get(SELECT_ACTIVE_FILE_LOCKER);
+					if (docLocker == null)
+						docLocker = (String) mContentObject.get(CommonDocument.SELECT_LOCKER);
+					strFileId = (String) mContentObject.get(SELECT_IDS_OF_ACTIVE_VERSION);
+				}
+				catch (ClassCastException ex) {
+					docLocker = ((StringList) mContentObject.get(SELECT_ACTIVE_FILE_LOCKER)).elementAt(0).toString();
+					if (docLocker == null)
+						docLocker = ((StringList) mContentObject.get(CommonDocument.SELECT_LOCKER)).elementAt(0).toString();
+					strFileId = ((StringList) mContentObject.get(SELECT_IDS_OF_ACTIVE_VERSION)).elementAt(0).toString();
+				}
+				sbLink.append("<a href=\"javascript:submitWithCSRF('../components/emxCommonDocumentUnlock.jsp?objectId=");
+				sbLink.append(XSSUtil.encodeForJavaScript(context, strFileId));
+				sbLink.append("', emxUICore.findFrame(getTopWindow(), 'listHidden'))\">");
+				sbLink.append("<img border=\"0\" src=\"../common/images/iconActionUnlock.gif\" alt=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, docLocker));
+				sbLink.append("\" title=\"");
+				sbLink.append(XSSUtil.encodeForXML(context, docLocker));
+				sbLink.append("\"/></a>&#160;");
+			}
+			return sbLink.toString();
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	/**
+	 * Method to get the hyperlink for subscription
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param strId
+	 *            object id
+	 * @return link to subscription dialog
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getSubscriptionLink(Context context, String strId) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String strTipSubscription = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(),
+					"emxTeamCentral.ContentSummary.ToolTipSubscription");
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxSubscription.jsp?enablePush=false&amp;objectId=");
+			sbLink.append(XSSUtil.encodeForURL(context, strId));
+			sbLink.append("',575,575)\"><img border=\"0\" src=\"../common/images/iconActionSubscribe.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipSubscription));
+			sbLink.append("\" title=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, strTipSubscription));
+			sbLink.append("\"/></a>&#160;");
+			return sbLink.toString();
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+
+	}
+
+	/**
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param mContentObject
+	 *            Map with document selectables
+	 * @return Viewer link
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getViewLink(Context context, Map mContentObject) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			Object fileObj = mContentObject.get(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION);
+			String strFileName = "";
+			String strActiveFileVersionID = "";
+			if (fileObj instanceof String) {
+				strFileName = (String) fileObj;
+			}
+			else if (fileObj instanceof StringList) {
+				strFileName = ((StringList) fileObj).elementAt(0).toString();
+			}
+			String SELECT_MOVE_FILES_TO_VERSION = DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+					PeriodicReviewConstants.SYMBOLIC_INTERFACE_VCDOCUMENT));
+			boolean moveFilesToVersion = (new Boolean((String) mContentObject.get(SELECT_MOVE_FILES_TO_VERSION))).booleanValue();
+			if (moveFilesToVersion) {
+				Object obj = mContentObject.get(CommonDocument.SELECT_ACTIVE_FILE_VERSION_ID);
+				if (obj instanceof String) {
+					strActiveFileVersionID = (String) obj;
+				}
+				else if (obj instanceof StringList) {
+					strActiveFileVersionID = ((StringList) obj).elementAt(0).toString();
+				}
+				// get the format that the Active version object contains the
+				// file
+				Map viewerURLMap = getViewerURLInfo(context, strActiveFileVersionID, strFileName);
+				if (viewerURLMap != null) {
+					sbLink.append(${CLASS:emxCommonFileUI}.getViewerURL(context, strActiveFileVersionID, (String) viewerURLMap.get("format"),
+							strFileName));
+				}
+			}
+			else { // Designer Central Changes
+				String strDocumentId = (String) mContentObject.get(DomainConstants.SELECT_ID);
+				DomainObject docObject = DomainObject.newInstance(context, strDocumentId);
+				String strFileFormat = CommonDocument.getFileFormat(context, docObject);
+				sbLink.append(${CLASS:emxCommonFileUI}.getViewerURL(context, strDocumentId, strFileFormat, strFileName));
+			}
+			return sbLink.toString();
+		}
+		catch (Exception ex) {
+			throw new FrameworkException(ex);
+		}
+
+	}
+
+	/**
+	 * // For Designer Central
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param objectId
+	 * @param fileName
+	 * @return viewer URL
+	 * @exclude
+	 */
+	private Map getViewerURLInfo(Context context, String objectId, String fileName) {
+		Map viewerInfoMap = null;
+		try {
+			DomainObject obj = DomainObject.newInstance(context, objectId);
+			MapList associatedFileList = obj.getAllFormatFiles(context);
+			for (int i = 0; i < associatedFileList.size(); i++) {
+				Map associatedFile = (Map) associatedFileList.get(i);
+				if (fileName.equals(associatedFile.get("filename"))) {
+					viewerInfoMap = new HashMap();
+					viewerInfoMap.put("fileName", fileName);
+					viewerInfoMap.put("format", associatedFile.get("format"));
+					viewerInfoMap.put("id", objectId);
+					break;
+				}
+			}
+
+		}
+		catch (Exception ex) {
+			System.out.println("Error in getViewerURLInfo=" + ex.getMessage());
+			ex.printStackTrace();
+		}
+		return viewerInfoMap;
+	}
+
+	/**
+	 * Method to get the hyperlink for add files
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param mContentObject
+	 *            Map with document selectables
+	 * @param strCustomSortColumns
+	 *            customSortColumns value from param map
+	 * @param strCustomSortDirections
+	 *            customSortDirections value from param map
+	 * @param strUiType
+	 *            uiType value from param map
+	 * @param strTable
+	 *            table value from param map
+	 * @return link to add new files
+	 * @throws FrameworkException
+	 *             if operation fails
+	 * @exclude
+	 */
+	private String getAddFilesLink(Context context, Map mContentObject, String strCustomSortColumns, String strCustomSortDirections,
+			String strUiType, String strTable) throws FrameworkException {
+		try {
+			StringBuilder sbLink = new StringBuilder(256);
+			String sTipAddFiles = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", context.getLocale(),
+					"emxTeamCentral.ContentSummary.ToolTipAddFiles");
+			String strDocumentId = (String) mContentObject.get(DomainConstants.SELECT_ID);
+			sbLink.append("<a href=\"javascript:showNonModalDialog('../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strDocumentId));
+			sbLink.append("&amp;customSortColumns=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortColumns));
+			sbLink.append("&amp;customSortDirections=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strCustomSortDirections));
+			sbLink.append("&amp;uiType=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strUiType));
+			sbLink.append("&amp;table=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context, strTable));
+			sbLink.append("&amp;showFormat=true&amp;showDescription=required&amp;objectAction=checkin&amp;showTitle=true&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true',730,450);\">");
+			sbLink.append("<img border=\"0\" src=\"../common/images/iconActionAppend.gif\" alt=\"");
+			sbLink.append(XSSUtil.encodeForXML(context, sTipAddFiles));
+			sbLink.append("\" title =\"");
+			sbLink.append(XSSUtil.encodeForXML(context, sTipAddFiles));
+			sbLink.append("\"/></a>&#160;");
+			return sbLink.toString();
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	/**
+	 * Returns list containing HTML link for organization
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds object list
+	 * @return List containing HTML link for organization
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 */
+	public List<String> getOrganizationLinks(Context context, String[] args) throws PeriodicReviewException {
+		// Unpacking the args
+		Map programMap;
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			// Gets the objectList from args
+			MapList mlObjectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(PeriodicReviewConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(PeriodicReviewConstants.REPORTFORMAT);
+			List<String> lLinks = new StringList();
+			// Getting the bus ids for objects in the table
+			for (Object object : mlObjectList) {
+				Map map = (Map) object;
+				String strOrgName = (String) (map.get(DomainConstants.SELECT_ORGANIZATION));
+				if (UIUtil.isNullOrEmpty(strOrgName)) {
+					String strId = (String) map.get(DomainConstants.SELECT_ID);
+					if (UIUtil.isNotNullAndNotEmpty(strId)) {
+						DomainObject domObj = DomainObject.newInstance(context, strId);
+						strOrgName = domObj.getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+					}
+					if (UIUtil.isNullOrEmpty(strOrgName)) {
+						strOrgName = DomainConstants.EMPTY_STRING;
+					}
+				}
+				if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strOrgName)) {
+					String strOrgId = PeriodicReviewUtil.getOrganizationId(context, strOrgName);
+					strOrgName = PeriodicReviewUtil.getObjectLink(context, strOrgId, strOrgName);
+				}
+				lLinks.add(strOrgName);
+			}
+			return lLinks;
+		}
+		catch (Exception ex) {
+			throw new PeriodicReviewException(ex.getMessage());
+		}
+	}
+
+	/**
+	 * Method is used to get periodic review interval value on change of
+	 * periodic review enabled
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return Map return the map to execute JSP to call JavaScript
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map getPeriodicReviewInterval(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			String strInterVal = DomainConstants.EMPTY_STRING;
+			Map<String, String> mpReturn = new HashMap<String, String>();
+			Map hmParamMap = (Map) JPO.unpackArgs(args);
+			String[] sPropertyKey = (String[]) hmParamMap.get("propertyKey");
+			String strKey = sPropertyKey[0];
+
+			try {
+				strInterVal = EnoviaResourceBundle.getProperty(context, strKey);
+				if (UIUtil.isNullOrEmpty(strInterVal) || strInterVal.equals(strKey)) {
+					strInterVal = DomainConstants.EMPTY_STRING;
+				}
+			}
+			catch (Exception ex) {
+				strInterVal = DomainConstants.EMPTY_STRING;
+			}
+			mpReturn.put(PeriodicReviewConstants.ACTION_AJAX, strInterVal);
+			return mpReturn;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException();
+		}
+	}
+
+	/**
+	 * UI Mothod for enabling/disabling Periodic Review
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            Holds the objectID & Periodic Review Details to be edited
+	 * @return
+	 * @throws PeriodicReviewException
+	 */
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map editPRDetails(Context context, String[] args) throws PeriodicReviewException {
+		Map<String, String> mpReturn = new HashMap<String, String>();
+		try {
+			PeriodicReviewService periodicReviewService = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String[] strArrObjectIds = (String[]) programMap.get(PeriodicReviewConstants.OBJECTID);
+
+			StringList slObjectIds = new StringList();
+			StringList slReleasedObjectIds = new StringList();
+			for (String strId : strArrObjectIds) {
+				// to prevent duplicates & separate objects in Released &
+				// un-released object lists
+				Map mperiodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strId);
+				List<String> slReviewState = (StringList) mperiodicReview.get(PeriodicReviewConstants.APPROVAL_STATES);
+
+				if (!slObjectIds.contains(strId) && !slReleasedObjectIds.contains(strId)) {
+					String strCurrent = DomainObject.newInstance(context, strId).getInfo(context, DomainObject.SELECT_CURRENT);
+					if (slReviewState != null && slReviewState.contains(strCurrent))
+						slReleasedObjectIds.add(strId);
+					else
+						slObjectIds.add(strId);
+				}
+			}
+			for (int i = 0; i < slReleasedObjectIds.size(); i++) {
+				String strSMEOID = ((String[]) programMap.get(PeriodicReviewConstants.SME_OID))[0];
+				periodicReviewService.updateSME(context, (String) slReleasedObjectIds.get(i), strSMEOID, PeriodicReviewConstants.SMEROLE_OWNER);
+			}
+			if (!slObjectIds.isEmpty()) {
+				String strPeriodicReviewEnabled = ((String[]) programMap.get(PeriodicReviewConstants.PR_ENABLED_FIELD_VALUE))[0];
+				if (PeriodicReviewConstants.YES.equalsIgnoreCase(strPeriodicReviewEnabled)) {
+					String strPeriodicReviewInterval = ((String[]) programMap.get(PeriodicReviewConstants.PR_INTERVAL_FIELD_VALUE))[0];
+					String strSMEOID = ((String[]) programMap.get(PeriodicReviewConstants.SME_OID))[0];
+					periodicReviewService.enablePeriodicReview(context, slObjectIds, strPeriodicReviewInterval, strSMEOID);
+				}
+				else
+					periodicReviewService.disablePeriodicReview(context, slObjectIds);
+			}
+		}
+		catch (Exception ex) {
+			throw new PeriodicReviewException(ex.getLocalizedMessage());
+		}
+		return mpReturn;
+	}
+
+	/**
+	 * Range program method is used to get range values for
+	 * PeriodicReviewEnabled field
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds nothing
+	 * @return Map with range values
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public Map<?, ?> getRangeForPeriodicReviewEnabled(Context context, String[] args) throws PeriodicReviewException {
+		Map mpReturn = new HashMap();
+		StringList slRangeValues = new StringList();
+		slRangeValues.add(PeriodicReviewConstants.YES);
+		slRangeValues.add(PeriodicReviewConstants.NO);
+		StringList slDisplayRangeValues = new StringList();
+		try {
+			slDisplayRangeValues.add(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Range.Yes"));
+			slDisplayRangeValues.add(EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Range.No"));
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+		slRangeValues.add(" ");
+		slDisplayRangeValues.add(" ");
+
+		mpReturn.put(PeriodicReviewConstants.FIELD_CHOICES, slRangeValues);
+		mpReturn.put(PeriodicReviewConstants.FIELD_DISPLAY_CHOICES, slDisplayRangeValues);
+
+		return mpReturn;
+	}
+
+	/**
+	 * Access function for 'Edit Details' Command. Command will be shown to
+	 * owner in Pre-Approval states For Controlled Documents it will also be
+	 * shown to (Owner & DCA) in Released state
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws PeriodicReviewException
+	 */
+	public boolean showEditDetailsCommand(Context context, String[] args) throws PeriodicReviewException {
+		boolean boolShowCommand = false;
+		Map programMap;
+		try {
+
+			programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+
+			Map mPeriodicReview = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			boolean isTypeKindOf = PeriodicReviewUtil.isPeriodicReviewType(context, strObjectId);
+			String strOwner = dObj.getOwner(context).getName();
+			String strCurrent = dObj.getInfo(context, DomainObject.SELECT_CURRENT);
+	                List<String> slStates = new StringList();
+			slStates = (StringList) mPeriodicReview.get(PeriodicReviewConstants.EDITING_STATES);
+			List<String> slRoles = (StringList) mPeriodicReview.get(PeriodicReviewConstants.EDITING_ROLES);
+			List<String> slReviewStates = (StringList) mPeriodicReview.get(PeriodicReviewConstants.APPROVAL_STATES);
+	
+
+			if (strOwner.equalsIgnoreCase(context.getUser()) && (slStates != null && slStates.contains(strCurrent)))
+				boolShowCommand = true;
+
+			if (isTypeKindOf) {
+				String strPeriodiReviewEnabled=dObj.getInfo(context, 
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PERIODIC_REVIEW_ENABLED)));
+				String strPersonId = PersonUtil.getPersonObjectID(context, context.getUser());
+				Person person = new Person(strPersonId);
+				boolean hasPersonRole = false;
+				if (slRoles != null) {
+				for (String role : slRoles) {
+					if (person.hasRole(context, role))
+						hasPersonRole = true;
+				}
+				}
+
+				if (hasPersonRole && (slReviewStates != null && slReviewStates.contains(strCurrent))
+						&& UIUtil.isNotNullAndNotEmpty(strPeriodiReviewEnabled)
+						&& PeriodicReviewConstants.YES.equalsIgnoreCase(strPeriodiReviewEnabled)) {
+					boolShowCommand = true;
+				}
+				if ((slReviewStates != null && slReviewStates.contains(strCurrent)) && UIUtil.isNotNullAndNotEmpty(strPeriodiReviewEnabled)
+						&& PeriodicReviewConstants.NO.equalsIgnoreCase(strPeriodiReviewEnabled)) {
+					boolShowCommand = false;
+				}
+
+			}
+		}
+		catch (Exception ex) {
+			throw new PeriodicReviewException(ex.getLocalizedMessage());
+		}
+		return boolShowCommand;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws PeriodicReviewException
+	 */
+	public boolean isVersionObject(Context context, String[] args) throws PeriodicReviewException {
+	Map programMap;
+		try {
+	        	programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+			Map mPeriodicReviewState = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+			List<String> slEditingState = (List<String>) mPeriodicReviewState.get(PeriodicReviewConstants.EDITING_STATES);
+			List<String> slApprovalState = (List<String>) mPeriodicReviewState.get(PeriodicReviewConstants.APPROVAL_STATES);
+			String strCurrentState = DomainObject.newInstance(context, strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (slEditingState.contains(strCurrentState) && !slApprovalState.contains(strCurrentState))
+				return true;
+
+			return false;
+		}
+		catch (Exception ex) {
+			throw new PeriodicReviewException(ex.getLocalizedMessage());
+		}
+			}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws PeriodicReviewException
+	 */
+	public boolean isReviewState(Context context, String[] args) throws PeriodicReviewException {
+		Map programMap;
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(PeriodicReviewConstants.OBJECTID);
+			Map mPeriodicReviewState = PeriodicReviewUtil.getPeriodicReviewProperty(context, strObjectId);
+			List<String> slReviewState = (List<String>) mPeriodicReviewState.get(PeriodicReviewConstants.APPROVAL_STATES);
+			String strCurrentState = DomainObject.newInstance(context, strObjectId).getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (slReviewState.contains(strCurrentState))
+				return true;
+
+			return false;
+		}
+		catch (Exception ex) {
+			throw new PeriodicReviewException(ex.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method is used to write history of "Reason for change" field when
+	 * controlled document object is in Approval state
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @throws PeriodicReviewException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public void writeHistoryForreasonForChange(Context context, String[] args) throws PeriodicReviewException {
+		try {
+			String strReasonForChange = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Label.ReasonForChange");
+			StringBuilder sbHistory = new StringBuilder();
+			Map hmProgram = (Map) JPO.unpackArgs(args);
+			Map hmParam = (Map) hmProgram.get(PeriodicReviewConstants.PARAMMAP);
+			String strValue = (String) hmParam.get(PeriodicReviewConstants.NEW_VALUE);
+			HistoryAuditTrailService auditTrailService = PeriodicReviewServiceUtil.getHistoryAuditTrailService(context);
+			auditTrailService.customHistoryUpdation(context, (String) hmParam.get(PeriodicReviewConstants.OBJECTID), strReasonForChange, strValue,
+					PeriodicReviewConstants.HISTORY_MODIFY_ACTION);
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	public Map<String, String> cancelPage(Context context, String[] args) throws PeriodicReviewException {
+
+		try {
+			Map mReturn = new HashMap();
+			mReturn.put(PeriodicReviewConstants.ACTION_JAVASCRIPT, "getTopWindow().close();");
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new PeriodicReviewException(e.getLocalizedMessage());
+		}
+	}
+	
+	
+	public String getPeriodicReviewFieldsScript(Context context, String[] args) throws PeriodicReviewException
+	{
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			String strObjectId = (String) requestMap.get(PeriodicReviewConstants.OBJECTID);
+			
+			String strRelTemplateToDocument=PropertyUtil.getSchemaProperty(context,"relationship_TemplateToDocument");
+			StringBuilder strRelDocumentTemplate = new StringBuilder(64).append("from[").append(strRelTemplateToDocument).append("].to.id");
+	
+			StringList sListSelect=new StringList();
+			sListSelect.add(strRelDocumentTemplate.toString());
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			Map mpDocInfo= periodicReview.getDocumentInformation(context,strObjectId,sListSelect);
+			boolean templateConnected=(mpDocInfo!=null && mpDocInfo.size()>0) && UIUtil.isNotNullAndNotEmpty(mpDocInfo.get(strRelDocumentTemplate.toString()).toString());
+			
+			if(templateConnected)
+				return "<script>disablePeriodicReviewFields(true,'"+strObjectId+"');</script>";
+			else
+				return "<script>disablePeriodicReviewFields(false,'"+strObjectId+"');</script>";
+		}
+		catch(Exception e)
+		{
+			throw new PeriodicReviewException(e);
+		}
+	}
+	 @com.dassault_systemes.enovia.periodicreview.ExecuteCallable
+	 public Map getSubjectMatterExpertOfTemplate(Context context, String[] args)throws Exception
+	 {
+		 String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		 String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+		 
+		 Map programMap = (Map) JPO.unpackArgs(args);
+		 
+		 String[] selTemplateId=(String[]) programMap.get("selTemplateId");
+		 
+		 DomainObject domDocTemp=new DomainObject(selTemplateId[0]);
+		 String relSME=PropertyUtil.getSchemaProperty(context,"relationship_SubjectMatterExpert");
+		
+		 List slSelect=new StringList();
+		 slSelect.add(DomainObject.SELECT_ID);
+		 slSelect.add(DomainObject.SELECT_NAME);
+		 
+		 List slRoles=new StringList();
+	     slRoles.add(PeriodicReviewConstants.SMEROLE_OWNER);
+	     slRoles.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+	        
+		 PeriodicReviewService periodicReview=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+	     List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, selTemplateId[0], slRoles, strTypeMemberList+","+strTypePerson, (List)slSelect, "");
+	     Iterator itr=mlSME.iterator();
+	        
+	     String strSMEId="";
+	     String strSMEName="";
+	    	 
+	     while(itr.hasNext())
+	     {
+        	Map mpSME=(Map)itr.next();
+        	if(strTypeMemberList.equals(mpSME.get(DomainConstants.SELECT_TYPE)))
+        	{
+        		strSMEName=(String)mpSME.get(DomainConstants.SELECT_NAME);
+        		strSMEId=(String)mpSME.get(DomainConstants.SELECT_ID);
+        		break;
+        	}
+        	else
+        	{
+        		strSMEName=(String)mpSME.get(DomainConstants.SELECT_NAME);
+        		strSMEId=(String)mpSME.get(DomainConstants.SELECT_ID);
+        	}
+	     }
+	     
+		 Map retMap=new HashMap();
+		 retMap.put(PeriodicReviewConstants.ACTION_AJAX, strSMEName+"|"+strSMEId);
+		 return retMap;
+	 }
+	public void updatePeriodicReviewEnabled(Context context, String[] args) throws PeriodicReviewException
+	{
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			Map paramMap = (Map) programMap.get("paramMap");
+			
+			String strObjectId = (String) paramMap.get(PeriodicReviewConstants.OBJECTID);
+			String strDCMode = ((String[]) requestMap.get("DCMode"))[0];
+			DomainObject domDoc=new DomainObject(strObjectId);
+			String attribute_PeriodicReviewEnabled=PropertyUtil.getSchemaProperty(context,"attribute_PeriodicReviewEnabled");
+			
+			if(strDCMode!=null && strDCMode.equals("createdocument"))
+			{
+				if(requestMap.containsKey("TemplateOID") && requestMap.get("TemplateOID")!=null)
+				{
+					String strTemplateId = ((String[]) requestMap.get("TemplateOID"))[0];
+					
+					if(UIUtil.isNotNullAndNotEmpty(strTemplateId))
+					{
+						DomainObject domTemplate=new DomainObject(strTemplateId);
+						String attr=domTemplate.getAttributeValue(context, attribute_PeriodicReviewEnabled);
+						domDoc.setAttributeValue(context, attribute_PeriodicReviewEnabled, attr);
+						return;
+					}
+				}
+			}
+			
+			String newValue = (String) paramMap.get("New Value");
+			domDoc.setAttributeValue(context, attribute_PeriodicReviewEnabled, newValue);
+		}
+		catch(Exception e)
+		{
+			throw new PeriodicReviewException(e);
+		}
+	}
+	
+	public void updatePeriodicReviewIntervals(Context context, String[] args) throws PeriodicReviewException
+	{
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			Map paramMap = (Map) programMap.get("paramMap");
+			
+			String strObjectId = (String) paramMap.get(PeriodicReviewConstants.OBJECTID);
+			String strDCMode = ((String[]) requestMap.get("DCMode"))[0];
+			
+			DomainObject domDoc=new DomainObject(strObjectId);
+			String attribute_PeriodicReviewInterval=PropertyUtil.getSchemaProperty(context,"attribute_PeriodicReviewInterval");
+			
+			if(strDCMode!=null && strDCMode.equals("createdocument"))
+			{
+				if(requestMap.containsKey("TemplateOID") && requestMap.get("TemplateOID")!=null)
+				{
+					String strTemplateId = ((String[]) requestMap.get("TemplateOID"))[0];
+					if(UIUtil.isNotNullAndNotEmpty(strTemplateId))
+					{
+						DomainObject domTemplate=new DomainObject(strTemplateId);
+						String attr=domTemplate.getAttributeValue(context, attribute_PeriodicReviewInterval);
+						domDoc.setAttributeValue(context, attribute_PeriodicReviewInterval, attr);
+						return;
+					}
+				}
+			}
+			
+			String newValue = (String) paramMap.get("New Value");
+			domDoc.setAttributeValue(context, attribute_PeriodicReviewInterval, newValue);
+		}
+		catch(Exception e)
+		{
+			throw new PeriodicReviewException(e);
+		}
+	}
+	
+	public StringList getAssigneeColumn(Context context, String args[]) throws PeriodicReviewException
+	{
+		Map programMap;
+		String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+		String strRelAttributeProjectRole = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PROJECT_ROLE);
+		String strRelSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+		
+		String strPendingAcceptance = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+				context.getLocale(), "enoPeriodicReview.Msg.PendingAcceptance");
+		String strUnassigned = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+				context.getLocale(), "enoPeriodicReview.Msg.Unassigned");
+		try {
+			programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjectList = (MapList) programMap.get(PeriodicReviewConstants.OBJECTLIST);
+			StringList slRet=new StringList();
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			
+			StringList busSelects=new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_TYPE);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			
+			StringList slRoles=new StringList();
+			slRoles.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+			slRoles.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+			slRoles.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			
+			String curPersonId=PersonUtil.getPersonObjectID(context, context.getUser());
+			
+			for(int i=0;i<mlObjectList.size();i++)
+			{
+				Map mpObj=(Map)mlObjectList.get(i);
+				String objId=mpObj.get(DomainConstants.SELECT_ID).toString();
+				
+				String strSMEOwner="";
+					
+				List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, objId, slRoles, strTypePerson+","+strTypeMemberList, busSelects, "");
+				
+				boolean boolAccepted=false;
+				
+				String temporaryAssignee="";
+				
+				int smeMLIndex=-1;
+				String smeOwner="";
+				String smeAssignee="";
+				int cnt=0;
+				
+				for(int j=0;j<mlSME.size();j++)
+				{
+					Map mpSME=mlSME.get(j);
+					String id=mpSME.get(DomainConstants.SELECT_ID).toString();
+					String type=mpSME.get(DomainConstants.SELECT_TYPE).toString();
+					String smeName=mpSME.get(DomainConstants.SELECT_NAME).toString();
+					String strProjectRole=mpSME.get("attribute["+strRelAttributeProjectRole+"].value").toString();
+					
+					
+					if(PeriodicReviewConstants.SMEROLE_OWNER.equals(strProjectRole))
+					{
+						if(!strTypeMemberList.equals(type))
+					{
+						boolAccepted=true;
+						smeOwner=smeName;
+					}
+						else
+							smeMLIndex=j;
+					}
+					if(PeriodicReviewConstants.SMEROLE_TEMPORARY.equals(strProjectRole))
+					{
+						temporaryAssignee=smeName;
+						boolAccepted=true;
+					}
+					
+					if(PeriodicReviewConstants.SMEROLE_ASSIGNED.equals(strProjectRole))
+					{
+						smeAssignee=smeName;
+						cnt++;
+					}
+				}
+				
+		        
+		        String retSme="";
+		        String outStr="";
+		        
+		        if(cnt==0 && boolAccepted)
+		        {
+		        	if(!smeOwner.equals("") && temporaryAssignee.equals(""))
+		        		retSme=smeOwner;
+		        	else if(!temporaryAssignee.equals(""))
+		        		retSme=temporaryAssignee;
+		        }
+		        else
+		        {		
+		        	if(cnt==1 && !(smeMLIndex!=-1 && mlSME.size()==2))
+		        	{
+		        		outStr=strPendingAcceptance;
+		        		retSme=smeAssignee;
+		        	}
+		        	else
+		        		outStr=strUnassigned;
+		        }
+				
+				if(!(outStr.equals(strUnassigned)))
+				{
+					String strOwnerId = PersonUtil.getPersonObjectID(context, retSme);
+			        String strName = PersonUtil.getFullName(context, retSme);
+			        if (UIUtil.isNotNullAndNotEmpty(strName)) {
+						strName = PeriodicReviewUtil.getObjectLink(context, strOwnerId, strName);
+					}
+			        if(outStr.equals(strPendingAcceptance))
+			        {
+			        	slRet.add("<b><i>"+XSSUtil.encodeForHTML(context, outStr)+"</i></b><br/>("+strName+")");
+			        }
+			        else
+			        	slRet.add(strName);
+			        
+				}
+				else
+					slRet.add(XSSUtil.encodeForHTML(context, outStr));
+			}
+			return slRet;
+		}
+		catch(Exception ex)
+		{
+			throw new PeriodicReviewException(ex);
+		}
+	}
+	
+	public String getDocumentAssigneeField(Context context, String[] args) throws PeriodicReviewException
+	{
+		try
+		{
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+			
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			String strObjectId = (String) requestMap.get(PeriodicReviewConstants.OBJECTID);
+			
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			String strRelAttributeProjectRole = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ATTRIBUTE_PROJECT_ROLE);
+			
+			String strPendingAcceptance = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Msg.PendingAcceptance");
+			String strUnassigned = EnoviaResourceBundle.getProperty(context, PeriodicReviewConstants.PERIODIC_REVIEW_STRING_RESOURCE,
+					context.getLocale(), "enoPeriodicReview.Msg.Unassigned");
+			
+			String strSMEOwner="";
+			
+			StringList slRoles=new StringList();
+			slRoles.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			slRoles.add(PeriodicReviewConstants.SMEROLE_TEMPORARY);
+			slRoles.add(PeriodicReviewConstants.SMEROLE_ASSIGNED);
+			
+			StringList busSelects=new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			
+			List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, strObjectId, slRoles, strTypePerson+","+strTypeMemberList, busSelects, "");
+			
+			boolean boolAccepted=false;
+			
+			String temporaryAssignee="";
+			int smeMLIndex=-1;
+			String smeOwner="";
+			String smeAssignee="";
+			int cnt=0;
+			
+			for(int j=0;j<mlSME.size();j++)
+			{
+				Map mpSME=mlSME.get(j);
+				String id=mpSME.get(DomainConstants.SELECT_ID).toString();
+				String type=mpSME.get(DomainConstants.SELECT_TYPE).toString();
+				String smeName=mpSME.get(DomainConstants.SELECT_NAME).toString();
+				String strProjectRole=mpSME.get("attribute["+strRelAttributeProjectRole+"].value").toString();
+				
+				
+				if(PeriodicReviewConstants.SMEROLE_OWNER.equals(strProjectRole))
+				{
+					if(!strTypeMemberList.equals(type))
+				{
+					boolAccepted=true;
+					smeOwner=smeName;
+				}
+					else
+						smeMLIndex=j;
+				}
+				
+				if(PeriodicReviewConstants.SMEROLE_TEMPORARY.equals(strProjectRole))
+				{
+					temporaryAssignee=smeName;
+					boolAccepted=true;
+				}
+				
+				if(PeriodicReviewConstants.SMEROLE_ASSIGNED.equals(strProjectRole))
+				{
+					smeAssignee=smeName;
+					cnt++;
+				}
+			}
+			
+	        
+	        String retSme="";
+	        String outStr="";
+	        
+	        if(cnt==0 && boolAccepted)
+	        {
+	        	if(!smeOwner.equals("") && temporaryAssignee.equals(""))
+	        		retSme=smeOwner;
+	        	else if(!temporaryAssignee.equals(""))
+	        		retSme=temporaryAssignee;
+	        }
+	        else
+	        {		
+	        	if(cnt==1 && !(smeMLIndex!=-1 && mlSME.size()==2))
+	        	{
+	        		outStr=strPendingAcceptance;
+	        		retSme=smeAssignee;
+	        	}
+	        	else
+	        		outStr=strUnassigned;
+	        }
+			
+			if(!(outStr.equals(strUnassigned)))
+			{
+				String strOwnerId = PersonUtil.getPersonObjectID(context, retSme);
+		        String strName = PersonUtil.getFullName(context, retSme);
+		        
+		        if (UIUtil.isNotNullAndNotEmpty(strName)) 
+		        	strName = PeriodicReviewUtil.getObjectLink(context, strOwnerId, strName);
+		        
+		        if(outStr.equals(strPendingAcceptance))
+		        	return "<b><i>"+XSSUtil.encodeForHTML(context, outStr)+"</i></b><br/>("+strName+")";
+		        else
+		        	return strName;
+		        
+			}
+			else
+				return XSSUtil.encodeForHTML(context, outStr);
+			
+		}
+		catch(Exception e)
+		{
+			throw new PeriodicReviewException(e);
+		}
+	}
+	
+	public String getDocumentSMEField(Context context, String[] args) throws PeriodicReviewException
+	{
+		try
+		{
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+			
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get("requestMap");
+			
+			String strObjectId = (String) requestMap.get(PeriodicReviewConstants.OBJECTID);
+			PeriodicReviewService periodicReview = PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			
+			StringList slRoles=new StringList();
+			slRoles.add(PeriodicReviewConstants.SMEROLE_OWNER);
+			StringList busSelects=new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			busSelects.add(DomainConstants.SELECT_TYPE);
+			
+			List<Map> mlSME=periodicReview.getPeriodicReviewRelatedData(context, strObjectId, slRoles, strTypePerson+","+strTypeMemberList, busSelects, "");
+			String retString="";
+			if(mlSME!=null && mlSME.size()==1)
+			{
+				Map mpSME=(Map)mlSME.get(0);
+				String strId=mpSME.get(DomainConstants.SELECT_ID).toString();
+				String strType=mpSME.get(DomainConstants.SELECT_TYPE).toString();
+				String strName=mpSME.get(DomainConstants.SELECT_NAME).toString();
+				DomainObject domSME=DomainObject.newInstance(context, strId);
+				if(strType.equals(strTypePerson))
+					strName=PersonUtil.getFullName(context, strName);
+
+				String objHtml=PeriodicReviewUtil.getObjectLink(context,strId,strName);
+				retString= objHtml;
+			}
+			return retString;
+		}
+		catch(Exception e)
+		{
+			throw new PeriodicReviewException(e);
+		}
+	}
+	
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	 public List<String> getPersonSMEForReassign(Context context, String args[]) throws PeriodicReviewException 
+	 {
+		 String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		 String strPolicyPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_Person);
+		 String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+		 String strPolicyMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_MemberList);
+		 
+		 String strRelSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+		 String strRoleSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT);
+		 String strRoleLeader = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+		 String strStateActiveMemberList = PropertyUtil.getSchemaProperty(context, "policy",strPolicyMemberList, "state_Active");
+		 String strStateActivePerson = PropertyUtil.getSchemaProperty(context, "policy",strPolicyPerson, "state_Active");
+		 
+		 try 
+		 {
+			 Map programMap = (Map) JPO.unpackArgs(args);
+			 String objectId="";
+			 
+			 if(programMap.containsKey("appendedDocIds"))
+				 objectId =((String)programMap.get("appendedDocIds")).split(",")[0];
+			 else
+				 objectId=((String)programMap.get("objectId"));
+			 
+			 List<String> slIncludePersons = new StringList();
+			 List<String> slIncludeMemberList = new StringList();
+			 
+			 StringList objSelects = new StringList();
+			 objSelects.add(DomainObject.SELECT_ID);
+			 objSelects.add(DomainObject.SELECT_NAME);
+			 objSelects.add(DomainObject.SELECT_TYPE);
+			 
+			 PeriodicReviewService periodicReview=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			 if(UIUtil.isNotNullAndNotEmpty(objectId))
+			 {
+				 String smeML=periodicReview.getSMEIfMemberList(context, objectId);
+				 if(UIUtil.isNotNullAndNotEmpty(smeML))
+					 slIncludeMemberList.add(smeML); 
+			 }
+			 
+			 String curUserId=PersonUtil.getPersonObject(context, context.getUser()).getId(context);
+			 
+			 if(slIncludeMemberList.size()>0)
+			 {
+				 slIncludePersons.clear();
+				 MapList mlMembers=periodicReview.getSMEMembersOfMemberList(context, DomainObject.newInstance(context,slIncludeMemberList.get(0)));
+				 for(Map mpMember:(List<Map>)mlMembers)
+				 {
+					 slIncludePersons.add(mpMember.get(DomainConstants.SELECT_ID).toString());
+				 }
+				 slIncludePersons.remove(curUserId);
+				 return slIncludePersons;
+			 }
+			 
+			 StringBuilder sbWhere=new StringBuilder();
+			 sbWhere.append(DomainConstants.SELECT_CURRENT).append("==").append("const\"").append(strStateActivePerson).append("\"");
+			 
+			 StringList slPersons=PersonUtil.getPersonFromRole(context, strRoleSME);//DomainObject.findObjects(context, strTypePerson,DomainConstants.QUERY_WILDCARD, sbWhere.toString(), objSelects);
+			 slPersons.addAll(PersonUtil.getPersonFromRole(context, strRoleLeader));
+			 
+			 Iterator itr=slPersons.iterator();
+			 while(itr.hasNext())
+			 {
+				 DomainObject perObj=PersonUtil.getPersonObject(context, itr.next().toString());
+				 String curState=perObj.getInfo(context, "current");
+				 if(strStateActivePerson.equals(curState))
+					 slIncludePersons.add(perObj.getId(context));
+			 }
+			 slIncludePersons.remove(curUserId);
+			 return slIncludePersons;
+		 }
+		 catch (Exception e) {
+			 throw new PeriodicReviewException(e.getLocalizedMessage());
+		 }
+
+	 }
+	
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	 public List<String> getPersonAndMemberListSME(Context context, String args[]) throws PeriodicReviewException 
+	 {
+		 String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		 String strPolicyPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_Person);
+		 String strTypeMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_MemberList);
+		 String strPolicyMemberList = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_policy_MemberList);
+		 
+		 String strRelSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_RELATIONSHIP_SUBJECT_MATTER_EXPERT);
+		 String strRoleSME = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ROLE_SUBJECT_MATTER_EXPERT);
+		 String strRoleLeader = PropertyUtil.getSchemaProperty(context, PeriodicReviewConstants.SYMBOLIC_ROLE_VPLM_PROJECT_LEADER);
+		 String strStateActiveMemberList = PropertyUtil.getSchemaProperty(context, "policy",strPolicyMemberList, "state_Active");
+		 String strStateActivePerson = PropertyUtil.getSchemaProperty(context, "policy",strPolicyPerson, "state_Active");
+		 
+		 try 
+		 {
+			 PeriodicReviewService periodicReview=PeriodicReviewServiceUtil.getPeriodicReviewService(context);
+			 Map programMap = (Map) JPO.unpackArgs(args);
+			 
+			 List<String> slIncludePersons = new StringList();
+
+			 StringList objSelects = new StringList();
+			 objSelects.add(DomainObject.SELECT_ID);
+			 objSelects.add(DomainObject.SELECT_NAME);
+			 
+			 StringBuilder sbWhere=new StringBuilder();
+			 sbWhere.append(DomainConstants.SELECT_CURRENT).append("==").append("const\"").append(strStateActivePerson).append("\"");
+			 
+			 StringList slPersons=PersonUtil.getPersonFromRole(context, strRoleSME);
+			 slPersons.addAll(PersonUtil.getPersonFromRole(context, strRoleLeader));
+			 
+			 
+			 Iterator itr=slPersons.iterator();
+			 while(itr.hasNext())
+			 {
+				 DomainObject perObj=PersonUtil.getPersonObject(context, itr.next().toString());
+				 String curState=perObj.getInfo(context, "current");
+				 if(strStateActivePerson.equals(curState))
+					 slIncludePersons.add(perObj.getId(context));
+			 }
+			 
+			 sbWhere=new StringBuilder();
+			 sbWhere.append(DomainConstants.SELECT_CURRENT).append("==").append("const\"").append(strStateActiveMemberList).append("\"");
+			 
+			 MapList mlPersons=DomainObject.findObjects(context, strTypeMemberList,null, sbWhere.toString(), objSelects);
+			 
+			
+			 
+			 itr=mlPersons.iterator();
+			 while(itr.hasNext())
+			 {
+				 String memberListId=((Map)itr.next()).get(DomainObject.SELECT_ID).toString();
+				 List<Map> mlMembers=periodicReview.getSMEMembersOfMemberList(context, DomainObject.newInstance(context,memberListId));
+				 if(mlMembers!=null && !mlMembers.isEmpty())
+					 slIncludePersons.add(memberListId);
+			 }
+			 
+			 String objectId=(String)programMap.get("objectId");
+
+			 if(UIUtil.isNotNullAndNotEmpty(objectId))
+			 {
+				 
+				 List<Map> mpSMEInfo=periodicReview.getPeriodicReviewRelatedData(context, objectId, new StringList(), strTypeMemberList,objSelects , "");
+				 
+				 itr=mpSMEInfo.iterator();
+				 
+				 while(itr.hasNext())
+				 {
+					 Map smeMap=(Map)itr.next();
+					 String objId=(String)smeMap.get(DomainConstants.SELECT_ID);
+					 
+					 if(strTypeMemberList.equals((String)smeMap.get(DomainConstants.SELECT_TYPE)))
+						 slIncludePersons.remove(objId);
+				 }
+			 }
+			 
+			 return slIncludePersons;
+		 }
+		 catch (Exception e) {
+			 throw new PeriodicReviewException(e.getLocalizedMessage());
+		 }
+
+	 }
+	}
+

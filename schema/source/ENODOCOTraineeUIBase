@@ -1,0 +1,2275 @@
+import java.net.InetAddress;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.DCLLifecycleService;
+import com.dassault_systemes.enovia.dcl.service.HistoryAuditTrailService;
+import com.dassault_systemes.enovia.dcl.service.TrainingService;
+import com.dassault_systemes.enovia.dcl.service.impl.NotificationUtil;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.dassault_systemes.enovia.periodicreview.PeriodicReviewConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.StringUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.Policy;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> preProcessAddTraineeMembers(Context context, String args[]) throws DCLException {
+		Map<String, String> mReturnMap = new HashMap<>();
+		try {
+			Map<?, ?> programMap = (Map) JPO.unpackArgs(args);
+			StringList slTraineetoDoc = new StringList();
+			String strOId = DomainConstants.EMPTY_STRING;
+			String ObjId = DomainConstants.EMPTY_STRING;
+
+			String strRelId = DomainConstants.EMPTY_STRING;
+			StringBuilder sbSubmitURL = new StringBuilder();
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String[] strTableRowId = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strparentOID = (String[]) programMap.get(DCConstants.PARENT_OID);
+			if (strparentOID != null && strparentOID.length > 0){
+				ObjId=strparentOID[0];
+			}else{
+				ObjId=strObjectId[0];
+			}
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strPolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			DomainObject domainObj = DomainObject.newInstance(context, ObjId);
+			Policy policy = domainObj.getPolicy(context);
+			if (strTableRowId != null && strTableRowId.length > 0) {
+				if (strTableRowId.length > 1) {
+					String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Alert.MultipleSelection");
+					mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+				}
+
+				else {
+					for (String strRowIds : strTableRowId) {
+						String strRowId = strRowIds;
+						TableRowId tr = new TableRowId(strRowId);
+						strOId = tr.getObjectId();
+						strRelId = tr.getRelationshipId();
+						slTraineetoDoc.add(strOId);
+					}
+					DomainObject dobj = DomainObject.newInstance(context, strOId);
+					if (dobj.isKindOf(context, strTypePerson)) {
+						String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Alert.InvalidPersonSelection");
+						mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+					}
+					else {
+						if (!strPolicy.equals(policy.toString())) {
+							mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "emxFullSearchAddTraineeMembers", strOId, strRelId, strparentOID[0]));
+						}
+						else {
+							String requiredText = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+									"enoDocumentControl.Alert.TemplatePersonSelection");
+							mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", requiredText));
+						}
+					}
+				}
+			}
+			else {
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "preProcessAddTraineeMembersNoRowID", strPolicy, policy.toString(), strObjectId[0]));
+			}
+		}
+
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return mReturnMap;
+	}
+
+	public Map<String, String> addTraineeMembers(Context context, String args[]) throws DCLException {
+		Map<String, String> mReturnMap = new HashMap<>();
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String[] strRelId = (String[]) programMap.get(DCLConstants.RELID);
+			String[] strTableRowId = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strParentId = (String[]) programMap.get(DCConstants.PARENT_OID);
+			String strTypeQSD = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_DOCUMENTS);
+
+			String strObjId = DomainConstants.EMPTY_STRING;
+			StringList slList = new StringList();
+			StringList slTraingRequiredAttribute = new StringList();
+
+			for (String strRowIds : strTableRowId) {
+				String strRowId = strRowIds;
+				TableRowId tr = new TableRowId(strRowId);
+				strObjId = tr.getObjectId();
+				String[] strTrainingRequired = (String[]) programMap.get(strObjId);
+				slList.add(strObjId);
+				if (!DCLUtil.isNullOrEmpty(strTrainingRequired)) {
+					slTraingRequiredAttribute.add(strTrainingRequired[0]);
+				}
+				else
+				{
+					slTraingRequiredAttribute.add(DCLConstants.MANDATORY);
+				}
+			}
+
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId[0]);
+			if (!dobj.isKindOf(context, strTypeQSD)) {
+				strObjectId[0] = strParentId[0];
+			}
+
+			String strRelIDs = (strRelId == null) ? null : strRelId[0];
+			service.addTrainees(context, strObjectId[0], slList, strRelIDs, slTraingRequiredAttribute);				
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "topWindowParentOpener"));
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+		return mReturnMap;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getDocumentTrainees(Context context, String args[]) throws DCLException {
+		TrainingService service = DCLServiceUtil.getTraineeService(context);
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strDocObjId = (String) programMap.get(DCLConstants.OBJECTID);
+			MapList mlPerson = new MapList();
+			String strPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			mlPerson = service.getAllTrainees(context, strDocObjId);
+			// FOR PERSONS CONNECTED BY TRAINEE
+			for (Object obj : mlPerson) {
+				Map personMap = (Map) obj;
+				String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+				DomainObject dobj = DomainObject.newInstance(context, strPersonId);
+				if (dobj.isKindOf(context, strPersonType)) {
+					personMap.put("hasChildren", DCLConstants.FALSE);
+				}
+
+			}
+			return mlPerson;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList expandOrganizationPerson(Context context, String args[]) throws DCLException {
+		try {
+			String strAllTRaineeFilterValue = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.AllTrainees");
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			Map programMap = JPO.unpackArgs(args);
+			String strRelID = (String) programMap.get(DCLConstants.RELID);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			MapList mlPerson = new MapList();
+			MapList programFilterMenuMapList = (MapList) programMap.get("ProgramMenuFilter");
+			Map filterMap = (Map) programFilterMenuMapList.get(0);
+			String strfilterValue = filterMap.keySet().toString();
+			strfilterValue = strfilterValue.substring(1, strfilterValue.length() - 1);
+
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			mlPerson = service.getAssignedTraineesFromGroup(context, strRelID);
+			Iterator<?> itrList = mlPerson.iterator();
+			while (itrList.hasNext()) {
+				Map personMap = (Map) itrList.next();
+				String strAssigneeRelId = (String) personMap.get(DomainRelationship.SELECT_ID);
+				String strTrainingStatusValue = DomainRelationship.getAttributeValue(context, strAssigneeRelId, strAttrTrainingStatus);
+				if (!strTrainingStatusValue.equals(strfilterValue) && !strfilterValue.equals(strAllTRaineeFilterValue))
+					itrList.remove();
+				else
+					personMap.put("hasChildren", DCLConstants.FALSE);
+			}
+			return mlPerson;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList includePersonOID(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectID = (String) programMap.get(DCLConstants.OBJECTID);
+			String strRelId = (String) programMap.get(DCLConstants.RELID);
+			StringList slPersonOID = new StringList();
+			String strPersonId = DomainConstants.EMPTY_STRING;
+
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+
+			// IF ADDING UNDER AN ORGANIZATION, MEMBERLIST, DEPARTMENT ETC
+
+			if (UIUtil.isNotNullAndNotEmpty(strRelId)) {
+				MapList mlPerson = service.getPersonFromGroups(context, strObjectID);
+				for (Object obj : mlPerson) {
+					Map map = (Map) obj;
+					strPersonId = (String) map.get(DomainConstants.SELECT_ID);
+					slPersonOID.add(strPersonId);
+					StringList slexcludePerson = service.getIncludeOIDList(context, strObjectID, strRelId);
+					for (Object object : slexcludePerson) {
+						if (slPersonOID.contains(object)) {
+							slPersonOID.remove(object);
+						}
+					}
+				}
+			}
+			// IF ADDING AS A TRAINEE
+			else {
+				slPersonOID = service.getIncludeOIDList(context, strObjectID, strRelId);
+			}
+			return slPersonOID;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Method to remove Person,Groups,Department,BU,Orgs etc.. from a particular
+	 * training
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            string array of command line arguments.
+	 * @return Map containing javascript to refresh the table structure.
+	 * @throws DCLException
+	 *             if the operation fails
+	 * @exclude
+	 */
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> removeTraineeMembers(Context context, String args[]) throws DCLException {
+		Map<String, String> mReturnMap = new HashMap<>();
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String[] strTableRowId = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strObjectID = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String strObjId = DomainConstants.EMPTY_STRING;
+			String strRelId = DomainConstants.EMPTY_STRING;
+
+			StringList slRelList = new StringList();
+			StringList slObjList = new StringList();
+			for (String strRowIds : strTableRowId) {
+				String strRowId = strRowIds;
+				TableRowId tr = new TableRowId(strRowId);
+				strObjId = tr.getObjectId();
+				slObjList.add(strObjId);
+				strRelId = tr.getRelationshipId();
+				slRelList.add(strRelId);
+			}
+
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			service.removeMembers(context, slRelList, slObjList, strObjectID[0]);
+			StringBuilder sbJavascript = new StringBuilder();
+			String strEmxTableRowIds = StringUtil.join(strTableRowId, ";");
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "removeTraineeMembers", strEmxTableRowIds));
+			return mReturnMap;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public void updateTrainingStatus(Context context, String args[]) throws DCLException {
+		try {
+			String strAttrPercentCompletion = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			Map programMap = JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String[] strPercentCompletion = (String[]) programMap.get("PercentComplete");
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			StringList slRelId = service.getTraineeRelIds(context, strObjectId[0], strUserId);
+			Map<String, String> attributeMap = new HashMap<>();
+			attributeMap.put(strAttrPercentCompletion, strPercentCompletion[0]);
+			attributeMap.put(strAttrTrainingStatus, DCLConstants.FILTER_INPROGRESS);
+			service.updateTrainingFromPropertiesPage(context, slRelId, attributeMap, strObjectId[0]);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to assign training to Person,Groups,Department,BU,Orgs
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            string array of command line arguments.
+	 * @return Map containing javascript to refresh the table structure.
+	 * @throws DCLException
+	 *             if the operation fails
+	 * @exclude
+	 */
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map assignTrainingtoTrainees(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String[] strEmxTableRowId = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			StringList slRelList = new StringList();
+			StringList slObjList = new StringList();
+			StringBuilder sbJavascript = new StringBuilder();
+			Map mReturn = new HashMap<>();
+
+			// IF NO PERSON OR BU OR DEPARTMENT OR ORG OR ML IS SELECTED
+			if (DCLUtil.isNullOrEmpty(strEmxTableRowId)) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Alert.Selection");
+				mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strMessage));
+			}
+			else {
+				for (String strRowIds : strEmxTableRowId) {
+					TableRowId tr = new TableRowId(strRowIds);
+					String strRelId = tr.getRelationshipId();
+					slRelList.add(strRelId);
+					slObjList.add(tr.getObjectId());
+				}
+
+				TrainingService service = DCLServiceUtil.getTraineeService(context);
+				service.assignTraining(context, slObjList, slRelList, strObjectId[0]);
+				mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			}
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public StringList getTrainingStatus(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			StringList slTrainingStatus = new StringList();
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			List<String> sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+			String strStatusVal = DomainConstants.EMPTY_STRING;
+			for(String strStatus:sListTrainingStatus){
+				if(strStatus.equals(DomainConstants.EMPTY_STRING)){
+					strStatusVal=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),"enoDocumentControl.Filter.Label.UnAssigned");
+				}
+				else{
+					strStatusVal=EnoviaResourceBundle.getProperty(context, DCLConstants.FRAMEWORK_STRING_RESOURCE, context.getLocale(),"emxFramework.Range.Training_Status."+strStatus);
+				}
+				slTrainingStatus.add(strStatusVal);
+			}
+			return slTrainingStatus;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public HashMap getTrainingStatusRange(Context context, String[] args) throws DCLException {
+
+		try {
+			if (args.length == 0) {
+				throw new IllegalArgumentException();
+			}
+
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+			HashMap tempMap = new HashMap();
+			fieldRangeValues.addElement(DomainConstants.EMPTY_STRING);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.UnAssigned"));
+			fieldRangeValues.addElement(DCLConstants.FILTER_ASSIGNED);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Assigned"));
+			fieldRangeValues.addElement(DCLConstants.FILTER_INPROGRESS);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.InProgress"));
+			fieldRangeValues.addElement(DCLConstants.FILTER_COMPLETED);
+			fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Completed"));
+
+			tempMap.put("field_choices", fieldRangeValues);
+			tempMap.put("field_display_choices", fieldDisplayRangeValues);
+
+			return tempMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getComments(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			StringList sListTrainingStatus = new StringList();
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Comments);
+			sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+
+			return sListTrainingStatus;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public Vector<String> getPercentComplete(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			List<String>  sListTrainingStatus = new Vector<String> ();
+			Vector<String>  sListTrainingStatus1 = new Vector<String> ();
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+			sListTrainingStatus1.addAll(sListTrainingStatus);
+			return sListTrainingStatus1;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public StringList getDueDate(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			StringList slTrainingDueDate = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			slTrainingDueDate = service.findAttributeValue(context, objectList, strAttributeName);
+			return slTrainingDueDate;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getTrainingRequired(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			StringList sListTrainingStatus = new StringList();
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+
+			return sListTrainingStatus;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getCompletionDate(Context context, String[] args) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			StringList sListTrainingStatus = new StringList();
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_COMPLETED_DATE);
+			sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+
+			return sListTrainingStatus;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAssignedTrainees(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			String strFilterValue = DCLConstants.FILTER_ASSIGNED;
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			MapList filterMl = service.getFilteredTrainees(context, strObjectId, strFilterValue);
+			return filterMl;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInProgressTrainees(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			String strFilterValue = DCLConstants.FILTER_INPROGRESS;
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			MapList filterMl = service.getFilteredTrainees(context, strObjectId, strFilterValue);
+			return filterMl;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getCompletedTrainees(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			String strFilterValue = DCLConstants.FILTER_COMPLETED;
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			MapList filterMl = service.getFilteredTrainees(context, strObjectId, strFilterValue);
+			return filterMl;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map preprocessCompleteTraining(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			String strEmxTableRowId[] = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String strFormHeading = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Header.CompleteTraining");
+			String strMessage=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Header.CompleteTrainingAlert");
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			StringList strObjId = new StringList();
+			StringBuilder slTraineeRelId =new StringBuilder();
+			strObjId.removeAll(strObjId);
+			Map mReturnMap = new HashMap<>();
+			String strUserId=PersonUtil.getPersonObjectID(context);
+
+			for (String tableRowId : strEmxTableRowId) {
+				TableRowId tr = new TableRowId(tableRowId);
+				strObjId.add(tr.getParentObjectId());
+				String strTraineeId=(String)tr.getRelationshipId();
+				if(DCLUtil.isNullOrEmpty(strTraineeId)){
+					strTraineeId=(String)(service.getTraineeRelIds(context, tr.getObjectId().toString(),strUserId )).get(0);
+				}
+				String strTrainingStatus = DomainRelationship.getAttributeValue(context, strTraineeId,strAttrTrainingStatus);
+				if (!DCLUtil.isNullOrEmpty(strTrainingStatus)&&!strTrainingStatus.equals(DCLConstants.FILTER_COMPLETED))
+					slTraineeRelId.append(strTraineeId);
+
+				slTraineeRelId.append(DCLConstants.COMMA);
+			}
+			if(slTraineeRelId.length()>0){
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "preprocessCompleteTraining", strFormHeading, strObjId.get(0).toString(), slTraineeRelId.toString()));
+			}else{
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertWithTopWindowRefresh", strMessage));
+			}
+
+			return mReturnMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public Map<String, String> completeTraining(Context context, String args[]) throws DCLException {
+		try {
+
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			String strComment = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.CompleteTraining.ReadUnderstoodStatement");
+
+			String strMessage = DomainObject.EMPTY_STRING;
+			List<String> slTraineeRel=new StringList();
+			Map<String, String> mReturnMap = new HashMap<>();
+			Map programMap = JPO.unpackArgs(args);
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String[] strTableIds = (String[]) programMap.get("relIds");
+			String[] strreadAndUnderstood = (String[]) programMap.get("readAndUnderstood");
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			String strUser=context.getUser();
+			List<String> slObjectId =new StringList();
+
+			if (!DCLUtil.isNullOrEmpty(strreadAndUnderstood)) {
+				TrainingService service = DCLServiceUtil.getTraineeService(context);
+				if (DCLUtil.isNullOrEmpty(strTableIds)){
+					slObjectId=	service.getTraineeRelIds(context, strObjectId[0], strUserId);
+				}else{
+					String ObjectId = strTableIds[0];
+					List<String> slRelIds = FrameworkUtil.split(ObjectId, DCLConstants.COMMA);
+					for(String str:slRelIds){
+						if(!DCLUtil.isNullOrEmpty(str))
+							slObjectId.add(str);
+				}
+                	}
+				for (String strRelId : slObjectId) {
+					String strTrainingStatus = DomainRelationship.getAttributeValue(context, strRelId,strAttrTrainingStatus);
+					if (!DCLUtil.isNullOrEmpty(strTrainingStatus)&&!strTrainingStatus.equals(DCLConstants.FILTER_COMPLETED))
+						slTraineeRel.add(strRelId);				
+				}
+				if(!DCLUtil.isNullOrEmpty(slTraineeRel))
+					strMessage = service.completeTraining(context, strUser,strComment, slTraineeRel);
+			}
+			else {
+				strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.ErrorMsg.ReadUnderstoodCheckboxNotChecked");
+			}
+			if (!strMessage.isEmpty()) {
+				StringBuilder sbURL=new StringBuilder();
+				sbURL.append("alert(\"" + strMessage + "\");\n");
+				mReturnMap.put(PeriodicReviewConstants.ACTION_JAVASCRIPT,sbURL.toString());
+			}
+			return mReturnMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean checkAccessOnPasswordField(Context context, String args[]) throws DCLException {
+
+		try {
+			boolean bResult = false;
+			String strPasswordSetting = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA");
+			if (!DCLUtil.isNullOrEmpty(strPasswordSetting)) {
+				bResult = Boolean.parseBoolean(strPasswordSetting);
+			}
+			return bResult;
+		}
+		catch (Exception exception) {
+			throw new DCLException(exception);
+		}
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String, String> sendNotificationToTrainee(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Content.Msg.SendNotificationAlert");
+			String[] strObjectId = (String[]) programMap.get(DCLConstants.OBJECTID);
+			MapList slFinalList = new MapList();
+			StringList slFilterValue = new StringList();
+			StringList slSenderList = new StringList();
+			slFilterValue.add(DCLConstants.FILTER_ASSIGNED);
+			slFilterValue.add(DCLConstants.FILTER_INPROGRESS);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			for (Object obj : slFilterValue) {
+				slFinalList = service.getFilteredTrainees(context, strObjectId[0], obj.toString());
+				for (Object object : slFinalList) {
+					Map objMap = (Map) object;
+					String strPersonId = (String) objMap.get(DomainConstants.SELECT_ID);
+					slSenderList.add(strPersonId);
+				}
+			}
+			if(slSenderList.size()>0){
+				strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Content.Msg.SendNotificationAlert");
+				service.sendNotificationToTrainee(context, slSenderList, strObjectId[0]);
+
+			} else {
+				strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+						"enoDocumentControl.Content.Msg.SendAssignTraineeAlert");
+			}
+			Map<String, String> mreturn = new HashMap<String, String>();
+			mreturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "alertMessage", strMessage));
+			return mreturn;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public List<String> getTrainingRequiredRangeValues(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			List<Map> objectList = (List<Map>) programMap.get(DCConstants.OBJECTLIST);
+			List<String> slResponse = new StringList();
+			for (Object objMap : objectList) {
+				Map<String, String> mObjectMap = (Map<String, String>) objMap;
+				String strobjectId = mObjectMap.get(DomainConstants.SELECT_ID);
+				StringBuilder sBuff = new StringBuilder();
+				sBuff.append("<select name='");
+				sBuff.append(strobjectId);
+				sBuff.append("'><option value=\'"
+						+ DCLConstants.MANDATORY
+						+ "\'>"
+						+ EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Range.Yes") + "</option>");
+				sBuff.append("<option value=\'"
+						+ DCLConstants.OPTIONAL
+						+ "\'>"
+						+ EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoDocumentControl.Range.No") + "</option>");
+				sBuff.append("</select>");
+				slResponse.add(sBuff.toString());
+			}
+			return slResponse;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map updateTrainingStatusAttribute(Context context, String args[]) throws DCLException {
+		try {
+			Map mReturn = new HashMap<>();
+			String strTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			String strPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strParentId = (String) requestMap.get(DCConstants.PARENT_OID);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			String strUnAssignedStatus=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),"enoDocumentControl.Filter.Label.UnAssigned");
+
+			//for issue of MAss update.It display value of Empty staus is unassigned but is returns display value while doing mass update
+			if(strNewValue.equals(strUnAssignedStatus)){
+				strNewValue=DomainObject.EMPTY_STRING;
+			}
+
+			if (dobj.isKindOf(context, strPersonType)) {
+				service.updateAttributeValues(context, strParentId, strObjectId, strNewValue, strTrainingStatus, strRelId);
+			}
+			else {
+				service.updateTrainingStatusofTraineeCandidates(context, strParentId, strObjectId, strNewValue, strTrainingStatus, strRelId);
+			}
+
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to update the percent complete attribute value.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            string array of command line arguments.
+	 * @return Map containing javascript to refresh the table structure.
+	 * @throws DCLException
+	 *             if the operation fails
+	 * @exclude
+	 */
+
+	public Map updatePercentCompletionAttribute(Context context, String args[]) throws DCLException {
+		try {
+			Map<String, String> mReturn = new HashMap<>();
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			String strPercentComplete = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			String stPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strQSDType = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_QUALITY_SYSTEM_DOCUMENT);
+			String strRelId = DomainConstants.EMPTY_STRING;
+			String strObjectId = DomainConstants.EMPTY_STRING;
+			String strParentId = DomainConstants.EMPTY_STRING;
+			String strNewValue = DomainConstants.EMPTY_STRING;
+			String strType = DomainConstants.EMPTY_STRING;
+			StringList slPersonRelIds = new StringList();
+			StringBuilder sbJavascript = new StringBuilder();
+			String str = DomainObject.SELECT_TO_NAME;
+			Map programMap = JPO.unpackArgs(args);
+			/*if (DCLUtil.isNullOrEmpty("FromProgress")) {
+				Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+				strParentId = (String) requestMap.get(DCConstants.PARENT_OID);
+				Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+				strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+				strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+				strRelId = (String) paramMap.get(DCLConstants.RELID);
+				Double dNewValue = Double.parseDouble(strNewValue);
+				dNewValue = Math.floor(dNewValue);
+				strNewValue = Double.toString(dNewValue);
+			}
+			else {*/
+			strRelId = ((String[]) programMap.get(DCLConstants.RELID))[0];
+			strObjectId = ((String[]) programMap.get("objectID"))[0];
+			strParentId = ((String[]) programMap.get(DCLConstants.PARENTOID))[0];
+			strNewValue = ((String[]) programMap.get("newValue"))[0];
+			//			}
+
+			if (!DCLUtil.isNullOrEmpty(strObjectId)) {
+				DomainObject doObj = DomainObject.newInstance(context, strObjectId);
+				strType = doObj.getInfo(context, DomainObject.SELECT_TYPE);
+			}
+			// RelId will be Null or Empty when updating attribute values of
+			// trainees from "Training Documents" command from My Enovia menu.
+			if (DCLUtil.isNullOrEmpty(strRelId)) {
+				slPersonRelIds = service.getTraineeRelIds(context, strObjectId, strUserId);
+				strRelId = slPersonRelIds.get(0).toString();
+			}
+			// check to restrict user to update value to 100% from My Trainings
+			// Table
+			/*if (!(DCLUtil.isNullOrEmpty(strParentId) && (strNewValue.equals("100.0"))) && !DCLUtil.isNullOrEmpty(strType)
+					&& (strType.equals(stPersonType) || strType.equals(strQSDType))) {
+				{
+					service.updateAttributeValues(context, strParentId, strObjectId, strNewValue, strPercentComplete, strRelId);
+				}
+			}*/
+
+			if (!(strNewValue.equals("100.0"))) {
+				service.updateAttributeValues(context, strParentId, strObjectId, strNewValue, strPercentComplete, strRelId);
+			}
+
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map updateDueDateAttribute(Context context, String args[]) throws DCLException {
+		try {
+			HistoryAuditTrailService service = DCLServiceUtil.getHistoryAuditTrailService(context);
+			Map mReturn = new HashMap<>();
+			StringBuilder sb = new StringBuilder();
+			String strDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strTrainingGroup = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_TRAINING_GROUP);
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strParentId = (String) requestMap.get(DCConstants.PARENT_OID);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+			Date currentDate = new Date();
+			SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			String strCurrentDate = sdf.format(currentDate);
+
+			String strNewDate = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			TimeZone timezone = TimeZone.getTimeZone(context.getSession().getTimezone());
+			double dbMilisecondsOffset = (double) (-1) * timezone.getRawOffset();
+			double clientTZOffset = (new Double(dbMilisecondsOffset / (1000 * 60 * 60))).doubleValue();
+			String strNewFormatedDate = DCLUtil.getDateinEmatrixFormat(context, strNewDate, String.valueOf(clientTZOffset));
+
+			int i = DCLUtil.compareDates(context, strCurrentDate, strNewFormatedDate);
+			if (i > 0) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Error.Msg.DueDatePriorToCurrentDate");
+				throw new DCLException(strMessage);
+			}
+
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+			String strName = dobj.getInfo(context, DomainObject.SELECT_NAME);
+			// AS THERE IS NO DUE DATE ATTRIBUTE ON TRAINEECANDIDATE
+			// RELATIONSHIP
+			// SO NO NEED TO CALL UPDATE METHOD
+
+			String strOldValue = DomainRelationship.getAttributeValue(context, strRelId, strDueDate);
+			DomainRelationship.setAttributeValue(context, strRelId, strDueDate, strNewDate);
+
+			sb.append(strName).append(" - ");
+			sb.append(strDueDate);
+			sb.append(":").append(strNewDate);
+			sb.append(" was: ").append(strOldValue);
+			service.customHistoryUpdation(context, strParentId, DomainConstants.EMPTY_STRING, sb.toString(), DCLConstants.HISTORY_MODIFY_ACTION);
+			sb.setLength(0);
+
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map updateCommentsAttribute(Context context, String args[]) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map mReturn = new HashMap<>();
+			StringList sl = new StringList();
+			String strComments = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Comments);
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strParentId = (String) requestMap.get(DCConstants.PARENT_OID);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+
+			if (DCLUtil.isNullOrEmpty(strRelId)) {
+				sl = service.getTraineeRelIds(context, strObjectId, PersonUtil.getPersonObjectID(context));
+				strRelId = sl.get(0).toString();
+			}
+			service.updateAttributeValues(context, strParentId, strObjectId, strNewValue, strComments, strRelId);
+
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			return mReturn;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map updateTrainingRequiredAttribute(Context context, String args[]) throws DCLException {
+		try {
+			Map mReturn = new HashMap<>();
+			String strTrainingRequired = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strParentId = (String) requestMap.get(DCConstants.PARENT_OID);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strNewValue = (String) paramMap.get(DCLConstants.NEW_VALUE);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strRelId = (String) paramMap.get(DCLConstants.RELID);
+
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			service.updateAttributeValues(context, strParentId, strObjectId, strNewValue, strTrainingRequired, strRelId);
+
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "refreshStructure"));
+			return mReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean columnAccessforTemplate(Context context, String args[]) throws DCLException {
+		try {
+			String strPolicyCDT = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENT_TEMPLATE);
+			Map programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+			Policy policy = dobj.getPolicy(context);
+			String strPolicy = policy.toString();
+			if (strPolicy.equals(strPolicyCDT)) {
+				return false;
+			}
+			else {
+				return true;
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public boolean checkTrainingAccess(Context context, String args[]) throws DCLException {
+		try {
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			Map programMap = JPO.unpackArgs(args);
+			String strPolicyName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS);
+			String strPolicyStateReleased = PropertyUtil.getSchemaProperty(context, DCConstants.POLICY, strPolicyName,
+					DCLConstants.SYMBOLIC_STATE_RELEASED);
+			String strPolicyStateApproved = PropertyUtil.getSchemaProperty(context, DCConstants.POLICY, strPolicyName,
+					DCLConstants.SYMBOLIC_STATE_APPROVED);
+			boolean show = false;
+			String strObjectId = (String) programMap.get(DCLConstants.OBJECTID);
+			String strUiType = (String) programMap.get("uiType");
+			if (!DCLUtil.isNullOrEmpty(strObjectId) && strUiType.equals("form")) {
+				String strUserId = PersonUtil.getPersonObjectID(context);
+
+				DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+				TrainingService service = DCLServiceUtil.getTraineeService(context);
+				StringList sl = service.getTraineeRelIds(context, strObjectId, strUserId);
+				Policy policy = dobj.getPolicy(context);
+				if (!DCLUtil.isNullOrEmpty(sl)) {
+					for (Object obj : sl) {
+						String strTrainingStatus = DomainRelationship.getAttributeValue(context, obj.toString(), strAttrTrainingStatus);
+						if (PolicyUtil.checkState(context, strObjectId, strPolicyStateReleased, PolicyUtil.EQ)||PolicyUtil.checkState(context, strObjectId, strPolicyStateApproved, PolicyUtil.EQ)
+								&& strPolicyName.equals(policy.toString())) {
+							if (!(strTrainingStatus.equals(DCLConstants.FILTER_COMPLETED) || (DCLUtil.isNullOrEmpty(strTrainingStatus)))) {
+								show = true;
+							}
+						}
+					}
+				}
+				return show;
+			}
+			else
+				return true;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public String getPercentCompleteValueOnUpdateTrainingForm(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			String strTrainingPercent = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			StringList sl = service.getTraineeRelIds(context, strObjectId, strUserId);
+			String strPCValue = DomainRelationship.getAttributeValue(context, sl.get(0).toString(), strTrainingPercent);
+			return strPCValue;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList editAccessOnColumn(Context context, String args[]) throws DCLException {
+		//public List<Boolean> editAccessOnColumn(Context context, String args[]) throws DCLException {
+		try {
+			String strTrainee = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_TRAINEE);
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			Map programMap = JPO.unpackArgs(args);
+			MapList ObjectListMl = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map columnMap = (Map) programMap.get(DCLConstants.COLUMN_MAP);
+			String strName = (String) columnMap.get("name");
+			StringList slAccess = new StringList();
+			String strPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+
+			for (Object obj : ObjectListMl) {
+				Map map = (Map) obj;
+				String strRelId = (String) map.get(DomainRelationship.SELECT_ID);
+				String strType = (String) map.get("Type");
+				String strRelationshipName = (String) map.get("relationship");
+				String strTrainingStatusValue = DomainRelationship.getAttributeValue(context, strRelId, strAttrTrainingStatus);
+				// FOR DUE DATE ONLY FOR TRAINEES EDITABLE
+				if (strName.equals(DCLConstants.DUE_DATE)) {
+					if (!DCLUtil.isNullOrEmpty(strRelationshipName) && strRelationshipName.equals(strTrainee)
+							&& (!strTrainingStatusValue.equals(DCLConstants.FILTER_COMPLETED))) {
+						slAccess.add(String.valueOf(true));
+					}
+					else {
+						slAccess.add(String.valueOf(false));
+					}
+				}
+
+				else if (strName.equals(DCLConstants.PERCENT_COMPLETE)) {
+
+					if (DCLUtil.isNullOrEmpty(strTrainingStatusValue) || strTrainingStatusValue.equals(DCLConstants.FILTER_COMPLETED)
+							|| !(strType.equals(strPersonType)))
+						slAccess.add(String.valueOf(false));
+					else
+						slAccess.add(String.valueOf(true));
+				}
+				else if (strName.equals(DCLConstants.TRAINING_STATUS)) {
+					if (strTrainingStatusValue.equals(DCLConstants.FILTER_COMPLETED))
+						slAccess.add(String.valueOf(false));
+					else
+						slAccess.add(String.valueOf(true));
+				}
+				else if (strName.equals(DCLConstants.TRAINING_REQUIRED)) {
+					if ((strTrainingStatusValue.equals(DCLConstants.FILTER_COMPLETED)) || DCLUtil.isNullOrEmpty(strRelationshipName)
+							|| !strRelationshipName.equals(strTrainee))
+						slAccess.add(String.valueOf(false));
+					else
+						slAccess.add(String.valueOf(true));
+				}
+				else {
+					if (strType.equals(strPersonType)) {
+						slAccess.add(String.valueOf(true));
+					}
+					else {
+						slAccess.add(String.valueOf(false));
+					}
+				}
+			}
+			return slAccess;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Method to set the custom CSS styling for cells of PERCENT COMPLETE and
+	 * DUE DATE column.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return List of CSS class names for each cell as defined in
+	 *         "dsecUIType-Custom.css" program object.
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	public List<String> getStyleInfoForCells(Context context, String args[]) throws DCLException {
+		try {
+			StringList slStyles = new StringList();
+			StringList sListTrainingStatus = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map columnMap = (Map) programMap.get(DCLConstants.COLUMN_MAP);
+			String strLabel = (String) columnMap.get("name");
+			String strAttributeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			String strDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strCompletedDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_COMPLETED_DATE);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			if (strLabel.equals("Percent Complete")) {
+
+				String strPercentCompleteRedPeriod = EnoviaResourceBundle.getProperty(context,
+						"enoDocumentControl.Training.PercentCompletionRedPeriod");
+				String strPercentCompleteYellowPeriod = EnoviaResourceBundle.getProperty(context,
+						"enoDocumentControl.Training.PercentCompletionYellowPeriod");
+
+				sListTrainingStatus = service.findAttributeValue(context, objectList, strAttributeName);
+				StringBuffer sbuff = new StringBuffer();
+				for (Object objM : sListTrainingStatus) {
+					String strPercent = (String) objM;
+					sbuff = new StringBuffer();
+
+					if (UIUtil.isNotNullAndNotEmpty(strPercent)) {
+						double d = Double.parseDouble(strPercent);
+						// To check for Red color property value
+						if (!DCLUtil.isNullOrEmpty(strPercentCompleteRedPeriod) && (d >= 0.0 && d <= Double.parseDouble(strPercentCompleteRedPeriod))) {
+							slStyles.addElement("doco-cell-background-red");
+						}
+						// if Red color property value not present use default
+						// values
+						else if (DCLUtil.isNullOrEmpty(strPercentCompleteRedPeriod) && (d >= 0.0 && d < 50.0)) {
+							slStyles.addElement("doco-cell-background-red");
+						}
+
+						// check for yellow color property value
+						else if (!DCLUtil.isNullOrEmpty(strPercentCompleteYellowPeriod)
+								&& (d < (Double.parseDouble(strPercentCompleteYellowPeriod) + 1))) {
+							slStyles.addElement("doco-cell-background-yellow");
+						}
+						// if Yellow Color property not present use default
+						// values
+						else if (DCLUtil.isNullOrEmpty(strPercentCompleteYellowPeriod) && d < 100.0) {
+							slStyles.addElement("doco-cell-background-yellow");
+						}
+
+						// else go for Green color
+						else {
+							slStyles.addElement("doco-cell-background-green");
+						}
+					}
+					else {
+						slStyles.addElement(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			else if (strLabel.equals(DCLConstants.DUE_DATE)) {
+				int iDifference = 0;
+				sListTrainingStatus = service.findAttributeValue(context, objectList, strDueDate);
+				String strTrainingDueDatePeriod = EnoviaResourceBundle.getProperty(context, "enoDocumentChangeControl.Training.DueDatePeriod");
+				Date dateToday = DCLUtil.cleanTime(new Date());
+				for (int i = 0; i < sListTrainingStatus.size(); i++) {
+					if (!DCLUtil.isNullOrEmpty(sListTrainingStatus.get(i).toString())) {
+						Date dateDocEffectiveDate = DCLUtil.cleanTime(eMatrixDateFormat.getJavaDate(sListTrainingStatus.get(i).toString()));
+						Long lDifference = dateDocEffectiveDate.getTime() - dateToday.getTime();
+						iDifference = (int) (lDifference / (1000 * 60 * 60 * 24));
+						if (iDifference <= 0) {
+							slStyles.addElement("doco-cell-background-red");
+						}
+						else if (iDifference >= Integer.parseInt(strTrainingDueDatePeriod)) {
+							slStyles.addElement(DomainConstants.EMPTY_STRING);
+						}
+						else
+							slStyles.addElement("doco-cell-background-yellow");
+
+					}
+					else {
+						slStyles.addElement(DomainConstants.EMPTY_STRING);
+					}
+				}
+			}
+			else {
+				int iDifference = 0;
+				StringList sListTrainingCompletedDate = service.findAttributeValue(context, objectList, strCompletedDate);
+				StringList sListTrainingDueDate = service.findAttributeValue(context, objectList, strDueDate);
+				String strTrainingDueDatePeriod = EnoviaResourceBundle.getProperty(context, "enoDocumentChangeControl.Training.DueDatePeriod");
+				Date dateToday = DCLUtil.cleanTime(new Date());
+				for (int i = 0; i < sListTrainingCompletedDate.size(); i++) {
+					if (!(DCLUtil.isNullOrEmpty(sListTrainingDueDate.get(i).toString()) || DCLUtil.isNullOrEmpty(sListTrainingCompletedDate.get(i)
+							.toString()))) {
+						Date dateCompletedDate = DCLUtil.cleanTime(eMatrixDateFormat.getJavaDate(sListTrainingCompletedDate.get(i).toString()));
+						Date dateDueDate = DCLUtil.cleanTime(eMatrixDateFormat.getJavaDate(sListTrainingDueDate.get(i).toString()));
+						Long lDifference = dateDueDate.getTime() - dateCompletedDate.getTime();
+						iDifference = (int) (lDifference / (1000 * 60 * 60 * 24));
+						if (iDifference < 0) {
+							slStyles.addElement("doco-cell-background-red");
+						}
+						else
+							slStyles.addElement(DomainConstants.EMPTY_STRING);
+					}
+					else
+						slStyles.addElement(DomainConstants.EMPTY_STRING);
+				}
+
+			}
+
+			return slStyles;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean getTrainingRequiredAccessForTable(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String strRelId = (String) programMap.get(DCLConstants.RELID);
+			if (DCLUtil.isNullOrEmpty(strRelId))
+				return true;
+			else
+				return false;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to retrieve docuemnts on which the logged in user is assigned
+	 * training. docuemnts should be in released state and training should be
+	 * assigned to them.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return List of documents.
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getContextOwnerTrainingDocuments(Context context, String args[]) throws DCLException {
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strProgramLabel = (String) programMap.get("selectedProgramLabel");
+			String strFilter = (String) (FrameworkUtil.split(strProgramLabel, DCLConstants.PIPE_SEPARATOR).get(1));
+			strFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), strFilter);
+			String strUserId = PersonUtil.getPersonObjectID(context);
+			MapList documentList = service.getContextOwnerTrainingDocuments(context, strUserId, strFilter);
+			return documentList;
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+	/**
+	 * Method to retrieve the trainee name in <last name,first name> format.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return StringList containing trainee name in <last name,First name>
+	 *         format.
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	public StringList getTraineeName(Context context, String args[]) throws DCLException {
+		StringList slTraineeName = new StringList();
+		try {
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map mpRequest = (Map) programMap.get(DCLConstants.PARAMLIST);
+			String strReportFormat = (String) mpRequest.get(DCConstants.REPORTFORMAT);
+			String strPFMode = (String) mpRequest.get(DCConstants.PFMODE);
+
+			slTraineeName = service.getTraineeName(context, objectList, strReportFormat);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slTraineeName;
+
+	}
+
+	/**
+	 * Method to retrieve the Organization,BusinessUnit,MemberList of trainee to
+	 * which trainee is connected with member relationship.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return StringList containing Organization of trainee.
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	public StringList getOrgnizationOfTrainee(Context context, String args[]) throws DCLException {
+		StringList slOrgName = new StringList();
+
+		TrainingService service = DCLServiceUtil.getTraineeService(context);
+		String strAttributeName = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+		String strType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		String strOrg = DomainObject.EMPTY_STRING;
+
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			for (Object object : objectList) {
+				Map map = (Map) object;
+				String objectId = (String) map.get(DomainObject.SELECT_ID);
+				String strName = (String) map.get(DomainObject.SELECT_TO_NAME);
+
+				if (strType.equals(map.get("Type"))) {
+					DomainObject domObjPerson = DomainObject.newInstance(context, objectId);
+					String strOrganizationName = domObjPerson.getInfo(context,
+							"to[" + PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_Member) + "].from.name");
+					StringList slOrg = domObjPerson.getInfoList(context,
+							"to[" + PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_Member) + "].from.id");
+					StringBuffer sbOrg = new StringBuffer();
+					for (Object org : slOrg) {
+						strOrg = (String) org;
+						String str = DCLUtil.getInfo(context, strOrg, DomainObject.SELECT_NAME);
+						if (!DCLUtil.isNullOrEmpty(sbOrg.toString())) {
+							sbOrg.append(DCLConstants.COMMA);
+						}
+						sbOrg.append(DCUtil.getObjectLink(context, strOrg, DCLUtil.getInfo(context, strOrg, DomainObject.SELECT_NAME)));
+
+					}
+					slOrgName.add(sbOrg.toString());
+
+				}
+				else {
+					slOrgName.add(" ");
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+
+		}
+		return slOrgName;
+
+	}
+
+	/**
+	 * Method to retrieve the emailId of trainee and give hyperLink to open
+	 * mailto window for perticular trainee.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return StringList containing emailId of Trainee .
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	public StringList getEmailIdOfTrainee(Context context, String args[]) throws DCLException {
+		StringList slEmailId = new StringList();
+		String strAttrEmailId = PropertyUtil.getSchemaProperty(context, DomainObject.SYMBOLIC_attribute_EmailAddress);
+		String strAttrDueDate = PropertyUtil.getSchemaProperty(context, DomainObject.SYMBOLIC_attribute_DueDate);
+		String strPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strParentOID = (String) paramList.get(DCConstants.PARENT_OID);
+			String strObjectName = (String) paramList.get("treeLabel");
+			InetAddress addr = InetAddress.getLocalHost();
+			String strIPAddr = addr.getHostAddress();
+			String strHostName = addr.getHostName();
+			for (Object obj : objectList) {
+				Map map = (Map) obj;
+				String strType = (String) map.get("Type");
+				if (strType.equals(strPersonType)) {
+					// to add due date in email content
+					String strDueDate = DomainConstants.EMPTY_STRING;
+					if (DCLUtil.isNullOrEmpty((String) map.get("relationship"))) {
+						StringList slTraineeRelId = service.getTraineeRelIds(context, strParentOID, (String) map.get(DomainObject.SELECT_ID));
+						Map mpDueDate = service.getLatestDueDate(context, slTraineeRelId);
+						strDueDate = DomainRelationship.getAttributeValue(context, (String) slTraineeRelId.get(0), strAttrDueDate);
+
+					}
+					else {
+						strDueDate = DomainRelationship.getAttributeValue(context, (String) map.get("id[connection]"), strAttrDueDate);
+					}
+					DomainObject domObj = DomainObject.newInstance(context, (String) map.get(DomainObject.SELECT_ID));
+					String strEmail = domObj.getAttributeValue(context, strAttrEmailId);
+					String strObjectLink = ${CLASS:emxNotificationUtilBase}.getObjectLinkHTML(context, strObjectName, strParentOID);
+					StringList slLink = FrameworkUtil.split(strObjectLink, "'");
+					if (slLink.size() > 1) {
+						String strLink = slLink.get(1).toString();
+						if (strLink.contains("localhost")) {
+							strLink = (strLink).replace("localhost", strHostName);
+						}
+						strLink = XSSUtil.encodeForHTML(context, strLink);
+						String strSubject = XSSUtil.encodeForHTML(context, EnoviaResourceBundle.getProperty(context,
+								DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Content.Msg.EmailSubject"));
+						String strEmailContent = XSSUtil.encodeForHTML(context, EnoviaResourceBundle.getProperty(context,
+								DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), "enoDocumentControl.Content.Msg.EmailContent"));
+						if (!DCLUtil.isNullOrEmpty(strDueDate)) {
+							strDueDate = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+									"enoDocumentControl.Content.Msg.EmailContentwithDueDate") + "  " + strDueDate + " :";
+							strEmailContent = XSSUtil.encodeForHTML(context, strDueDate);
+						}
+						slEmailId.add("<a href=\"mailto:" + strEmail + "?subject=" + strSubject + "%20" + strObjectName + "&amp;body="
+								+ strEmailContent + "%0A" + strLink + "\">" + strEmail + "</a>");
+					}
+					else {
+						slEmailId.add(strEmail);
+					}
+
+				}
+				else
+					slEmailId.add(DomainConstants.EMPTY_STRING);
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slEmailId;
+	}
+
+	/**
+	 * Method to retrieve the training required value of trainee and to
+	 * represent it in Yes/No format.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param String
+	 *            array of command line arguments.
+	 * @return StringList containing training required value of trainee in Yes
+	 *         /No format.
+	 * @throws DCLException
+	 *             if the operation fails
+	 */
+	public StringList getTrainingRequiredValue(Context context, String args[]) throws DCLException {
+		StringList slTrainingRequired = new StringList();
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			String strTrainingRequired = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			for (Object obj : objectList) {
+				Map map = (Map) obj;
+				String strTrainingRequiredValue = DomainRelationship.getAttributeValue(context,
+						(String) map.get(DomainObject.SELECT_RELATIONSHIP_ID), strTrainingRequired);
+				if (strTrainingRequiredValue.equals(DCLConstants.MANDATORY))
+					slTrainingRequired.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Range.Yes"));
+				else if (strTrainingRequiredValue.equals(DCLConstants.OPTIONAL))
+					slTrainingRequired.add(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+							"enoDocumentControl.Range.No"));
+				else
+					slTrainingRequired.add(DomainConstants.EMPTY_STRING);
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+		return slTrainingRequired;
+	}
+
+	public HashMap showTrainingRequiredRangeValues(Context context, String[] args) throws Exception {
+
+		if (args.length == 0) {
+			throw new IllegalArgumentException();
+		}
+
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) paramMap.get(DCLConstants.REQUESTMAP);
+		HashMap fieldMap = (HashMap) paramMap.get(DCLConstants.FIELD_MAP);
+		String language = (String) requestMap.get(DCLConstants.LANGUAGE_STR);
+		String propertyFile = (String) requestMap.get(DCLConstants.STRING_RESOURCE_FIELD);
+		StringList fieldRangeValues = new StringList();
+		StringList fieldDisplayRangeValues = new StringList();
+		HashMap tempMap = new HashMap();
+
+		String policy = DomainConstants.EMPTY_STRING;
+		HashMap fieldValues = (HashMap) paramMap.get(DCLConstants.FIELD_VALUES);
+		fieldRangeValues.addElement(DCLConstants.MANDATORY);
+		fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Range.Yes"));
+		fieldRangeValues.addElement(DCLConstants.OPTIONAL);
+		fieldDisplayRangeValues.addElement(EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Range.No"));
+
+		tempMap.put(DCLConstants.FIELD_CHOICES, fieldRangeValues);
+		tempMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, fieldDisplayRangeValues);
+
+		return tempMap;
+	}// end of method
+
+	public Vector columnPercentComplete(Context context, String[] args) throws Exception {
+
+		Vector vResult = new Vector();
+
+		Map programMap = (Map) JPO.unpackArgs(args);
+		MapList mlObjects = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+		HashMap paramList = (HashMap) programMap.get(DCLConstants.PARAMLIST);
+		HashMap columnMap = (HashMap) programMap.get(DCLConstants.COLUMN_MAP);
+		HashMap settings = (HashMap) columnMap.get("settings");
+		String sLanguage = (String) paramList.get(DCLConstants.LANGUAGE_STR);
+		String strParentOID = (String) paramList.get(DCLConstants.PARENTOID);
+		String sClickToSet = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Content.Msg.ClickToSetProgressTo");
+		String sAttribute = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+		String sTarget = "parent.frames[\"listHidden\"].document.location.href";
+		String[] sStates = new String[0];
+		String[] sColors = new String[0];
+		Boolean bIsIndented = false;
+		String strUserId = PersonUtil.getPersonObjectID(context);
+		if (settings.containsKey("Attribute")) {
+			sAttribute = (String) settings.get("Attribute");
+		}
+		if (settings.containsKey(DCLConstants.STATES)) {
+			if (settings.containsKey(DCLConstants.COLORS)) {
+				String sParameterStates = (String) settings.get(DCLConstants.STATES);
+				String sParameterColors = (String) settings.get(DCLConstants.COLORS);
+				sStates = sParameterStates.split(DCLConstants.COMMA);
+				sColors = sParameterColors.split(DCLConstants.COMMA);
+			}
+		}
+		if (paramList.containsKey("isIndentedView")) {
+			bIsIndented = true;
+			sTarget = "self.frames[\"listHidden\"].document.location.href";
+		}
+
+		if (mlObjects.size() > 0) {
+
+			for (int i = 0; i < mlObjects.size(); i++) {
+
+				Map mObject = (Map) mlObjects.get(i);
+				String sOID = (String) mObject.get(DomainObject.SELECT_ID);
+				String sRID = (String) mObject.get(DCLConstants.ID_LEVEL);
+				DomainObject dObject = new DomainObject(sOID);
+
+				StringList busSelects = new StringList();
+				// busSelects.add("attribute[" + sAttribute + "]");
+				busSelects.add(DomainObject.SELECT_CURRENT);
+
+				Map mData = dObject.getInfo(context, busSelects);
+				// String sValue = (String)mData.get("attribute[" + sAttribute +
+				// "]");
+				String sValue = "20";
+				TrainingService service = DCLServiceUtil.getTraineeService(context);
+				String strRelId = (String) mObject.get(DomainObject.SELECT_RELATIONSHIP_ID);
+				if (strRelId == null) {
+					String strObjectId = (String) mObject.get(DomainObject.SELECT_ID);
+					StringList sl = service.getTraineeRelIds(context, strObjectId, strUserId);
+					if (!DCLUtil.isNullOrEmpty(sl))
+						strRelId = sl.get(0).toString();
+				}
+				DomainRelationship rel = DomainRelationship.newInstance(context, strRelId);
+
+				sValue = rel.getAttributeValue(context, sAttribute);
+				String sCurrent = (String) mData.get(DomainObject.SELECT_CURRENT);
+				Double dValue = Double.parseDouble(sValue);
+				StringBuilder sbResult = new StringBuilder();
+				String sColor = "5F747D";
+
+				if (sStates.length > 0) {
+					for (int j = 0; j < sStates.length; j++) {
+						if (sStates[j].equals(sCurrent)) {
+							sColor = sColors[j];
+							continue;
+						}
+					}
+				}
+				sColor = "3d9ad5";
+				// #3d9ad5,#7ebbe3,#93c7e8,#52a5da,#7ebbe3,#93c7e8,
+				StringBuilder sbStyleCommon = new StringBuilder();
+				sbStyleCommon.append("border-top:1px solid #");
+				sbStyleCommon.append(sColor);
+				sbStyleCommon.append(";border-bottom:1px solid #");
+				sbStyleCommon.append(sColor);
+				sbStyleCommon
+				.append(";font-size:6pt;float:left;text-align:center;margin:0px;padding:0px;width:11px;height:16px;line-height:15px;vertical-align:middle;text-Shadow:0px 0px 0px #111;");
+
+				// String sStyleActive =
+				// " style='color:#000;background:linear-gradient(to bottom,white,#c7e6f7 , #a5d7f2 ,#3da8e2, #2da1e0 ,#3da8e2, #a5d7f2 ,#c7e6f7,white  );"
+				// + sbStyleCommon.toString() + "'";
+				String sStyleActive = " style='color:#000;background:linear-gradient(to bottom,white, #" + sColor + ");" + sbStyleCommon.toString()
+				+ "'";
+				String sStyleInactive = " style='color:transparent;background:\"#00000\";" + sbStyleCommon.toString() + "'";
+				String sOnMouseOutActive = " onmouseout='this.style.color=\"#000\";this.style.background=\"linear-gradient(to bottom,white,#"
+						+ sColor + ")\";this.style.textShadow=\"1px 1px 1px #111\";this.innerHTML=\"\";'";
+				String sOnMouseOutInactive = " onmouseout='this.style.color=\"#transparent\";this.style.background=\"transparent\";this.style.textShadow=\"none\";this.innerHTML=\"\";'";
+				String sOnMouseOutCurrent = " onmouseout='this.style.color=\"#000\";this.style.background=\"linear-gradient(to bottom,white,#"
+						+ sColor + ")\";this.style.textShadow=\"1px 1px 1px #111\";'";
+				String sOnMouseOver = " onmouseover='this.style.cursor=\"pointer\";this.style.color=\"#fff\";this.style.background=\"#cc0000\";this.style.textShadow=\"1px 1px 2px #333\";this.title=\""
+						+ XSSUtil.encodeForXML(context, sClickToSet) + " : ";
+
+				String sOnMouseOver10 = sOnMouseOver + " 10%\";this.innerHTML=\"10\";'";
+				String sOnMouseOver20 = sOnMouseOver + " 20%\";this.innerHTML=\"20\";'";
+				String sOnMouseOver30 = sOnMouseOver + " 30%\";this.innerHTML=\"30\";'";
+				String sOnMouseOver40 = sOnMouseOver + " 40%\";this.innerHTML=\"40\";'";
+				String sOnMouseOver50 = sOnMouseOver + " 50%\";this.innerHTML=\"50\";'";
+				String sOnMouseOver60 = sOnMouseOver + " 60%\";this.innerHTML=\"60\";'";
+				String sOnMouseOver70 = sOnMouseOver + " 70%\";this.innerHTML=\"70\";'";
+				String sOnMouseOver80 = sOnMouseOver + " 80%\";this.innerHTML=\"80\";'";
+				String sOnMouseOver90 = sOnMouseOver + " 90%\";this.innerHTML=\"90\";'";
+				String sOnMouseOver100 = sOnMouseOver + " 100%\";this.innerHTML=\"100\";'";
+
+				StringBuilder sbMouseDown = new StringBuilder();
+				sbMouseDown.append(" onmousedown='");
+				sbMouseDown.append(sTarget);
+
+				sbMouseDown.append("=\"../documentcontrol/enoDCLExecute.jsp?dclAction=ENODCLAdminActions:updatePercentCompletionAttribute");
+
+				sbMouseDown.append("&amp;FromProgress=");
+				sbMouseDown.append(sAttribute);
+				sbMouseDown.append("&amp;parentOID=");
+				sbMouseDown.append(strParentOID);
+				sbMouseDown.append("&amp;objectID=");
+				sbMouseDown.append(sOID);
+				sbMouseDown.append("&amp;relId=");
+				sbMouseDown.append(strRelId);
+				sbMouseDown.append("&amp;validateToken=");
+				sbMouseDown.append("false");
+				sbMouseDown.append("&amp;newValue=");
+
+				String sOnMouseDown10 = sbMouseDown.toString() + "10.0\";'";
+				String sOnMouseDown20 = sbMouseDown.toString() + "20.0\";'";
+				String sOnMouseDown30 = sbMouseDown.toString() + "30.0\";'";
+				String sOnMouseDown40 = sbMouseDown.toString() + "40.0\";'";
+				String sOnMouseDown50 = sbMouseDown.toString() + "50.0\";'";
+				String sOnMouseDown60 = sbMouseDown.toString() + "60.0\";'";
+				String sOnMouseDown70 = sbMouseDown.toString() + "70.0\";'";
+				String sOnMouseDown80 = sbMouseDown.toString() + "80.0\";'";
+				String sOnMouseDown90 = sbMouseDown.toString() + "90.0\";'";
+				String sOnMouseDown100 = sbMouseDown.toString() + "100.0\";'";
+
+				String sValue10 = DomainConstants.EMPTY_STRING;
+				String sValue20 = DomainConstants.EMPTY_STRING;
+				String sValue30 = DomainConstants.EMPTY_STRING;
+				String sValue40 = DomainConstants.EMPTY_STRING;
+				String sValue50 = DomainConstants.EMPTY_STRING;
+				String sValue60 = DomainConstants.EMPTY_STRING;
+				String sValue70 = DomainConstants.EMPTY_STRING;
+				String sValue80 = DomainConstants.EMPTY_STRING;
+				String sValue90 = DomainConstants.EMPTY_STRING;
+				String sValue100 = DomainConstants.EMPTY_STRING;
+
+				String sStyle10 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle20 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle30 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle40 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle50 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle60 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle70 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle80 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle90 = sStyleInactive + sOnMouseOutInactive;
+				String sStyle100 = sStyleInactive + sOnMouseOutInactive;
+
+				if (dValue >= 10.0) {
+					sStyle10 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 20.0) {
+						sValue10 = "10";
+						sStyle10 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 20.0) {
+					sStyle20 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 30.0) {
+						sValue20 = "20";
+						sStyle20 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 30.0) {
+					sStyle30 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 40.0) {
+						sValue30 = "30";
+						sStyle30 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 40.0) {
+					sStyle40 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 50.0) {
+						sValue40 = "40";
+						sStyle40 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 50.0) {
+					sStyle50 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 60.0) {
+						sValue50 = "50";
+						sStyle50 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 60.0) {
+					sStyle60 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 70.0) {
+						sValue60 = "60";
+						sStyle60 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 70.0) {
+					sStyle70 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 80.0) {
+						sValue70 = "70";
+						sStyle70 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 80.0) {
+					sStyle80 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 90.0) {
+						sValue80 = "80";
+						sStyle80 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+				if (dValue >= 90.0) {
+					sStyle90 = sStyleActive + sOnMouseOutActive;
+					if (dValue < 100.0) {
+						sValue90 = "90";
+						sStyle90 = sStyleActive + sOnMouseOutCurrent;
+					}
+					else {
+						sValue100 = "100";
+						sStyle100 = sStyleActive + sOnMouseOutCurrent;
+					}
+				}
+
+				sStyle10 = sStyle10.replace("style='", "style='border-left:1px  solid #" + sColor + ";");
+				sStyle100 = sStyle100.replace("style='", "style='border-right:1px solid #" + sColor + ";");
+
+				sbResult.append("<div style='visibility:hidden;display:none;'>");
+				if (dValue < 100.0) {
+					sbResult.append("0");
+				}
+				sbResult.append(sValue).append("</div>");
+
+				sbResult.append("<div").append(sStyle10).append(sOnMouseOver10).append(sOnMouseDown10).append(" >").append(sValue10).append("</div>");
+				sbResult.append("<div").append(sStyle20).append(sOnMouseOver20).append(sOnMouseDown20).append(" >").append(sValue20).append("</div>");
+				sbResult.append("<div").append(sStyle30).append(sOnMouseOver30).append(sOnMouseDown30).append(" >").append(sValue30).append("</div>");
+				sbResult.append("<div").append(sStyle40).append(sOnMouseOver40).append(sOnMouseDown40).append(" >").append(sValue40).append("</div>");
+				sbResult.append("<div").append(sStyle50).append(sOnMouseOver50).append(sOnMouseDown50).append(" >").append(sValue50).append("</div>");
+				sbResult.append("<div").append(sStyle60).append(sOnMouseOver60).append(sOnMouseDown60).append(" >").append(sValue60).append("</div>");
+				sbResult.append("<div").append(sStyle70).append(sOnMouseOver70).append(sOnMouseDown70).append(" >").append(sValue70).append("</div>");
+				sbResult.append("<div").append(sStyle80).append(sOnMouseOver80).append(sOnMouseDown80).append(" >").append(sValue80).append("</div>");
+				sbResult.append("<div").append(sStyle90).append(sOnMouseOver90).append(sOnMouseDown90).append(" >").append(sValue90).append("</div>");
+				sbResult.append("<div").append(sStyle100).append(sOnMouseOver100).append(sOnMouseDown100).append(" >").append(sValue100)
+				.append("</div>");
+				// sbResult.append("<div style='width:185px;'></div>");
+				sbResult.append("<div style='width:10px;'></div>");
+
+				vResult.addElement(sbResult.toString());
+
+			}
+		}
+
+		return vResult;
+
+	}
+
+	public StringList showPercentCompleteRange(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			StringList slPercentCompleteRange = new StringList();
+			for (Double i = 0.0; i <= 90.0; i = i + 10) {
+				slPercentCompleteRange.add(Double.toString(i));
+			}
+			String strPercentComplete = getPercentCompleteValueOnUpdateTrainingForm(context, args);
+			int index = slPercentCompleteRange.indexOf(strPercentComplete.toString());
+			slPercentCompleteRange.remove(index);
+
+			return slPercentCompleteRange;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public boolean showDateColumnOnMyTrainingTable(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestValuesMap = (Map) programMap.get(DCLConstants.REQUESTVALUEMAP);
+			Map setting = (Map) programMap.get(DCLConstants.SETTINGS);
+			String[] programLabel = (String[]) requestValuesMap.get(DCLConstants.PROGRAMLABEL);
+			StringList slFilter = FrameworkUtil.split(programLabel[0], DCLConstants.COMMA);
+			String strFilter = (String) slFilter.get(0);
+
+			String strAllFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.AllTrainees");
+			String strAssignedFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Assigned");
+			String strCompletedFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Completed");
+
+			strFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), strFilter);
+			String strColumnFunction = (String) setting.get("function");
+			if (strColumnFunction.contains(DCLConstants.DUE_DATE)) {
+				if (!strFilter.equals(strCompletedFilter))
+					return true;
+				else
+					return false;
+			}
+			else {
+				if (!strFilter.equals(strAssignedFilter))
+					return true;
+				else
+					return false;
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	/**
+	 * Method which sends Notification called via Timer Servlet.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            String[] of command line arguments
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	public void sendNotificationForTrainingDocuments(Context context, String args[]) throws DCLException {
+		try {
+			// Mail Subject, Body and Table Header, Table Data for email and
+			// Icon Mail
+			Map tableDataMap = new HashMap<>();
+			tableDataMap.put("Subject", "enoDocumentControl.Notification.TrainingReminder.Subject");
+			tableDataMap.put("Body", "enoDocumentControl.Notification.TrainingReminder.Body");
+			tableDataMap.put("TableHeader", "enoDocumentControl.TableHeader.TrainingReminder");
+			tableDataMap.put("TableData", "enoDocumentControl.TableDATA.TrainingReminder");
+
+			String strSubjectKey = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.Subject");
+			String strMessageText = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.MessageText");
+			String strMessageHTML = EnoviaResourceBundle.getProperty(context, "enoDocumentControl.ConsolidatedNotification.MessageHTML");
+
+			TrainingService service = DCLServiceUtil.getTraineeService(context);
+			MapList documentMapList = new MapList();
+
+			String strAssignedFilter = DCLConstants.FILTER_ASSIGNED;
+			StringList objectSelects = new StringList();
+			objectSelects.add(DomainConstants.SELECT_NAME);
+			objectSelects.add(DomainConstants.SELECT_ID);
+			String strPersonType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+
+			// Finds all the persons in the application
+			MapList personList = DomainObject.findObjects(context, strPersonType, null, null, objectSelects);
+
+			for (Object obj : personList) {
+				Map map = (Map) obj;
+				String strPersonId = (String) map.get(DomainConstants.SELECT_ID);
+				String strToName = DomainObject.newInstance(context, strPersonId).getInfo(context, DomainConstants.SELECT_NAME);
+				// Get only those documents for which notification has to be
+				// sent.
+				documentMapList = getDueDateDetails(context, service.getContextOwnerTrainingDocuments(context, strPersonId, strAssignedFilter));
+				StringList relIdList = new StringList();
+				StringList dueDateList = new StringList();
+				StringList documentList = new StringList();
+				if (documentMapList != null && !documentMapList.isEmpty()) {
+					for (Object o : documentMapList) {
+						Map documentMap = (Map) o;
+						String docId = (String) documentMap.get(DomainConstants.SELECT_ID);
+						documentList.add(docId);
+						String strRelId = (String) documentMap.get(DomainRelationship.SELECT_ID);
+						relIdList.add(strRelId);
+						String strdueDate = (String) documentMap.get(docId);
+						dueDateList.add(strdueDate);
+					}
+					NotificationUtil notification = new NotificationUtil();
+					Map payload = notification.getTableStructureDate(context, documentList, new StringList(strToName), tableDataMap);
+					payload = getTrainingFieldsData(context, payload, documentList, relIdList, dueDateList);
+
+					// sends both notification and email
+					${CLASS:emxNotificationUtil}.sendNotification(context, documentList.get(0).toString(), // id
+							// (argument
+							// to
+							// check
+							// if
+							// it
+							// is
+							// object
+							// or
+							// relationship)
+							"object", // id Type
+							DomainConstants.EMPTY_STRING, // String
+							// notificationName,
+							payload, // payload
+							new StringList(strToName), // toList,
+							null, // ccList,
+							null, // bccList,
+							strSubjectKey, // String subjectKey,
+							strMessageText, // String messageKey,
+							strMessageHTML, // String messageHTMLKey,
+							null, // StringList objectIdList,
+							DCLConstants.DCL_STRING_RESOURCE, // String
+							// basePropFile,
+							null, // String urlSuffix,
+							DCLConstants.USER_AGENT, // String fromAgent,
+							null, // StringList replyTo,
+							DomainConstants.EMPTY_STRING, // String
+							// preprocessJPOMethod,
+							"both" // String notifyType)
+							);
+				}
+			}
+		}
+
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Get only those documents for which notification has to be sent..
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param documentMapList
+	 *            List of document maps which have to be filtered for sending
+	 *            notification
+	 * @return MapList of documents for which notification have to be sent.
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	private MapList getDueDateDetails(Context context, MapList documentMapList) throws DCLException {
+		MapList finalDocumentMapList = new MapList();
+		try {
+			String strAttrDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			TrainingService trainingService = DCLServiceUtil.getTraineeService(context);
+			if (documentMapList != null && !documentMapList.isEmpty()) {
+				SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+				String strDueDateValue = EnoviaResourceBundle.getProperty(context, "enoDocumentChangeControl.Training.DueDatePeriod");
+				StringList documentList = new StringList();
+
+				int intThresholdValue = Integer.parseInt(strDueDateValue);
+				DCLLifecycleService service = DCLServiceUtil.getDCLLifecycleService(context);
+				for (Object obj : documentMapList) {
+					Map map = (Map) obj;
+					String strDocumentId = (String) map.get(DomainConstants.SELECT_ID);
+					StringList relIdList = (StringList) map.get("relationshipID");
+					// If there are multiple RELIDs, then check for DueDate of
+					// each RELID
+					// compare the DueDate and which ever is the earliest, use
+					// that date as the Final DueDate
+					Map FinalDueDate = trainingService.getLatestDueDate(context, relIdList);
+					if (!FinalDueDate.isEmpty()) {
+						int days = service.getEffectiveDateDifference(context, (String) FinalDueDate.get(strAttrDueDate));
+						days = Math.abs(days);
+						if (days < intThresholdValue) {
+							Map dueDateMap = new HashMap<>();
+							dueDateMap.put(strDocumentId, (String) FinalDueDate.get(strAttrDueDate));
+							dueDateMap.put(DomainObject.SELECT_ID, strDocumentId);
+							dueDateMap.put(DomainRelationship.SELECT_ID, (String) FinalDueDate.get(DomainRelationship.SELECT_ID));
+							finalDocumentMapList.add(dueDateMap);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return finalDocumentMapList;
+	}
+
+	/**
+	 * Populate the Table with training data (eg attributes - Training Status,
+	 * Training Required, Percen Complete, DueDate) .
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param payload
+	 *            Map containing structure and data of table to be populated
+	 * @param documentList
+	 *            StringList of documents.
+	 * @param relIdList
+	 *            List of relIds from which attribute values have to be
+	 *            retrieved.
+	 * @return updated payload
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	private Map getTrainingFieldsData(Context context, Map payload, StringList documentList, StringList relIdList, StringList dueDateList)
+			throws DCLException {
+		try {
+			Date date = null;
+			String strAttrTrainingRequired = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			String strAttrTrainingStatus = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_STATUS);
+			String strAttrPercentCompletion = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_PERCENT_COMPLETE);
+			String strAttrDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strTrainingRequired = DomainConstants.EMPTY_STRING;
+			StringList objectSelects = new StringList();
+			String[] strTableKeys = (String[]) payload.get(DCLConstants.TABLE_ROW_KEYS);
+			String[][] strTableValues = (String[][]) payload.get(DCLConstants.TABLE_ROW_VALUES);
+			String[] strTrainingKeys = new String[] { DCLConstants.TRAINING_STATUS, DCLConstants.PERCENT_COMPLETE, DCLConstants.DUE_DATE, DCLConstants.MANDATORY };
+			String[] strfinalarray = new String[10];
+			String[] strActualTableValues = new String[] {};
+			String strTrainingTableValues[] = new String[] {};
+			Locale str = context.getLocale();
+
+			String[][] strfinalValues;
+			System.arraycopy(strTableKeys, 0, strfinalarray, 0, strTableKeys.length);
+			System.arraycopy(strTrainingKeys, 0, strfinalarray, strTableKeys.length, strTrainingKeys.length);
+			for (int i = 0; i < documentList.size(); i++) {
+				String strRelId = relIdList.get(i).toString();
+				Map attributeMap = DomainRelationship.getAttributeMap(context, strRelId);
+				if (!attributeMap.containsKey(strAttrDueDate)) {
+					MapList mlTraineeData = DomainRelationship.getInfo(context, new String[] { strRelId }, new StringList("fromrel.id"));
+					Map map = (Map) mlTraineeData.get(0);
+					String strTraineeRelId = (String) map.get("fromrel.id");
+					strTrainingRequired = DomainRelationship.getAttributeValue(context, strTraineeRelId, strAttrTrainingRequired);
+				}
+				else {
+					strTrainingRequired = ((String) attributeMap.get(strAttrTrainingRequired));
+				}
+				if (strTrainingRequired.equals(DCLConstants.MANDATORY))
+					attributeMap.put(strAttrTrainingRequired, DCLConstants.YES);
+				else
+					attributeMap.put(strAttrTrainingRequired, DCLConstants.NO);
+				if(dueDateList.get(i).toString().contains("/")){
+					SimpleDateFormat dateFormat = new SimpleDateFormat(eMatrixDateFormat.getInputDateFormat(), context.getLocale());
+					date = dateFormat.parse(dueDateList.get(i).toString());
+				}
+				else
+					date = new SimpleDateFormat("MMM dd, yyyy").parse(dueDateList.get(i).toString());
+				String format = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), context.getLocale()).format(date);
+				strActualTableValues = strTableValues[i];
+				strTrainingTableValues = new String[] { (String) attributeMap.get(strAttrTrainingStatus),
+						(String) attributeMap.get(strAttrPercentCompletion), format.substring(0, 10),
+						(String) attributeMap.get(strAttrTrainingRequired) };
+				String[] strfinalarrayValues = new String[10];
+				System.arraycopy(strActualTableValues, 0, strfinalarrayValues, 0, strActualTableValues.length);
+				System.arraycopy(strTrainingTableValues, 0, strfinalarrayValues, strActualTableValues.length, strTrainingTableValues.length);
+				strTableValues[i] = strfinalarrayValues;
+			}
+			payload.put(DCLConstants.TABLE_ROW_KEYS, strfinalarray);
+			payload.put(DCLConstants.TABLE_ROW_VALUES, strTableValues);
+			return payload;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get the HTML part of the message to be sent in notification and
+	 * email.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            [] String array of command line arguments
+	 * @return HTML message in string form
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	public String getMessageHTML(Context context, String[] args) throws DCLException {
+		try {
+			return NotificationUtil.getMessageHTML(context, args);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Method to get the TEXT part of the message to be sent in notification and
+	 * email.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            [] String array of command line arguments
+	 * @return TEXT message in string form
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	public String getMessageText(Context context, String args[]) throws DCLException {
+		try {
+			return NotificationUtil.getMessageText(context, args);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Get Read & Understood field for DOCOCompleteTraining form
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments
+	 * @return String to include password field in form
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	public String getDOCOCompleteTrainingFieldReadUnderstood(Context context, String[] args) throws DCLException {
+		String strLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Label.ReadUnderstoodCheckbox");
+		String strReadLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Label.ReadUnderstood");
+		StringBuilder sbreadAndUnderstood = new StringBuilder();
+		sbreadAndUnderstood
+		.append("<input type = \"checkbox\" id =\"readAndUnderstood\" title =\"");
+		sbreadAndUnderstood.append(strReadLabel);
+		sbreadAndUnderstood.append("\" name =\"readAndUnderstood\" value =\"IAgree\" required =\"true\"> "
+				+ strLabel);
+		sbreadAndUnderstood
+		.append("<script>var readUnderstoodField = document.getElementById('calc_ReadAndUnderstood');readUnderstoodField.children[0].className = 'labelRequired';</script>");
+		return sbreadAndUnderstood.toString();
+
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws DCLException
+	 */
+	public Vector<String> getTableDOCOTrainingDocumentListColumneSignature(Context context, String[] args) throws DCLException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList ObjList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			Vector<String> vceSignature = new Vector<String>();
+			String strComment = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.CompleteTraining.ReadUnderstoodStatement");
+			if (!DCLUtil.isNullOrEmpty(ObjList)) {
+				for (Iterator<Map<?, ?>> iterator = ObjList.iterator(); iterator.hasNext();) {
+					Map<?, ?> object = iterator.next();
+					StringBuffer sbeSignatureGif = new StringBuffer();
+					sbeSignatureGif.append("<img src=\"../common/images/iconActionEdit.png\" border=\"0\" alt=\"");
+					sbeSignatureGif.append(XSSUtil.encodeForXML(context, strComment));
+					sbeSignatureGif.append("\" title=\"");
+					sbeSignatureGif.append(XSSUtil.encodeForXML(context, strComment));
+					sbeSignatureGif.append("\"/>");
+					vceSignature.add(sbeSignatureGif.toString());
+				}
+			}
+			return vceSignature;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws DCLException
+	 */
+	public boolean showTableDOCOTrainingDocumentListColumneSignature(Context context, String[] args) throws DCLException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestValuesMap = (Map) programMap.get(DCLConstants.REQUESTVALUEMAP);
+			Map setting = (Map) programMap.get(DCLConstants.SETTINGS);
+			String[] programLabel = (String[]) requestValuesMap.get(DCLConstants.PROGRAMLABEL);
+			StringList slFilter = FrameworkUtil.split(programLabel[0], DCLConstants.COMMA);
+			String strFilter = (String) slFilter.get(0);
+
+			String strAllFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.AllTrainees");
+			String strAssignedFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Assigned");
+			String strCompletedFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Filter.Label.Completed");
+
+			strFilter = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(), strFilter);
+			if (strFilter.equals(strCompletedFilter))
+				return true;
+			else
+				return false;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	public HashMap postProcessRefresh (Context context, String[] args) throws Exception
+	{
+		// unpack the incoming arguments
+		HashMap inputMap = (HashMap)JPO.unpackArgs(args);
+
+		HashMap returnMap = new HashMap(1);
+		returnMap.put("Action","refresh");
+		return returnMap;
+	}	
+	public boolean checkAccessOnMyTrainingCommandForLBC(Context context, String args[]) throws DCLException {
+
+		try {
+			boolean bResult = false;
+			String strMyTrainingAccessForLBC = EnoviaResourceBundle.getProperty(context, "enoDocumentChangeControl.Training.MyTrainingAccessForLBC");
+			if (!DCLUtil.isNullOrEmpty(strMyTrainingAccessForLBC)) {
+				bResult = Boolean.parseBoolean(strMyTrainingAccessForLBC);
+			}
+			return bResult;
+		}	
+		catch (Exception exception) {
+			throw new DCLException(exception);
+		}	
+	}
+
+	/**
+	 * Access Method to determine whether to show the training category menu or not
+	 * based on value of attribute 'Training Enabled'
+	 * 
+	 * @param context
+	 * @param args
+	 * @return	true if training is enabled, false otherwise
+	 * @throws DCLException
+	 */	
+	public boolean showTrainingCategoryMenu(Context context, String args[]) throws DCLException	{	
+		try {
+			boolean bResult = false;
+			String attributeTrainingEnabled = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_ENABLED);
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String ObjectId = programMap.get(DCLConstants.OBJECTID).toString();
+			DomainObject documentObject = DomainObject.newInstance(context, ObjectId);
+			String strTrainingEnabled = documentObject.getAttributeValue(context, attributeTrainingEnabled);
+			bResult = (DCLConstants.YES.equalsIgnoreCase(strTrainingEnabled)) ? Boolean.TRUE : Boolean.FALSE;
+			return bResult;
+		}	
+		catch (Exception exception) {
+			throw new DCLException(exception);
+		}
+	}
+
+}
+

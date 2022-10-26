@@ -1,0 +1,463 @@
+
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.matrixone.apps.common.InboxTask;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+/**
+ * Created 02/25/2006 <br>
+ * Author: D. Ames<br>
+ * <br>
+ * Extension of <code>emxInboxTask</code>
+ */
+@Deprecated
+public class ${CLASSNAME} extends ${CLASS:emxInboxTask} {
+	public static final String	ATTRIBUTE_APPROVAL_STATUS					= PropertyUtil.getSchemaProperty("attribute_ApprovalStatus");
+	public static final String	ATTRIBUTE_ROUTE_ACTION						= PropertyUtil.getSchemaProperty("attribute_RouteAction");
+	public static final String	ATTRIBUTE_SCHEDULED_COMPLETION_DATE			= PropertyUtil.getSchemaProperty("attribute_ScheduledCompletionDate");
+	public static final String	ATTRIBUTE_TITLE								= PropertyUtil.getSchemaProperty("attribute_Title");
+	public static final String	ATTRIBUTE_ACTUAL_COMPLETION_DATE			= PropertyUtil.getSchemaProperty("attribute_ActualCompletionDate");
+	public static final String	ATTRIBUTE_ROUTE_NODE_ID						= PropertyUtil.getSchemaProperty("attribute_RouteNodeID");
+	public static final String	ATTRIBUTE_IW_ROUTE_TASK_USER				= PropertyUtil.getSchemaProperty("attribute_IWRouteTaskUser");
+	public static final String	ATTRIBUTE_ROUTE_TASK_USER					= PropertyUtil.getSchemaProperty("attribute_RouteTaskUser");
+
+	public static final String	POLICY_INBOX_TASK							= PropertyUtil.getSchemaProperty("policy_InboxTask");
+
+	public static final String	RELATIONSHIP_OBJECT_ROUTE					= PropertyUtil.getSchemaProperty("relationship_ObjectRoute");
+	public static final String	RELATIONSHIP_ROUTE_TASK						= PropertyUtil.getSchemaProperty("relationship_RouteTask");
+	public static final String	RELATIONSHIP_ROUTE_SCOPE					= PropertyUtil.getSchemaProperty("relationship_RouteScope");
+	public static final String	RELATIONSHIP_PROJECT_TASK					= PropertyUtil.getSchemaProperty("relationship_ProjectTask");
+
+	public static final String	SELECT_ATTRIBUTE_ROUTE_STATUS				= "attribute[" + ATTRIBUTE_ROUTE_STATUS + "]";
+	public static final String	SELECT_ATTRIBUTE_ROUTE_ACTION				= "attribute[" + ATTRIBUTE_ROUTE_ACTION + "]";
+	public static final String	SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE	= "attribute[" + ATTRIBUTE_SCHEDULED_COMPLETION_DATE + "]";
+	public static final String	SELECT_ATTRIBUTE_TITLE						= "attribute[" + ATTRIBUTE_TITLE + "]";
+	public static final String	SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE		= "attribute[" + ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]";
+	public static final String	SELECT_ROUTE_ID								= "relationship[" + RELATIONSHIP_ROUTE_TASK + "].to.id";
+	public static final String	SELECT_ROUTE_NAME							= "relationship[" + RELATIONSHIP_ROUTE_TASK + "].to.name";
+	public static final String	SELECT_ROUTE_OWNER							= "relationship[" + RELATIONSHIP_ROUTE_TASK + "].to.owner";
+	public static final String	SELECT_OBJECT_NAME							= "relationship[" + RELATIONSHIP_ROUTE_TASK + "].to.to["
+			+ RELATIONSHIP_ROUTE_SCOPE + "].from.name";
+	public static final String	SELECT_OBJECT_ID							= "relationship[" + RELATIONSHIP_ROUTE_TASK + "].to.to["
+			+ RELATIONSHIP_ROUTE_SCOPE + "].from.id";
+	public static final String	SELECT_PERSON_TYPE							= "relationship[" + RELATIONSHIP_PROJECT_TASK + "].to.type";
+
+	public static final String	TYPE_ROUTE									= PropertyUtil.getSchemaProperty("type_Route");
+	public static final String	TYPE_INBOX_TASK								= PropertyUtil.getSchemaProperty("type_InboxTask");
+	public static final String	TYPE_PERSON									= PropertyUtil.getSchemaProperty("type_Person");
+
+	/**
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF Rossini
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		super(context, args);
+	}
+
+	/**
+	 * 02/25/2006<br>
+	 * Override of base method to account for Approval Matrix Function. The
+	 * Approval Matrix needs to be modified to properly reassign the 'owner' of
+	 * an Inbox Task once the task is assigned to a Person.<br>
+	 * 
+	 * getTasksToBeAccepted - gets the list of Tasks assigned to any of the
+	 * person assignments
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - objectList MapList
+	 * @returns Object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF Rossini
+	 * @grade 0
+	 */
+	@Override
+	public Object getTasksToBeAccepted(Context context, String[] args) throws Exception {
+		MapList taskMapList = new MapList();
+		try {
+			StringList selectTypeStmts = new StringList();
+			selectTypeStmts.add(SELECT_NAME);
+			selectTypeStmts.add(SELECT_ID);
+			selectTypeStmts.add(SELECT_DESCRIPTION);
+			selectTypeStmts.add(SELECT_OWNER);
+			selectTypeStmts.add(SELECT_CURRENT);
+			selectTypeStmts.add(SELECT_ATTRIBUTE_ROUTE_ACTION);
+			selectTypeStmts.add(SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+			selectTypeStmts.add(SELECT_ATTRIBUTE_ACTUAL_COMPLETION_DATE);
+			selectTypeStmts.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_INSTRUCTIONS);
+			selectTypeStmts.add(SELECT_ATTRIBUTE_TITLE);
+			selectTypeStmts.add(SELECT_OBJECT_ID);
+			selectTypeStmts.add(SELECT_OBJECT_NAME);
+			selectTypeStmts.add(SELECT_ROUTE_ID);
+			selectTypeStmts.add(SELECT_ROUTE_NAME);
+			selectTypeStmts.add(SELECT_ROUTE_OWNER);
+
+			String strPersonAssignments = "";
+			Vector personAssignments = PersonUtil.getAssignments(context);
+			personAssignments.remove(context.getUser());
+			Iterator assignmentsItr = personAssignments.iterator();
+			while (assignmentsItr.hasNext()) {
+				String assignment = (String) assignmentsItr.next();
+				strPersonAssignments += assignment + ",";
+			}
+			// Remove the last ","
+			strPersonAssignments = strPersonAssignments.substring(0, (strPersonAssignments.length()) - 1);
+
+			/* 02/25/2006 - IW customization Start */
+			// String objWhere = DomainObject.SELECT_OWNER + " matchlist " +
+			// "\"" +
+			// strPersonAssignments + "\" \",\"";
+			String stateAssigned = FrameworkUtil.lookupStateName(context, POLICY_INBOX_TASK, "state_Assigned");
+			String objWhere = " current == \"" + stateAssigned + "\" && " + SELECT_PERSON_TYPE + " != \"" + TYPE_PERSON + "\" && "
+					+ DomainObject.SELECT_OWNER + " matchlist " + "\"" + strPersonAssignments + "\" \",\"";
+			/* 02/25/2006 - IW customization End */
+
+			taskMapList = DomainObject.findObjects(context, TYPE_INBOX_TASK, null, objWhere, selectTypeStmts);
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e.getMessage());
+		}
+
+		return taskMapList;
+	}
+
+	/**
+	 * The attached Route is modifed so that it cannot be used again, but is
+	 * kept for reference purposes. The Route status is changed to Rejected. The
+	 * attached object is demoted. All current tasks are deleted with
+	 * notification to the Task owners.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            [0] String- The Inbox Task object id that is being rejected.
+	 * @return int - 0 if successful
+	 * @throws Throwable
+	 */
+	public int taskRejectAction(Context context, String[] args) throws Throwable {
+		String sTaskObjId = args[0];
+		String sPolicy = args[1];
+		String sState = args[2];
+		String sDemote = args[3];
+
+		try {
+			int returnResult = Integer.parseInt(Helper.runWithSuperUser(context, new Helper.Callable() {
+
+				@Override
+				public Object run(Context context, Object... args) throws LSAException {
+					try {
+						String sTaskObjId = (String) args[0];
+						String sPolicy = (String) args[1];
+						String sState = (String) args[2];
+						String sDemote = (String) args[3];
+
+						String sCurrentUser = context.getUser();
+
+						InboxTask itCompletedTask = new InboxTask(sTaskObjId);
+
+						// Check to see if the Task was approved or rejected
+						String sApprovalStatus = itCompletedTask.getInfo(context,
+								${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_APPROVAL_STATUS);
+
+						// If it wasn't rejected get out of here
+						if (!sApprovalStatus.equalsIgnoreCase("Reject"))
+							return 0;
+
+						sPolicy = PropertyUtil.getSchemaProperty(context, sPolicy);
+						sState = PropertyUtil.getSchemaProperty(context, "policy", sPolicy, sState);
+
+						// Get Route
+						String sRouteId = itCompletedTask.getInfo(context, "relationship[Route Task].to.id");
+						DomainObject doRoute = new DomainObject(sRouteId);
+						// String sRouteDescription = doRoute.getInfo(context,
+						// doRoute.SELECT_DESCRIPTION) + " - Rejected by " +
+						// sCurrentUser;
+						String sRouteDescription = doRoute.getInfo(context, doRoute.SELECT_DESCRIPTION)
+								+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.RejectedBy")
+								+ sCurrentUser;
+
+						StringList objSelects = new StringList(2);
+						objSelects.addElement(doRoute.SELECT_ID);
+						objSelects.addElement(doRoute.SELECT_TYPE);
+
+						String sWhere = "(policy=='" + sPolicy + "' && current=='" + sState + "')";
+
+						// Get the object attached to the route
+						MapList mlAttachedObjects = doRoute.getRelatedObjects(context, "*", // relationshipPattern
+								"*", // typePattern
+								objSelects, // objectSelects
+								new StringList(), // relationshipSelects
+								true, // getTo
+								false, // getFrom
+								(short) 1, // recurseToLevel
+								sWhere, // objectWhere
+								"", 0, null, null, null); // relationshipWhere
+
+						// If there are no attached object with the type pattern
+						// passed in
+						// from the
+						// trigger PolicyInboxTaskStateReviewPromoteAction,
+						// process as OOTB.
+						if (mlAttachedObjects.size() == 1) {
+							rejectRoute(context, sRouteId, sRouteDescription);
+
+							// Get object ID attached to Route.
+							String sAttachedObjectId = (String) ((Map) mlAttachedObjects.get(0)).get(doRoute.SELECT_ID);
+
+							// *********Demote Attached Object**********
+							if (sDemote.equalsIgnoreCase("TRUE")) {
+								DomainObject doObjOnRoute = new DomainObject(sAttachedObjectId);
+								doObjOnRoute.demote(context);
+							}
+						}
+						return 0;
+					}
+					catch (Exception e) {
+						throw new LSAException(
+								Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.TaskRejectFailed"));
+					}
+				}
+
+			}, sTaskObjId, sPolicy, sState, sDemote).toString());
+
+			return returnResult;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public int demoteObjectInApproval(Context context, String[] args) throws Throwable {
+		String sObjId = args[0];
+		DomainObject doObject = null;
+
+		// get the username before the context is pushed.
+		String sCurrentUser = context.getUser();
+
+		try {
+			// we need to push the context becuase not all users have the
+			// ability to
+			// modify Inbox Task and Routes, or even view them sometimes.
+			ContextUtil.pushContext(context);
+			doObject = new DomainObject(sObjId);
+
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(doObject.SELECT_ID);
+			objSelects.addElement(doObject.SELECT_DESCRIPTION);
+			StringList relSelects = new StringList();
+
+			String sObjectWhere = ${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_STATUS + "=='Started'";
+
+			// Get the Route(s). There should only be one.
+			MapList mlStartedRoutes = doObject.getRelatedObjects(context, RELATIONSHIP_OBJECT_ROUTE, // relationshipPattern
+					TYPE_ROUTE, // typePattern
+					objSelects, // objectSelects
+					relSelects, // relationshipSelects
+					false, // getTo
+					true, // getFrom
+					(short) 1, // recurseToLevel
+					sObjectWhere, // objectWhere
+					"", 0, null, null, null); // relationshipWhere
+
+			for (int i = 0; i < mlStartedRoutes.size(); i++) {
+				String objectId = (String) ((Map) mlStartedRoutes.get(i)).get(doObject.SELECT_ID);
+				// String sRouteDescription =
+				// (String)((Map)mlStartedRoutes.get(i)).get(doObject.SELECT_DESCRIPTION)
+				// + " - Demoted by " + sCurrentUser;
+				String sRouteDescription = (String) ((Map) mlStartedRoutes.get(i)).get(doObject.SELECT_DESCRIPTION)
+						+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.DemotedBy") + sCurrentUser;
+
+				rejectRoute(context, objectId, sRouteDescription);
+			}
+		}
+		catch (Exception me) {
+			return -1;
+		}
+		finally {
+			ContextUtil.popContext(context);
+		}
+
+		return 0;
+	}
+
+	public int demoteObjectAfterApproval(Context context, String[] args) throws Throwable {
+		String sObjId = args[0];
+		DomainObject doObject = new DomainObject(sObjId);
+
+		// get the username before the context is pushed.
+		String sCurrentUser = context.getUser();
+
+		try {
+			// we need to push the context because not all users have the
+			// ability to
+			// modify Inbox Task and Routes, or even view them sometimes.
+			ContextUtil.pushContext(context);
+
+			doObject = new DomainObject(sObjId);
+
+			// Demote the parent object again
+			doObject.demote(context);
+
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(doObject.SELECT_ID);
+			objSelects.addElement(doObject.SELECT_DESCRIPTION);
+			StringList relSelects = new StringList();
+
+			String sObjectWhere = ${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_STATUS + "=='Finished'";
+
+			// Get the Route(s). There should only be one.
+			MapList mlFinishedRoutes = doObject.getRelatedObjects(context, RELATIONSHIP_OBJECT_ROUTE, // relationshipPattern
+					TYPE_ROUTE, // typePattern
+					objSelects, // objectSelects
+					relSelects, // relationshipSelects
+					false, // getTo
+					true, // getFrom
+					(short) 1, // recurseToLevel
+					sObjectWhere, // objectWhere
+					"", 0, null, null, null); // relationshipWhere
+
+			// Update the Finished Route attached. There should only be one that
+			// has the
+			// status of finished. There could be others with the status of
+			// Rejected.
+			for (int i = 0; i < mlFinishedRoutes.size(); i++) {
+				String objectId = (String) ((Map) mlFinishedRoutes.get(i)).get(doObject.SELECT_ID);
+				// String sRouteDesc =
+				// (String)((Map)mlFinishedRoutes.get(i)).get(doObject.SELECT_DESCRIPTION)
+				// + " - Demoted by " + sCurrentUser +
+				// " after Approval Process";
+				String sRouteDesc = (String) ((Map) mlFinishedRoutes.get(i)).get(doObject.SELECT_DESCRIPTION)
+						+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.DemotedBy") + sCurrentUser
+						+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.AfterApprovalProcess");
+
+				DomainObject doRoute = new DomainObject(objectId);
+				doRoute.open(context);
+				doRoute.setDescription(context, sRouteDesc);
+				doRoute.setAttributeValue(context, ATTRIBUTE_ROUTE_STATUS, "Rejected");
+			}
+		}
+		catch (Exception me) {
+			return -1;
+		}
+		finally {
+			ContextUtil.popContext(context);
+		}
+
+		return 0;
+	}
+
+	public static void rejectRoute(Context context, String sRouteId, String sRejectDescrtiption) throws Exception {
+		try {
+			DomainObject doRoute = new DomainObject(sRouteId);
+
+			StringList objSelects = new StringList(1);
+			objSelects.addElement(doRoute.SELECT_ID);
+			StringList relSelects = new StringList();
+
+			String sObjectWhere = "current!=Complete";
+
+			// Get the all incomplete tasks attached to the Route
+			MapList mlIncompleteTasks = doRoute.getRelatedObjects(context, RELATIONSHIP_ROUTE_TASK, // relationshipPattern
+					TYPE_INBOX_TASK, // typePattern
+					objSelects, // objectSelects
+					relSelects, // relationshipSelects
+					true, // getTo
+					false, // getFrom
+					(short) 1, // recurseToLevel
+					sObjectWhere, // objectWhere
+					"", 0, null, null, null); // relationshipWhere
+
+			// *******Process Route*********
+			doRoute.open(context);
+			// Change Route Status attribute
+			String sRouteBasePurpose = doRoute.getAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_ROUTE_BASE_PURPOSE);
+
+			// only clean up routes that are "Approval" routes
+			if (sRouteBasePurpose.equals("Approval")) {
+				doRoute.setAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_ROUTE_STATUS, "Rejected");
+				doRoute.setDescription(context, sRejectDescrtiption);
+
+				// check if the route has been started yet
+				if ((doRoute.getInfo(context, doRoute.SELECT_CURRENT)).equals("Define")) {
+					try {
+						MqlUtil.mqlCommand(context, "trigger off", true);
+						doRoute.promote(context);
+					}
+					finally {
+						MqlUtil.mqlCommand(context, "trigger on", true);
+					}
+				}
+
+				// Promote to Route to Complete State
+				doRoute.promote(context);
+				doRoute.close(context);
+
+				// ********Remove incomplete tasks*********
+				InboxTask itTask = new InboxTask();
+				StringList listPersons = new StringList();
+				String assignee = "";
+				String sTaskId = "";
+
+				for (int i = 0; i < mlIncompleteTasks.size(); i++) {
+					sTaskId = (String) ((Map) mlIncompleteTasks.get(i)).get(doRoute.SELECT_ID);
+					itTask.setId(sTaskId);
+					assignee = itTask.getTaskAssignee(context);
+
+					if (!listPersons.contains(assignee))
+						listPersons.add(assignee);
+
+					itTask.deleteObject(context);
+				}
+
+				// Send notification to users that their tasks have been deleted
+				// IconMail iconmail = new IconMail();
+				// iconmail.create(context);
+				// iconmail.setToList(listPersons);
+				// iconmail.setMessage("Route Rejected");
+				// iconmail.send(context, "Route Rejected");
+			}
+		}
+		catch (Exception e) {
+
+			// throw new
+			// FrameworkException("Task reject trigger failed
+			// (taskRejectAction). Check with administrator.");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.IWInboxTask.ErrorMsg.TaskRejectFailed"));
+		}
+		finally {
+
+		}
+	}
+}
+

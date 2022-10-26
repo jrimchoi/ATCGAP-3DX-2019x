@@ -1,0 +1,662 @@
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.regex.Pattern;
+import java.util.Collections;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Vector;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import javax.swing.UIManager;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+
+import matrix.db.*;
+import matrix.util.*;
+import java.io.StringReader;
+
+import de.cenit.ev6sap.adaptor.EV6SAPAdaptor;
+import de.cenit.ev6sap.adaptor.EV6SAPAdaptor.*;
+import de.cenit.ev6sap.adaptor.Result;
+import de.cenit.ev6sap.adaptor.MAP;
+import de.cenit.ev6sap.util.*;
+
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}() throws Exception {}
+
+	public Hashtable mxMainWS(Context ctx, String[] argsMap)  throws Exception {
+
+System.out.println("Roles Before : "+ ctx.getRole());
+	//ctx.setRole("ctx::VPLMProjectLeader.CENIT AG.StandardParts");
+	System.out.println("Roles after : "+ ctx.getRole());
+  Hashtable result = new Hashtable();
+
+                  Hashtable paramMap = (Hashtable) JPO.unpackArgs(argsMap);
+
+
+HashMap hm_context = (HashMap)paramMap.get("context");
+HashMap hm_objectID = (HashMap)paramMap.get("objectID");
+HashMap hm_additioalParameter = (HashMap)paramMap.get("additioalParameter");
+String s_operation = (String)paramMap.get("operation");
+
+			/* if(MAP.globalMap == null) 
+			MAP.globalMap = new Hashtable();
+			MAP.globalMap.put("CONTEXT", hm_context);
+			MAP.globalMap.put("OBJECTID", hm_objectID);
+			MAP.globalMap.put("ADDITIONALPARAMETER", hm_additioalParameter);*/
+        
+                   String[] Args = new String[10];
+        
+                   String BusID ="0";
+                   String DialogMode = "0";
+                   String Mode = "Online";
+
+                   Args[0] = BusID;
+                   Args[1] = s_operation;
+                   Args[2] = DialogMode;
+                   Args[3] = Mode;
+
+                 Result r_return = mxMainEV6SAP(ctx, Args, paramMap);
+putTrace("Debug kph0731 r_code" + r_return.Code );
+
+result.put("Code", r_return.Code );
+result.put("Message", r_return.Message );
+result.put("Output", r_return.Output );
+result.put("List", r_return.List);
+result.put("OutTable", r_return.OutTable);
+
+                  return result;
+}
+
+		public int mxMainBatch(Context Ctx, String[] Args) throws Exception {
+
+				String BusID= Args[0];
+
+				BusinessObject RequestObject = new BusinessObject(BusID);
+				RequestObject.open(Ctx);
+				AttributeList Data = RequestObject.getAttributeValues(Ctx, true);
+
+				Map attrData = new HashMap();
+
+				AttributeItr I = new AttributeItr(Data);
+				while (I.next()) {
+					Attribute A = I.obj();
+					attrData.put( A.getName(), A.getValue());
+				}
+
+
+				RequestObject.close(Ctx);
+
+
+				Map<String,String> hm_context = null;
+				Map<String,String> hm_objectID = null;
+				Map<String,String> hm_additioalParameter = null;
+				String s_operation = attrData.get("cenitEV6SAPRequestOperation")+"";;
+				int RetryCount = Integer.parseInt(attrData.get("cenitEV6SAPRequestRetryCount")+"");
+				Hashtable result = new Hashtable();
+
+				String contextMapXML = attrData.get("cenitEV6SAPRequestContextMap")+"";
+				if(!cenitUtil.isNullString(contextMapXML)){
+					hm_context= stringToMap(contextMapXML);
+
+				}
+
+				contextMapXML = attrData.get("cenitEV6SAPRequestObjectMap")+"";
+				if(!cenitUtil.isNullString(contextMapXML)){
+
+					hm_objectID = stringToMap(contextMapXML);
+
+				}
+
+				contextMapXML = attrData.get("cenitEV6SAPRequestAdditionalParamMap")+"";
+				if(!cenitUtil.isNullString(contextMapXML)){
+
+					hm_additioalParameter = stringToMap(contextMapXML);
+
+				}
+
+
+				Hashtable paramMap = new Hashtable();
+				paramMap.put("context", hm_context);
+				paramMap.put("objectID", hm_objectID);
+				paramMap.put("additioalParameter", hm_additioalParameter);
+				//paramMap.put("operation", operation);
+
+
+				String[] Args1 = new String[10];
+
+				BusID ="0";
+				String DialogMode = "0";
+				String Mode = "Online";
+
+				Args1[0] = BusID;
+				Args1[1] = attrData.get("cenitEV6SAPRequestOperation")+"";;
+				Args1[2] = DialogMode;
+				Args1[3] = Mode;
+
+				Result r_return = mxMainEV6SAP(Ctx, Args1, paramMap);
+				
+				// Set the results in request object attributes
+				int MsgNumber = 3 - RetryCount + 1;
+				if(MsgNumber > 3 )
+					MsgNumber = 3; 
+				String sMsgNumber = String.valueOf(MsgNumber);
+				AttributeList AL = new AttributeList();
+				AttributeType AT = new AttributeType("cenitEV6SAPRequestMessage"
+						+ sMsgNumber);
+				Attribute A = new Attribute(AT, r_return.Message);
+				AL.addElement(A);
+				AT = new AttributeType("cenitEV6SAPRequestOutput");
+				A = new Attribute(AT, r_return.Output);
+				AL.addElement(A);
+
+				//
+				if (r_return.Code == 0) {
+					AT = new AttributeType("cenitEV6SAPRequestRetryCount");
+					A = new Attribute(AT, "0");
+					//	AL.addElement(A);
+					AT = new AttributeType("cenitEV6SAPRequestErrorFlag");
+					A = new Attribute(AT, "FALSE");
+					AL.addElement(A);
+					//	Subject = Text.Get(ev6sap1, 113) + ": " + Text.Get(ev6sap1, 102);
+				} else {
+					RetryCount--;
+					AT = new AttributeType("cenitEV6SAPRequestRetryCount");
+					//	A = new Attribute(AT, String.valueOf(RetryCount));
+					A = new Attribute(AT, "0");
+					//	AL.addElement(A);
+					AT = new AttributeType("cenitEV6SAPRequestErrorFlag");
+					A = new Attribute(AT, "TRUE");
+					AL.addElement(A);
+					//	Subject = Text.Get(ev6sap1, 113) + ": " + Text.Get(ev6sap1, 104);
+				}
+
+				// Set result attribute values
+				RequestObject.setAttributes(Ctx, AL);
+
+
+
+				return r_return.Code;
+			}
+			
+			static String getTextValue(Element ele, String tagName) {
+				String textVal = null;
+				NodeList nl = ele.getElementsByTagName(tagName);
+				if(nl != null && nl.getLength() > 0) {
+					Element el = (Element)nl.item(0);
+					if(el.getFirstChild()!=null)
+						textVal = el.getFirstChild().getNodeValue();
+				}
+
+				return textVal;
+			}
+
+			public static Map<String,String> stringToMap(String xml){
+
+				Map<String,String> dataMap = new HashMap<String,String>();
+
+				DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+				DocumentBuilder db = null;
+				try {
+					db = dbf.newDocumentBuilder();
+					InputSource is = new InputSource();
+					is.setCharacterStream(new StringReader(xml));
+					try {
+						Document doc = db.parse(is);
+						Element docEle = doc.getDocumentElement();
+
+						//get a nodelist of  elements
+						NodeList nl = docEle.getElementsByTagName("data");
+
+						for (int i = 0; i < nl.getLength(); i++) {
+							Element el = (Element)nl.item(i);
+
+							String key = getTextValue(el,"key");
+							String value = getTextValue(el,"value");
+
+							dataMap.put(key,value);
+						}
+
+					} catch (SAXException e) {
+						// handle SAXException
+					} catch (IOException e) {
+						// handle IOException
+					}
+				} catch (ParserConfigurationException e1) {
+					// handle ParserConfigurationException
+				}
+				return dataMap;
+
+			}
+
+
+
+public int mxMain(Context Ctx, String[] Args) throws Exception {
+System.out.println("ATLAS::DB::LOCK::::START::::mxMain");
+	 return mxMainEV6SAP(Ctx,Args, null).Code;
+	}
+
+public de.cenit.ev6sap.adaptor.Result mxMainEV6SAP(Context Ctx, String[] Args, Map paramMap) throws Exception {
+
+ try {
+ 
+
+
+{
+
+    		
+			 try {
+            Thread.sleep(2);
+        } catch (NumberFormatException e) {
+        } catch (InterruptedException e) {
+        }
+			}
+
+	/*	if(MAP.globalMap == null) 
+				MAP.globalMap = new Hashtable();	*/
+        String BusID, Operation, DialogMode, Mode, Input = "";
+        BusID = Args[0];
+        Operation = Args[1];
+        DialogMode = Args[2];
+        Mode = Args[3];
+        if (Args.length > 4) Input = Args[4];
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        putTrace("\n\n\n---------- EV6SAP JPO mxMain " + df.format(new Date()) + "----------");
+        putTrace("ObjectID = " + BusID);
+        putTrace("Operation = " + Operation);
+
+System.out.println("Inside the -------- EV6SAP JPO mxMain-------- EV6SAP JPO mxMain-------- EV6SAP JPO mxMain-------- EV6SAP JPO mxMain-------- EV6SAP JPO mxMain");
+
+        putTrace("DialogMode = " + DialogMode);
+        putTrace("Mode = " + Mode);
+        putTrace("Input = " + Input);
+        MQLCommand MQL = new MQLCommand();
+        MQL.executeCommand(Ctx, "list env");
+        putTrace("RPE:\n" + MQL.getResult());
+		System.out.println("MQL Result:::::::::::::::::::::::::::::::::::::"+MQL.getResult());
+        if (BusID.isEmpty()) {
+            MQL.executeCommand(Ctx, "get env OBJECTID");
+            BusID = MQL.getResult();
+            if (BusID.trim().isEmpty()) {
+                MQL.executeCommand(Ctx, "get env ID");
+                BusID = MQL.getResult();
+            }
+        }
+        BusID = BusID.replace("\n", "");
+        putTrace("ObjectID = " + BusID);
+        if (Mode.equalsIgnoreCase("Batch")) {
+            try {
+                EV6SAPAdaptor ev6sapAdaptor = new EV6SAPAdaptor();
+                ev6sapAdaptor.createRequestObject(Ctx, BusID, Operation, DialogMode, Input);
+				System.out.println("ATLAS::DB::LOCK::::END::::mxMain");
+                return new Result (0,"RequestObject crearted ...");
+            } catch (MatrixException e) {
+                MQL.executeCommand(Ctx, "error \"Error creating Request Object: " + e.getLocalizedMessage() + "\"");
+				System.out.println("ATLAS::DB::LOCK::::END::::mxMain");
+                return new Result (1,"error \"Error creating Request Object: " + e.getLocalizedMessage() + "\"");
+            }
+        }
+        else if (Mode.equalsIgnoreCase("Online")) {
+putTrace("Debug kph06");
+            Result Return = exec(Ctx, BusID, Operation, DialogMode, Input, paramMap);
+System.out.println("1: " + Return.Code);
+putTrace("Debug kph07");
+putTrace("Debug kph071: " + Return.Code);
+putTrace("Debug kph071: " + Return.Message);
+
+            if (Return.Code == 0) {
+                if (! Return.Message.isEmpty()){
+				putTrace("Debug kph072");
+                  //  MQL.executeCommand(Ctx, "notice \"" + Return.Message + "\"");
+					}
+					putTrace("Debug kph073 r_code" + Return.Code );
+				System.out.println("ATLAS::DB::LOCK::::END::::mxMain");	
+                return Return;
+            }
+			
+putTrace("Debug kph08");
+System.out.println("2: " + Return.Message);
+            if (Return.Message.isEmpty()){
+putTrace("Debug kph09");
+ ${CLASS:emxContextUtil}.mqlNotice(Ctx,"Execution EV6SAP Operation failed : " + Return.Message);
+             throw new Exception("EV6SAP Operation failed"); // kph - MQL.executeCommand(Ctx, "error \"Error in SAP activity " + Operation + "\"");
+            }else{
+putTrace("Debug kph10");
+
+ ${CLASS:emxContextUtil}.mqlNotice(Ctx,"Execution EV6SAP Operation  failed : " + Return.Message);
+ System.out.println("ATLAS::DB::LOCK::::END::::mxMain");
+		 return Return;
+	//throw new Exception(Return.Message);               // kph- MQL.executeCommand(Ctx, "error \"" + Return.Message + "\"");
+            //kph- return 1;
+        } }else{
+putTrace("Debug kph11");
+           
+		   throw new Exception("Unknown mode: " + Mode);
+	}
+	
+	} catch (Exception e1) {
+	
+	throw e1;
+        }
+		
+	 
+	}
+
+	
+	
+	
+	public String mxMessage(Context Ctx, String[] Args) throws Exception {
+
+
+
+                
+//String Mode, BusID, Operation, DialogMode, Input = "", Output = "";
+		HashMap programMap = (HashMap) JPO.unpackArgs(Args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        putTrace("\n\n\n----------ev6sap JPO mxForm " + df.format(new Date()) + "----------");
+		printHashMap("requestMap", requestMap);
+		printHashMap("paramMap", paramMap);
+  
+        
+                   String[] Args1 = new String[10];
+        
+                   String BusID ="0";
+                   String DialogMode = "0";
+                   String Mode = "Online";
+
+                   Args1[0] = BusID;
+                   Args1[1] =(String) requestMap.get("preProcessJPO");
+                   Args1[2] = DialogMode;
+                   Args1[3] = Mode;
+
+				   
+				   
+				    HashMap argMap = new HashMap();
+					HashMap temp = new HashMap();
+					
+					argMap.put("context",temp);
+					argMap.put("objectID",temp);
+					argMap.put("additioalParameter",temp);
+
+
+
+
+                 Result r_return = mxMainEV6SAP(Ctx, Args1, argMap);
+
+
+                  return r_return.Message;
+}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	public String mxForm(Context Ctx, String[] Args) throws Exception {
+		String Mode, BusID, Operation, DialogMode, Input = "", Output = "";
+		HashMap programMap = (HashMap) JPO.unpackArgs(Args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+        SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+        putTrace("\n\n\n----------ev6sap JPO mxForm " + df.format(new Date()) + "----------");
+		printHashMap("requestMap", requestMap);
+		printHashMap("paramMap", paramMap);
+        Mode = (String) requestMap.get("mode");
+		BusID = (String) requestMap.get("objectId");
+		Operation = (String) requestMap.get("preProcessJPO");
+		DialogMode = (String) requestMap.get("postProcessJPO");
+        if (requestMap.containsKey("cancelProcessJPO")) Input = (String) requestMap.get("cancelProcessJPO");
+        if (Mode.equalsIgnoreCase("batch")) {
+            try {
+                EV6SAPAdaptor ev6sapAdaptor = new EV6SAPAdaptor();
+//              Due to a reason I dont know, creating a Request Object in the original context does not work.
+//              ev6sapAdaptor.createRequestObject(Ctx, BusID, Operation, DialogMode, Input);
+//              Therefore, I clone the context.
+                ev6sapAdaptor.createRequestObject(new Context(null, Ctx, null), BusID, Operation, DialogMode, Input);
+                Output = "Request Object created";
+            } catch (MatrixException e) {
+                Output = "Error creating Request Object: " + e.getLocalizedMessage();
+            }
+            putTrace("Output = " + Output);
+        } else {
+putTrace("Debug kph04");
+    		Result Return = exec(new Context(null, Ctx, null), BusID, Operation, DialogMode, Input,null);
+putTrace("Debug kph05");
+        	if (! Return.Message.isEmpty())
+            	Output = Return.Message;
+    		else if (Return.Code == 0)
+        		Output = "SAP activity ended successfully";
+            else
+                Output = "Error in SAP activity";
+        	putTrace("Output1 = " + Output);
+        	if (Operation.equals("BOMShowSAP"))
+            	Output += formatHTML(Return.Output, "Item No;Component;Quantity;Unit", "", false);
+        	else
+        		Output += formatHTML(Return.Output, "", "", true);
+            putTrace("Output2 = " + Output);
+            Output = Output.replaceAll("\n", "<br/>");
+        	putTrace("Output3 = " + Output);
+        }
+		return Output;
+	}
+
+    private Result exec(Context Ctx, String BusID, String Operation, String DialogMode, String Input, Map paramMap) throws Exception {
+		SimpleDateFormat DF = new SimpleDateFormat("yyyyMMddHHmmss");
+	    String DateExtension = DF.format(new Date());
+		String ProcessID = DateExtension+"_"+System.currentTimeMillis();
+		String TNR = getTNR(Ctx, BusID);
+        Result Return;
+		boolean EntireTree = false, ParentsOnly = false, BottomUp = true;
+        /* EntireTree = false: only the current object is processed
+         * EntireTree = true: all objects of the entire tree are considered */
+		EntireTree = matches(Operation, "Tree");
+        /* ParentsOnly = false: all objects of the tree are processed
+         * ParentsOnly = true: objects are only processed if they have children */
+		ParentsOnly = matches(Operation, "BOM") ;
+        /* BottomUp = false: Processing runs top down, parents are processed before children
+         * BottomUp = true: Processing runs bottom up, children are processed before parents */
+		BottomUp = matches(Operation, "Document") || matches(Operation, "BOD");
+		if (!EntireTree) {
+			System.out.println("! EntireTree");
+			putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+			Return = execute(Ctx, BusID, Operation, DialogMode, Input, paramMap, "", TNR);
+			putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+			putTrace("Result = " + String.valueOf(Return.Code) + "---" + Return.Message + "---" + Return.Output);
+        } else {
+			System.out.println("EntireTree  " );
+			BusinessObject Bus = new BusinessObject(BusID);
+			Vector<String> Tree = new Vector<String>();
+			getTree(Ctx, Bus, "EBOM,VPLMrel/CUSDEMO1Instance,CAD SubComponent", ParentsOnly, Tree);
+			//getTree(Ctx, Bus, "EBOM,VPLMrel/PLMProductInstanceDS", ParentsOnly, Tree);
+			//getTree(Ctx, Bus, "EBOM", ParentsOnly, Tree);
+            //getTree(Ctx, Bus, "VPLMrel/PLMProductInstanceDS", ParentsOnly, Tree);
+			if (BottomUp) Collections.reverse(Tree);
+			Enumeration<String> E = Tree.elements();
+			Return = new Result(0, "", "");
+			while(E.hasMoreElements()) {
+				BusID = E.nextElement();
+				putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+				System.out.println("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+				//Old one without Performance Check
+				//Result R = execute(Ctx, BusID, Operation, DialogMode, Input, paramMap);
+				Result R = execute(Ctx, BusID, Operation, DialogMode, Input, paramMap, ProcessID, TNR);
+				putTrace("Object = " + BusID + " (" + getTNR(Ctx, BusID) + ")");
+				putTrace("Result = " + String.valueOf(R.Code) + "---" + R.Message + "---" + R.Output);
+				System.out.println("Result = " + String.valueOf(R.Code) + "---" + R.Message + "---" + R.Output);
+				Return.Code += R.Code;
+				if (! R.Message.isEmpty()) Return.Message += "\n" + getTNR(Ctx, BusID) + ":\n" + R.Message;
+			}
+			if (Return.Message.length() > 0) Return.Message = Return.Message.substring(1);
+		}
+		return Return;
+	}
+
+	private Result execute(Context Ctx, String BusID, String Operation, String sDialogMode, String Input, Map paramMap, String ProcessID, String TNR) {
+		try {		
+    		EV6SAPAdaptor ev6sapAdaptor = new EV6SAPAdaptor();
+			ev6sapAdaptor.setGlobalMap(paramMap);
+			ev6sapAdaptor.setProcessID(ProcessID);
+			ev6sapAdaptor.setRootTNR(TNR);
+			eDialogMode DialogMode = eDialogMode.values()[Integer.parseInt(sDialogMode)];
+			return ev6sapAdaptor.execute(null, Operation, Ctx, BusID, DialogMode, eProgressInfo.piNone, Input);
+		} catch (RuntimeException e) {
+			return new Result(1, "Runtime Exception: " + e.getMessage(), "");
+		} catch (Exception e) {
+			return new Result(1, "Exception: " + e.getMessage(), "");
+		}
+	}
+
+	private void getTree(Context Ctx, BusinessObject Bus, String RelationName, boolean ParentsOnly, Vector<String> V) throws MatrixException {
+	    BusinessObjectWithSelect Child = null;
+	    StringList SL = new StringList();
+        boolean ta = Ctx.isTransactionActive();
+        if (! ta) Ctx.start(false);
+	    Bus.open(Ctx);
+		String BusID = Bus.getObjectId(Ctx);
+                                 putTrace("kph:getTree:head= " +  BusID);
+		ExpansionIterator E = Bus.getExpansionIterator(Ctx, RelationName, "*", SL, SL, false, true, (short) 1, "", "", (short) 0, false, false, (short) 1024);
+		if ((E.hasNext() || ! ParentsOnly) && ! V.contains(BusID)) V.addElement(BusID);
+		while (E.hasNext()) {
+			Child = E.next().getTarget();
+                                                putTrace("kph:getTree:child= " +  Child.getObjectId(Ctx));
+			getTree(Ctx, Child, RelationName, ParentsOnly, V);
+		}
+        E.close();
+		Bus.close(Ctx);
+        if (! ta) Ctx.commit();
+	}
+
+
+
+
+    private String getTNR(Context Ctx, String BusID) throws MatrixException {
+
+String TNR = "0";  //case of ws call without enovia id
+
+ if (!BusID.equalsIgnoreCase("0")) {
+        BusinessObject Bus = new BusinessObject(BusID);
+        Bus.open(Ctx);
+        TNR = Bus.getTypeName() + " " + Bus.getName() + " rev " + Bus.getRevision();
+        Bus.close(Ctx);
+}
+
+        return TNR;
+    }
+
+	public int saveRemote(Context Ctx, String[] Args) throws Exception {
+        Hashtable<String,String> BusDataUpdate = (Hashtable<String,String>) JPO.unpackArgs(Args);
+        String BusID = BusDataUpdate.get("*ID*");
+        BusinessObject Bus = new BusinessObject(BusID);
+		AttributeList AL = new AttributeList();
+		Iterator I = BusDataUpdate.entrySet().iterator();
+        boolean ta = Ctx.isTransactionActive();
+        try {
+            if (! ta) Ctx.start(true);
+            while(I.hasNext()) {
+                Map.Entry E = (Map.Entry) I.next();
+            	String Key = (String) E.getKey();
+                String Value = (String) E.getValue();
+                if (Key.equalsIgnoreCase("Name")) {
+                    Bus.open(Ctx);
+    		        Bus = new BusinessObject(Bus.change(Ctx, Bus.getTypeName(), Value, Bus.getRevision(),
+        	        									Bus.getVault(), Bus.getPolicy(Ctx).getName()));
+                    Bus.close(Ctx);
+                } else if (Key.equalsIgnoreCase("Revision")) {
+    				Bus.open(Ctx);
+        	        Bus = new BusinessObject(Bus.change(Ctx, Bus.getTypeName(), Bus.getName(), Value,
+                    									Bus.getVault(), Bus.getPolicy(Ctx).getName()));
+                    Bus.close(Ctx);
+                } else if (Key.equalsIgnoreCase("Description")) {
+        			Bus.setDescription(Ctx, Value);
+            		Bus.update(Ctx);
+    			} else if (Key.equalsIgnoreCase("Owner")) {
+        			Bus.setOwner(Ctx, Value);
+            		Bus.update(Ctx);
+                } else if (Key.equalsIgnoreCase("Policy")) {
+    				Policy P = new Policy(Value);
+        			Bus.setPolicy(Ctx, P);
+            		Bus.update(Ctx);
+                } else if (Key.equalsIgnoreCase("Vault")) {
+    				Vault V = new Vault(Value);
+        			Bus.setVault(Ctx, V);
+            		Bus.update(Ctx);
+                } else if (! Key.equalsIgnoreCase("*ID*")){
+    				AttributeType AT = new AttributeType(Key);
+        			Attribute A = new Attribute(AT, Value);
+            		AL.addElement(A);
+    			}
+    		}
+    		if (! AL.isEmpty()) Bus.setAttributes(Ctx, AL);
+            if (! ta) Ctx.commit();
+        } catch (Exception e) {
+            if (! ta) Ctx.abort();
+            throw new Exception(e.getLocalizedMessage());
+        }
+        return 0;
+	}
+
+    private boolean matches(String S, String P) {
+        P = ".*" + P + ".*";
+        Pattern Pat = Pattern.compile(P, Pattern.CASE_INSENSITIVE);
+		return Pat.matcher(S).matches();
+	}
+
+	private String formatHTML(String S, String ColHeaders, String RowHeaders, boolean FirstColIsRowHeader) {
+		if (S == null || S.isEmpty()) return "";
+		String FirstFieldType = "field";
+		if (RowHeaders != null && ! RowHeaders.isEmpty()) {
+			String[] RH = RowHeaders.split(";");
+			S = RH[0] + ";" + S;
+			for (int i = 1; i < RH.length; i++)
+				S = S.replace(";;", ";;" + RH[i] + ";");
+		}
+		if (FirstColIsRowHeader) FirstFieldType = "label";
+		S = S.replace(";;", "</td></tr><tr><td class=\"" + FirstFieldType + "\">");
+   		S = S.replace(";", "</td><td class=\"field\">");
+   		S = "<tr><td class=\"" + FirstFieldType + "\">" + S + "</td></tr>";
+		if (ColHeaders != null && ! ColHeaders.isEmpty()) {
+			ColHeaders = ColHeaders.replace(";", "</td><td class=\"label\">");
+			ColHeaders = "<tr><td class=\"label\">" + ColHeaders + "</td></tr>";
+			S = ColHeaders + S;
+		}
+		return S;
+	}
+
+	private void printHashMap(String Name, HashMap H) throws IOException {
+        if (H == null) return;
+		Iterator I = H.entrySet().iterator();
+		int i = 0;
+		while(I.hasNext()) {
+			Map.Entry E = (Map.Entry) I.next();
+            putTrace(String.format("%s (%2d): %s --- %s", Name, i++, E.getKey(), E.getValue()));
+		}
+	}
+
+    private void putTrace(String S) {
+        String EV6SAPPreTrace = System.getenv("EV6SAP_PRE_TRACE");
+        boolean Trace = EV6SAPPreTrace != null && ! EV6SAPPreTrace.isEmpty();
+        if (Trace) System.out.println("JPO / " + S);
+    }
+
+}
+

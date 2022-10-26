@@ -1,0 +1,502 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.StringResource;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ContactService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UITableIndented;
+import com.matrixone.jdom.Element;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Contact constructor
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @param args
+	 *            holds no arguments
+	 * @throws LSAException
+	 *             if the operation fails
+	 * @since 10.0.0.0
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws LSAException {
+		super();
+	}
+
+	private static ContactService getContactService(Context context) throws ComponentException {
+		final Component LSAContactsCore = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+		final ContactService service = (ContactService) LSAContactsCore.getService(ContactService.class);
+		return service;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableLSAContacts(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String objectId = getObjectId(context, programMap);
+			final ContactService contactService = getContactService(context);
+			MapList mlContacts = new MapList();
+
+			final StringList busSelects = new StringList(4);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_TYPE);
+			busSelects.add(DomainConstants.SELECT_NAME);
+			busSelects.add(DomainConstants.SELECT_REVISION);
+
+			final String strWhere = "type != type_Reviewer && type != type_RegulatoryReviewer";
+
+			if (objectId == null || objectId.isEmpty()) {
+				mlContacts = new MapList(contactService.getContacts(context, busSelects, strWhere));
+			}
+			else {
+				mlContacts = new MapList(contactService.getContactsOfParent(context, DomainObject.newInstance(context, objectId), busSelects,
+						strWhere, Helper.stringList(DomainRelationship.SELECT_ID), ""));
+			}
+			return mlContacts;
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	private String getObjectId(Context context, Map programMap) {
+		String strObjectId = DomainConstants.EMPTY_STRING;
+		Map paramMap = (HashMap) programMap.get("paramMap");
+		if (paramMap == null || paramMap.isEmpty()) {
+			Object strArrayObjectId = programMap.get("objectId");
+			if (strArrayObjectId instanceof String) {
+				strObjectId = (String) strArrayObjectId;
+			}
+			else {
+				String[] temp = (String[]) strArrayObjectId;
+				strObjectId = temp[0];
+			}
+		}
+		else {
+			strObjectId = (String) paramMap.get("objectId");
+		}
+		return strObjectId;
+	}
+
+	@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+	public Map<?, ?> createContacts(Context context, String[] args) throws LSAException {
+		try {
+			final Map mReturnMap = new HashMap();
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramMap");
+			final String objectId = (String) paramMap.get("objectId");
+			final Element rootElement = (Element) programMap.get("contextData");
+			final MapList chgRowsMapList = UITableIndented.getChangedRowsMapFromElement(context, rootElement);
+			final MapList mlChangedRows = new MapList();
+			ContextUtil.startTransaction(context, true);
+
+			for (final Object obj : chgRowsMapList) {
+				final Map<?, ?> contactMap = (Map<?, ?>) obj;
+				final Map<?, ?> newContact = (Map<?, ?>) contactMap.get("columns");
+				final Map<String, String> attributeMap = new HashMap<String, String>();
+				final String contactFaxNumber = (String) newContact.get("Contact Fax Number");
+				final String contactCity = (String) newContact.get("Contact City");
+				final String contactBusinessorAgency = (String) newContact.get("Contact Business or Agency");
+				final String contactType = (String) newContact.get("Contact Type");
+				final String contactOccupation = (String) newContact.get("Occupation");
+				final String contactMobileNumber = (String) newContact.get("Contact Mobile Number");
+				final String contactZip = (String) newContact.get("Contact Zip");
+				final String contactEmailAddress = (String) newContact.get("Contact Email Address");
+				final String contactTelephoneNumber = (String) newContact.get("Contact Telephone Number");
+				final String contactHomeNumber = (String) newContact.get("Contact Home Number");
+				final String contactCountry = (String) newContact.get("Contact Country");
+				final String contactStreetAddress = (String) newContact.get("Contact Street Address");
+				final String contactTitle = (String) newContact.get("Contact Title");
+				final String contactState = (String) newContact.get("Contact State");
+				final String contactFirstName = (String) newContact.get("First Name");
+				final String contactLastName = (String) newContact.get("Last Name");
+				final String CONTACT_MIDDLE_NAME = (String) newContact.get("Middle Name");
+				final String contactSalutation = (String) newContact.get("Salutation");
+				final String zipCodeExtension = (String) newContact.get("ZIP Code Extension");
+				final String addressLine2 = (String) newContact.get("Address Line 2");
+				final String contactOutsourcingFacility = (String) newContact.get("Outsourcing Facility");
+
+				if (!Helper.isNullOrEmpty(contactOutsourcingFacility) || contactOutsourcingFacility == DomainConstants.EMPTY_STRING) {
+					if (contactType.equalsIgnoreCase("Manufacturer") && contactOutsourcingFacility.equalsIgnoreCase("Not Applicable")) {
+						throw new LSAException("Outsourcing Facility can be Yes or No if Contact Type is Manufacturer");
+					}
+					else if (!contactType.equalsIgnoreCase("Manufacturer") && !contactOutsourcingFacility.equalsIgnoreCase("Not Applicable")) {
+						throw new LSAException("Outsourcing Facility should be \"Not Applicable\" if Contact Type is not Manufacturer");
+					}
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_OutsourcingFacility"), contactOutsourcingFacility);
+				}
+
+				attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_BusinessorAgency"), contactBusinessorAgency);
+
+				if (contactFaxNumber != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_FaxNumber"), contactFaxNumber);
+				}
+
+				if (contactCity != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_City"), contactCity);
+				}
+
+				if (contactMobileNumber != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_CellPhoneNumber"), contactMobileNumber);
+				}
+
+				if (contactZip != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_PostalCode"), contactZip);
+				}
+
+				if (contactEmailAddress != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_EmailAddress"), contactEmailAddress);
+				}
+
+				if (contactTelephoneNumber != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_WorkPhoneNumber"), contactTelephoneNumber);
+				}
+
+				if (contactHomeNumber != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_HomePhoneNumber"), contactHomeNumber);
+				}
+
+				if (contactCountry != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Country"), contactCountry);
+				}
+
+				if (contactStreetAddress != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Address"), contactStreetAddress);
+				}
+
+				if (contactTitle != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Title"), contactTitle);
+				}
+
+				if (contactState != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_StateRegion"), contactState);
+				}
+
+				if (contactFirstName != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_FirstName"), contactFirstName);
+				}
+
+				if (contactLastName != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_LastName"), contactLastName);
+				}
+
+				if (CONTACT_MIDDLE_NAME != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_MiddleName"), CONTACT_MIDDLE_NAME);
+				}
+
+				if (contactSalutation != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Salutation"), contactSalutation);
+				}
+
+				if (contactType != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_ContactType"), contactType);
+				}
+
+				if (contactOccupation != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_Occupation"), contactOccupation);
+				}
+
+				if (addressLine2 != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_AddressLine2"), addressLine2);
+				}
+
+				if (zipCodeExtension != null) {
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, "attribute_ZIPCodeExtension"), zipCodeExtension);
+				}
+
+				final ContactService contactService = getContactService(context);
+				final String newObjectId = contactService.createContact(context, PropertyUtil.getSchemaProperty(context, "type_Contact"),
+						attributeMap);
+				final Map mReturn = new HashMap();
+
+				mReturn.put("rowId", contactMap.get("rowId"));
+				mReturn.put("oid", newObjectId);
+				mReturn.put("markup", "new");
+				mReturn.put("columns", newContact);
+				if (objectId != null && !objectId.isEmpty()) {
+					final Map<?, ?> connectionMap = contactService.addContactsToParent(context, DomainObject.newInstance(context, objectId),
+							Helper.stringList(newObjectId));
+					mReturn.put("pid", objectId);
+					mReturn.put("relid", connectionMap.get(newObjectId));
+				}
+				mlChangedRows.add(mReturn);
+			}
+			mReturnMap.put("Action", "success");
+			mReturnMap.put("changedRows", mlChangedRows);
+			ContextUtil.commitTransaction(context);
+			return mReturnMap;
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@Deprecated
+	public Map<?, ?> getDefaultTypeContact(Context context, String[] args) {
+		final Map<String, String> mpType = new HashMap<String, String>();
+		mpType.put("Default_AddNewRow", PropertyUtil.getSchemaProperty(context, "type_Contact"));
+		return mpType;
+	}
+
+	public Map<?, ?> getTableColumnDefaultValue(Context context, String[] args) throws LSAException {
+		final Map<String, String> mpType = new HashMap<String, String>();
+		mpType.put("Default_AddNewRow", "");
+		return mpType;
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionDeleteSelectedContacts(Context context, String[] args) throws LSAException {
+		try {
+			ContextUtil.startTransaction(context, true);
+			final Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String[] objectId = (String[]) inputMap.get("objectId");
+			if (objectId != null && objectId.length > 0 && !objectId[0].isEmpty()) {
+				actionRemoveSelectedContacts(context, args);
+			}
+			final List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds((String[]) inputMap.get("emxTableRowId"));
+			final ContactService contactService = getContactService(context);
+			final StringList contactIds = Helper.stringList();
+
+			for (final EmxTableRowId rowId : emxTableRowIds) {
+				contactIds.add(rowId.getObjectId());
+			}
+			contactService.deleteContact(context, contactIds);
+			ContextUtil.commitTransaction(context);
+			return Helper.encodeFunctionForJavaScript(context, false, "alertContactsSuccessfullyDeleted");
+		}
+		catch (final Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new LSAException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveSelectedContacts(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String[] objList = (String[]) programMap.get("emxTableRowId");
+			final String[] objectId = (String[]) programMap.get("objectId");
+			final List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(objList);
+			final List<String> idList = new ArrayList<String>();
+			for (final EmxTableRowId emxTableRowId : emxTableRowIds) {
+				idList.add(emxTableRowId.getObjectId());
+			}
+			final ContactService contactService = getContactService(context);
+			contactService.removeContactsFromParent(context, DomainObject.newInstance(context, objectId[0]), idList);
+			return Helper.encodeFunctionForJavaScript(context, false, "removeAndRefreshPage");
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	public boolean checkAccessForCategoryCommand(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String objectId = (String) programMap.get("objectId");
+			if (objectId == null || objectId.isEmpty()) {
+				return false;
+			}
+			else {
+				final DomainObject parentObject = DomainObject.newInstance(context, objectId);
+
+				// Additional check for Cancel and Archive state of Submission
+				if (parentObject.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_Submission"))) {
+					String state = parentObject.getInfo(context, DomainObject.SELECT_CURRENT);
+					final String POLICY_PROJECT_SPACE = PropertyUtil.getSchemaProperty(context, "policy_ProjectSpace");
+					final String STATE_PROJECT_SPACE_ARCHIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_SPACE,
+							"state_Archive");
+					final String POLICY_PROJECT_SPACE_HOLD_CANCEL = PropertyUtil.getSchemaProperty(context, "policy_ProjectSpaceHoldCancel");
+					final String STATE_PROJECT_SPACE_HOLD_CANCEL_CANCEL = PropertyUtil.getSchemaProperty(context, "policy",
+							POLICY_PROJECT_SPACE_HOLD_CANCEL, "state_Cancel");
+					if (STATE_PROJECT_SPACE_ARCHIVE.equalsIgnoreCase(state) || (STATE_PROJECT_SPACE_HOLD_CANCEL_CANCEL).equalsIgnoreCase(state)) {
+						return false;
+					}
+				}
+				if (!parentObject.checkAccess(context, (short) AccessConstants.cModify)) {
+					return false;
+				}
+			}
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+		return true;
+	}
+
+	public boolean checkAccessForGlobalContactsToolbarCommands(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			final String objectId = (String) programMap.get("objectId");
+			if (objectId == null || objectId.isEmpty()) {
+				return true;
+			}
+			else {
+				final DomainObject parentObject = DomainObject.newInstance(context, objectId);
+
+				// Additional check for Cancel and Archive state of Submission
+				if (parentObject.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_Submission"))) {
+					String state = parentObject.getInfo(context, DomainObject.SELECT_CURRENT);
+					final String POLICY_PROJECT_SPACE = PropertyUtil.getSchemaProperty(context, "policy_ProjectSpace");
+					final String STATE_PROJECT_SPACE_ARCHIVE = PropertyUtil.getSchemaProperty(context, "policy", POLICY_PROJECT_SPACE,
+							"state_Archive");
+					final String POLICY_PROJECT_SPACE_HOLD_CANCEL = PropertyUtil.getSchemaProperty(context, "policy_ProjectSpaceHoldCancel");
+					final String STATE_PROJECT_SPACE_HOLD_CANCEL_CANCEL = PropertyUtil.getSchemaProperty(context, "policy",
+							POLICY_PROJECT_SPACE_HOLD_CANCEL, "state_Cancel");
+					if (STATE_PROJECT_SPACE_ARCHIVE.equalsIgnoreCase(state) || (STATE_PROJECT_SPACE_HOLD_CANCEL_CANCEL).equalsIgnoreCase(state)) {
+						return false;
+					}
+				}
+				if (!parentObject.checkAccess(context, (short) AccessConstants.cModify)) {
+					return false;
+				}
+			}
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+		return true;
+	}
+
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddContact(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = JPO.unpackArgs(args);
+			final String[] objectId = (String[]) programMap.get("objectId");
+			final String[] arrRowIdsActual = (String[]) programMap.get("emxTableRowId");
+			final List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(arrRowIdsActual);
+			final List<String> idList = new ArrayList<String>();
+			for (final EmxTableRowId emxTableRowId : emxTableRowIds) {
+				idList.add(emxTableRowId.getObjectId());
+			}
+			final ContactService contactService = getContactService(context);
+			contactService.addContactsToParent(context, DomainObject.newInstance(context, objectId[0]), idList);
+			return Helper.encodeFunctionForJavaScript(context, false, "addAndRefreshPage");
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getContactsExclude(Context context, String[] args) throws LSAException {
+		try {
+			final Map<?, ?> programMap = JPO.unpackArgs(args);
+			final String objectId = (String) programMap.get("objectId");
+			final ContactService contactService = getContactService(context);
+			final List<Map<?, ?>> mlContacts = contactService.getContactsOfParent(context, DomainObject.newInstance(context, objectId),
+					Helper.stringList(DomainConstants.SELECT_ID), "", Helper.stringList(), "");
+			final StringList slExcludeContacts = Helper.stringList();
+			for (final Map<?, ?> mpContact : mlContacts) {
+				slExcludeContacts.add((String) mpContact.get(DomainConstants.SELECT_ID));
+			}
+			return slExcludeContacts;
+		}
+		catch (final Exception e) {
+			throw new LSAException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public HashMap<?, ?> preProcessCheckForEdit(Context context, String[] args) throws LSAException {
+		try {
+			HashMap returnMap = new HashMap();
+			final HashMap<?, ?> inputMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			final HashMap<?, ?> paramMap = (HashMap<?, ?>) inputMap.get("paramMap");
+			final HashMap<?, ?> tableData = (HashMap<?, ?>) inputMap.get("tableData");
+			final MapList objectList = (MapList) tableData.get("ObjectList");
+			final String strObjectId = (String) paramMap.get("objectId");
+
+			if (strObjectId == null || strObjectId.isEmpty()) {
+				returnMap = new HashMap(2);
+				returnMap.put("Action", "Continue");
+				returnMap.put("ObjectList", objectList);
+			}
+			else {
+				final DomainObject parentObj = new DomainObject(strObjectId);
+				final boolean access = parentObj.checkAccess(context, (short) AccessConstants.cModify);
+				if (!access) {
+					returnMap = new HashMap(3);
+					returnMap.put("Action", "Stop");
+					returnMap.put("Message", "LSACommonFramework.Message.UserNotAuthorised");
+					returnMap.put("ObjectList", objectList);
+					return returnMap;
+				}
+				else if (parentObj.isKindOf(context, PropertyUtil.getSchemaProperty(context, "type_Submission"))) {
+					returnMap = (HashMap<?, ?>) JPO.invokeLocal(context, "${CLASS:com.dassault_systemes.enovia.lsa.lra.services.ui.Submission}", null,
+							"preProcessCheckForEdit", args, HashMap.class);
+				}
+				else {
+					returnMap = new HashMap(2);
+					returnMap.put("Action", "Continue");
+					returnMap.put("ObjectList", objectList);
+				}
+			}
+			return returnMap;
+		}
+		catch (final Throwable t) {
+			throw new LSAException(t);
+		}
+	}
+
+	@ProgramCallable
+	public Map<?, ?> reloadTableCellOutsourcingFacility(Context context, String[] args) throws LSAException {
+		try {
+			Map<String, Object> reloadMap = new HashMap<>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> columnValuesMap = (Map<?, ?>) programMap.get("columnValues");
+			String contactType = (String) columnValuesMap.get("Contact Type");
+			final String DISPLAY_VALUE_YES = Helper.getI18NString(context, StringResource.AEF, "emxFramework.Range.Outsourcing_Facility.Yes");
+			final String DISPLAY_VALUE_NO = Helper.getI18NString(context, StringResource.AEF, "emxFramework.Range.Outsourcing_Facility.No");
+			final String DISPLAY_VALUE_NOT_APPLICABLE = Helper.getI18NString(context, StringResource.AEF,
+					"emxFramework.Range.Outsourcing_Facility.Not_Applicable");
+			StringList slManufacturerRangeActualValues = Helper.stringList("Yes", "No");
+			StringList slManufacturerRangeDisplayValues = Helper.stringList(DISPLAY_VALUE_YES, DISPLAY_VALUE_NO);
+			StringList slOtherRangeActualValues = Helper.stringList("Not Applicable");
+			StringList slOtherRangeDisplayValues = Helper.stringList(DISPLAY_VALUE_NOT_APPLICABLE);
+			if (contactType.equalsIgnoreCase("Manufacturer")) {
+				reloadMap.put("RangeValues", slManufacturerRangeActualValues);
+				reloadMap.put("RangeDisplayValue", slManufacturerRangeDisplayValues);
+			}
+			else {
+				reloadMap.put("RangeValues", slOtherRangeActualValues);
+				reloadMap.put("RangeDisplayValue", slOtherRangeDisplayValues);
+			}
+
+			return reloadMap;
+		}
+		catch (Exception e) {
+			throw new LSAException();
+		}
+	}
+}
+

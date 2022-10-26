@@ -1,0 +1,478 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.HazardContext;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskContext;
+import com.dassault_systemes.enovia.riskmgmt.ManagedRiskWithSelect;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames, DomainConstants {
+	private final String					CELL_SIZE			= "55px";
+	private List<ManagedRiskWithSelect>[][]	riskMatrix			= null;
+	private List<ManagedRiskWithSelect>		unevaluatedRisks	= null;
+	private String							objectId			= null;
+
+	public static String					RISK_TABLE_URL		= "emxIndentedTable.jsp?toolbar=RiskMgmtManagedRiskSummaryToolBar&program=com.dassault_systemes.enovia.riskmgmt.ui.ManagedRisk:getAssociatedManagedRisks"
+																		+ "&table=RiskMgmtRiskAssessmentSummary&sortColumnName=CurrentRPN&sortDirection=descending&selection=multiple&objectId=%s&occIndex=%s&sevIndex=%s";
+
+	public static String					targetFrame			= "RiskMgmtRiskTable";
+
+	public static final String				RISK_CREATE_URL		= "emxCreate.jsp?nameField=autoName&form=type_CreateManagedRisk&type=type_ManagedRisk&policy=policy_ManagedRisk&formHeader=RiskMgmt.Form.type_CreateManagedRisk.Header"
+																		+ "&mode=edit&createJPO=com.dassault_systemes.enovia.riskmgmt.ui.ManagedRisk:createManagedRisk&submitAction=refreshCaller&showApply=true&HelpMarker=CreateManagedRisk&showPageURLIcon=false"
+																		+ "&postProcessURL=../RiskMgmt/RiskMgmtCreateRiskPostProcess.jsp&suiteKey=RiskMgmt&StringResourceFileId=RiskMgmtStringResource&SuiteDirectory=RiskMgmt&objectId=%s&parentOID=%s"
+																		+ "&openerFrame=RiskMgmtRiskTable&occIndex=%s&sevIndex=%s&launchCreate=true";
+
+	public ${CLASSNAME}(Context context, String[] args) {
+
+	}
+
+	private void init(Context context, String objectId) throws RiskMgmtException {
+		try {
+			ManagedRiskContext riskContext = null;
+			final String TYPE_PRODUCTS = SYMBOLIC_TYPE_PRODUCTS.toString();
+			DomainObject domainObject = DomainObject.newInstance(context, objectId);
+			Map<String, Boolean> typeInfoMap = RiskMgmtUtil.getTypeKindOf(context, domainObject, TYPE_PRODUCTS);
+			if (!RiskMgmtUtil.isNullOrEmpty(typeInfoMap) && typeInfoMap.get(PropertyUtil.getSchemaProperty(context, TYPE_PRODUCTS))) {
+				RISK_TABLE_URL = "emxIndentedTable.jsp?toolbar=RiskMgmtHazardSummaryActionsToolbar&expandProgram=com.dassault_systemes.enovia.riskmgmt.ui.RiskMgmtRiskMatrix:getEmptyMapList&program=com.dassault_systemes.enovia.riskmgmt.ui.Hazard:getTableRiskMgmtHazardSummaryData&table=RiskMgmtHazardSummary&showPageHeader=false&selection=multiple&objectId=%s&occIndex=%s&sevIndex=%s";
+				targetFrame = "RiskMgmtHazardDetails";
+				riskContext = new HazardContext(objectId);
+			}
+			else {
+				riskContext = new ManagedRiskContext(objectId);
+			}
+
+			Set<String> selects = new HashSet<String>();
+			selects.add(SELECT_ID);
+			selects.add(SELECT_CURRENT);
+
+			this.objectId = objectId;
+
+			unevaluatedRisks = new ArrayList<ManagedRiskWithSelect>();
+
+			riskMatrix = riskContext.getRiskMatrix(context, selects, null, unevaluatedRisks);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Returns empty MapList for expandProgram in link from hazardMatrix
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getEmptyMapList(Context context, String args[]) {
+		return new MapList();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public String getRiskMatrix(Context context, String[] args) throws RiskMgmtException {
+		try {
+			StringBuilder riskMatrixHTML = new StringBuilder();
+
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			Map requestMap = (HashMap) inputMap.get(REQUEST_MAP);
+			String objectId = (String) requestMap.get(OBJECT_ID);
+
+			init(context, objectId);
+
+			String verticalLabelDiv = getVerticalLabelDiv(context);
+			String verticalCellIDsDiv = getVerticalCellIDsDiv(context);
+
+			riskMatrixHTML.append(verticalLabelDiv).append(verticalCellIDsDiv);
+			riskMatrixHTML.append("</div>");
+
+			Integer[] highDistrib = new Integer[] { 0, 0, 0 };
+			Integer[] medDistrib = new Integer[] { 0, 0, 0 };
+			Integer[] lowDistrib = new Integer[] { 0, 0, 0 };
+			Integer[] unevalDistrib = new Integer[] { 0, 0, 0 };
+
+			riskMatrixHTML.append(getRiskGridDiv(context, objectId, highDistrib, medDistrib, lowDistrib, unevalDistrib));
+
+			riskMatrixHTML.append(getHorizontalCellIDsDiv(context));
+
+			riskMatrixHTML.append(getStateDistribDiv(context, highDistrib, medDistrib, lowDistrib, unevalDistrib));
+
+			riskMatrixHTML.append(getHorizontalLabelDiv(context));
+
+			return riskMatrixHTML.toString();
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String getHorizontalLabelDiv(Context context) {
+		StringBuilder div = new StringBuilder();
+
+		div.append("<div style=\"width:275px;height:11px;font-height:15px;font-weight:bold;letter-spacing:5px;clear:both;position:relative; top:-1.3em;margin:0 10em;\">");
+
+		div.append(EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(), "RiskMgmt.Common.Severity")).append(
+				"</div>");
+
+		return div.toString();
+	}
+
+	private String getHorizontalCellIDsDiv(Context context) {
+		StringBuilder div = new StringBuilder();
+
+		for (int i = 0; i < 5; ++i) {
+
+			div.append("<div style=\"display:table-cell;width:55px;height:11px;text-align:center;vertical-align:top;color:#8E8E8E\">").append(i + 1)
+					.append("</div>");
+		}
+		div.append("</div>");
+
+		return div.toString();
+	}
+
+	private String getStateDistribDiv(Context context, Integer[] highDistrib, Integer[] medDistrib, Integer[] lowDistrib, Integer[] unevalDistrib)
+			throws RiskMgmtException {
+		try {
+			StringBuilder div = new StringBuilder();
+			String commonStyle = "width:auto;border:1px solid #fefefe;height:24px;overflow:hidden;";
+
+			String StateLevel = EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(),
+					"RiskMgmt.Header.StateLevel");
+			String High = EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(), "RiskMgmt.Header.High");
+			String Medium = EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(), "RiskMgmt.Header.Medium");
+			String Low = EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(), "RiskMgmt.Header.Low");
+			String noRPN = EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(), "RiskMgmt.Header.NoRPN");
+
+			div.append("<div style=\"float:right;overflow:hidden;\"><table style=\"border-collapse:collapse\">");
+			beginRow(div);
+			addField(div, commonStyle, "background-color:#DADADA", StateLevel, null, true);
+			addField(div, commonStyle, "background-color:#FF3030;width:auto;", High, null, true);
+			addField(div, commonStyle, "background-color:#FFFF00;width:auto;", Medium, null, true);
+			addField(div, commonStyle, "background-color:#00FF00;width:auto;", Low, null, true);
+			addField(div, commonStyle, "background-color:#DADADA", noRPN, null, true);
+			addField(div, commonStyle, "background-color:#DADADA", "&Sum;", null, true);
+			endRow(div);
+
+			updateDistrib(context, unevaluatedRisks, unevalDistrib);
+
+			String identifiedState = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYMBOLIC_STATE_IDENTIFIED);
+			String evaluatedState = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYMBOLIC_STATE_EVALUATED);
+			String controlledState = RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYMBOLIC_STATE_CONTROLLED);
+
+			String i18nIdentifiedState = RiskMgmtUtil.getStateI18NString(context, SYM_POLICY_MANAGED_RISK.get(context), identifiedState);
+			String i18nEvaluatedState = RiskMgmtUtil.getStateI18NString(context, SYM_POLICY_MANAGED_RISK.get(context), evaluatedState);
+			String i18nControlledState = RiskMgmtUtil.getStateI18NString(context, SYM_POLICY_MANAGED_RISK.get(context), controlledState);
+
+			addValuesRow(div, i18nIdentifiedState, identifiedState, highDistrib[0], medDistrib[0], lowDistrib[0], unevalDistrib[0], commonStyle, null);
+			addValuesRow(div, i18nEvaluatedState, evaluatedState, highDistrib[1], medDistrib[1], lowDistrib[1], unevalDistrib[1], commonStyle, null);
+			addValuesRow(div, i18nControlledState, controlledState, highDistrib[2], medDistrib[2], lowDistrib[2], unevalDistrib[2], commonStyle, null);
+			addValuesRow(div, "&Sum;", "&Sum;", getSum(highDistrib), getSum(medDistrib), getSum(lowDistrib), getSum(unevalDistrib), commonStyle, null);
+
+			div.append("</table></div>");
+
+			return div.toString();
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String getRiskGridDiv(Context context, String objectId, Integer[] highDistrib, Integer[] medDistrib, Integer[] lowDistrib,
+			Integer[] unevalDistrib) throws RiskMgmtException {
+		try {
+			StringBuilder div = new StringBuilder("<div style=\"display:table;float:left;padding:1px;overflow:hidden;margin:1px\">");
+			String cellStyle = String.format("width:%s;height:%s;border:1px solid black;display:table-cell;text-align:center;vertical-align:middle",
+					CELL_SIZE, CELL_SIZE);
+
+			for (int occIndex = 4; occIndex > -1; --occIndex) {
+				div.append("<div style=\"display:table-row\">");
+				for (int sevIndex = 0; sevIndex < 5; ++sevIndex) {
+
+					String color = RiskMgmtUtil.getRiskColor(occIndex + 1, sevIndex + 1);
+					List<ManagedRiskWithSelect> indexedManagedRisks = riskMatrix[occIndex][sevIndex];
+
+					/*
+					 * To be implemented later - do not remove
+					 * if(RiskMgmtUtil.isNullOrEmpty(indexedManagedRisks)) {
+					 * 
+					 * 
+					 * String createURL = String.format(RISK_CREATE_URL,
+					 * objectId, objectId, occIndex+1, sevIndex+1);
+					 * 
+					 * div.append(String.format(
+					 * "<div onclick=\"getTopWindow().showSlideInDialog('%s', true)\" style=\""
+					 * , createURL)).append(cellStyle).append(
+					 * ";cursor:pointer;background-color:"
+					 * ).append(color).append("\">");
+					 * 
+					 * } else {
+					 * 
+					 * div.append("<div style=\"").append(cellStyle).append(
+					 * ";background-color:").append(color).append("\">"); }
+					 */
+
+					div.append("<div style=\"").append(cellStyle).append(";background-color:").append(color).append("\">");
+
+					if (!RiskMgmtUtil.isNullOrEmpty(indexedManagedRisks)) {
+
+						div.append(String.format("<a href=\"%s\" target=\"" + targetFrame + "\">%s</a>",
+								String.format(RISK_TABLE_URL, objectId, occIndex, sevIndex), String.valueOf(indexedManagedRisks.size())));
+
+						Integer[] currDistrib = medDistrib;
+
+						if (color.equals("#FF3030"))
+							currDistrib = highDistrib;
+						else if (color.equals("#00FF00"))
+							currDistrib = lowDistrib;
+
+						updateDistrib(context, indexedManagedRisks, currDistrib);
+					}
+
+					div.append("</div>");
+				}
+
+				div.append("</div>");
+			}
+
+			return div.toString();
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String getVerticalCellIDsDiv(Context context) {
+		StringBuilder div = new StringBuilder("<div style=\"display:table;float:left;overflow:hidden;\">");
+
+		for (int i = 5; i > 0; --i) {
+
+			div.append(
+					"<div style=\"display:table-row\"><div style=\"display:table-cell;width:15px;height:55px;text-align:center;vertical-align:middle;color:#8E8E8E;overflow: hidden;\">")
+					.append(i).append("</div></div>");
+		}
+		div.append("</div>");
+
+		return div.toString();
+	}
+
+	private String getVerticalLabelDiv(Context context) {
+		StringBuilder verticalLabelDiv = new StringBuilder();
+
+		String occurrence = getVerticalLabel(EnoviaResourceBundle.getProperty(context, RISK_MGMT_STRING_RESOURCE, context.getLocale(),
+				"RiskMgmt.Common.Occurrence"));
+
+		verticalLabelDiv
+				.append("<div style=\"display:inline-block;float:left;width:30px;height:315px;font-height:15px;font-weight:bold;letter-spacing:5px;float:left;overflow:hidden;margin:1px;padding:1px\">")
+				.append(occurrence).append("</div>");
+
+		return verticalLabelDiv.toString();
+	}
+
+	private String getVerticalLabel(String input) {
+		StringBuilder output = new StringBuilder("<br><br><br>");
+
+		char[] chars = input.toCharArray();
+
+		for (int i = 0; i < chars.length; ++i) {
+
+			output.append("<br>").append(chars[i]);
+		}
+
+		return output.toString();
+	}
+
+	private Integer getSum(Integer[] input) {
+		int sum = 0;
+		for (int i = 0; i < input.length; ++i) {
+
+			sum = sum + input[i];
+		}
+
+		return sum;
+	}
+
+	private void updateDistrib(Context context, List<ManagedRiskWithSelect> indexedManagedRisks, Integer[] distrib) throws RiskMgmtException {
+		try {
+			if (!RiskMgmtUtil.isNullOrEmpty(indexedManagedRisks)) {
+				for (ManagedRiskWithSelect managedRisk : indexedManagedRisks) {
+
+					if (managedRisk != null) {
+
+						int stateIndex = 0;
+						String currState = managedRisk.getValue(SELECT_CURRENT);
+
+						if (currState.equals(RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(), SYMBOLIC_STATE_EVALUATED))) {
+							stateIndex = 1;
+						}
+						else if (currState.equals(RiskMgmtUtil.getActualStateName(context, SYM_POLICY_MANAGED_RISK.toString(),
+								SYMBOLIC_STATE_CONTROLLED))) {
+							stateIndex = 2;
+						}
+
+						distrib[stateIndex] = distrib[stateIndex].intValue() + 1;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private void addValuesRow(StringBuilder table, String rowLabel, String rowName, Integer highCount, Integer medCount, Integer lowCount,
+			Integer unevalCount, String commonStyle, String customStyle) {
+		String row = "&row=" + rowName;
+		StringBuilder sumFieldStyle = new StringBuilder();
+		if ("&Sum;".equals(rowLabel)) {
+
+			row = "&row=" + "sum";
+			sumFieldStyle.append("font-weight:bold;");
+		}
+
+		beginRow(table);
+		addField(table, commonStyle, customStyle, rowLabel, null, true);
+		addField(table, commonStyle, customStyle, highCount.toString(), row + "&col=high", false);
+		addField(table, commonStyle, customStyle, medCount.toString(), row + "&col=medium", false);
+		addField(table, commonStyle, customStyle, lowCount.toString(), row + "&col=low", false);
+		addField(table, commonStyle, customStyle, unevalCount.toString(), row + "&col=unevaluated", false);
+		addField(table, commonStyle, sumFieldStyle.toString(), String.valueOf(highCount + medCount + lowCount + unevalCount), row + "&col=sum", false);
+		endRow(table);
+	}
+
+	private void beginRow(StringBuilder table) {
+		String trStyle = "padding:2px";
+
+		table.append("<tr style=\"").append(trStyle).append("\">");
+	}
+
+	private void endRow(StringBuilder table) {
+		table.append("</tr>");
+	}
+
+	private void addField(StringBuilder table, String commonStyle, String overrideStyle, String value, String urlParams, boolean isLabel) {
+		String tdStyle = "padding:4px;";
+		String labelStyle = "background-color:#DADADA;color:#000000;font-weight:bold;white-space:normal;word-break:keep-all;";
+		String fieldStyle = "background-color:#EEEEEE;white-space:pre-wrap;word-break:keep-all;";
+
+		table.append("<td class=\"");
+
+		if (isLabel) {
+			table.append("label\" style=\"");
+			table.append(labelStyle);
+		}
+		else {
+			table.append("field\" style=\"");
+			table.append(fieldStyle);
+		}
+
+		table.append(commonStyle).append(tdStyle);
+
+		if (!RiskMgmtUtil.isNullOrEmpty(overrideStyle)) {
+
+			table.append(overrideStyle);
+		}
+
+		if (!RiskMgmtUtil.isAnyNullOrEmpty(urlParams, value) && Integer.valueOf(value) != 0) {
+
+			StringBuilder href = new StringBuilder(String.format("<a href=\"%s\" target=\"" + targetFrame + "\">%s</a>",
+					String.format(RISK_TABLE_URL + urlParams, objectId, "", ""), value));
+
+			/*
+			 * StringBuilder href = new StringBuilder(
+			 * "<a href=\"emxIndentedTable.jsp?toolbar=RiskMgmtManagedRiskSummaryToolBar&program=com.dassault_systemes.enovia.riskmgmt.ui.ManagedRisk:getAssociatedManagedRisks&table=RiskMgmtRiskAssessmentSummary"
+			 * ).append(urlParams);
+			 * href.append("&objectId=").append(objectId).append
+			 * ("\" target=\"RiskMgmtRiskTable\">"); href.append(value);
+			 * href.append("</a>");
+			 */
+
+			value = href.toString();
+		}
+
+		table.append("\">").append(value).append("</td>");
+	}
+
+	public String test(Context context, String[] args) {
+		// return
+		// "<div style=\"display:inline-block;border:1px solid white;text-align:center;height:100%;padding:0px;margin:1px\">High</div><div style=\"display:inline-block;border:1px solid white;text-align:center;height:100%;padding:0px;margin:1px\">Medium</div><div style=\"display:inline-block;border:1px solid white;text-align:center;height:100%;padding:0px;margin:1px\">Low</div>";
+
+		return "<div style=\"float:left\"><table><tr><td>State/Level</td><td>High</td><td>Medium</td><td>Low</td><tr></table></div>";
+	}
+
+	public Boolean showClearFilter(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			String occIndex = (String) inputMap.get(OCC_INDEX);
+			String sevIndex = (String) inputMap.get(SEV_INDEX);
+			String showFilter = (String) inputMap.get(SHOW_FILTER);
+
+			if (!RiskMgmtUtil.isNullOrEmpty(showFilter) && showFilter.equals("false")) {
+				return new Boolean(false);
+			}
+			else if (!RiskMgmtUtil.isNullOrEmpty(occIndex) && !RiskMgmtUtil.isNullOrEmpty(sevIndex)) {
+				return new Boolean(true);
+			}
+
+			return new Boolean(false);
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	public Object getFilterRange(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map inputMap = (HashMap) JPO.unpackArgs(args);
+			HashMap requestMap = (HashMap) inputMap.get(REQUEST_MAP);
+			String occIndex = (String) requestMap.get(OCC_INDEX);
+			String sevIndex = (String) requestMap.get(SEV_INDEX);
+			String showFilter = (String) requestMap.get(SHOW_FILTER);
+			String languageStr = (String) requestMap.get(LANGUAGE_STR);
+
+			HashMap tempMap = new HashMap();
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+
+			String cellRange = new StringBuilder().append(increment(sevIndex, 1)).append("x").append(increment(occIndex, 1)).toString();
+			fieldRangeValues.addElement(cellRange);
+			fieldDisplayRangeValues.addElement(cellRange);
+			fieldRangeValues.addElement("all");
+			fieldDisplayRangeValues.addElement("All");
+			tempMap.put(FIELD_CHOICES, fieldRangeValues);
+			tempMap.put(FIELD_DISPLAY_CHOICES, fieldDisplayRangeValues);
+
+			return tempMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	private String increment(String intStr, int i) {
+
+		String incrStr = "";
+		if (!RiskMgmtUtil.isNullOrEmpty(intStr)) {
+
+			incrStr = String.valueOf(Integer.valueOf(intStr) + i);
+		}
+
+		return incrStr;
+	}
+
+}
+

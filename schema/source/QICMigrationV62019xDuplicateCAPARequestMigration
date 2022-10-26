@@ -1,0 +1,58 @@
+
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} extends ${CLASS:emxCommonMigrationBase} {
+
+	/**
+	 * 
+	 */
+	private static final long	serialVersionUID	= 1L;
+	private static String		POLICY_CAPA_REQUEST	= DomainObject.EMPTY_STRING;
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		super(context, args);
+	}
+
+	public void migrateObjects(Context context, StringList objectList) throws Exception {
+		POLICY_CAPA_REQUEST = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST);
+		for (Object string : objectList) {
+			DomainObject capaRequest = DomainObject.newInstance(context, (String) string);
+			List<Map<?, ?>> lsMasterRequestInfo = QueryUtil.getRelatedObjects(context, capaRequest,
+					QICConstants.SYMBOLIC_RELATIONSHIP_DUPLICATE_REQUEST, QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST,
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_POLICY),
+					Helper.stringList(DomainRelationship.SELECT_ID, DomainRelationship.SELECT_FROM_ID, DomainRelationship.SELECT_TO_ID), true, false,
+					(short) 1, "policy ~~ '" + POLICY_CAPA_REQUEST + "'", DomainObject.EMPTY_STRING);
+			if (!Helper.isNullOrEmpty(lsMasterRequestInfo)) {
+				for (Map<?, ?> map : lsMasterRequestInfo) {
+					reverseDuplicateRequestRelDirection(context, (String) map.get(DomainRelationship.SELECT_ID),
+							(String) map.get(DomainRelationship.SELECT_FROM_ID), (String) map.get(DomainRelationship.SELECT_TO_ID));
+				}
+			}
+		}
+	}
+
+	private void reverseDuplicateRequestRelDirection(Context context, String relId, String fromId, String toId) throws Exception {
+		QueryUtil.connectObjects(context, DomainObject.newInstance(context, toId), QICConstants.SYMBOLIC_RELATIONSHIP_DUPLICATE_REQUEST,
+				DomainObject.newInstance(context, fromId), null);
+		DomainRelationship.disconnect(context, relId);
+	}
+}
+

@@ -1,0 +1,363 @@
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.projectmgmtextensions.EmxTableRowId;
+import com.dassault_systemes.enovia.projectmgmtextensions.Helper;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEConstants;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEException;
+import com.dassault_systemes.enovia.projectmgmtextensions.QueryUtil;
+import com.matrixone.apps.domain.DomainAccess;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.program.ProgramCentralConstants;
+import com.matrixone.apps.program.ProjectSnapshot;
+import com.matrixone.apps.program.ProjectSpace;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws PMEException
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	/**
+	 * Returns javaScript function after validating Object to be compared.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javaScript function.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.projectmgmtextensions.ExecuteCallable
+	public String compareSnapshot(Context context, String[] args) throws PMEException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strParentId = DomainConstants.EMPTY_STRING;
+			String strChildId = DomainConstants.EMPTY_STRING;
+			String[] arrParentId = (String[]) programMap.get(PMEConstants.PARENT_OID);
+			String[] arrRowIdsActual = (String[]) programMap.get(PMEConstants.EMX_TABLE_ROW_ID);
+			List<String> alObjectIds = new ArrayList<String>();
+			if (!Helper.isNullOrEmpty(arrRowIdsActual)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(arrRowIdsActual);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					alObjectIds.add(rowId.getObjectId());
+				}
+			}
+			if (!Helper.isNullOrEmpty(arrParentId) && !Helper.isNullOrEmpty(arrParentId[0])) {
+				strParentId = arrParentId[0];
+			}
+			if (alObjectIds.size() == 1) {
+				strChildId = alObjectIds.get(0);
+				if (!Helper.isNullOrEmpty(strChildId) && !((Helper.getTypeKindOf(context, DomainObject.newInstance(context, strChildId),
+						PMEConstants.SYMBOLIC_TYPE_PROJECT_SNAPSHOT)).containsValue(Boolean.TRUE))) {
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage",
+							Helper.getI18NString(context, Helper.StringResource.PME, "PME.ErrorMessage.Snapshot.SelectASnapShotToCompare"));
+				}
+			}
+			else if (alObjectIds.size() == 2) {
+				strParentId = alObjectIds.get(0);
+				strChildId = alObjectIds.get(1);
+			}
+			else if (alObjectIds.size() > 2) {
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage",
+						Helper.getI18NString(context, Helper.StringResource.PME, "PME.ErrorMessage.Snapshot.SelectOnlyTwo"));
+			}
+			return Helper.encodeFunctionForJavaScript(context, false, "compareSnapshotsStructure", strParentId, strChildId);
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	/**
+	 * Creates Snapshot.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javaScript function.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.projectmgmtextensions.ExecuteCallable
+	public String createSnapshot(Context context, String[] args) throws PMEException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrParentId = (String[]) programMap.get(PMEConstants.PARENT_OID);
+			if (!Helper.isNullOrEmpty(arrParentId) && !Helper.isNullOrEmpty(arrParentId[0])) {
+				String sPlanId = ProjectSpace.getGoverningProjectPlanId(context, arrParentId[0]);
+				if (!Helper.isNullOrEmpty(sPlanId)) {
+					ProjectSpace projectSpace = new ProjectSpace(sPlanId);
+					ProjectSnapshot snapshot = new ProjectSnapshot(projectSpace);
+					snapshot.create(context);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, PMEConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	/**
+	 * Deletes the selected Snapshots.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function to refresh Snapshot table.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.projectmgmtextensions.ExecuteCallable
+	public String actionDeleteSnapshots(Context context, String[] args) throws PMEException {
+		final String STATE_COMPLETE = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_SPACE,
+				PMEConstants.SYMBOLIC_STATE_COMPLETE);
+		final String STATE_ARCHIVE = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_SPACE,
+				PMEConstants.SYMBOLIC_STATE_ARCHIVE);
+		try {
+			List<String> arrSuccessSnapshotIds = new ArrayList<String>();
+			ArrayList<String> arrFailedSnapshotIds = new ArrayList<String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(PMEConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(tableRowIds)) {
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+				for (EmxTableRowId rowId : emxTableRowIds) {
+					String strSnapshotId = rowId.getObjectId();
+					if (!Helper.isNullOrEmpty(strSnapshotId)) {
+						if (!((Helper.getTypeKindOf(context, DomainObject.newInstance(context, strSnapshotId),
+								PMEConstants.SYMBOLIC_TYPE_PROJECT_SNAPSHOT)).containsValue(Boolean.TRUE))) {
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage",
+									Helper.getI18NString(context, Helper.StringResource.PME, "PME.ErrorMessage.Snapshot.SelectOnlySnapshotToDelete"));
+						}
+						else {
+							List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strSnapshotId },
+									Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_CURRENT));
+							for (Object obj : returnMap) {
+								Map requestMap = (Map) obj;
+								String strName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+								String strOwner = (String) requestMap.get(DomainConstants.SELECT_OWNER);
+								String strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+								if (context.getUser().equalsIgnoreCase(strOwner) && (!Helper.isNullOrEmpty(strState)
+										&& !(strState.equalsIgnoreCase(STATE_COMPLETE) || strState.equalsIgnoreCase(STATE_ARCHIVE)))) {
+									arrSuccessSnapshotIds.add(strSnapshotId);
+								}
+								else {
+									arrFailedSnapshotIds.add(strName);
+								}
+							}
+						}
+					}
+				}
+			}
+			if (arrFailedSnapshotIds.size() > 0) {
+				StringBuilder sbReturn = new StringBuilder();
+				sbReturn.append(Helper.getI18NString(context, Helper.StringResource.PME, "PME.ErrorMessage.Snapshot.NoDeleteAccess"));
+				sbReturn.append(PMEConstants.NEW_LINE_CHARACTER);
+				sbReturn.append(arrFailedSnapshotIds.toString());
+				return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMessage", sbReturn.toString());
+			}
+			else if (arrSuccessSnapshotIds.size() > 0) {
+				for (String strSuccessSnapshotId : arrSuccessSnapshotIds) {
+					ProjectSnapshot dmoSnapshot = (ProjectSnapshot) ProjectSnapshot.newInstance(context,
+							ProgramCentralConstants.TYPE_PROJECT_SNAPSHOT, ProgramCentralConstants.PROGRAM);
+					dmoSnapshot.setId(strSuccessSnapshotId);
+					dmoSnapshot.delete(context);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, PMEConstants.REFRESH_OPENER_WINDOW_AND_STRUCTURE_TAB);
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Create Snapshot" command.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandPMESnapshotCreate(Context context, String[] args) throws PMEException {
+		final String STATE_HOLD = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_SPACE_HOLD_CANCEL,
+				PMEConstants.SYMBOLIC_STATE_HOLD);
+		final String STATE_CANCEL = Helper.getActualStateName(context, PMEConstants.SYMBOLIC_POLICY_PROJECT_SPACE_HOLD_CANCEL,
+				PMEConstants.SYMBOLIC_STATE_CANCEL);
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrParentId = (String) programMap.get(PMEConstants.PARENT_OID);
+			if (!Helper.isNullOrEmpty(arrParentId) && isPMEConfigurableType(context, arrParentId)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { arrParentId },
+						Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+				if (!Helper.isNullOrEmpty(returnMap)) {
+					Map parentObjMap = (Map) returnMap.get(0);
+					if (!Helper.isNullOrEmpty(parentObjMap)) {
+						String strOwner = (String) parentObjMap.get(DomainConstants.SELECT_OWNER);
+						String strState = (String) parentObjMap.get(DomainConstants.SELECT_CURRENT);
+						if ((context.getUser().equalsIgnoreCase(strOwner)
+								|| (Helper.hasRoles(context, PMEConstants.SYMBOLIC_role_ProjectLead, PMEConstants.SYMBOLIC_role_VPLMProjectLeader)
+										&& hasProjectLeadAccess(context, arrParentId)))
+								&& (!Helper.isNullOrEmpty(strState)
+										&& !(strState.equalsIgnoreCase(STATE_HOLD) || strState.equalsIgnoreCase(STATE_CANCEL)))) {
+							blAccess = true;
+						}
+					}
+				}
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Compare Schedule" command.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandPMESnapshotCompare(Context context, String[] args) throws PMEException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrParentId = (String) programMap.get(PMEConstants.PARENT_OID);
+			if (!Helper.isNullOrEmpty(arrParentId) && isPMEConfigurableType(context, arrParentId)) {
+				blAccess = true;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	/**
+	 * Gives Access to view "Delete Snapshot" command.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return true or false based on conditional check.
+	 * @throws PMEException
+	 *             if operation fails.
+	 */
+	public boolean canViewCommandPMESnapshotDelete(Context context, String[] args) throws PMEException {
+		try {
+			boolean blAccess = false;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrParentId = (String) programMap.get(PMEConstants.PARENT_OID);
+			if (!Helper.isNullOrEmpty(arrParentId) && isPMEConfigurableType(context, arrParentId)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { arrParentId }, Helper.stringList(DomainConstants.SELECT_OWNER));
+				if (!Helper.isNullOrEmpty(returnMap)) {
+					Map parentObjMap = (Map) returnMap.get(0);
+					if (!Helper.isNullOrEmpty(parentObjMap)) {
+						String strOwner = (String) parentObjMap.get(DomainConstants.SELECT_OWNER);
+						if (context.getUser().equalsIgnoreCase(strOwner)) {
+							blAccess = true;
+						}
+					}
+				}
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	public boolean canNotViewTablePMCProjectSnapshotViewTableColumnActions(Context context, String[] args) throws PMEException {
+		try {
+			boolean blAccess = true;
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String arrParentId = (String) programMap.get(PMEConstants.PARENT_OID);
+			if (!Helper.isNullOrEmpty(arrParentId) && isPMEConfigurableType(context, arrParentId)) {
+				blAccess = false;
+			}
+			return blAccess;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private boolean isPMEConfigurableType(Context context, String strObjectId) throws PMEException {
+		try {
+			boolean isOfConfigurableType = false;
+			String strConfigurableTypes = Helper.getProperty(context, "ProjectMgmtExtensions.ConfigurableTypes");
+			if (!Helper.isNullOrEmpty(strObjectId) && !Helper.isNullOrEmpty(strConfigurableTypes)) {
+				DomainObject domainObject = DomainObject.newInstance(context, strObjectId);
+				StringList slConfigurableTypes = FrameworkUtil.split(strConfigurableTypes, PMEConstants.COMMA);
+				if ((Helper.getTypeKindOf(context, domainObject, (String[]) slConfigurableTypes.toArray(new String[slConfigurableTypes.size()])))
+						.containsValue(Boolean.TRUE)) {
+					isOfConfigurableType = true;
+				}
+			}
+			return isOfConfigurableType;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+	private boolean hasProjectLeadAccess(Context context, String strProjectId) throws PMEException {
+		try {
+			boolean hasProjectleadAccess = false;
+			if (!Helper.isNullOrEmpty(strProjectId)) {
+				List<Map<?, ?>> lmProjectMembers = DomainAccess.getAccessSummaryList(context, strProjectId);
+				String strContextUser = context.getUser();
+				if (!Helper.isNullOrEmpty(lmProjectMembers)) {
+					for (Map<?, ?> mpProjectMember : lmProjectMembers) {
+						if (!Helper.isNullOrEmpty(mpProjectMember) && mpProjectMember.containsValue(strContextUser + "_PRJ")) {
+							String strAccess = (String) mpProjectMember.get(PMEConstants.ACCESS);
+							if (!Helper.isNullOrEmpty(strAccess) && strAccess.equals(ProgramCentralConstants.PROJECT_ACCESS_PROJECT_LEAD)) {
+								hasProjectleadAccess = true;
+							}
+						}
+					}
+				}
+			}
+			return hasProjectleadAccess;
+		}
+		catch (Exception e) {
+			throw new PMEException(e);
+		}
+	}
+
+}
+

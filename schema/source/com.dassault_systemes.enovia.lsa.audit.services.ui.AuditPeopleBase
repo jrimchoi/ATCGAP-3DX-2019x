@@ -1,0 +1,1025 @@
+/************************************************************************************************************
+ * /* AuditPeopleBase
+ ** 
+ ** Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 17-APR-2015 AuditPeople program to handle Audit members
+ ************************************************************************************************************/
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	public static final String	PREFIX_ACTION_TASK				= "ACTTASK";
+	public static final String	MSG_FOR_ASSIGNMENT_TO_REQUEST	= "LQIAudit.Message.IsAssignedToRequest";
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) {
+		return 0;
+	}
+
+	/**
+	 * It finds all related Requests/Findings and builds a list of the users
+	 * assigned to those requests/findings. We need this information when we
+	 * determine if it is acceptable to remove an auditor from the audit.
+	 * 
+	 * @param context
+	 * @param doObject
+	 * @param strAttr
+	 * @param isRequest
+	 * @return
+	 * @throws AuditException
+	 * @throws Exception
+	 */
+	private static String getUsersOnRelatedRequestsOrFindings(Context context, DomainObject doObject, String strAttr, boolean isRequest)
+			throws AuditException {
+		try {
+			StringBuffer users = new StringBuffer();
+			StringList busSelects = new StringList();
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_CURRENT);
+			// busSelects.add(AuditConstants.SELECT_AUDITAUDITEES);
+			busSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES)));
+			// busSelects.add(AuditConstants.SELECT_AUDITOR);
+			busSelects.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITOR)));
+			// getting the related Request from Audit
+			// modified, also get related Audit Finding since Member could be
+			// the
+			// Auditor of Audit Finding
+			MapList mapRelatedRequestFinding = null;
+			if (isRequest) {
+				mapRelatedRequestFinding = doObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITREQUEST),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITREQUEST), false, true, 1, busSelects, null, null, "",
+						null, null, null);
+			}
+			else {
+				mapRelatedRequestFinding = doObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITFINDINGS),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITFINDING), false, true, 1, busSelects, null, null, "",
+						null, null, null);
+			}
+			Iterator iter = mapRelatedRequestFinding.iterator();
+			while (iter.hasNext()) {
+				Hashtable melement = (Hashtable) iter.next();
+				String strReqOrFindId = (String) melement.get("id");
+				DomainObject doReqOrFindObj = DomainObject.newInstance(context, strReqOrFindId);
+				users.append('~');
+				users.append(doReqOrFindObj.getAttributeValue(context, strAttr));
+
+			}
+			return users.toString();
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This is a helper method that was extracted out of the massive, 400 line
+	 * method below in an attempt to make the code just a tiny bit more
+	 * readable. It is used to determine if a person is associated with a
+	 * request or a finding. It gets called twice, once with a list of people
+	 * associated with Requests, and once again with a list of people associated
+	 * with Findings.
+	 * 
+	 * @param memberDisplayName
+	 * @param currentState
+	 * @param usersOnRequestOrFinding
+	 * @param strAttr
+	 * @param strValue
+	 * @return
+	 */
+	private static boolean isMemberOnRequestOrFinding(Context context, String memberDisplayName, String currentState, String usersOnRequestOrFinding,
+			String strAttr, String strValue) {
+		boolean found;
+		String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+		String STATE_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT, AuditConstants.SYM_STATE_PLAN);
+		String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT, AuditConstants.SYM_STATE_ACTIVE);
+
+		if ((usersOnRequestOrFinding.indexOf(memberDisplayName) != -1)
+				&& (currentState.equalsIgnoreCase(STATE_PLAN) || currentState.equalsIgnoreCase(STATE_ACTIVE))) {
+			found = true;
+		}
+		// specially add for check auditors whether is assigned to Request
+		else if (strAttr.equalsIgnoreCase(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITORS))
+				&& (currentState.equalsIgnoreCase(STATE_PLAN) || currentState.equalsIgnoreCase(STATE_ACTIVE))
+				&& usersOnRequestOrFinding.indexOf(strValue) != -1) {
+			found = true;
+		}
+		else {
+			found = false;
+		}
+		return found;
+	}
+
+	/**
+	 * This method gets the list of all persons who are having Audit lead/
+	 * Auditor/Auditee role
+	 * 
+	 * @param context
+	 * @param args
+	 * @return MapList
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditMembers(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strAuditId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			MapList auditMembersList = new MapList();
+			if (!Helper.isNullOrEmpty(strAuditId)) {
+				String auditMemberId = DomainConstants.EMPTY_STRING;
+				ArrayList<Map<?, ?>> auditMemberList = new ArrayList<Map<?, ?>>();
+				final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+				final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+				final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+				// get values of 'Audit Auditees, Audit Auditors, Audit Lead
+				// Auditor' attributes of Audit
+				List<Map<?, ?>> auditMemberMapList = getAuditMemberMapList(context, strAuditId);
+				if (!Helper.isNullOrEmpty(auditMemberMapList)) {
+					Map auditMemberMap = auditMemberMapList.get(0);
+					// get name of persons who are Auditors, Auditees, Lead
+					// Auditor
+					String auditors = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					String leadAuditor = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR));
+					String auditees = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES));
+					if (!(Helper.isNullOrEmpty(auditees) && Helper.isNullOrEmpty(leadAuditor) && Helper.isNullOrEmpty(auditors))) {
+						String auditMembers = auditors + AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR + leadAuditor
+								+ AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR + auditees;
+						HashSet<String> auditPeopleSet = new HashSet<String>(
+								FrameworkUtil.split(auditMembers, AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR).toList());
+						// get id of persons who are Auditors, Auditees, Lead
+						// Auditor
+						for (String auditMemberName : auditPeopleSet) {
+							if (!Helper.isNullOrEmpty(auditMemberName)) {
+								auditMemberId = PersonUtil.getPersonObjectID(context, auditMemberName);
+								Map<String, String> membersMap = new HashMap<String, String>();
+								membersMap.put(DomainConstants.SELECT_ID, auditMemberId);
+								membersMap.put(DomainConstants.SELECT_NAME, auditMemberName);
+								auditMemberList.add(membersMap);
+							}
+						}
+
+						auditMembersList.addAll(auditMemberList);
+					}
+				}
+			}
+			return auditMembersList;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method get all the audit roles of persons to be displayed in Audit
+	 * Role column of QICAUDRoles table. Every element in the returned list is a
+	 * comma separated string of audit roles(Lead Auditor/Auditor/Auditee) of
+	 * each person
+	 * 
+	 * @param context
+	 * @param args
+	 * @return StringList
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public StringList getAuditMemberRoles(Context context, String[] args) throws AuditException {
+		try {
+			StringList auditRoles = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> paramList = (Map) programMap.get("paramList");
+			String auditId = (String) paramList.get(AuditConstants.OBJECT_ID);
+			if (!Helper.isNullOrEmpty(auditId)) {
+				final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+				final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+				final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+				// get values of 'Audit Auditees, Audit Auditors, Audit Lead
+				// Auditor' attributes of Audit
+				List<Map<?, ?>> auditMemberMapList = getAuditMemberMapList(context, auditId);
+				if (!Helper.isNullOrEmpty(auditMemberMapList)) {
+					Map auditMemberMap = auditMemberMapList.get(0);
+					// get name of persons who are Auditors, Auditees, Lead
+					// Auditor
+					String auditors = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					String leadAuditor = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR));
+					String auditees = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES));
+					MapList auditMemberInfoList = (MapList) programMap.get("objectList");
+					for (Object object : auditMemberInfoList) {
+						String rolesLabelStr = DomainConstants.EMPTY_STRING;
+						Map auditMemberInfo = (Map) object;
+						String auditMemberName = (String) auditMemberInfo.get(DomainConstants.SELECT_NAME);
+						// get comma separated roles of each person by matching
+						// auditors/auditees/leadAuditor string for person name
+						rolesLabelStr = getAuditMemberRoleByName(context, auditors, leadAuditor, auditees, auditMemberName);
+						auditRoles.add(rolesLabelStr);
+					}
+				}
+			}
+			return auditRoles;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * This method returns comma separated audit roles of each person
+	 * 
+	 * @param context
+	 * @param auditors
+	 * @param leadAuditor
+	 * @param auditees
+	 * @param auditMemberName
+	 * @return String
+	 * @throws FrameworkException
+	 */
+	private String getAuditMemberRoleByName(Context context, String auditors, String leadAuditor, String auditees, String auditMemberName)
+			throws FrameworkException {
+		final String LQI_AUDIT = "LQIAudit";
+		String rolesLabelStr;
+		StringBuffer rolesLabel = new StringBuffer();
+		String auditeeRoleLabel = EnoviaResourceBundle.getProperty(context, LQI_AUDIT, "LQIAudit.Common.Label.AuditAuditee",
+				context.getSession().getLanguage());
+		String auditorRoleLAbel = EnoviaResourceBundle.getProperty(context, LQI_AUDIT, "LQIAudit.Common.Label.Auditor",
+				context.getSession().getLanguage());
+		String leadAuditorRoleLabel = EnoviaResourceBundle.getProperty(context, LQI_AUDIT, "LQIAudit.Common.Label.LeadAuditor",
+				context.getSession().getLanguage());
+
+		if (!(Helper.isNullOrEmpty(auditees)) && auditees.indexOf(auditMemberName) != -1) {
+			// current user is the Auditee, add the label
+			rolesLabel.append(auditeeRoleLabel);
+			rolesLabel.append(AuditConstants.COMMA);
+		}
+
+		if (!(Helper.isNullOrEmpty(auditors)) && auditors.indexOf(auditMemberName) != -1) {
+			// current user is the Auditor, add the label
+			rolesLabel.append(auditorRoleLAbel);
+			rolesLabel.append(AuditConstants.COMMA);
+		}
+		if (!(Helper.isNullOrEmpty(leadAuditor)) && leadAuditor.indexOf(auditMemberName) != -1) {
+			// current user is the Lead Auditor, add the label
+			rolesLabel.append(leadAuditorRoleLabel);
+		}
+		int index = rolesLabel.lastIndexOf(AuditConstants.COMMA);
+		if (index == rolesLabel.length() - 1) {
+			rolesLabelStr = rolesLabel.substring(0, index);
+		}
+		else {
+			rolesLabelStr = rolesLabel.toString();
+		}
+		return rolesLabelStr;
+	}
+
+	/**
+	 * This method returns range of values for editing audit role of a person
+	 * 
+	 * @param context
+	 * @param args
+	 * @return Map<?, ?>
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public Map<?, ?> getRangeTableQICAUDRolesColumnAuditRole(Context context, String[] args) throws AuditException {
+		Map<String, StringList> attributeRangeMap = new HashMap<String, StringList>();
+		try {
+			StringList slAttributeDispRange = new StringList();
+			slAttributeDispRange.add(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.Label.AuditAuditee"));
+			slAttributeDispRange.add(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.Label.Auditor"));
+			slAttributeDispRange.add(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Common.Label.LeadAuditor"));
+			StringList slAttributeRange = new StringList();
+			slAttributeRange.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES));
+			slAttributeRange.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITORS));
+			slAttributeRange.add(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR));
+			if (!Helper.isNullOrEmpty(slAttributeRange)) {
+				attributeRangeMap.put(AuditConstants.FIELD_CHOICES, slAttributeRange);
+				attributeRangeMap.put(AuditConstants.FIELD_DISPLAY_CHOICES, slAttributeDispRange);
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+		return attributeRangeMap;
+	}
+
+	/**
+	 * This method updates the audit role of a person on edit. Update the 'Audit
+	 * Auditors'/'Audit Auditees'/'Audit Lead Auditor' attributes of an audit.
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws AuditException
+	 */
+	public void updateTableQICAUDRolesColumnAuditRole(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+			final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+			final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+			Map<?, ?> paramMap = (Map) programMap.get(AuditConstants.PARAM_MAP);
+			Map<?, ?> requestMap = (Map) programMap.get(AuditConstants.REQUEST_MAP);
+			String auditId = (String) requestMap.get(AuditConstants.OBJECT_ID);
+			String personId = (String) paramMap.get(AuditConstants.OBJECT_ID);
+			String newAuditRoles = (String) paramMap.get(AuditConstants.NEW_VALUE);
+			if (!Helper.isNullOrEmpty(auditId) && !Helper.isNullOrEmpty(personId)) {
+				DomainObject auditObj = DomainObject.newInstance(context, auditId);
+				String current = (String) QueryUtil.getInfo(context, new String[] { auditId }, Helper.stringList(DomainConstants.SELECT_CURRENT))
+						.get(0).get(DomainConstants.SELECT_CURRENT);
+				String personName = (String) QueryUtil.getInfo(context, new String[] { personId }, Helper.stringList(DomainConstants.SELECT_NAME))
+						.get(0).get(DomainConstants.SELECT_NAME);
+				String newRoles[] = newAuditRoles.split(AuditConstants.COMMA);
+				boolean isAuditor = false;
+				boolean isLeadAuditor = false;
+				boolean isAuditee = false;
+				List<Map<?, ?>> auditMemberMapList = QueryUtil.getInfo(context, new String[] { auditId },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS),
+								DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR),
+								DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES)));
+				String auditors = (String) auditMemberMapList.get(0).get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+				String auditees = (String) auditMemberMapList.get(0).get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES));
+				String leadAuditor = (String) auditMemberMapList.get(0).get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR));
+
+				StringList existingRolesList = new StringList();
+				if (!(Helper.isNullOrEmpty(leadAuditor)) && leadAuditor.indexOf(personName) != -1) {
+					existingRolesList.add(ATTRIBUTE_AUDIT_LEADAUDITOR);
+					isLeadAuditor = true;
+				}
+				if (!(Helper.isNullOrEmpty(auditors)) && auditors.indexOf(personName) != -1) {
+					existingRolesList.add(ATTRIBUTE_AUDIT_AUDITORS);
+					isAuditor = true;
+				}
+				if (!(Helper.isNullOrEmpty(auditees)) && auditees.indexOf(personName) != -1) {
+					existingRolesList.add(ATTRIBUTE_AUDIT_AUDITEES);
+					isAuditee = true;
+				}
+
+				Map<String, String> auditAttrValueMap = new HashMap<String, String>();
+				auditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITEES, auditees);
+				auditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITORS, auditors);
+				auditAttrValueMap.put(ATTRIBUTE_AUDIT_LEADAUDITOR, leadAuditor);
+				// remove existing role
+				Map<String, String> auditAttrValueMapOnRem = removeRoleOnEdit(context, auditObj, current, personName, existingRolesList,
+						newAuditRoles, auditAttrValueMap);
+				// add new role
+				Map<String, String> auditAttrValueMapOnAdd = addRoleOnEdit(context, personName, existingRolesList, newRoles, auditAttrValueMapOnRem,
+						isAuditee, isAuditor, isLeadAuditor);
+				// update attibute values of audit
+				auditObj.setAttributeValues(context, auditAttrValueMapOnAdd);
+			}
+
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	private Map<String, String> addRoleOnEdit(Context context, String personName, StringList existingRolesList, String[] newRoles,
+			Map<String, String> auditAttrValueMap, boolean isAuditee, boolean isAuditor, boolean isLeadAuditor) throws LSAException {
+		final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+		final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+		final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+		String auditees = auditAttrValueMap.get(ATTRIBUTE_AUDIT_AUDITEES);
+		String auditors = auditAttrValueMap.get(ATTRIBUTE_AUDIT_AUDITORS);
+		String leadAuditor = auditAttrValueMap.get(ATTRIBUTE_AUDIT_LEADAUDITOR);
+		StringBuffer sbReturn = new StringBuffer();
+		for (int i = 0; i < newRoles.length; i++) {
+			String auditRole = newRoles[i];
+			if (ATTRIBUTE_AUDIT_AUDITORS.equals(auditRole)) {
+				if (Helper.isNullOrEmpty(auditors)) {
+					auditors = personName;
+				}
+				else if (!isAuditor) {
+					auditors = auditors + AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR + personName;
+				}
+
+			}
+			else if (ATTRIBUTE_AUDIT_AUDITEES.equals(auditRole)) {
+				if (Helper.isNullOrEmpty(auditees)) {
+					auditees = personName;
+				}
+				else if (!isAuditee) {
+					auditees = auditees + AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR + personName;
+				}
+			}
+			else if (ATTRIBUTE_AUDIT_LEADAUDITOR.equals(auditRole)) {
+				if (Helper.isNullOrEmpty(leadAuditor)) {
+					leadAuditor = personName;
+				}
+				else if (!isLeadAuditor) {
+					ContextUtil.abortTransaction(context);
+					sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.EditLeadAuditor"));
+					throw new AuditException(sbReturn.toString());
+				}
+			}
+
+		}
+		Map<String, String> newAuditAttrValueMap = new HashMap<String, String>();
+		newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITEES, auditees);
+		newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITORS, auditors);
+		newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_LEADAUDITOR, leadAuditor);
+		return newAuditAttrValueMap;
+
+	}
+
+	private Map<String, String> removeRoleOnEdit(Context context, DomainObject auditObj, String current, String personName,
+			StringList existingRolesList, String newAuditRoles, Map<String, String> auditAttrValueMap) throws AuditException {
+		try {
+			final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+			final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+			final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+			final String ATTRIBUTE_AUDIT_AUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITOR);
+			String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+			String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+					AuditConstants.SYM_STATE_ACTIVE);
+			// Build a list of all auditees assigned to
+			// Requests
+			String auditeesOnRequest = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITEES, true);
+			// Build a list of all auditors assigned to Requests and
+			// Findings
+			String auditorsOnRequest = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITOR, true);
+			String auditorsOnFinding = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITOR, false);
+			StringBuffer sbReturn = new StringBuffer();
+			String auditees = auditAttrValueMap.get(ATTRIBUTE_AUDIT_AUDITEES);
+			String auditors = auditAttrValueMap.get(ATTRIBUTE_AUDIT_AUDITORS);
+			String leadAuditor = auditAttrValueMap.get(ATTRIBUTE_AUDIT_LEADAUDITOR);
+			String personFullName = PersonUtil.getFullName(context, personName);
+			for (Object object : existingRolesList) {
+				String existingRole = (String) object;
+				if (newAuditRoles.indexOf(existingRole) == -1) {
+					if (ATTRIBUTE_AUDIT_AUDITEES.equals(existingRole)) {
+						// Determine if Auditee is assigned to a
+						// request and set a flag. We will use this to determine
+						// if the Auditee role can be removed from the Members
+						// screen in edit mode
+						boolean isMemberOnRequest = isMemberOnRequestOrFinding(context, personFullName, current, auditeesOnRequest,
+								ATTRIBUTE_AUDIT_AUDITEES, auditees);
+						auditees = removeAuditee(context, STATE_ACTIVE, current, personName, auditees, isMemberOnRequest);
+					}
+					else if (ATTRIBUTE_AUDIT_AUDITORS.equals(existingRole)) {
+						// Determine if Auditor is assigned to a
+						// request or a finding and set a flag. We will use this
+						// to determine
+						// if the Auditor role can be removed from the Members
+						// screen in edit mode
+						boolean isMemberOnRequest = isMemberOnRequestOrFinding(context, personName, current, auditorsOnRequest,
+								ATTRIBUTE_AUDIT_AUDITORS, auditors);
+						boolean isMemberOnFinding = isMemberOnRequestOrFinding(context, personName, current, auditorsOnFinding,
+								ATTRIBUTE_AUDIT_AUDITORS, auditors);
+						auditors = removeAuditor(context, personName, auditors, isMemberOnRequest, isMemberOnFinding);
+
+					}
+					else if (ATTRIBUTE_AUDIT_LEADAUDITOR.equals(existingRole)) {
+						// lead auditor cannot be removed in edit mode
+						ContextUtil.abortTransaction(context);
+						sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.EditLeadAuditor"));
+						throw new AuditException(sbReturn.toString());
+					}
+				}
+			}
+			Map<String, String> newAuditAttrValueMap = new HashMap<String, String>();
+			newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITEES, auditees);
+			newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_AUDITORS, auditors);
+			newAuditAttrValueMap.put(ATTRIBUTE_AUDIT_LEADAUDITOR, leadAuditor);
+			return newAuditAttrValueMap;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	private String removeAuditor(Context context, String personName, String auditors, boolean isMemberOnRequest, boolean isMemberOnFinding)
+			throws LSAException, AuditException, FrameworkException {
+		String newAuditors = auditors;
+		String personFullName = PersonUtil.getFullName(context, personName);
+		StringBuffer sbReturn = new StringBuffer();
+		if (isMemberOnRequest) {
+			ContextUtil.abortTransaction(context);
+			sbReturn.append(personFullName);
+			sbReturn.append(AuditConstants.SPACE);
+			sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, MSG_FOR_ASSIGNMENT_TO_REQUEST));
+			throw new AuditException(sbReturn.toString());
+		}
+		else if (isMemberOnFinding) {
+			ContextUtil.abortTransaction(context);
+			sbReturn.append(personFullName);
+			sbReturn.append(AuditConstants.SPACE);
+			sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.IsAssignedToFinding"));
+			throw new AuditException(sbReturn.toString());
+		}
+		else {
+			newAuditors = updateAuditAttrForRemoval(newAuditors, personName);
+		}
+		return newAuditors;
+	}
+
+	private String removeAuditee(Context context, String STATE_ACTIVE, String current, String personName, String auditees, boolean isMemberOnRequest)
+			throws LSAException, AuditException, FrameworkException {
+		StringBuffer sbReturn = new StringBuffer();
+		String newAuditees = auditees;
+		String personFullName = PersonUtil.getFullName(context, personName);
+		if (isMemberOnRequest) {
+			ContextUtil.abortTransaction(context);
+			sbReturn.append(personFullName);
+			sbReturn.append(AuditConstants.SPACE);
+			sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, MSG_FOR_ASSIGNMENT_TO_REQUEST));
+			throw new AuditException(sbReturn.toString());
+		}
+		// one auditee must remain in active state of audit
+		else if (!(Helper.isNullOrEmpty(newAuditees)) && newAuditees.equals(personName) && STATE_ACTIVE.equals(current)) {
+			ContextUtil.abortTransaction(context);
+			sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.BlockDeleteAlAuditeelMessage"));
+			throw new AuditException(sbReturn.toString());
+		}
+		else {
+			newAuditees = updateAuditAttrForRemoval(newAuditees, personName);
+		}
+		return newAuditees;
+	}
+
+	/**
+	 * This method returns the list of person ids which are to be excluded from
+	 * search result while adding new auditees to an audit
+	 * 
+	 * @param context
+	 * @param args
+	 * @return StringList
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedAuditeePersonId(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String auditId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			StringList auditeeIdList = new StringList();
+			if (!Helper.isNullOrEmpty(auditId)) {
+				final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+				// Existing auditees should not appear while adding new auditees
+				auditeeIdList = getAuditPersonIdList(context, auditId, ATTRIBUTE_AUDIT_AUDITEES);
+			}
+			return auditeeIdList;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method returns the list of person ids which are to be excluded from
+	 * search result while adding new auditors to an audit
+	 * 
+	 * @param context
+	 * @param args
+	 * @return StringList
+	 * @throws AuditException
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedAuditorPersonId(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String auditId = (String) programMap.get(AuditConstants.OBJECT_ID);
+			StringList auditorIdList = new StringList();
+			if (!Helper.isNullOrEmpty(auditId)) {
+				final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+				// Existing auditors should not appear while adding new auditors
+				auditorIdList = getAuditPersonIdList(context, auditId, ATTRIBUTE_AUDIT_AUDITORS);
+			}
+			return auditorIdList;
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method adds new auditor to audit
+	 * 
+	 * @param context
+	 * @param args
+	 * @return String
+	 * @throws AuditException
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddAuditorToAudit(Context context, String[] args) throws AuditException {
+		try {
+			String auditorAttribute = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITORS);
+			addAuditMemberToAudit(context, args, auditorAttribute);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * This method adds new lead auditor to audit
+	 * 
+	 * @param context
+	 * @param args
+	 * @return String
+	 * @throws AuditException
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddLeadAuditorToAudit(Context context, String[] args) throws AuditException {
+		try {
+
+			String leadAuditorAttribute = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+			addAuditMemberToAudit(context, args, leadAuditorAttribute);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshAuditMemberFrameAndCloseTopWindow");
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * This method adds new auditee to audit
+	 * 
+	 * @param context
+	 * @param args
+	 * @return String
+	 * @throws AuditException
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddAuditeeToAudit(Context context, String[] args) throws AuditException {
+		try {
+
+			String auditeeAttribute = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+			addAuditMemberToAudit(context, args, auditeeAttribute);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+
+	}
+
+	/**
+	 * This method returns List of map consisting of audit attribute(Lead
+	 * Auditor, Auditor, Auditee) and their values(persons names)
+	 * 
+	 * @param context
+	 * @param auditId
+	 * @return List<Map<?, ?>>
+	 * @throws LSAException
+	 */
+	private List<Map<?, ?>> getAuditMemberMapList(Context context, String auditId) throws LSAException {
+
+		final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+		final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+		final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+		List<Map<?, ?>> auditMemberMapList = QueryUtil.getInfo(context, new String[] { auditId },
+				Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS),
+						DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR), DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES)));
+		return auditMemberMapList;
+
+	}
+
+	/**
+	 * This method returns the list of person ids with the audit role given as
+	 * parameter
+	 * 
+	 * @param context
+	 * @param auditId
+	 * @param auditRoleAttribute
+	 * @return StringList
+	 * @throws LSAException
+	 * @throws FrameworkException
+	 */
+	private StringList getAuditPersonIdList(Context context, String auditId, String auditRoleAttribute) throws LSAException, FrameworkException {
+
+		final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+		final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+
+		StringList auditmemberIdList = new StringList();
+		if (!Helper.isNullOrEmpty(auditRoleAttribute) && ATTRIBUTE_AUDIT_AUDITORS.equals(auditRoleAttribute)
+				|| ATTRIBUTE_AUDIT_AUDITEES.equals(auditRoleAttribute)) {
+			List<Map<?, ?>> auditMemberMapList = QueryUtil.getInfo(context, new String[] { auditId },
+					Helper.stringList(DomainObject.getAttributeSelect(auditRoleAttribute)));
+			String auditMembers = (String) auditMemberMapList.get(0).get(DomainObject.getAttributeSelect(auditRoleAttribute));
+			if (!Helper.isNullOrEmpty(auditMembers)) {
+				List<String> auditMemberNameList = Arrays.asList(auditMembers.split(AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR));
+				for (String auditMemberName : auditMemberNameList) {
+					String auditMemberId = PersonUtil.getPersonObjectID(context, auditMemberName);
+					auditmemberIdList.add(auditMemberId);
+				}
+
+			}
+		}
+		return auditmemberIdList;
+
+	}
+
+	/**
+	 * This method add the persons as Auditor/Auditee/Lead Auditor
+	 * 
+	 * @param context
+	 * @param args
+	 * @param auditRoleAttribute
+	 * @throws AuditException
+	 * @throws Exception
+	 */
+	private void addAuditMemberToAudit(Context context, String args[], String auditRoleAttribute) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] auditId = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			String[] newAuditMemberInfoList = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(auditId) && !Helper.isNullOrEmpty(newAuditMemberInfoList)) {
+				DomainObject auditObj = DomainObject.newInstance(context, auditId[0]);
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(newAuditMemberInfoList);
+				String auditAttrValue = DomainObject.EMPTY_STRING;
+				List<Map<?, ?>> lmAuditInfo = QueryUtil.getInfo(context, new String[] { auditId[0] },
+						Helper.stringList(DomainObject.getAttributeSelect(auditRoleAttribute)));
+				if (!Helper.isNullOrEmpty(lmAuditInfo)) {
+					Map mpAuditinfo = lmAuditInfo.get(0);
+					auditAttrValue = (String) mpAuditinfo.get(DomainObject.getAttributeSelect(auditRoleAttribute));
+				}
+				String newAuditAttributeValue = auditAttrValue;
+				for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+					String auditMemberPersonId = emxTableRowId.getObjectId();
+					String newAuditMemberName = (String) QueryUtil
+							.getInfo(context, new String[] { auditMemberPersonId }, Helper.stringList(DomainConstants.SELECT_NAME)).get(0)
+							.get(DomainConstants.SELECT_NAME);
+					if (!Helper.isNullOrEmpty(newAuditAttributeValue)) {
+						newAuditAttributeValue = newAuditAttributeValue + AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR + newAuditMemberName;
+					}
+					else {
+						newAuditAttributeValue = newAuditMemberName;
+					}
+				}
+				auditObj.setAttributeValue(context, auditRoleAttribute, newAuditAttributeValue);
+			}
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * Delete audit member.
+	 * 
+	 * @param context
+	 * 
+	 * @param args
+	 * 
+	 * 
+	 * @return String
+	 * 
+	 * @throws Exception
+	 *             the AuditException
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveAuditMember(Context context, String[] args) throws AuditException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] auditId = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			String[] auditMemberRemovalList = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(auditId) && !Helper.isNullOrEmpty(auditMemberRemovalList)) {
+				DomainObject auditObj = DomainObject.newInstance(context, auditId[0]);
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(auditMemberRemovalList);
+				String current = auditObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+				String POLICY_AUDIT = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_POLICY_AUDIT);
+				final String ATTRIBUTE_AUDIT_AUDITORS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDIT_AUDITORS);
+				final String ATTRIBUTE_AUDIT_LEADAUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+				final String ATTRIBUTE_AUDIT_AUDITEES = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITAUDITEES);
+				final String ATTRIBUTE_AUDIT_AUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITOR);
+				String STATE_PLAN = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+						AuditConstants.SYM_STATE_PLAN);
+				String STATE_ACTIVE = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, POLICY_AUDIT,
+						AuditConstants.SYM_STATE_ACTIVE);
+				final String jsFunction = "showErrorMessageForRemovePersonFromAudit";
+				String auditors = null;
+				String auditees = null;
+				String leadAuditor = null;
+				String newAuditors = null;
+				String newAuditees = null;
+				String newLeadAuditor = null;
+				List<Map<?, ?>> auditMemberMapList = getAuditMemberMapList(context, auditId[0]);
+				if (!Helper.isNullOrEmpty(auditMemberMapList)) {
+					Map auditMemberMap = auditMemberMapList.get(0);
+					auditors = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITORS));
+					leadAuditor = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_LEADAUDITOR));
+					auditees = (String) auditMemberMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUDIT_AUDITEES));
+					newLeadAuditor = leadAuditor;
+					newAuditees = auditees;
+					newAuditors = auditors;
+				}
+				// Build a list of all audit members assigned to Requests
+				// and
+				// Findings
+				String auditorsOnRequest = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITOR, true);
+				String auditorsOnFinding = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITOR, false);
+				// Build a list of all audit members assigned to Requests
+				String auditeesOnRequest = getUsersOnRelatedRequestsOrFindings(context, auditObj, ATTRIBUTE_AUDIT_AUDITEES, true);
+				for (EmxTableRowId emxTableRowId : emxTableRowIds) {
+					String auditMemberPersonId = emxTableRowId.getObjectId();
+					String auditMemberName = (String) QueryUtil
+							.getInfo(context, new String[] { auditMemberPersonId }, Helper.stringList(DomainConstants.SELECT_NAME)).get(0)
+							.get(DomainConstants.SELECT_NAME);
+					StringBuffer sbReturn = new StringBuffer();
+					// remove person from audit
+					if (!(Helper.isNullOrEmpty(leadAuditor)) && leadAuditor.indexOf(auditMemberName) != -1) {
+						// lead auditor can be removed only in plan state of
+						// audit
+						if (!STATE_PLAN.equals(current)) {
+							sbReturn.append(Helper.getI18NString(context, Helper.StringResource.AUDIT,
+									"LQIAudit.Message.LeadAuditorCanBeRemovedInPlanState"));
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, jsFunction, sbReturn.toString());
+						}
+						else {
+							String errorMsg = checkForAuditorRemoval(context, current, ATTRIBUTE_AUDIT_LEADAUDITOR, leadAuditor, auditorsOnRequest,
+									auditorsOnFinding, auditMemberName);
+							if (!Helper.isNullOrEmpty(errorMsg)) {
+								return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, jsFunction, errorMsg);
+							}
+							newLeadAuditor = DomainConstants.EMPTY_STRING;
+						}
+					}
+					if (!(Helper.isNullOrEmpty(auditors)) && auditors.indexOf(auditMemberName) != -1) {
+						String errorMsg = checkForAuditorRemoval(context, current, ATTRIBUTE_AUDIT_AUDITORS, auditors, auditorsOnRequest,
+								auditorsOnFinding, auditMemberName);
+						if (!Helper.isNullOrEmpty(errorMsg)) {
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, jsFunction, errorMsg);
+						}
+						newAuditors = updateAuditAttrForRemoval(newAuditors, auditMemberName);
+
+					}
+					if (!(Helper.isNullOrEmpty(auditees)) && auditees.indexOf(auditMemberName) != -1) {
+						String errorMsg = checkForAuditeeRemoval(context, current, ATTRIBUTE_AUDIT_AUDITEES, STATE_ACTIVE, auditees, newAuditees,
+								auditeesOnRequest, auditMemberName);
+						if (!Helper.isNullOrEmpty(errorMsg)) {
+							return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, jsFunction, errorMsg);
+						}
+						newAuditees = updateAuditAttrForRemoval(newAuditees, auditMemberName);
+					}
+
+				}
+				// update audit attribute values
+				Map<String, String> attributeValueMap = new HashMap<String, String>();
+				attributeValueMap.put(ATTRIBUTE_AUDIT_AUDITORS, newAuditors);
+				attributeValueMap.put(ATTRIBUTE_AUDIT_AUDITEES, newAuditees);
+				attributeValueMap.put(ATTRIBUTE_AUDIT_LEADAUDITOR, newLeadAuditor);
+				auditObj.setAttributeValues(context, attributeValueMap);
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER_WINDOW);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+
+		}
+	}
+
+	private String checkForAuditeeRemoval(Context context, String current, final String ATTRIBUTE_AUDIT_AUDITEES, String STATE_ACTIVE,
+			String auditees, String newAuditees, String auditeesOnRequest, String auditMemberName) throws LSAException, FrameworkException {
+		StringBuffer errorMsg = new StringBuffer();
+		final String assignedToReqMsg = MSG_FOR_ASSIGNMENT_TO_REQUEST;
+		String auditMemberFullName = PersonUtil.getFullName(context, auditMemberName);
+		// Determine if Auditee is assigned to a request
+		// and set a flag. We will use this to determine if
+		// the Auditee can be removed from the Members screen
+		boolean isMemberOnRequest = isMemberOnRequestOrFinding(context, auditMemberFullName, current, auditeesOnRequest, ATTRIBUTE_AUDIT_AUDITEES,
+				auditees);
+		if (isMemberOnRequest) {
+			errorMsg.append(auditMemberFullName);
+			errorMsg.append(AuditConstants.SPACE);
+			errorMsg.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, assignedToReqMsg));
+
+		}
+		// one auditee must remain in active state of audit
+		else if (!(Helper.isNullOrEmpty(newAuditees)) && newAuditees.equals(auditMemberName) && STATE_ACTIVE.equals(current)) {
+			errorMsg.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.BlockDeleteAlAuditeelMessage"));
+
+		}
+		return errorMsg.toString();
+	}
+
+	private String checkForAuditorRemoval(Context context, String current, final String auditAttribute, String auditors, String auditorsOnRequest,
+			String auditorsOnFinding, String auditMemberName) throws LSAException, FrameworkException {
+		StringBuffer errorMsg = new StringBuffer();
+		final String assignedToReqMsg = MSG_FOR_ASSIGNMENT_TO_REQUEST;
+		final String assignedToFinMsg = "LQIAudit.Message.IsAssignedToFinding";
+		String auditMemberFullName = PersonUtil.getFullName(context, auditMemberName);
+		// Determine if Auditee or Auditor is assigned to a request
+		// or a
+		// finding and set a flag. We will use this to determine if
+		// the
+		// Auditor or Auditee can be removed from the Members screen
+		boolean isMemberOnRequest = isMemberOnRequestOrFinding(context, auditMemberName, current, auditorsOnRequest, auditAttribute, auditors);
+		boolean isMemberOnFinding = isMemberOnRequestOrFinding(context, auditMemberName, current, auditorsOnFinding, auditAttribute, auditors);
+		if (isMemberOnRequest) {
+			errorMsg.append(auditMemberFullName);
+			errorMsg.append(AuditConstants.SPACE);
+			errorMsg.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, assignedToReqMsg));
+		}
+		else if (isMemberOnFinding) {
+			errorMsg.append(auditMemberFullName);
+			errorMsg.append(AuditConstants.SPACE);
+			errorMsg.append(Helper.getI18NString(context, Helper.StringResource.AUDIT, assignedToFinMsg));
+		}
+		return errorMsg.toString();
+	}
+
+	private String updateAuditAttrForRemoval(String auditMembers, String auditMemberName) {
+		String newAuditMembers = auditMembers;
+		newAuditMembers = newAuditMembers.replaceAll(auditMemberName + AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR, DomainConstants.EMPTY_STRING);
+		newAuditMembers = newAuditMembers.replaceAll(auditMemberName, DomainConstants.EMPTY_STRING);
+		int ind = newAuditMembers.lastIndexOf(AuditConstants.AUDIT_MEMBER_NAME_SEPARATOR);
+		if ((ind != -1) && (ind == newAuditMembers.length() - 1)) {
+			newAuditMembers = newAuditMembers.substring(0, ind);
+		}
+		return newAuditMembers;
+	}
+
+	/**
+	 * Pre-Check to add lead auditor, if a lead auditor already exists then a
+	 * JavaScript function is called to show appropriate error message alert
+	 * otherwise JavaScript function to show search page of person is called.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return JavaScript function.
+	 * @throws AuditException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String preCheckForAddLeadAuditor(Context context, String[] args) throws AuditException {
+		String errorMsg = DomainConstants.EMPTY_STRING;
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] auditId = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+			final String ATTRIBUTE_AUIDIT_LEAD_AUDITOR = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR);
+			String auditAttrValue = DomainObject.EMPTY_STRING;
+			if (!Helper.isNullOrEmpty(auditId)) {
+				List<Map<?, ?>> lmAuditInfo = QueryUtil.getInfo(context, new String[] { auditId[0] },
+						Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_AUIDIT_LEAD_AUDITOR)));
+				if (!Helper.isNullOrEmpty(lmAuditInfo)) {
+					Map mpAuditinfo = lmAuditInfo.get(0);
+					auditAttrValue = (String) mpAuditinfo.get(DomainObject.getAttributeSelect(ATTRIBUTE_AUIDIT_LEAD_AUDITOR));
+				}
+				if (!Helper.isNullOrEmpty(auditAttrValue)) {
+					errorMsg = Helper.getI18NString(context, Helper.StringResource.AUDIT, "LQIAudit.Message.AddLeadAuditorError");
+					return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "showErrorMsgAndRefreshAuditMemberFrame", errorMsg);
+				}
+			}
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionAddLeadAuditor", auditId);
+		}
+		catch (Exception e) {
+			throw new AuditException(e);
+		}
+	}
+}
+

@@ -1,0 +1,370 @@
+
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.util.StringList;
+
+@Deprecated
+public class ${CLASSNAME} {
+	/**
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		if (!context.isConnected()) {
+			// throw new Exception("Not supported on desktop client");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.NoDesktopClient"));
+		}
+	}
+
+	/**
+	 * This method is executed if a specific method is not specified.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @returns nothing
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public int mxMain(Context context, String[] args) throws Exception {
+		if (!context.isConnected()) {
+			// throw new Exception("Not supported on desktop client");
+			throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.NoDesktopClient"));
+		}
+		return 0;
+	}
+
+	/**
+	 * This method returns html link for checkout URL of all checked in files of
+	 * object
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            [] holds input param map
+	 * @returns vector containing file checkout urls
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Object getFileLaunchHTML(Context context, String[] args) throws Exception {
+		Vector vectFileList = null;
+		try {
+			// Getting program Map from arguments
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			MapList mListObject = (MapList) programMap.get("objectList");
+			// HashMap hmParamMap = (HashMap) programMap.get("paramList");
+
+			// Vector declared to hold file list with link to the checkout
+			// servlet
+			vectFileList = new Vector();
+
+			// Variable declaration
+			String strTableHTML = "";
+			String strState = "";
+			String strObjectId = "";
+
+			// Select list for object search
+			StringList sListSelect = new StringList(2);
+			sListSelect.addElement("format.file.name");
+			sListSelect.addElement("format.file.format");
+			sListSelect.addElement("current.access[checkout]");
+
+			// Make db call to get info regarding files
+			String sObjIdArray[] = new String[mListObject.size()];
+			if (mListObject != null) {
+				// Copy the Business Object List to Object ID Array
+				for (int iObjCnt = 0; iObjCnt < mListObject.size(); iObjCnt++) {
+					try {
+						sObjIdArray[iObjCnt] = (String) ((HashMap) mListObject.get(iObjCnt)).get(DomainConstants.SELECT_ID);
+					}
+					catch (Exception e) {
+						sObjIdArray[iObjCnt] = (String) ((Hashtable) mListObject.get(iObjCnt)).get(DomainConstants.SELECT_ID);
+					}
+				}
+				BusinessObjectWithSelectList boslSelectList = null;
+				boslSelectList = DomainObject.getSelectBusinessObjectData(context, sObjIdArray, sListSelect);
+
+				// loop for all the business objects and create html
+				for (int iCnt = 0; iCnt < mListObject.size(); iCnt++) {
+					strObjectId = sObjIdArray[iCnt];
+
+					// Variable to hold html table
+					strTableHTML = "";
+
+					// Create DomainObject of Object
+					DomainObject doObject = new DomainObject(strObjectId);
+
+					// Get state of Object
+					strState = doObject.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+					// loop through all the files for the object
+					StringList sListFileName = boslSelectList.getElement(iCnt).getSelectDataList("format.file.name");
+					StringList sListFileFormat = boslSelectList.getElement(iCnt).getSelectDataList("format.file.format");
+					StringList sListAccess = boslSelectList.getElement(iCnt).getSelectDataList("current.access[checkout]");
+
+					String sAccess = (String) sListAccess.firstElement();
+
+					// If user has checkout access call Function which returns
+					// data in table format
+					// else return filename only
+					if ("TRUE".equalsIgnoreCase(sAccess)) {
+						strTableHTML = generateReturnHTML(context, strObjectId, strState, sListFileName, sListFileFormat, "", strTableHTML);
+					}
+					else {
+						strTableHTML = generateReadOnlyReturnHTML(context, sListFileName);
+					}
+
+					if (strTableHTML != null) {
+						vectFileList.add(strTableHTML);
+					}
+				}
+			}
+			return vectFileList;
+		}
+		catch (Exception objException) {
+			String exceptionMsg = Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.Exception");
+			System.err.println(exceptionMsg + objException.getMessage());
+			throw objException;
+		}
+	}
+
+	/**
+	 * This method generated html string representing file checkout URL
+	 * 
+	 * @param context
+	 * @param sObjId
+	 *            - The object ID of the object owning the files (original) or
+	 *            (refer to)
+	 * @param sState
+	 *            - If Released this will only show PDFs for the passed object
+	 * @param slFileName
+	 *            - List of files attached to the object
+	 * @param slFileFormat
+	 *            - List of formats matching the list of files
+	 * @param strSuffix
+	 *            - This is added to the end of the sTableHTML (used to indicate
+	 *            if the object is a reference doc or not)
+	 * @param sTableHTML
+	 *            - This is the HTML that is built up throughout the class
+	 * @return String
+	 * @throws FrameworkException
+	 *             if operation fails
+	 */
+
+	private static String generateReturnHTML(Context context, String strObjectId, String strState, StringList sListFileName,
+			StringList sListFileFormat, String strSuffix, String strTableHTML) throws FrameworkException {
+		// Varaible declarations
+		String strFileName = "";
+		String strDisplayName = "";
+		String strFileFormat = "";
+
+		// Iterate through each file
+		for (int iFileCount = 0; iFileCount < sListFileName.size(); iFileCount++) {
+			strDisplayName = (String) sListFileName.get(iFileCount);
+
+			// strFileName = java.net.URLEncoder.encode(strDisplayName);
+			// Encoding is no longer needed with the js method callCheckout. If
+			// the URL is encoded, it will not launch certain filenames.
+			strFileName = strDisplayName;
+
+			strFileFormat = (String) sListFileFormat.get(iFileCount);
+
+			if (!strFileName.equals("")) {
+				if (!strTableHTML.equals("")) {
+					strTableHTML += (iFileCount < 0 ? "" : "<br>");
+				}
+				/*
+				 * // strTableHTML +=
+				 * "<a href = '../components/emxComponentsCheckout.jsp";
+				 * strTableHTML +=
+				 * "<a href = 'javascript:showNonModalDialog(\"../components/emxCommonDocumentPreCheckout.jsp"
+				 * ; strTableHTML += "?objectId=" + strObjectId; strTableHTML +=
+				 * "&amp;fileName=" + strFileName; strTableHTML +=
+				 * "&amp;action=download"; strTableHTML += "&amp;format=" +
+				 * strFileFormat; strTableHTML += "\",730,450)'>";
+				 */
+				strTableHTML += "<a href=\"javascript:callCheckout('" + strObjectId + "','download','" + strFileName + "','" + strFileFormat
+						+ "',null,null,null,null,'null');\">";
+				strTableHTML += "<img border='0' src='images/utilNavBarBullet.gif'/>";
+				strTableHTML += strDisplayName + "</a>";
+				strTableHTML += strSuffix;
+			}
+		}
+		return strTableHTML;
+	}
+
+	/**
+	 * This method generates an html string letting user know that a file exists
+	 * even though they don't have access to checkout
+	 * 
+	 * @param slFileName
+	 *            - List of files attached to the object
+	 * @return String
+	 */
+	private static String generateReadOnlyReturnHTML(Context context, StringList sListFileName) {
+		String strDisplayName = "";
+		String strTableHTML = "";
+
+		// Iterate through each file
+		for (int iFileCount = 0; iFileCount < sListFileName.size(); iFileCount++) {
+			strDisplayName = (String) sListFileName.get(iFileCount);
+			if (!strDisplayName.equals("")) {
+				String noCheckoutAccess = "No checkout access";
+				// No context. Cannot Localize
+				try {
+					noCheckoutAccess = Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.NoCheckoutAccess");
+				}
+				catch (Exception e) {
+				}
+
+				// strTableHTML +=
+				// "<img border='0' src='images/utilNavBarBullet.gif' alt='No
+				// checkout access'>";
+				strTableHTML += "<img border='0' src='images/utilNavBarBullet.gif' alt='" + noCheckoutAccess + "'>";
+				strTableHTML += strDisplayName;
+				strTableHTML += "<br>";
+			}
+		}
+		return strTableHTML;
+	}
+
+	/**
+	 * This method deleted file attachments
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            [] holds input param map
+	 * @throws Throwable
+	 * @returns nothing
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static HashMap deleteFileAttachment(Context context, String[] args) throws Throwable {
+		HashMap hmReturn = new HashMap();
+		// TODO Need to localize, but first need to determine what package to
+		// put in. We need to keep in mind that
+		// for a product we may not be able to update the ootb string resource
+		// files
+		// String sDisplayMessage =
+		// " was not deleted because it is not a File Attachment";
+		String sDisplayMessage = " " + Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.NotDeleted");
+
+		String sActualUser = context.getUser();
+		String sFullName = PersonUtil.getFullName(context, sActualUser);
+		String sDisplayName = sActualUser + "(" + sFullName + ")";
+		Vector vDeletedDocNames = new Vector();
+		String callback = "javascript: var treeDetail = getTopWindow().objDetailsTree;";
+
+		// Getting program Map from arguments
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+		Vector vOidsToDelete = new Vector();
+		String sParentOID = "";
+		Object oParentID = programMap.get("parentOID");
+		if (oParentID instanceof String) {
+			sParentOID = (String) oParentID;
+		}
+		else {
+			String[] saParentOID = (String[]) oParentID;
+			sParentOID = saParentOID[0];
+		}
+
+		for (int i = 0; i < emxTableRowId.length; ++i) {
+			String sOid = emxTableRowId[i].substring(emxTableRowId[i].indexOf("|") + 1);
+			DomainObject doFileAttachment = new DomainObject(sOid);
+			doFileAttachment.open(context);
+			String sType = doFileAttachment.getTypeName();
+			String sName = doFileAttachment.getName();
+			// Make sure that all selected items are File Attachments
+			if ("File Attachment".equals(sType)) {
+				vOidsToDelete.add(sOid);
+				String sTitle = doFileAttachment.getAttributeValue(context, "Title");
+				vDeletedDocNames.add(sName + "(" + sTitle + ")");
+				callback += "if(treeDetail!=null){treeDetail.deleteObject('" + sOid + "', false);}";// ";eval(top.trees['emxUIDetailsTree']).deleteObject('"+
+																									// sOid
+																									// +"')";
+			}
+			else {
+				// Send message to user that this operation is only to delete
+				// file attachments
+				${CLASS:emxContextUtil}.mqlNotice(context, sName + sDisplayMessage);
+			}
+
+		}
+
+		// convert vector to string array
+		String[] sOidsToDelete = new String[vOidsToDelete.size()];
+		vOidsToDelete.toArray(sOidsToDelete);
+		try {
+			ContextUtil.pushContext(context);
+			// Bug 43256 - Start
+			// Set an environmental variable to bypass "File Reference"
+			// relationship delete trigger.
+
+			MQLCommand mqlComm = new MQLCommand();
+			mqlComm.open(context);
+			mqlComm.executeCommand(context, "set env global BYPASS_FILE_REFERENCE_DELETE_TRIGGER TRUE");
+			// Bug 43256 - End
+			CommonDocument.deleteDocuments(context, sOidsToDelete);
+			// Bug 43256 - Start
+			mqlComm.executeCommand(context, "unset env global BYPASS_FILE_REFERENCE_DELETE_TRIGGER");
+			mqlComm.close(context);
+			// Bug 43256 - End
+			ContextUtil.popContext(context);
+			callback += "getTopWindow().refreshTablePage();";
+			hmReturn.put("callback", callback);
+			Iterator it = vDeletedDocNames.iterator();
+			while (it.hasNext()) {
+				String sDocName = (String) it.next();
+				String wasDeletedBy = " " + Helper.getI18NString(context, Helper.StringResource.LSA, "emxComponents.Common.WasDeletedBy") + " ";
+				// String strHistory = "modify bus " + sParentOID +
+				// " add history modify comment \"File Attachment "
+				// + sDocName + " was deleted by " + sDisplayName + "\" ";
+				String strRet = MqlUtil.mqlCommand(context, "modify bus $1 add history modify comment $2", sParentOID,
+						"File Attachment " + sDocName + wasDeletedBy + sDisplayName);
+			}
+
+		}
+		catch (Exception objException) {
+			${CLASS:emxContextUtil}.mqlError(context, objException.toString());
+		}
+		catch (Throwable objException) {
+			${CLASS:emxContextUtil}.mqlError(context, objException.toString());
+		}
+
+		return hmReturn;
+	}
+}
+

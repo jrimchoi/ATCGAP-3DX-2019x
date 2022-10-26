@@ -1,0 +1,2797 @@
+
+/*
+ * * emxLSASchemaDefinitionBase** Copyright (c) 1992-2018 Dassault Systemes.*
+ * All Rights Reserved.* This program contains proprietary and trade secret
+ * information of MatrixOne,* Inc. Copyright notice is precautionary only* and
+ * does not evidence any actual or intended publication of such program*
+ */
+
+import java.io.File;
+import java.io.PrintStream;
+import java.io.PrintWriter;
+import java.text.MessageFormat;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.StringTokenizer;
+import java.util.TreeMap;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.db.MatrixWriter;
+
+import com.matrixone.jdom.Document;
+import com.matrixone.jdom.Element;
+import com.matrixone.jdom.input.SAXBuilder;
+import com.matrixone.jsystem.util.MxLinkedHashMap;
+import com.matrixone.jsystem.util.StringUtils;
+
+/**
+ * The <code>emxSchemaDefinitionBase</code> class contains methods for
+ * ActionLinkAccess.
+ *
+ * @version AEF 10.Next - Copyright (c) 2003, MatrixOne, Inc.
+ */
+
+public class ${CLASSNAME} {
+	// application name
+	private static final String				FRAMEWORK_APPLICATION_NAME	= "Framework";
+
+	// Install properties
+	private static final String				PROP_INSTALLER				= "installer";
+	private static final String				PROP_VERSION				= "version";
+	private static final String				PROP_INSTALLED_DATE			= "installed date";
+	private static final String				PROP_ORIGINAL_NAME			= "original name";
+	private static final String				PROP_APPLICATION			= "application";
+	// Install properties values
+	private static final String				PROP_INSTALLER_VALUE		= "ENOVIAEngineering";
+	private static final String				PROP_APPLICATION_VALUE		= "Framework";
+
+	// rename prefix
+	private static final String				RENAME_PREFIX				= "emx";
+	private static final String				RENAME_SUFIX				= "~";
+
+	// Schema Definition File Keys
+	private static final String				KEY_ADMIN_TYPE				= "AdminType";
+	private static final String				KEY_ORIGNAL_NAME			= "OrignalName";
+	private static final String				KEY_ORIGINAL_NAME			= "OriginalName";
+	private static final String				KEY_SYMBOLIC_NAME			= "SymbolicName";
+	private static final String				KEY_VERSION_HISTORY			= "VersionHistory";
+	private static final String				KEY_COMMAND_INFO			= "CommandInfo";
+	private static final String				KEY_COMMAND					= "Command";
+	private static final String				KEY_SYMBOLIC_NAME_START		= "<SYM>";
+	private static final String				KEY_SYMBOLIC_NAME_END		= "</SYM>";
+	private static final String				KEY_ENV_START				= "<ENV>";
+	private static final String				KEY_ENV_END					= "</ENV>";
+	private static final String				KEY_JPO						= "JPO";
+	private static final String				KEY_SCRIPT					= "Script";
+	private static final String				KEY_CONSTRUCTOR_ARGS		= "ConstructorArg";
+	private static final String				KEY_METHOD					= "Method";
+	private static final String				KEY_METHOD_ARGS				= "MethodArg";
+	private static final String				KEY_SCRIPT_ARGS				= "ScriptArg";
+
+	// Schema definition file attributes
+	private static final String				ATTRIBUTE_VERSION			= "Version";
+	private static final String				ATTRIBUTE_SKIP				= "Skip";
+	private static final String				ATTRIBUTE_SKIP_YES			= "Yes";
+	private static final String				ATTRIBUTE_SKIP_NO			= "No";
+	private static final String				ATTRIBUTE_COMMAND_TYPE		= "Type";
+	private static final String				ATTRIBUTE_COMMAND_TYPE_MQL	= "MQL";
+	private static final String				ATTRIBUTE_COMMAND_TYPE_JPO	= "JPO";
+	private static final String				ATTRIBUTE_COMMAND_TYPE_TCL	= "TCL";
+	private static final String				ATTRIBUTE_RELOAD_CACHE		= "ReloadCache";
+	private static final String				ATTRIBUTE_RELOAD_CACHE_YES	= "Yes";
+	private static final String				ATTRIBUTE_RELOAD_CACHE_NO	= "No";
+	private static final String				ATTRIBUTE_DEFERRED			= "deferred";
+	private static final String				ATTRIBUTE_DEFERRED_YES		= "Yes";
+	private static final String				ATTRIBUTE_DEFERRED_NO		= "No";
+
+	// Symbolic names hook
+	private static final String				SCHEMA_MAPPING_PROGRAM		= "eServiceSchemaVariableMapping.tcl";
+
+	// Schema Definition files will be cached here
+	private Document						schemaDefinitionFile		= null;
+
+	// version util
+	private ${CLASS:emxLSAAppVersionUtilBase}	appVersionUtil				= null;
+
+	// symbolic name cache
+	private static TreeMap					adminCache					= null;
+	// adminCache keys
+	private static final String				KEY_ACTUAL_NAME				= "ActualName";
+	private static final String				KEY_VERSION					= "Version";
+	private static final String				KEY_STATES					= "States";
+	private static final String				KEY_APPLICATION				= "Application";
+	private static final String				KEY_UNRESOLVED_REFERENCES	= "Unresolved References";
+
+	/**
+	 * Constructor.
+	 *
+	 * Should be used while firing JPO throgh command line
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            [0] holds schema definition file name with full path
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		// throw exception if improper arguments are passed
+		if (args.length < 1) {
+			throw (new Exception("Could not instantiate JPO:  Schema definition xml file name should be passed as input parameter."));
+		}
+
+		// load AppInfo.rul file
+		String sAppInfoFile = null;
+		if (args.length >= 2 && args[1].trim().length() > 0) {
+			sAppInfoFile = args[1];
+		}
+		appVersionUtil = new ${CLASS:emxLSAAppVersionUtilBase}(context, FRAMEWORK_APPLICATION_NAME, sAppInfoFile);
+
+		// Get reload cache flag is on.
+		// by default it will be set to false.
+		boolean bReloadCache = true;
+		if (args.length >= 3 && args[2].equalsIgnoreCase("FALSE")) {
+			bReloadCache = false;
+		}
+
+		loadSchemaDefinition(context, args[0], bReloadCache);
+	}
+
+	/**
+	 * Constructor.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param schemaDefFile
+	 *            holds schema definition file handle
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public ${CLASSNAME}(Context context, File schemaDefFile, ${CLASS:emxLSAAppVersionUtilBase} appVersions) throws Exception {
+		loadSchemaDefinition(context, schemaDefFile, true);
+
+		if (appVersions != null) {
+			appVersionUtil = appVersions;
+		}
+		else {
+			appVersionUtil = new ${CLASS:emxLSAAppVersionUtilBase}(context, FRAMEWORK_APPLICATION_NAME, null);
+		}
+	}
+
+	/**
+	 * Empty Constructor.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param schemaDefFile
+	 *            holds schema definition file handle
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public ${CLASSNAME}() throws Exception {
+	}
+
+	/**
+	 * This method loads schema definition file.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param xmlFile
+	 *            holds schema definition file name with full path
+	 * @param bReloadCache
+	 *            if set to true it will reload the cache
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public void loadSchemaDefinition(Context context, String xmlFile, boolean bReloadCache) throws Exception {
+		loadSchemaDefinition(context, new File(xmlFile), bReloadCache);
+	}
+
+	/**
+	 * This method loads schema definition file.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param xmlFile
+	 *            holds schema definition file name with full path
+	 * @param bReloadCache
+	 *            if set to true it will reload the cache
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public void loadSchemaDefinition(Context context, File xmlFile, boolean bReloadCache) throws Exception {
+		// if reload cache is set to ture or
+		// if xml file is not cached then parse xml file
+		if (bReloadCache || schemaDefinitionFile == null) {
+			SAXBuilder xmlBuilder = new SAXBuilder();
+			Document xmlDoc = xmlBuilder.build(xmlFile);
+			schemaDefinitionFile = xmlDoc;
+		}
+	}
+
+	/**
+	 * Get schema definition file admin type.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public String getAdminType(Context context) throws Exception {
+		// Get root
+		Element root = schemaDefinitionFile.getRootElement();
+		// Get admin type node text
+		String sAdminType = root.getChildText(KEY_ADMIN_TYPE).trim();
+		return sAdminType;
+	}
+
+	/**
+	 * Get schema definition file original name.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public String getOriginalName(Context context) throws Exception {
+		// get root
+		Element root = schemaDefinitionFile.getRootElement();
+		// get original name text
+		String sOriginalName = root.getChildText(KEY_ORIGINAL_NAME);
+		if (sOriginalName == null) {
+			sOriginalName = root.getChildText(KEY_ORIGNAL_NAME);
+		}
+
+		if (sOriginalName != null)
+			sOriginalName = sOriginalName.trim();
+
+		return sOriginalName;
+	}
+
+	/**
+	 * Get schema definition file Symbolic Name.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public String getSymbolicName(Context context) throws Exception {
+		// get root
+		Element root = schemaDefinitionFile.getRootElement();
+		// get symbolic name text
+		String sSymbolicName = root.getChildText(KEY_SYMBOLIC_NAME).trim();
+		return sSymbolicName;
+	}
+
+	/**
+	 * Get version list
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.Next
+	 */
+	public ArrayList getVersionList(Context context) throws Exception {
+		// get root
+		Element root = schemaDefinitionFile.getRootElement();
+		// get all version history nodes
+		List lVersionHistory = root.getChildren(KEY_VERSION_HISTORY);
+		ArrayList aVersion = new ArrayList(lVersionHistory.size());
+
+		// for each version history node
+		for (int i = 0; i < lVersionHistory.size(); i++) {
+			Element eVersionHistory = (Element) lVersionHistory.get(i);
+			// get version
+			String sVersion = eVersionHistory.getAttributeValue(ATTRIBUTE_VERSION);
+			aVersion.add(sVersion);
+		}
+
+		// return all versions
+		return aVersion;
+	}
+
+	/**
+	 * Get command list
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if the operation fails
+	 * @TreeMap returns a map of version and command list
+	 * @since AEF 10.Next
+	 */
+	public TreeMap getCommandList(Context context, ${CLASSNAME} customSDF) throws Exception {
+		TreeMap hCommandList = null;
+		// if custom SDF passed then search commands in it first
+		if (customSDF != null) {
+			hCommandList = customSDF.getCommandList(context, null);
+		}
+		else {
+			hCommandList = new TreeMap(new VersionComparator(context));
+		}
+
+		// get root
+		Element root = schemaDefinitionFile.getRootElement();
+		// get all version history nodes
+		List lVersionHistory = root.getChildren(KEY_VERSION_HISTORY);
+
+		// for each version history node
+		for (int i = 0; i < lVersionHistory.size(); i++) {
+			Element eVersionHistory = (Element) lVersionHistory.get(i);
+
+			// get version
+			String sSchemaDefVersion = eVersionHistory.getAttributeValue(ATTRIBUTE_VERSION).trim();
+
+			if (hCommandList.containsKey(sSchemaDefVersion)) {
+				continue;
+			}
+
+			// get skip attribute
+			String sSkip = eVersionHistory.getAttributeValue(ATTRIBUTE_SKIP);
+			boolean bSkip = false;
+			if (sSkip != null && sSkip.trim().equalsIgnoreCase(ATTRIBUTE_SKIP_YES)) {
+				bSkip = true;
+			}
+
+			ArrayList aCommand = new ArrayList();
+			if (!bSkip) {
+				// get all command info nodes
+				List lCommandInfo = eVersionHistory.getChildren(KEY_COMMAND_INFO);
+
+				// for each command info node
+				for (int ii = 0; ii < lCommandInfo.size(); ii++) {
+					Element eCommandInfo = (Element) lCommandInfo.get(ii);
+
+					// get commands
+					List lCommand = eCommandInfo.getChildren(KEY_COMMAND);
+					// for each command
+					for (int iii = 0; iii < lCommand.size(); iii++) {
+						Element eCommand = (Element) lCommand.get(iii);
+						aCommand.add(eCommand);
+					}
+				}
+			}
+
+			hCommandList.put(sSchemaDefVersion, aCommand);
+		}
+		return hCommandList;
+	}
+
+	/**
+	 * Replaces environment variables in the command with their values The
+	 * environment variables are prefixed and suffixed by <ENV> and </ENV> tags.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static String replaceEnvVariables(Context context, String sCmd) throws Exception {
+		String retString = sCmd;
+		StringBuffer sb = new StringBuffer(sCmd);
+		int index = retString.indexOf(KEY_ENV_START);
+		while (index >= 0) {
+			int index1 = retString.indexOf(KEY_ENV_END, index + KEY_ENV_START.length());
+
+			String sEnvName = retString.substring(index + KEY_ENV_START.length(), index1);
+			String sEnvValue = executeMQLCommand(context, "get env \"" + sEnvName + "\"");
+
+			sb.replace(index, index1 + KEY_ENV_END.length(), sEnvValue);
+			retString = sb.toString();
+			index = retString.indexOf(KEY_ENV_START);
+		}
+		return retString;
+	}
+
+	/**
+	 * Removes symbolic name references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static String removeUnresolvedSchemaReferences(Context context, String sAdminSymbolicName, String sName, String sInputCmd)
+			throws Exception {
+		// get admin type
+		String sAdminType = sAdminSymbolicName.substring(0, sAdminSymbolicName.indexOf('_'));
+		String sNewCmd = "";
+
+		// if admin type is type then look for attributes
+		if (sAdminType.equals("type")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add attribute");
+			aKeys.add("remove attribute");
+			aKeys.add("attribute");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		// if admin type is relationship then look for attributes and types
+		if (sAdminType.equals("relationship")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add attribute");
+			aKeys.add("remove attribute");
+			aKeys.add("attribute");
+			aKeys.add("add type");
+			aKeys.add("remove type");
+			aKeys.add("type");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		// if admin type is interface then look for attributes types and
+		// relationships
+		if (sAdminType.equals("interface")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add attribute");
+			aKeys.add("remove attribute");
+			aKeys.add("attribute");
+			aKeys.add("add type");
+			aKeys.add("remove type");
+			aKeys.add("type");
+			aKeys.add("add relationship");
+			aKeys.add("remove relationship");
+			aKeys.add("relationship");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		// if admin is role or group then look for person
+		if (sAdminType.equals("role") || sAdminType.equals("group")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add assign person");
+			aKeys.add("remove assign person");
+			aKeys.add("assign person");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		// if admin is person then look for group and role
+		if (sAdminType.equals("person")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("remove assign role");
+			aKeys.add("assign role");
+			aKeys.add("remove assign group");
+			aKeys.add("assign group");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		// if admin is policy then look for type,store,format,user
+		if (sAdminType.equals("policy")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add type");
+			aKeys.add("remove type");
+			aKeys.add("type");
+			aKeys.add("add format");
+			aKeys.add("remove format");
+			aKeys.add("format");
+			aKeys.add("defaultformat");
+			aKeys.add("store");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+			sNewCmd = removeUnresolvedUsers(context, sAdminSymbolicName, sName, sNewCmd);
+		}
+
+		// if admin type is application then look for all admin types
+		if (sAdminType.equals("application")) {
+			ArrayList aKeys = new ArrayList();
+			aKeys.add("add member store");
+			aKeys.add("remove member store");
+			aKeys.add("member store");
+			aKeys.add("add member vault");
+			aKeys.add("remove member vault");
+			aKeys.add("member vault");
+			aKeys.add("add member dimension");
+			aKeys.add("remove member dimension");
+			aKeys.add("member dimension");
+			aKeys.add("add member attribute");
+			aKeys.add("remove member attribute");
+			aKeys.add("member attribute");
+			aKeys.add("add member type");
+			aKeys.add("remove member type");
+			aKeys.add("member type");
+			aKeys.add("add member relationship");
+			aKeys.add("remove member relationship");
+			aKeys.add("member relationship");
+			aKeys.add("add member interface");
+			aKeys.add("remove member interface");
+			aKeys.add("member interface");
+			aKeys.add("add member format");
+			aKeys.add("remove member format");
+			aKeys.add("member format");
+			aKeys.add("add member person");
+			aKeys.add("remove member person");
+			aKeys.add("member person");
+			aKeys.add("add member role");
+			aKeys.add("remove member role");
+			aKeys.add("member role");
+			aKeys.add("add member group");
+			aKeys.add("remove member group");
+			aKeys.add("member group");
+			aKeys.add("add member association");
+			aKeys.add("remove member association");
+			aKeys.add("member association");
+			aKeys.add("add member policy");
+			aKeys.add("remove member policy");
+			aKeys.add("member policy");
+			aKeys.add("add member rule");
+			aKeys.add("remove member rule");
+			aKeys.add("member rule");
+			aKeys.add("add member index");
+			aKeys.add("remove member index");
+			aKeys.add("member index");
+			sNewCmd = removeUnresolvedSchemaReferences(context, sAdminSymbolicName, aKeys, sInputCmd);
+		}
+
+		if (sNewCmd.length() == 0) {
+			sNewCmd = sInputCmd;
+		}
+
+		return sNewCmd;
+	}
+
+	/**
+	 * Removes user references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static String removeUnresolvedUsers(Context context, String sAdminSymbolicName, String sName, String sInputCmd) throws Exception {
+		String sCmd = sInputCmd;
+		ArrayList aFieldKeyWords = new ArrayList();
+		aFieldKeyWords.add("add user");
+		aFieldKeyWords.add("remove user");
+		aFieldKeyWords.add("user");
+
+		ArrayList aOrgUnresolvedRef = getUnresolvedReferences(context, sAdminSymbolicName);
+
+		ArrayList aCmd = getWordsFromCmd(context, sCmd, aFieldKeyWords);
+
+		String sNewCmd = "";
+		ArrayList aUnresolvedSyms = new ArrayList();
+		for (int i = 0; i < aCmd.size(); i++) {
+			String sToken = (String) aCmd.get(i);
+			boolean bIsKeyWord = false;
+			for (int ii = 0; ii < aFieldKeyWords.size(); ii++) {
+				String sFieldKeyWord = (String) aFieldKeyWords.get(ii);
+				if (sToken.equals(sFieldKeyWord) && !((String) aCmd.get(i - 1)).equals("route")) {
+					String sFilter = null;
+					String sUser = (String) aCmd.get(++i);
+					int index = sUser.indexOf(KEY_SYMBOLIC_NAME_START);
+					int index1 = sUser.indexOf(KEY_SYMBOLIC_NAME_END, index + KEY_SYMBOLIC_NAME_START.length());
+					String sUserSymbolicName = sUser.substring(index + KEY_SYMBOLIC_NAME_START.length(), index1);
+
+					String sAccess = (String) aCmd.get(++i);
+
+					boolean bUserFound = true;
+					try {
+						sUser = replaceSymbolicNames(context, sAdminSymbolicName, sName, sUser);
+						if (aOrgUnresolvedRef.contains(sUserSymbolicName)) {
+							throw (new Exception());
+						}
+					}
+					catch (Exception ex) {
+						bUserFound = false;
+						aUnresolvedSyms.add(sUserSymbolicName);
+					}
+
+					boolean bFilterFound = true;
+					String sFilterKey = null;
+					if (i < aCmd.size() - 1) {
+						sFilterKey = (String) aCmd.get(i + 1);
+
+						if (sFilterKey.equals("filter") || sFilterKey.equals("localfilter")) {
+							bFilterFound = true;
+							i++;
+							sFilter = (String) aCmd.get(++i);
+
+							try {
+								sFilter = replaceSymbolicNames(context, sAdminSymbolicName, sName, sFilter);
+							}
+							catch (Exception ex) {
+								bFilterFound = false;
+								aUnresolvedSyms.add(sUserSymbolicName);
+							}
+						}
+					}
+
+					if (sFilter == null && bFilterFound) {
+						if (bUserFound) {
+							sNewCmd += sFieldKeyWord + " " + sUser + " " + sAccess + " ";
+						}
+					}
+					else {
+						if (bUserFound && bFilterFound) {
+							sNewCmd += sFieldKeyWord + " " + sUser + " " + sAccess + " " + sFilterKey + " " + sFilter + " ";
+						}
+					}
+
+					bIsKeyWord = true;
+					break;
+				}
+			}
+
+			if (!bIsKeyWord) {
+				sNewCmd += sToken + " ";
+			}
+		}
+		if (aUnresolvedSyms.size() > 0) {
+			ArrayList aUnresolvedRef = getUnresolvedReferences(context, sAdminSymbolicName);
+			for (int i = 0; i < aUnresolvedSyms.size(); i++) {
+				String sAdminSym = (String) aUnresolvedSyms.get(i);
+				if (aUnresolvedRef.contains(sAdminSym)) {
+					continue;
+				}
+				else {
+					sNewCmd += "property mxSym_" + sAdminSym + " value UNRESOLVED ";
+					aUnresolvedRef.add(sAdminSym);
+				}
+			}
+			putUnresolvedReferences(context, sAdminSymbolicName, aUnresolvedRef);
+		}
+		return sNewCmd;
+	}
+
+	/**
+	 * Gets word list from MQL command
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sInputCmd
+	 *            MQL command to be parsed to get word list
+	 * @param aKeyWords
+	 *            list of key words to be identified
+	 * @returns ArrayList containing list of all the words
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF 10.6
+	 */
+	private static ArrayList getWordsFromCmd(Context context, String sInputCmd, ArrayList aKeyWords) throws Exception {
+		// get command in one single line
+		StringTokenizer st = new StringTokenizer(sInputCmd, "\n");
+		String sCmd = "";
+		while (st.hasMoreTokens()) {
+			sCmd += st.nextToken().trim() + " ";
+		}
+
+		// replace all the key words separated by spaces
+		ArrayList aNewKeyWords = new ArrayList();
+		for (int i = 0; aKeyWords != null && i < aKeyWords.size(); i++) {
+			String sKeyWord = (String) aKeyWords.get(i);
+			String sNewKeyWord = sKeyWord.replace(' ', '_');
+			aNewKeyWords.add(sNewKeyWord);
+			sCmd = StringUtils.replaceAll(sCmd, sKeyWord, sNewKeyWord);
+		}
+
+		ArrayList aCmd = new ArrayList();
+		st = new StringTokenizer(sCmd, " ");
+		boolean bIsQuoteOn = false;
+		String sQuoteType = null;
+		String sCurrentWord = "";
+		while (st.hasMoreTokens()) {
+			String sToken = st.nextToken();
+			if (!bIsQuoteOn && sToken.startsWith("\"")) {
+				bIsQuoteOn = true;
+				sQuoteType = "\"";
+				sCurrentWord = "";
+			}
+			else if (!bIsQuoteOn && sToken.startsWith("'")) {
+				bIsQuoteOn = true;
+				sQuoteType = "'";
+				sCurrentWord = "";
+			}
+
+			if (bIsQuoteOn) {
+				if (sCurrentWord.length() == 0) {
+					sCurrentWord += sToken;
+				}
+				else {
+					sCurrentWord += " " + sToken;
+				}
+			}
+			else {
+				sCurrentWord = sToken;
+			}
+
+			if (bIsQuoteOn && sToken.endsWith(sQuoteType)) {
+				bIsQuoteOn = false;
+			}
+
+			if (!bIsQuoteOn) {
+				if (aNewKeyWords.contains(sCurrentWord)) {
+					sCurrentWord = sCurrentWord.replace('_', ' ');
+				}
+
+				aCmd.add(sCurrentWord);
+			}
+		}
+
+		return aCmd;
+	}
+
+	/**
+	 * Removes symbolic name references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param aFieldKeyWords
+	 *            keys to be searched in MQL
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static String removeUnresolvedSchemaReferences(Context context, String sAdminSymbolicName, ArrayList aFieldKeyWords, String sInputCmd)
+			throws Exception {
+		String sCmd = sInputCmd;
+
+		ArrayList aCmd = getWordsFromCmd(context, sCmd, aFieldKeyWords);
+
+		String sNewCmd = "";
+		ArrayList aUnresolvedSyms = new ArrayList();
+		for (int i = 0; i < aCmd.size(); i++) {
+			String sToken = (String) aCmd.get(i);
+
+			boolean bIsKeyWord = false;
+			for (int ii = 0; ii < aFieldKeyWords.size(); ii++) {
+				String sFieldKeyWord = (String) aFieldKeyWords.get(ii);
+				if (sToken.equals(sFieldKeyWord)) {
+					String sSymNames = (String) aCmd.get(++i);
+
+					StringTokenizer st2 = new StringTokenizer(sSymNames, ",");
+					ArrayList aSyms = new ArrayList();
+					while (st2.hasMoreTokens()) {
+						String sToken2 = st2.nextToken().trim();
+
+						if (sToken2.equals("all") || sToken2.equals("\"all\"") || sToken2.equals("'all'")) {
+							aSyms.add("all");
+						}
+						else {
+							int index = sToken2.indexOf(KEY_SYMBOLIC_NAME_START);
+							int index1 = sToken2.indexOf(KEY_SYMBOLIC_NAME_END, index + KEY_SYMBOLIC_NAME_START.length());
+							String sSymbolicName = sToken2.substring(index + KEY_SYMBOLIC_NAME_START.length(), index1);
+							String sAdminName = getName(context, sSymbolicName);
+							if (sAdminName == null || sAdminName.length() == 0) {
+								aUnresolvedSyms.add(sSymbolicName);
+							}
+							else {
+								aSyms.add(sAdminName);
+							}
+						}
+					}
+					if (aSyms.size() > 0) {
+						sNewCmd += sFieldKeyWord + " ";
+						for (int iii = 0; iii < aSyms.size(); iii++) {
+							sNewCmd += "\"" + (String) aSyms.get(iii) + "\"";
+							if (iii < aSyms.size() - 1) {
+								sNewCmd += ",";
+							}
+							sNewCmd += " ";
+						}
+						if (sToken.startsWith("member") || sToken.startsWith("add member")) {
+							sNewCmd += (String) aCmd.get(i + 1) + " ";
+							sNewCmd += (String) aCmd.get(i + 2) + " ";
+						}
+					}
+					if (sToken.startsWith("member") || sToken.startsWith("add member")) {
+						++i;
+						++i;
+					}
+
+					bIsKeyWord = true;
+					break;
+				}
+			}
+
+			if (!bIsKeyWord) {
+				sNewCmd += sToken + " ";
+			}
+
+		}
+		if (aUnresolvedSyms.size() > 0) {
+			ArrayList aUnresolvedRef = getUnresolvedReferences(context, sAdminSymbolicName);
+			for (int i = 0; i < aUnresolvedSyms.size(); i++) {
+				String sAdminSym = (String) aUnresolvedSyms.get(i);
+				if (aUnresolvedRef.contains(sAdminSym)) {
+					continue;
+				}
+				else {
+					sNewCmd += "property mxSym_" + sAdminSym + " value UNRESOLVED ";
+					aUnresolvedRef.add(sAdminSym);
+				}
+			}
+			putUnresolvedReferences(context, sAdminSymbolicName, aUnresolvedRef);
+		}
+
+		return sNewCmd;
+	}
+
+	/**
+	 * Replaces symbolic names in the command with their values The symbolic
+	 * names are prefixed and suffixed by <SYM> and </SYM> tags.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced symbolic names.
+	 * @since AEF 10.Next
+	 */
+	private static String replaceSymbolicNames(Context context, String sAdminSymbolicName, String sName, String sCmd) throws Exception {
+		String retString = sCmd;
+		StringBuffer sb = new StringBuffer(sCmd);
+		int index = retString.indexOf(KEY_SYMBOLIC_NAME_START);
+		while (index >= 0) {
+			int index1 = retString.indexOf(KEY_SYMBOLIC_NAME_END, index + KEY_SYMBOLIC_NAME_START.length());
+
+			String sSymbolicName = retString.substring(index + KEY_SYMBOLIC_NAME_START.length(), index1);
+
+			String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf("_"));
+			String sAdminName = "";
+			if (sAdminType.equals("state")) {
+				sAdminName = getStateName(context, sAdminSymbolicName, sSymbolicName);
+				if (sAdminName == null || sAdminName.length() == 0) {
+					throw (new Exception("Symbolic name " + sSymbolicName + " not found"));
+				}
+			}
+			else {
+				sAdminName = getName(context, sSymbolicName);
+				if (sAdminName == null || sAdminName.length() == 0) {
+					if (sCmd.trim().startsWith("add") && sSymbolicName.equals(sAdminSymbolicName)) {
+						sAdminName = sName;
+						putName(context, sAdminSymbolicName, sName);
+					}
+					else {
+						throw (new Exception("Error: Symbolic name " + sSymbolicName + " not found"));
+					}
+				}
+			}
+
+			sb.replace(index, index1 + KEY_SYMBOLIC_NAME_END.length(), sAdminName);
+			retString = sb.toString();
+			index = retString.indexOf(KEY_SYMBOLIC_NAME_START);
+		}
+		return retString;
+	}
+
+	/**
+	 * installs admin object
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sVersion
+	 *            version to be installed
+	 * @throws Throwable
+	 * @returns boolean true/false indicating install sucess.
+	 * @since AEF 10.Next
+	 */
+	public void install(Context context, String sInstallVersion, PrintStream fMQLLog) throws Throwable {
+		install(context, sInstallVersion, fMQLLog, null);
+	}
+
+	private String isTenantInstall = null;
+
+	/**
+	 * installs admin object
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sVersion
+	 *            version to be installed
+	 * @throws Throwable
+	 * @returns boolean true/false indicating install sucess.
+	 * @since AEF 10.Next
+	 */
+	public void install(Context context, String sInstallVersion, PrintStream fMQLLog, ${CLASSNAME} customSDF) throws Throwable {
+		// Get all the commands
+		TreeMap hCommandList = getCommandList(context, customSDF);
+
+		// if no commands found then return
+		if (hCommandList == null || hCommandList.isEmpty()) {
+			return;
+		}
+
+		// Get admin type, original name, symbolic name
+		String sAdminType = getAdminType(context);
+		String sOriginalName = getOriginalName(context);
+		String sSymbolicName = getSymbolicName(context);
+
+		// Get actual name from symbolic name lookup
+		String sDBName = getName(context, sAdminType, sSymbolicName);
+		String sDBVersion = getVersion(context, sAdminType, sSymbolicName);
+		String sDBApplication = getApplication(context, sAdminType, sSymbolicName);
+
+		boolean tenant = false;
+		if (isTenantInstall == null) {
+			String tenantCmd = "print context select tenant dump;";
+			String tenantResult = executeMQLCommand(context, tenantCmd);
+			if (tenantResult != null && !"".equals(tenantResult)) {
+				tenant = true;
+				isTenantInstall = "true";
+			}
+		}
+		else if ("true".equals(isTenantInstall)) {
+			tenant = true;
+		}
+		boolean preventedAdminByTenantUser = false;
+		if (tenant && (sAdminType.equals("vault") || sAdminType.equals("store"))) {
+			preventedAdminByTenantUser = true;
+		}
+		// Set name of the admin object
+		String sName = null;
+		if (sDBName != null) {
+			sName = sDBName;
+		}
+		else {
+			String sResult = null;
+			if (sAdminType.equals("association")) {
+				sResult = executeMQLCommand(context, "list user \"" + sOriginalName + "\"");
+			}
+			else if (!preventedAdminByTenantUser) {
+				sResult = executeMQLCommand(context, "list " + sAdminType + " \"" + sOriginalName + "\"");
+			}
+			if (sResult != null && sResult.equals(sOriginalName)) {
+				String sLatestVersion = appVersionUtil.getLatestVersion(context);
+				sName = RENAME_PREFIX + sLatestVersion + RENAME_SUFIX + sOriginalName;
+				writeSchemaLog(context, "Renaming", sAdminType, sOriginalName, "");
+			}
+			else {
+				sName = sOriginalName;
+			}
+		}
+
+		// current version getting installed
+		String sVersion = null;
+
+		// for each version listed in sdf
+		try {
+			Iterator itr = hCommandList.keySet().iterator();
+			while (itr.hasNext()) {
+				// get sdf version
+				sVersion = (String) itr.next();
+				// get internal version
+				sVersion = appVersionUtil.getInternalVersion(sVersion);
+
+				// if install version not passed then install all
+				// otherwise install only that specific version
+				if (sInstallVersion != null && !sInstallVersion.equals(sVersion)) {
+					continue;
+				}
+
+				StringBuilder sbElementInstall = new StringBuilder("Installing schema ");
+				sbElementInstall.append(sAdminType).append(" ");
+				sbElementInstall.append(sSymbolicName);
+
+				fMQLLog.println(sbElementInstall.toString());
+
+				// compare database version if admin already exists
+				// or database version is lesser then sdf version
+				if (sDBName == null || appVersionUtil.compareVersion(context, sAdminType, sName, sVersion, sDBVersion) > 0) {
+					// get command list for current version
+					ArrayList aCmds = (ArrayList) hCommandList.get(sVersion);
+
+					if (!aCmds.isEmpty()) {
+						if (sDBName == null) {
+							writeSchemaLog(context, "Adding", sAdminType, sName, sVersion);
+						}
+						else {
+							writeSchemaLog(context, "Modifying", sAdminType, sName, sVersion);
+						}
+					}
+
+					boolean isDeferred = false;
+					// execute all the commands.
+					if (!preventedAdminByTenantUser) {
+						for (int i = 0; i < aCmds.size(); i++) {
+							Element eCmd = (Element) aCmds.get(i);
+							String sCmdType = eCmd.getAttributeValue(ATTRIBUTE_COMMAND_TYPE).trim();
+							String sDeferred = eCmd.getAttributeValue(ATTRIBUTE_DEFERRED);
+							if (ATTRIBUTE_DEFERRED_YES.equalsIgnoreCase(sDeferred)) {
+								isDeferred = true;
+							}
+							int action = ${CLASS:emxInstallUtil}.getActionForUnsafeChanges(context);
+							if (sCmdType.equalsIgnoreCase(ATTRIBUTE_COMMAND_TYPE_JPO)) {
+								// Get JPO name
+								String sJPO = eCmd.getChildText(KEY_JPO).trim();
+								// Get method name
+								String sMethod = eCmd.getChildText(KEY_METHOD).trim();
+								// Get constructor args
+								List lConstArgs = eCmd.getChildren(KEY_CONSTRUCTOR_ARGS);
+								String aConstArgs[] = null;
+								if (lConstArgs != null && !lConstArgs.isEmpty()) {
+									aConstArgs = new String[lConstArgs.size()];
+									for (int ii = 0; ii < lConstArgs.size(); ii++) {
+										Element eConstArg = (Element) lConstArgs.get(ii);
+										aConstArgs[ii] = eConstArg.getText().trim();
+									}
+								}
+								// Get method args
+								List lMethodArgs = eCmd.getChildren(KEY_METHOD_ARGS);
+								String aMethodArgs[] = null;
+								if (lMethodArgs != null && !lMethodArgs.isEmpty()) {
+									aMethodArgs = new String[lMethodArgs.size()];
+									for (int ii = 0; ii < lMethodArgs.size(); ii++) {
+										Element eMethodArg = (Element) lMethodArgs.get(ii);
+										aMethodArgs[ii] = eMethodArg.getText().trim();
+									}
+								}
+
+								// Invoke JPO
+								String sCmd = "exec program " + sJPO;
+								if (lConstArgs != null && !lConstArgs.isEmpty()) {
+									for (String sConstArg : aConstArgs) {
+										sCmd += " -construct \"";
+										sCmd += sConstArg;
+										sCmd += "\"";
+									}
+								}
+								sCmd += " -method " + sMethod;
+								if (lMethodArgs != null && !lMethodArgs.isEmpty()) {
+									for (String sMethodArg : aMethodArgs) {
+										sCmd += " \"";
+										sCmd += sMethodArg;
+										sCmd += "\"";
+									}
+								}
+								if (isDeferred && ${CLASS:emxSchemaManifest}.fLiveUpgrade != null) {
+									${CLASS:emxSchemaManifest}.fLiveUpgrade.println(sCmd);
+									${CLASS:emxSchemaManifest}.fLiveUpgrade.println();
+								}
+								if (!isDeferred || (action & ${CLASS:emxInstallUtil}.ACTION_EXECUTE) != 0) {
+									JPO.invoke(context, sJPO, aConstArgs, sMethod, aMethodArgs);
+									// write MQL log
+									if (fMQLLog != null) {
+										fMQLLog.println(sCmd);
+										fMQLLog.println("");
+									}
+								}
+							}
+							else if (sCmdType.equalsIgnoreCase(ATTRIBUTE_COMMAND_TYPE_TCL)) {
+								// Get Program Name
+								String sCmd = "exec program \"";
+								String sProgram = eCmd.getChildText(KEY_SCRIPT).trim();
+								sCmd += sProgram + "\" ";
+								// Get args
+								List lProgramArgs = eCmd.getChildren(KEY_SCRIPT_ARGS);
+								if (lProgramArgs != null && !lProgramArgs.isEmpty()) {
+									for (int ii = 0; ii < lProgramArgs.size(); ii++) {
+										Element eProgramArg = (Element) lProgramArgs.get(ii);
+										sCmd += "\"" + eProgramArg.getText().trim() + "\"";
+									}
+								}
+								// execute TCL program
+								executeMQLCommand(context, sCmd);
+							}
+							else {
+								String sCmd = eCmd.getText();
+								sCmd = replaceEnvVariables(context, sCmd);
+								sCmd = removeUnresolvedSchemaReferences(context, sSymbolicName, sName, sCmd);
+								sCmd = replaceSymbolicNames(context, sSymbolicName, sName, sCmd);
+								if ((sDBName != null) && sCmd.trim().startsWith("add")) {
+									writeSchemaLog(context, "Exists", sAdminType, sName, sVersion);
+									writeSchemaLog(context, "Skipping", "Command", "", "");
+									println(context, sCmd);
+									continue;
+								}
+								executeMQLCommand(context, sCmd);
+								// write MQL log
+								if (fMQLLog != null) {
+									fMQLLog.println(sCmd);
+									fMQLLog.println("");
+								}
+							}
+							String sReloadCache = eCmd.getAttributeValue(ATTRIBUTE_RELOAD_CACHE);
+							if (sReloadCache != null && sReloadCache.trim().equalsIgnoreCase(ATTRIBUTE_RELOAD_CACHE_YES)) {
+								sName = getName(context, sAdminType, sSymbolicName);
+							}
+						}
+					}
+
+					// if admin to be added or modified is policy then
+					// register symbolic names for states.
+					if (!aCmds.isEmpty()) {
+						if (sAdminType.equalsIgnoreCase("policy")) {
+							refreshStateSymbolicNames(context, sSymbolicName, true);
+						}
+
+						// if admin being added first time then
+						// add application, installed date, original name,
+						// installer properties
+						if (sDBName == null) {
+							String sCmd = "";
+							if (!preventedAdminByTenantUser) {
+								sCmd = "modify " + sAdminType + " \"" + sName + "\"";
+								sCmd += " property \"" + PROP_VERSION + "\" value \"" + sVersion + "\"";
+								sCmd += " property \"" + PROP_APPLICATION + "\" value \"" + PROP_APPLICATION_VALUE + "\"";
+								sCmd += " property \"" + PROP_INSTALLER + "\" value \"" + PROP_INSTALLER_VALUE + "\"";
+								sCmd += " property \"" + PROP_ORIGINAL_NAME + "\" value \"" + sOriginalName + "\"";
+								sCmd += " property \"" + PROP_INSTALLED_DATE + "\" value \"" + new Date().toString() + "\"";
+								executeMQLCommand(context, sCmd);
+							}
+
+							// register symbolic name if admin is getting added
+							// first time.
+							sCmd = "add property \"" + sSymbolicName + "\" " + "on program \"" + SCHEMA_MAPPING_PROGRAM + "\" " + "to " + sAdminType
+									+ " \"" + sName + "\"";
+							executeMQLCommand(context, sCmd);
+							putName(context, sAdminType, sSymbolicName, sName);
+							putVersion(context, sAdminType, sSymbolicName, sVersion);
+							sDBName = sName;
+							sDBVersion = sVersion;
+						}
+						else {
+							String sCmd = "modify " + sAdminType + " \"" + sName + "\"";
+							sCmd += " property \"" + PROP_VERSION + "\" value \"" + sVersion + "\"";
+							executeMQLCommand(context, sCmd);
+							putVersion(context, sAdminType, sSymbolicName, sVersion);
+							sDBVersion = sVersion;
+						}
+					}
+				}
+				// Suncing and skipping messages if application property
+				// is FrameworkFuture
+				else if (sDBName != null && sDBApplication.equals("FrameworkFuture")) {
+					// If version is same then set application to Framework and
+					// Message Syncing
+					if (appVersionUtil.compareVersion(context, sAdminType, sName, sVersion, sDBVersion) == 0) {
+						writeSchemaLog(context, "Syncing", sAdminType, sName, sVersion);
+						String sCmd = "modify " + sAdminType + " \"" + sName + "\"";
+						sCmd += " property \"" + PROP_APPLICATION + "\" value \"Framework\"";
+						executeMQLCommand(context, sCmd);
+						putApplication(context, sAdminType, sSymbolicName, "Framework");
+					}
+					// If version is lower then skipping message.
+					else {
+						writeSchemaLog(context, "Skipping", sAdminType, sName, sVersion);
+					}
+
+					// get command list for current version
+					ArrayList aCmds = (ArrayList) hCommandList.get(sVersion);
+					// get all commands
+					for (int i = 0; i < aCmds.size(); i++) {
+						Element eCmd = (Element) aCmds.get(i);
+						String sCmdType = eCmd.getAttributeValue(ATTRIBUTE_COMMAND_TYPE).trim();
+						if (sCmdType.equalsIgnoreCase(ATTRIBUTE_COMMAND_TYPE_MQL)) {
+							String sCmd = eCmd.getText();
+							sCmd = replaceEnvVariables(context, sCmd);
+							writeSchemaLog(context, "Skipping", "Command", "", "");
+							println(context, sCmd);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception ex) {
+			fMQLLog.println(ex.getMessage());
+			if (sDBName == null) {
+				removeSymbolicName(context, sSymbolicName);
+			}
+			else {
+				refreshStateSymbolicNames(context, sSymbolicName, false);
+			}
+			// throw ex;
+		}
+	}
+
+	/**
+	 * installs admin object
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sVersion
+	 *            version to be installed
+	 * @throws Throwable
+	 * @returns boolean true/false indicating install sucess.
+	 * @since AEF 10.Next
+	 */
+	public void install(Context context, String args[]) throws Throwable {
+		${CLASSNAME} customSDF = null;
+		if (args != null && args.length > 0 && args[0].trim().length() > 0) {
+			customSDF = new ${CLASSNAME}(context, new File(args[0]), appVersionUtil);
+		}
+		install(context, null, null, customSDF);
+	}
+
+	private class VersionComparator implements Comparator {
+		private Context cntx = null;
+
+		public VersionComparator(Context context) {
+			cntx = context;
+		}
+
+		public int compare(Object o1, Object o2) {
+			// get versions
+			String sVersion1 = (String) o1;
+			String sVersion2 = (String) o2;
+
+			// return version compare results.
+			try {
+				return (appVersionUtil.compareVersion(cntx, null, null, sVersion1, sVersion2));
+			}
+			catch (Exception ex) {
+				return 0;
+			}
+		}
+	}
+
+	/**
+	 * resolves admin object
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sVersion
+	 *            version to be installed
+	 * @throws Exception
+	 *             if the operation fails
+	 * @returns boolean true/false indicating install sucess.
+	 * @since AEF 10.Next
+	 */
+	public void resolve(Context context, PrintStream fMQLLog) throws Exception {
+		resolve(context, fMQLLog, null);
+	}
+
+	/**
+	 * installs admin object
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sVersion
+	 *            version to be installed
+	 * @throws Exception
+	 *             if the operation fails
+	 * @returns boolean true/false indicating install sucess.
+	 * @since AEF 10.Next
+	 */
+	public void resolve(Context context, PrintStream fMQLLog, ${CLASSNAME} customSDF) throws Exception {
+		// Get all the commands
+		TreeMap hCommandList = getCommandList(context, customSDF);
+
+		// if no commands found then return
+		if (hCommandList == null || hCommandList.isEmpty()) {
+			return;
+		}
+
+		// Get admin type, original name, symbolic name
+		String sAdminType = getAdminType(context);
+		String sSymbolicName = getSymbolicName(context);
+
+		// Get actual name from symbolic name lookup
+		String sDBName = getName(context, sAdminType, sSymbolicName);
+		if (sDBName == null) {
+			return;
+		}
+		String sDBVersion = getVersion(context, sAdminType, sSymbolicName);
+
+		// for each version listed in sdf
+		try {
+			Iterator itr = hCommandList.keySet().iterator();
+			boolean bVersionPassed = false;
+			ArrayList aAllCmds = new ArrayList();
+			while (itr.hasNext() && !bVersionPassed) {
+				// get sdf version
+				String sVersion = (String) itr.next();
+
+				// if install version not passed then install all
+				// otherwise install only that specific version
+				if (sDBVersion.equals(sVersion)) {
+					bVersionPassed = true;
+				}
+
+				// get command list for current version
+				ArrayList aCmds = (ArrayList) hCommandList.get(sVersion);
+
+				// execute all the commands.
+				for (int i = 0; i < aCmds.size(); i++) {
+					Element eCmd = (Element) aCmds.get(i);
+					String sCmdType = eCmd.getAttributeValue(ATTRIBUTE_COMMAND_TYPE).trim();
+					if (sCmdType.equalsIgnoreCase(ATTRIBUTE_COMMAND_TYPE_MQL)) {
+						String sCmd = eCmd.getText();
+						aAllCmds.add(sCmd);
+					}
+				}
+			}
+
+			aAllCmds = resolveSchemaReferences(context, sSymbolicName, sDBName, aAllCmds);
+
+			for (int i = 0; i < aAllCmds.size(); i++) {
+				String sCmd = (String) aAllCmds.get(i);
+				if (sCmd == null || sCmd.length() == 0) {
+					continue;
+				}
+				executeMQLCommand(context, sCmd);
+
+				// write MQL log
+				if (fMQLLog != null) {
+					fMQLLog.println(sCmd);
+					fMQLLog.println("");
+				}
+			}
+		}
+		catch (Exception ex) {
+			fMQLLog.println(ex.getMessage());
+			throw ex;
+		}
+	}
+
+	/**
+	 * Removes symbolic name references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static ArrayList resolveSchemaReferences(Context context, String sAdminSymbolicName, String sName, ArrayList aInputCmd) throws Exception {
+		// get admin type
+		String sAdminType = sAdminSymbolicName.substring(0, sAdminSymbolicName.indexOf('_'));
+		ArrayList aNewCmd = null;
+
+		// if admin type is type then look for attributes
+		if (sAdminType.equals("type")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add attribute", "add attribute");
+			aKeys.put("remove attribute", "remove attribute");
+			aKeys.put("attribute", "add attribute");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("attribute");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		// if admin type is relationships then look for attributes and types
+		if (sAdminType.equals("relationship")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add attribute", "add attribute");
+			aKeys.put("remove attribute", "remove attribute");
+			aKeys.put("attribute", "add attribute");
+			aKeys.put("add type", "add type");
+			aKeys.put("remove type", "remove type");
+			aKeys.put("type", "add type");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("attribute");
+			aRefAdmins.add("type");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		// if admin type is interfaces then look for attributes types &
+		// relationships
+		if (sAdminType.equals("interface")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add attribute", "add attribute");
+			aKeys.put("remove attribute", "remove attribute");
+			aKeys.put("attribute", "add attribute");
+			aKeys.put("add type", "add type");
+			aKeys.put("remove type", "remove type");
+			aKeys.put("type", "add type");
+			aKeys.put("add relationship", "add relationship");
+			aKeys.put("remove relationship", "remove relationship");
+			aKeys.put("relationship", "add relationship");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("attribute");
+			aRefAdmins.add("type");
+			aRefAdmins.add("relationship");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		// if admin is role or group then look for person
+		if (sAdminType.equals("role") || sAdminType.equals("group")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add assign person", "add assign person");
+			aKeys.put("remove assign person", "remove assign person");
+			aKeys.put("assign person", "add assign person");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("person");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		// if admin is person then look for group and role
+		if (sAdminType.equals("person")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("remove assign role", "remove assign role");
+			aKeys.put("assign role", "assign role");
+			aKeys.put("remove assign group", "remove assign group");
+			aKeys.put("assign group", "assign group");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("role");
+			aRefAdmins.add("group");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		// if admin is policy then look for type,store,format,user
+		if (sAdminType.equals("policy")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add type", "add type");
+			aKeys.put("remove type", "remove type");
+			aKeys.put("type", "add type");
+			aKeys.put("add format", "add format");
+			aKeys.put("remove format", "remove format");
+			aKeys.put("format", "add format");
+			aKeys.put("defaultformat", "defaultformat");
+			aKeys.put("store", "store");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("type");
+			aRefAdmins.add("format");
+			aRefAdmins.add("store");
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+			aNewCmd.add(resolveUsers(context, sAdminSymbolicName, sName, aInputCmd));
+		}
+
+		// if admin type is application then look for all types
+		if (sAdminType.equals("application")) {
+			MxLinkedHashMap aKeys = new MxLinkedHashMap();
+			aKeys.put("add member store", "add member store");
+			aKeys.put("remove member store", "remove member store");
+			aKeys.put("member store", "add member store");
+			aKeys.put("add member vault", "add member vault");
+			aKeys.put("remove member vault", "remove member vault");
+			aKeys.put("member vault", "add member vault");
+			aKeys.put("add member dimension", "add member dimension");
+			aKeys.put("remove member dimension", "remove member dimension");
+			aKeys.put("member dimension", "add member dimension");
+			aKeys.put("add member attribute", "add member attribute");
+			aKeys.put("remove member attribute", "remove member attribute");
+			aKeys.put("member attribute", "add member attribute");
+			aKeys.put("add member type", "add member type");
+			aKeys.put("remove member type", "remove member type");
+			aKeys.put("member type", "add member type");
+			aKeys.put("add member relationship", "add member relationship");
+			aKeys.put("remove member relationship", "remove member relationship");
+			aKeys.put("member relationship", "add member relationship");
+			aKeys.put("add member interface", "add member interface");
+			aKeys.put("remove member interface", "remove member interface");
+			aKeys.put("member interface", "add member interface");
+			aKeys.put("add member format", "add member format");
+			aKeys.put("remove member format", "remove member format");
+			aKeys.put("member format", "add member format");
+			aKeys.put("add member person", "add member person");
+			aKeys.put("remove member person", "remove member person");
+			aKeys.put("member person", "add member person");
+			aKeys.put("add member role", "add member role");
+			aKeys.put("remove member role", "remove member role");
+			aKeys.put("member role", "add member role");
+			aKeys.put("add member group", "add member group");
+			aKeys.put("remove member group", "remove member group");
+			aKeys.put("member group", "add member group");
+			aKeys.put("add member association", "add member association");
+			aKeys.put("remove member association", "remove member association");
+			aKeys.put("member association", "add member association");
+			aKeys.put("add member policy", "add member policy");
+			aKeys.put("remove member policy", "remove member policy");
+			aKeys.put("member policy", "add member policy");
+			aKeys.put("add member rule", "add member rule");
+			aKeys.put("remove member rule", "remove member rule");
+			aKeys.put("member rule", "add member rule");
+			aKeys.put("add member index", "add member index");
+			aKeys.put("remove member index", "remove member index");
+			aKeys.put("member index", "add member index");
+			ArrayList aRefAdmins = new ArrayList();
+			aRefAdmins.add("store");
+			aRefAdmins.add("vault");
+			aRefAdmins.add("dimension");
+			aRefAdmins.add("attribute");
+			aRefAdmins.add("type");
+			aRefAdmins.add("relationship");
+			aRefAdmins.add("interface");
+			aRefAdmins.add("format");
+			aRefAdmins.add("person");
+			aRefAdmins.add("role");
+			aRefAdmins.add("group");
+			aRefAdmins.add("association");
+			aRefAdmins.add("policy");
+			aRefAdmins.add("rule");
+			aRefAdmins.add("index");
+
+			aNewCmd = resolveSchemaReferences(context, sAdminSymbolicName, aKeys, aRefAdmins, aInputCmd);
+		}
+
+		return aNewCmd;
+	}
+
+	/**
+	 * Resolves symbolic name references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param aFieldKeyWords
+	 *            keys to be searched in MQL
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static ArrayList resolveSchemaReferences(Context context, String sAdminSymbolicName, MxLinkedHashMap aFieldKeyWords, ArrayList aRefAdmins,
+			ArrayList aInputCmd) throws Exception {
+		ArrayList aReturnCmd = new ArrayList();
+		ArrayList aUnresolvedRef = getUnresolvedReferences(context, sAdminSymbolicName);
+
+		ArrayList aFoundFef = new ArrayList();
+
+		String sAdminType = sAdminSymbolicName.substring(0, sAdminSymbolicName.indexOf('_'));
+
+		String sAdminName = getName(context, sAdminSymbolicName);
+
+		for (int i = 0; i < aInputCmd.size(); i++) {
+			String sReturnCmd = "";
+			String sInputCmd = (String) aInputCmd.get(i);
+			ArrayList aCmd = getWordsFromCmd(context, sInputCmd, new ArrayList(aFieldKeyWords.keySet()));
+			boolean bIsTo = false;
+			for (int ii = 0; ii < aCmd.size(); ii++) {
+				String sCmdWord = (String) aCmd.get(ii);
+				if (sAdminType.equals("relationship") && sCmdWord.equals("to")) {
+					bIsTo = true;
+				}
+				if (sAdminType.equals("relationship") && sCmdWord.equals("from")) {
+					bIsTo = false;
+				}
+				for (int iii = 0; iii < aUnresolvedRef.size(); iii++) {
+					String sUnresolvedRef = (String) aUnresolvedRef.get(iii);
+					if (!aRefAdmins.contains(sUnresolvedRef.substring(0, sUnresolvedRef.indexOf('_')))) {
+						continue;
+					}
+					String sUnresolvedRefName = getName(context, sUnresolvedRef);
+					if (sUnresolvedRefName == null || sUnresolvedRefName.length() == 0) {
+						continue;
+					}
+					else {
+						if (!aFoundFef.contains(sUnresolvedRef)) {
+							aFoundFef.add(sUnresolvedRef);
+						}
+					}
+					if (sCmdWord.indexOf(KEY_SYMBOLIC_NAME_START + sUnresolvedRef + KEY_SYMBOLIC_NAME_END) >= 0) {
+						String sKey = (String) aCmd.get(ii - 1);
+
+						String sKeyValue = (String) aFieldKeyWords.get(sKey);
+
+						if (sKeyValue == null) {
+							continue;
+						}
+						sCmdWord = StringUtils.replaceAll(sCmdWord, KEY_SYMBOLIC_NAME_START + sUnresolvedRef + KEY_SYMBOLIC_NAME_END,
+								sUnresolvedRefName);
+						if (sAdminType.equals("relationship")) {
+							if (bIsTo) {
+								sReturnCmd += "to " + sKeyValue + " " + sCmdWord + " ";
+							}
+							else {
+								sReturnCmd += "from " + sKeyValue + " " + sCmdWord + " ";
+							}
+						}
+						else {
+							sReturnCmd += sKeyValue + " " + sCmdWord + " ";
+							if (sKey.startsWith("member") || sKey.startsWith("add member")) {
+								sReturnCmd += (String) aCmd.get(ii + 1) + " " + (String) aCmd.get(ii + 2);
+							}
+
+						}
+					}
+				}
+			}
+			if (sReturnCmd.length() > 0) {
+				sReturnCmd = "modify " + sAdminType + " \"" + sAdminName + "\" " + sReturnCmd;
+			}
+			aReturnCmd.add(sReturnCmd);
+		}
+
+		for (int i = 0; i < aFoundFef.size(); i++) {
+			String sFoundRef = (String) aFoundFef.get(i);
+			executeMQLCommand(context, "delete property mxSym_" + sFoundRef + " on " + sAdminType + " \"" + sAdminName + "\" ");
+			aUnresolvedRef.remove(aUnresolvedRef.indexOf(sFoundRef));
+		}
+
+		return aReturnCmd;
+	}
+
+	/**
+	 * Resolves symbolic name references from MQL command that don't exists
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sCmd
+	 *            the command to be processed
+	 * @param sAdminSymbolicName
+	 *            symbolic name of admin object
+	 * @param aFieldKeyWords
+	 *            keys to be searched in MQL
+	 * @param sInputCmd
+	 *            MQL command
+	 * @returns new command without unresolved admins.
+	 * @throws Exception
+	 *             if the operation fails
+	 * @String returns command with replaced env variables.
+	 * @since AEF 10.Next
+	 */
+	private static String resolveUsers(Context context, String sAdminSymbolicName, String sAdminName, ArrayList aInputCmd) throws Exception {
+		ArrayList aReturnCmd = new ArrayList();
+		ArrayList aUnresolvedRef = getUnresolvedReferences(context, sAdminSymbolicName);
+
+		ArrayList aFoundFef = new ArrayList();
+		ArrayList aNotFoundFef = new ArrayList();
+		ArrayList aFieldKeyWords = new ArrayList();
+		aFieldKeyWords.add("user");
+		aFieldKeyWords.add("add user");
+		aFieldKeyWords.add("remove user");
+		ArrayList aAdminList = new ArrayList();
+		aAdminList.add("person");
+		aAdminList.add("role");
+		aAdminList.add("group");
+		aAdminList.add("association");
+
+		String sAdminType = sAdminSymbolicName.substring(0, sAdminSymbolicName.indexOf('_'));
+		TreeMap mStateInfo = new TreeMap();
+
+		for (int i = 0; i < aInputCmd.size(); i++) {
+			String sReturnCmd = "";
+			String sInputCmd = (String) aInputCmd.get(i);
+
+			ArrayList aCmd = getWordsFromCmd(context, sInputCmd, aFieldKeyWords);
+			String sCurrentState = null;
+			for (int ii = 0; ii < aCmd.size(); ii++) {
+				String sCmdWord = (String) aCmd.get(ii);
+
+				if (sCmdWord.equals("state")) {
+
+					sCurrentState = (String) aCmd.get(ii + 1);
+					if (sCurrentState.startsWith("\"") || sCurrentState.startsWith("'")) {
+						sCurrentState = sCurrentState.substring(1, sCurrentState.length() - 1);
+						if (sCurrentState.indexOf(KEY_SYMBOLIC_NAME_START) >= 0) {
+							try {
+								sCurrentState = replaceSymbolicNames(context, sAdminSymbolicName, sAdminName, sCurrentState);
+							}
+							catch (Exception Ex) {
+								sCurrentState = null;
+								continue;
+							}
+						}
+					}
+
+					if (!isStateExists(context, sAdminSymbolicName, sCurrentState)) {
+						String sNewSymName = "state_" + StringUtils.replaceAll(sCurrentState, " ", "");
+						String sNewStateName = getStateName(context, sAdminSymbolicName, sNewSymName);
+
+						if (sNewStateName == null || sNewStateName.length() == 0) {
+							sCurrentState = null;
+							continue;
+						}
+						else {
+							sCurrentState = sNewStateName;
+						}
+					}
+
+				}
+
+				if (sCurrentState == null) {
+					continue;
+				}
+
+				for (int iii = 0; iii < aUnresolvedRef.size(); iii++) {
+					String sUnresolvedRef = (String) aUnresolvedRef.get(iii);
+					String sUnresolvedRefAdmin = sUnresolvedRef.substring(0, sUnresolvedRef.indexOf('_'));
+
+					if (!aAdminList.contains(sUnresolvedRefAdmin)) {
+						continue;
+					}
+
+					String sUnresolvedRefName = getName(context, sUnresolvedRef);
+					if (sUnresolvedRefName == null || sUnresolvedRefName.length() == 0) {
+						continue;
+					}
+					else {
+						if (sCmdWord.indexOf(KEY_SYMBOLIC_NAME_START + sUnresolvedRef + KEY_SYMBOLIC_NAME_END) >= 0) {
+							String sKey = (String) aCmd.get(ii - 1);
+
+							if (!aFieldKeyWords.contains(sKey)) {
+								continue;
+							}
+							sCmdWord = StringUtils.replaceAll(sCmdWord, KEY_SYMBOLIC_NAME_START + sUnresolvedRef + KEY_SYMBOLIC_NAME_END,
+									sUnresolvedRefName);
+							TreeMap mUserInfo = (TreeMap) getKeyValue(mStateInfo, sCurrentState, TreeMap.class);
+							ArrayList aUserInfo = (ArrayList) getKeyValue(mUserInfo, sUnresolvedRef, ArrayList.class);
+							ArrayList sAccessAndFilter = new ArrayList(2);
+							aUserInfo.add(sAccessAndFilter);
+
+							if (aCmd.size() > ii + 2
+									&& (((String) aCmd.get(ii + 2)).equals("filter") || ((String) aCmd.get(ii + 2)).equals("localfilter"))) {
+								String sFilterWord = (String) aCmd.get(ii + 2);
+								String sFilter = (String) aCmd.get(ii + 3);
+								try {
+									sFilter = replaceSymbolicNames(context, sAdminSymbolicName, sAdminName, sFilter);
+								}
+								catch (Exception ex) {
+									sAccessAndFilter.add(sKey + " " + sCmdWord + " " + aCmd.get(ii + 1));
+									sAccessAndFilter.add("UNRESOLVED");
+									continue;
+								}
+								sAccessAndFilter.add(sKey + " " + sCmdWord + " " + aCmd.get(ii + 1) + " " + sFilterWord + " ");
+								sAccessAndFilter.add(sFilter);
+							}
+							else {
+								sAccessAndFilter.add(sKey + " " + sCmdWord + " " + aCmd.get(ii + 1));
+							}
+						}
+					}
+				}
+			}
+		}
+
+		Iterator i = mStateInfo.keySet().iterator();
+		String sReturnCmd = "";
+		while (i.hasNext()) {
+			String sCurrentState = (String) i.next();
+			TreeMap mUserInfo = (TreeMap) mStateInfo.get(sCurrentState);
+			Iterator ii = mUserInfo.keySet().iterator();
+			while (ii.hasNext()) {
+				String sCurrentUserProp = (String) ii.next();
+				String sCurrentUser = getName(context, sCurrentUserProp);
+
+				ArrayList aAccessInfo = (ArrayList) mUserInfo.get(sCurrentUserProp);
+
+				boolean bUnResolved = false;
+				for (int iii = aAccessInfo.size() - 1; iii >= 0; iii--) {
+					ArrayList aCmd = (ArrayList) aAccessInfo.get(iii);
+					if (aCmd.size() == 2) {
+						if (((String) aCmd.get(1)).equals("UNRESOLVED")) {
+							bUnResolved = true;
+							if (!aNotFoundFef.contains(sCurrentUserProp)) {
+								aNotFoundFef.add(sCurrentUserProp);
+							}
+							break;
+						}
+						else {
+							bUnResolved = false;
+							if (!aFoundFef.contains(sCurrentUserProp)) {
+								aFoundFef.add(sCurrentUserProp);
+							}
+							break;
+						}
+					}
+					else {
+						if (!aFoundFef.contains(sCurrentUserProp)) {
+							aFoundFef.add(sCurrentUserProp);
+						}
+					}
+				}
+
+				if (!bUnResolved) {
+					for (int iii = 0; iii < aAccessInfo.size(); iii++) {
+						ArrayList aCmd = (ArrayList) aAccessInfo.get(iii);
+						sReturnCmd += "state \"" + sCurrentState + "\" " + aCmd.get(0) + " ";
+
+						if (aCmd.size() == 2) {
+							if (!((String) aCmd.get(1)).equals("UNRESOLVED")) {
+								sReturnCmd += aCmd.get(1);
+							}
+						}
+					}
+				}
+				else {
+					sReturnCmd += "state \"" + sCurrentState + "\" remove user \"" + sCurrentUser + "\" all ";
+				}
+			}
+		}
+
+		for (int j = 0; j < aFoundFef.size(); j++) {
+			String sFoundRef = (String) aFoundFef.get(j);
+			if (!aNotFoundFef.contains(sFoundRef)) {
+				executeMQLCommand(context, "delete property mxSym_" + sFoundRef + " on " + sAdminType + " \"" + sAdminName + "\" ");
+				aUnresolvedRef.remove(aUnresolvedRef.indexOf(sFoundRef));
+			}
+		}
+
+		if (sReturnCmd.length() > 0) {
+			sReturnCmd = "modify policy \"" + sAdminName + "\" " + sReturnCmd;
+		}
+		return sReturnCmd;
+	}
+
+	/**
+	 * Loads Symbolic Names map
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @throws Exception
+	 *             if operation fails
+	 * @since AEF 10.Next
+	 */
+	public static void loadAdminCache(Context context) throws Exception {
+		synchronized (${CLASSNAME}.class) {
+			if (adminCache == null) {
+				adminCache = new TreeMap();
+			}
+		}
+		// Exception if eServiceSchemaVariableMapping.tcl doesn't exists
+		String cmd = "list program \"" + SCHEMA_MAPPING_PROGRAM + "\"";
+		if (!SCHEMA_MAPPING_PROGRAM.equals(executeMQLCommand(context, cmd))) {
+			throw (new Exception(SCHEMA_MAPPING_PROGRAM + " does not exists"));
+		}
+
+		// Get to side admin connected of the property
+		cmd = "print program '" + SCHEMA_MAPPING_PROGRAM + "' select property.to";
+		String sCmdOutput = executeMQLCommand(context, cmd);
+		StringTokenizer tokenizerCmdOutput = new StringTokenizer(sCmdOutput, "\n");
+
+		// loop through each property
+		boolean firstTokenSkipped = false;
+		MessageFormat mf = new MessageFormat("property[{0}].to = {1}");
+		while (tokenizerCmdOutput.hasMoreTokens()) {
+			if (!firstTokenSkipped) {
+				firstTokenSkipped = true;
+				continue;
+			}
+			// Get Line
+			String sLine = tokenizerCmdOutput.nextToken().trim();
+			if (sLine.length() == 0) {
+				continue;
+			}
+			Object[] objs = null;
+			try {
+				objs = mf.parse(sLine);
+			}
+			catch (Exception ex) {
+				continue;
+			}
+
+			// Get property name
+			String sPropName = ((String) objs[0]).trim();
+			String sAdmin = ((String) objs[1]).trim();
+
+			// skip if admin object doesn't exists
+			if (sAdmin.length() == 0) {
+				continue;
+			}
+
+			// Get admin type
+			String sAdminType = sAdmin.substring(0, sAdmin.indexOf(' '));
+			if (sAdminType.equals("att")) {
+				sAdminType = "attribute";
+			}
+			else if (sAdminType.equals("lattice")) {
+				sAdminType = "vault";
+			}
+			// Get admin name
+			String sAdminName = sAdmin.substring(sAdmin.indexOf(' ') + 1);
+
+			// Get admin type map
+			TreeMap hAdminType = (TreeMap) getKeyValue(adminCache, sAdminType, TreeMap.class);
+			// Get admin info map
+			TreeMap hAdminInfo = (TreeMap) getKeyValue(hAdminType, sPropName, TreeMap.class);
+
+			// put property and respective name.
+			hAdminInfo.put(KEY_ACTUAL_NAME, sAdminName);
+		}
+	}
+
+	/**
+	 * Gets admin object name from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns name of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getName(Context context, String sAdminType, String sSymbolicName) throws Exception {
+		String name = null;
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		if (hAdminMap != null) {
+			// get admin info cache
+			TreeMap hAdminInfo = (TreeMap) hAdminMap.get(sSymbolicName);
+			if (hAdminInfo != null) {
+				name = (String) hAdminInfo.get(KEY_ACTUAL_NAME);
+			}
+		}
+
+		// return name
+		return name;
+	}
+
+	/**
+	 * Gets admin object name from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns name of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getName(Context context, String sSymbolicName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+
+		return (getName(context, sAdminType, sSymbolicName));
+	}
+
+	/**
+	 * Gets admin object version from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getVersion(Context context, String sSymbolicName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+
+		return (getVersion(context, sAdminType, sSymbolicName));
+	}
+
+	/**
+	 * Gets admin object version from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getVersion(Context context, String sAdminType, String sSymbolicName) throws Exception {
+		String version = null;
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		if (hAdminMap != null) {
+			// get admin info cache
+			TreeMap hAdminInfo = (TreeMap) hAdminMap.get(sSymbolicName);
+			if (hAdminInfo != null) {
+				version = (String) hAdminInfo.get(KEY_VERSION);
+				if (version == null) {
+					String name = (String) hAdminInfo.get(KEY_ACTUAL_NAME);
+					if (sAdminType.equalsIgnoreCase("association")) {
+						sAdminType = "user";
+					}
+					String sCmd = "print " + sAdminType + " \"" + name + "\" select property[version].value property[application].value dump |";
+					String sPropInfo = executeMQLCommand(context, sCmd);
+					StringTokenizer stPropInfo = new StringTokenizer(sPropInfo, "|");
+					if (stPropInfo.countTokens() == 2) {
+						version = stPropInfo.nextToken();
+						if (version == null || version.length() == 0) {
+							throw (new Exception("Error: version information missing on " + sSymbolicName));
+						}
+						hAdminInfo.put(KEY_VERSION, version);
+						String application = stPropInfo.nextToken();
+						hAdminInfo.put(KEY_APPLICATION, application);
+					}
+					else {
+						if (sPropInfo.length() == 0) {
+							throw (new Exception("Error: version information missing on " + sSymbolicName));
+						}
+						else {
+							sCmd = "print " + sAdminType + " \"" + name + "\" select property[version].value dump |";
+							version = executeMQLCommand(context, sCmd);
+							if (version == null || version.length() == 0) {
+								throw (new Exception("Error: version information missing on " + sSymbolicName));
+							}
+							hAdminInfo.put(KEY_VERSION, version);
+							hAdminInfo.put(KEY_APPLICATION, "");
+						}
+					}
+				}
+			}
+		}
+
+		// return version
+		return version;
+	}
+
+	/**
+	 * Gets admin object application from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getApplication(Context context, String sSymbolicName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+
+		return (getApplication(context, sAdminType, sSymbolicName));
+	}
+
+	/**
+	 * Gets admin object application from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static String getApplication(Context context, String sAdminType, String sSymbolicName) throws Exception {
+		String application = null;
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		if (hAdminMap != null) {
+			// get admin info cache
+			TreeMap hAdminInfo = (TreeMap) hAdminMap.get(sSymbolicName);
+			if (hAdminInfo != null) {
+				application = (String) hAdminInfo.get(KEY_APPLICATION);
+				if (application == null) {
+					String name = (String) hAdminInfo.get(KEY_ACTUAL_NAME);
+					if (sAdminType.equalsIgnoreCase("association")) {
+						sAdminType = "user";
+					}
+					String sCmd = "print " + sAdminType + " \"" + name + "\" select property[version].value property[application].value dump |";
+					String sPropInfo = executeMQLCommand(context, sCmd);
+					StringTokenizer stPropInfo = new StringTokenizer(sPropInfo, "|");
+					if (stPropInfo.countTokens() == 2) {
+						String version = stPropInfo.nextToken();
+						if (version == null || version.length() == 0) {
+							throw (new Exception("Error: version information missing on " + sSymbolicName));
+						}
+						hAdminInfo.put(KEY_VERSION, version);
+						application = stPropInfo.nextToken();
+						hAdminInfo.put(KEY_APPLICATION, application);
+					}
+					else {
+						if (sPropInfo.length() == 0) {
+							throw (new Exception("Error: version information missing on " + sSymbolicName));
+						}
+						else {
+							sCmd = "print " + sAdminType + " \"" + name + "\" select property[application].value dump |";
+							application = executeMQLCommand(context, sCmd);
+							if (application != null && application.length() != 0) {
+								throw (new Exception("Error: version information missing on " + sSymbolicName));
+							}
+							hAdminInfo.put(KEY_VERSION, sPropInfo);
+							hAdminInfo.put(KEY_APPLICATION, application);
+						}
+					}
+				}
+			}
+		}
+
+		// return application
+		return application;
+	}
+
+	/**
+	 * Puts admin object version from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sVersion
+	 *            version
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putVersion(Context context, String sAdminType, String sSymbolicName, String sVersion) throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) getKeyValue(adminCache, sAdminType, TreeMap.class);
+
+		// get admin info cache
+		TreeMap hAdminInfo = (TreeMap) getKeyValue(hAdminMap, sSymbolicName, TreeMap.class);
+
+		// put name into cache
+		hAdminInfo.put(KEY_VERSION, sVersion);
+	}
+
+	/**
+	 * Puts admin object version from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sVersion
+	 *            version
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putVersion(Context context, String sSymbolicName, String sVersion) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+		putVersion(context, sAdminType, sSymbolicName, sVersion);
+	}
+
+	/**
+	 * Puts admin object UnresolvedReferences from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sUnresolvedReferences
+	 *            unresolved References
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putUnresolvedReferences(Context context, String sAdminType, String sSymbolicName, ArrayList aUnresolvedReferences)
+			throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) getKeyValue(adminCache, sAdminType, TreeMap.class);
+
+		// get admin info cache
+		TreeMap hAdminInfo = (TreeMap) getKeyValue(hAdminMap, sSymbolicName, TreeMap.class);
+
+		// put name into cache
+		hAdminInfo.put(KEY_UNRESOLVED_REFERENCES, aUnresolvedReferences);
+	}
+
+	/**
+	 * Gets admin object unresolvedReferences from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static ArrayList getUnresolvedReferences(Context context, String sSymbolicName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+
+		return (getUnresolvedReferences(context, sAdminType, sSymbolicName));
+	}
+
+	/**
+	 * Gets admin object unresolvedReferences from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static ArrayList getUnresolvedReferences(Context context, String sAdminType, String sSymbolicName) throws Exception {
+		ArrayList aUnresolvedReferences = new ArrayList();
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		if (hAdminMap != null) {
+			// get admin info cache
+			TreeMap hAdminInfo = (TreeMap) hAdminMap.get(sSymbolicName);
+			if (hAdminInfo != null) {
+				aUnresolvedReferences = (ArrayList) hAdminInfo.get(KEY_UNRESOLVED_REFERENCES);
+				if (aUnresolvedReferences == null) {
+					aUnresolvedReferences = new ArrayList();
+					String name = (String) hAdminInfo.get(KEY_ACTUAL_NAME);
+					if (sAdminType.equalsIgnoreCase("association")) {
+						sAdminType = "user";
+					}
+					String sCmd = "print " + sAdminType + " \"" + name + "\" select property.name dump |";
+					String sPropInfo = executeMQLCommand(context, sCmd);
+					StringTokenizer stPropInfo = new StringTokenizer(sPropInfo, "|");
+
+					while (stPropInfo.hasMoreTokens()) {
+						String sPropName = stPropInfo.nextToken();
+						if (sPropName.startsWith("mxSym_")) {
+							aUnresolvedReferences.add(sPropName.substring(6));
+						}
+					}
+
+					hAdminInfo.put(KEY_UNRESOLVED_REFERENCES, aUnresolvedReferences);
+				}
+			}
+		}
+
+		// return unresolvedReferences
+		return aUnresolvedReferences;
+	}
+
+	/**
+	 * Gets all symbolic names in the cache for given admin types
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @throws exception
+	 * @returns ArrayList list of all the symbolic names in cache
+	 * @since AEF 10.Next
+	 */
+	public static ArrayList getAllSymbolicNames(Context context, String sAdminType) throws Exception {
+		ArrayList aAllSymNames = new ArrayList();
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		if (hAdminMap != null) {
+			// get all the keys
+			aAllSymNames = new ArrayList(hAdminMap.keySet());
+		}
+
+		// return list
+		return aAllSymNames;
+	}
+
+	/**
+	 * Puts admin object UnresolvedReferences from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sUnresolvedReferences
+	 *            UnresolvedReferences
+	 * @throws exception
+	 * @returns version of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putUnresolvedReferences(Context context, String sSymbolicName, ArrayList aUnresolvedReferences) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+		putUnresolvedReferences(context, sAdminType, sSymbolicName, aUnresolvedReferences);
+	}
+
+	/**
+	 * Puts admin object application from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            type of admin object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sApplication
+	 *            application
+	 * @throws exception
+	 * @returns application of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putApplication(Context context, String sAdminType, String sSymbolicName, String sApplication) throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) getKeyValue(adminCache, sAdminType, TreeMap.class);
+
+		// get admin info cache
+		TreeMap hAdminInfo = (TreeMap) getKeyValue(hAdminMap, sSymbolicName, TreeMap.class);
+
+		// put name into cache
+		hAdminInfo.put(KEY_APPLICATION, sApplication);
+	}
+
+	/**
+	 * Puts admin object application from symbolic name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sApplication
+	 *            application
+	 * @throws exception
+	 * @returns application of the admin object
+	 * @since AEF 10.Next
+	 */
+	public static void putApplication(Context context, String sSymbolicName, String sApplication) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+		putApplication(context, sAdminType, sSymbolicName, sApplication);
+	}
+
+	/**
+	 * Gets state name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sPolicySymbolicName
+	 *            symbolic name of policy
+	 * @param sStateSymbolicName
+	 *            symbolic name of state
+	 * @throws exception
+	 * @returns state name
+	 * @since AEF 10.Next
+	 */
+	public static boolean isStateExists(Context context, String sPolicySymbolicName, String sStateName) throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hPolicyMap = (TreeMap) adminCache.get("policy");
+		if (hPolicyMap != null) {
+			// get admin info cache
+			TreeMap hPolicyInfo = (TreeMap) hPolicyMap.get(sPolicySymbolicName);
+			if (hPolicyInfo != null) {
+				TreeMap hStates = (TreeMap) getKeyValue(hPolicyInfo, KEY_STATES, TreeMap.class);
+				if (hStates.isEmpty()) {
+					String sPolicyName = getName(context, sPolicySymbolicName);
+					String sCmd = "print policy" + " \"" + sPolicyName + "\" select property.name dump |";
+					String sProperty = executeMQLCommand(context, sCmd);
+					StringTokenizer stProperty = new StringTokenizer(sProperty, "|");
+					sCmd = "print policy" + " \"" + sPolicyName + "\" select property.value dump |";
+					String sValues = executeMQLCommand(context, sCmd);
+					StringTokenizer stValue = new StringTokenizer(sValues, "|");
+					sCmd = "print policy" + " \"" + sPolicyName + "\" select state dump |";
+					String sStateNames = executeMQLCommand(context, sCmd);
+					StringTokenizer stStateNames = new StringTokenizer(sStateNames, "|");
+					ArrayList aStates = new ArrayList();
+					while (stStateNames.hasMoreTokens()) {
+						aStates.add(stStateNames.nextToken());
+					}
+					while (stProperty.hasMoreTokens()) {
+						String sProp = stProperty.nextToken();
+						String sValue = stValue.nextToken();
+						if (sProp.startsWith("state_") && aStates.contains(sValue)) {
+							hStates.put(sProp, sValue);
+						}
+					}
+				}
+
+				ArrayList aStateNames = new ArrayList(hStates.values());
+
+				return (aStateNames.contains(sStateName));
+			}
+		}
+
+		// return false
+		return false;
+	}
+
+	/**
+	 * Gets state name
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sPolicySymbolicName
+	 *            symbolic name of policy
+	 * @param sStateSymbolicName
+	 *            symbolic name of state
+	 * @throws exception
+	 * @returns state name
+	 * @since AEF 10.Next
+	 */
+	public static String getStateName(Context context, String sPolicySymbolicName, String sStateSymbolicName) throws Exception {
+		String name = null;
+
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hPolicyMap = (TreeMap) adminCache.get("policy");
+		if (hPolicyMap != null) {
+			// get admin info cache
+			TreeMap hPolicyInfo = (TreeMap) hPolicyMap.get(sPolicySymbolicName);
+			if (hPolicyInfo != null) {
+				TreeMap hStates = (TreeMap) getKeyValue(hPolicyInfo, KEY_STATES, TreeMap.class);
+				if (!hStates.containsKey(sStateSymbolicName)) {
+					String sPolicyName = (String) hPolicyInfo.get(KEY_ACTUAL_NAME);
+					String sCmd = "print policy" + " \"" + sPolicyName + "\" select property[" + sStateSymbolicName + "].value dump";
+					name = executeMQLCommand(context, sCmd);
+					sCmd = "print policy" + " \"" + sPolicyName + "\" select state dump |";
+					String sStateNames = executeMQLCommand(context, sCmd);
+					StringTokenizer stStateNames = new StringTokenizer(sStateNames, "|");
+					ArrayList aStates = new ArrayList();
+					while (stStateNames.hasMoreTokens()) {
+						aStates.add(stStateNames.nextToken());
+					}
+					if (aStates.contains(name)) {
+						hStates.put(sStateSymbolicName, name);
+					}
+					else {
+						name = "";
+					}
+				}
+				else {
+					name = (String) hStates.get(sStateSymbolicName);
+				}
+			}
+		}
+
+		// return name
+		return name;
+	}
+
+	/**
+	 * refreshes state symbolic name cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sPolicySymbolicName
+	 *            symbolic name of policy
+	 * @param bUpdateDB
+	 *            if true then updates database.
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void refreshStateSymbolicNames(Context context, String sPolicySymbolicName, boolean bUpdateDB) throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hPolicyMap = (TreeMap) adminCache.get("policy");
+		if (hPolicyMap != null) {
+			// get admin info cache
+			TreeMap hPolicyInfo = (TreeMap) hPolicyMap.get(sPolicySymbolicName);
+			if (hPolicyInfo != null) {
+				// get policy name
+				String name = (String) hPolicyInfo.get(KEY_ACTUAL_NAME);
+
+				// get all the properties on the policy
+				String sCmd = "print policy" + " \"" + name + "\" select property.name dump |";
+				String sStatePropNames = executeMQLCommand(context, sCmd);
+				StringTokenizer stStatePropNames = new StringTokenizer(sStatePropNames, "|");
+
+				// get all the property values
+				sCmd = "print policy" + " \"" + name + "\" select property.value dump |";
+				String sStatePropValues = executeMQLCommand(context, sCmd);
+				StringTokenizer stStatePropValues = new StringTokenizer(sStatePropValues, "|");
+				TreeMap hStates = new TreeMap();
+
+				// update state properties into db if flag is set.
+				if (bUpdateDB) {
+					// get all the states
+					sCmd = "print policy" + " \"" + name + "\" select state dump |";
+					String sStateNames = executeMQLCommand(context, sCmd);
+					StringTokenizer stStateNames = new StringTokenizer(sStateNames, "|");
+					ArrayList aStates = new ArrayList();
+					while (stStateNames.hasMoreTokens()) {
+						aStates.add(stStateNames.nextToken());
+					}
+
+					// delete properties for deleted states
+					while (stStatePropNames.hasMoreTokens() && stStatePropValues.hasMoreTokens()) {
+						String sStatePropName = stStatePropNames.nextToken();
+						String sStatePropValue = stStatePropValues.nextToken();
+						if (sStatePropName.startsWith("state_") && !aStates.contains(sStatePropValue)) {
+							sCmd = "delete property \"" + sStatePropName + "\" on policy \"" + name + "\"";
+							executeMQLCommand(context, sCmd);
+						}
+						else {
+							hStates.put(sStatePropName, sStatePropValue);
+						}
+					}
+
+					String sPostCmd = "";
+					for (int i = 0; i < aStates.size(); i++) {
+						String sStateName = (String) aStates.get(i);
+						String sStateSymbolicName = "state_" + StringUtils.replaceAll(sStateName, " ", "");
+						sPostCmd += " property \"" + sStateSymbolicName + "\" value \"" + sStateName + "\"";
+						if (!hStates.containsKey(sStateSymbolicName)) {
+							hStates.put(sStateSymbolicName, sStateName);
+						}
+					}
+
+					if (sPostCmd.length() > 0) {
+						sCmd = "modify policy" + " \"" + name + "\"" + sPostCmd;
+						executeMQLCommand(context, sCmd);
+					}
+				}
+				else {
+					while (stStatePropNames.hasMoreTokens() && stStatePropValues.hasMoreTokens()) {
+						String sStatePropName = stStatePropNames.nextToken();
+						String sStatePropValue = stStatePropValues.nextToken();
+						if (sStatePropName.startsWith("state_")) {
+							hStates.put(sStatePropName, sStatePropValue);
+						}
+					}
+				}
+
+				// refresh state cache.
+				hPolicyInfo.put(KEY_STATES, hStates);
+			}
+		}
+	}
+
+	/**
+	 * puts name in the cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sName
+	 *            symbolic name of the object
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void putName(Context context, String sSymbolicName, String sName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+		putName(context, sAdminType, sSymbolicName, sName);
+	}
+
+	/**
+	 * puts name in the cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sAdminType
+	 *            admin type name
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @param sName
+	 *            symbolic name of the object
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void putName(Context context, String sAdminType, String sSymbolicName, String sName) throws Exception {
+		// load symbolic names first time
+		if (adminCache == null) {
+			loadAdminCache(context);
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) getKeyValue(adminCache, sAdminType, TreeMap.class);
+
+		// get admin info cache
+		TreeMap hAdminInfo = (TreeMap) getKeyValue(hAdminMap, sSymbolicName, TreeMap.class);
+
+		// put name into cache
+		hAdminInfo.put(KEY_ACTUAL_NAME, sName);
+	}
+
+	/**
+	 * removes symbolic name from the cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void removeSymbolicName(Context context, String sSymbolicName) throws Exception {
+		String sAdminType = sSymbolicName.substring(0, sSymbolicName.indexOf('_'));
+
+		// return if cache is not loaded
+		if (adminCache == null) {
+			return;
+		}
+
+		// get admin map
+		TreeMap hAdminMap = (TreeMap) adminCache.get(sAdminType);
+		// return if admin map is not present
+		if (adminCache == null) {
+			return;
+		}
+
+		// if admin info cache present then remove it
+		if (hAdminMap.containsKey(sSymbolicName)) {
+			hAdminMap.remove(sSymbolicName);
+		}
+	}
+
+	/**
+	 * reload symbolic name from the cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void reloadSymbolicName(Context context, String sSymbolicName) throws Exception {
+		removeSymbolicName(context, sSymbolicName);
+		String cmd = "print program '" + SCHEMA_MAPPING_PROGRAM + "' select property[" + sSymbolicName + "].to dump |";
+		String sResult = executeMQLCommand(context, cmd);
+		if (sResult != null && sResult.length() > 0) {
+			String sAdminName = sResult.substring(sResult.indexOf(' ') + 1);
+			putName(context, sSymbolicName, sAdminName);
+		}
+	}
+
+	/**
+	 * reload symbolic name from the cache
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sSymbolicName
+	 *            symbolic name
+	 * @throws exception
+	 * @since AEF 10.Next
+	 */
+	public static void reloadSymbolicName(Context context, String args[]) throws Exception {
+		for (int i = 0; i < args.length; i++) {
+			reloadSymbolicName(context, args[i]);
+		}
+	}
+
+	/**
+	 * Executes MQL command
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param cmd
+	 *            mql command
+	 * @throws Exception
+	 *             if operation fails
+	 * @since AEF 10.Next
+	 */
+	public static String executeMQLCommand(Context context, String cmd) throws Exception {
+		MQLCommand mql = new MQLCommand();
+		mql.open(context);
+
+		// throw exception if error
+		if (!mql.executeCommand(context, cmd)) {
+			mql.close(context);
+			throw (new Exception("ERROR: Failed to execute command " + cmd + " " + mql.getError().trim()));
+		}
+
+		// return result string
+		String sResult = mql.getResult().trim();
+		mql.close(context);
+
+		return sResult;
+	}
+
+	public static void writeSchemaLog(Context context, String sOperation, String sAdminType, String sAdminName, String sCmdVersion) throws Exception {
+		// create operation buffer
+		StringBuffer sOpBuf = new StringBuffer(">                    :");
+		sOpBuf.replace(1, sOperation.length() + 1, sOperation);
+
+		// create admin type buffer
+		StringBuffer sAdminTypeBuf = new StringBuffer("             ");
+		sAdminTypeBuf.replace(0, sAdminType.length(), sAdminType);
+
+		// create admin name buffer
+		StringBuffer sAdminNameBuf = new StringBuffer("                                                      ");
+		sAdminNameBuf.replace(0, sAdminName.length(), sAdminName);
+
+		// log a message
+		println(context, sOpBuf.toString() + sAdminTypeBuf.toString() + sAdminNameBuf.toString() + sCmdVersion);
+	}
+
+	/**
+	 * Find and Replace the String in a string
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param sLine
+	 *            line to be printed
+	 * @throws Exception
+	 *             if operation fails
+	 * @since AEF 10.Next
+	 */
+	public static void println(Context context, String sLine) throws Exception {
+		PrintWriter writer = new PrintWriter(new MatrixWriter(context), true);
+		writer.println(sLine);
+		writer.close();
+	}
+
+	/**
+	 * Gets child object. If it doesn't exists then create one
+	 *
+	 * @param parent
+	 *            parent TreeMap
+	 * @param key
+	 *            key
+	 * @param valueClass
+	 *            class of value object
+	 * @since AEF 10.Next
+	 */
+	public static Object getKeyValue(TreeMap parent, Object key, Class valueClass) throws Exception {
+		Object child = null;
+		if (!parent.containsKey(key)) {
+			child = valueClass.newInstance();
+			parent.put(key, child);
+		}
+		else {
+			child = parent.get(key);
+		}
+
+		return child;
+	}
+}
+

@@ -1,0 +1,186 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"}, 
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},{name:"SEL_PROD_SYS", type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                     [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var ExpandPrimitives     = Java.type("com.dassault_systemes.completion.service.ExpandPrimitives");
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var CompletionServicesConstants = Java.type("com.dassault_systemes.completion.service.CompletionServicesConstants");
+var FilterServices = Java.type("com.dassault_systemes.completion.service.FilterServices");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var System = Java.type("java.lang.System");
+var navSets = [PRD, PRCS, PROD_SYS, WK_PL, RSC];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+
+	var UC1CompletionID = "UC1";
+
+	var UserDefCompletionStop = System.getenv().get("UserDefCompletionStop");
+	var completionID="";
+	var primitiveName="";
+	var callIndex=1;
+	if (UserDefCompletionStop != null)
+	{
+		var UserDefCompletionStopTab = UserDefCompletionStop.split("|");
+		completionID = UserDefCompletionStopTab[0];
+		primitiveName = UserDefCompletionStopTab[1];
+		callIndex = Integer.parseInt(UserDefCompletionStopTab[2]);
+	}
+
+	var index = 1;
+	while(true)
+	{
+
+		///////////////////////////////////////
+		// 1- Retrieves Predecessors from the current Production Systems selection 
+		///////////////////////////////////////
+		var retrievePredecessorsTimer = new DebugTimer(context, 0, "Retrieves Predecessors from the current Production Systems selection", true);
+		var resPredecessorSys = NavigationPrimitives.retrievePredecessor(context, SEL_PROD_SYS);
+		retrievePredecessorsTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.RetrievePredecessorPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 2- Expand all Predecessor System 
+		///////////////////////////////////////
+		var expandPredecessorSystemTimer = new DebugTimer(context, 0, "Expand all Predecessor System", true);
+		var resExpandPredecessorSystem = ExpandPrimitives.expandSystem(context, resPredecessorSys, 0);
+		expandPredecessorSystemTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName))
+		{
+			if (index == callIndex) break;
+			index++;
+		}
+
+		///////////////////////////////////////
+		// 3- Expand selected Systems
+		///////////////////////////////////////
+		var expandSelectedSystemTimer = new DebugTimer(context, 0, "Expand selected Systems", true);
+		var resExpandSelectedSystem = ExpandPrimitives.expandSystem(context, SEL_PROD_SYS, 0);
+		PROD_SYS = PROD_SYS.merge(resExpandSelectedSystem);
+		expandSelectedSystemTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName))
+		{
+			if (index == callIndex) break;
+			index++;
+		}
+
+		///////////////////////////////////////
+		// 4- Operation to Resource Completion for Operations under Selected System (with the selected sys)
+		///////////////////////////////////////
+		var opToResTimer = new DebugTimer(context, 0, "Operation to Resource Completion for Operations under Selected System", true);
+		var navModeRes = [false, true, true, true];
+		var inputSelectionAndExpand = SEL_PROD_SYS.merge(resExpandSelectedSystem);
+		var resResource = NavigationPrimitives.navigateFromSystemToResource(context, inputSelectionAndExpand, navModeRes);
+		opToResTimer.complete();
+		RSC = RSC.merge(resResource);
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionSystemResourcePrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 5- Retrieve Implementing WorkPlan from Selected System and children
+		///////////////////////////////////////
+		var selectedSYSAndChildren = SEL_PROD_SYS.merge(resExpandSelectedSystem);
+
+		var sysToWorkplanTimer = new DebugTimer(context, 0, "navigate system -> workplan", true);
+		var navModeWP = [false, true];
+		var resWorkPlan = NavigationPrimitives.navigateFromSystemToWorkPlan(context, selectedSYSAndChildren, navModeWP);
+		if (resWorkPlan != null)
+			WK_PL = WK_PL.merge(resWorkPlan);
+		sysToWorkplanTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionSystemWorkPlanPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 6- Retrieve Implementing WorkPlan from Predecessor (of selected sys) and children
+		///////////////////////////////////////
+		var PredecessorAndChildren = resPredecessorSys.merge(resExpandPredecessorSystem);
+		var sysToWorkplanTempTimer = new DebugTimer(context, 0, "navigate system -> workplan", true);
+		var resWorkPlanTemp = NavigationPrimitives.navigateFromSystemToWorkPlan(context, PredecessorAndChildren, navModeWP);
+		sysToWorkplanTempTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionSystemWorkPlanPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 7- Expand (Predecessor) WorkPlan Systems 
+		///////////////////////////////////////
+		var expandWorkPlanPredecessorTimer = new DebugTimer(context, 0, "Expand All WorkPlan Systems", true);
+		var resExpandPredecessorWorkPlan = ExpandPrimitives.expandSystem(context, resWorkPlanTemp, 0);
+		expandWorkPlanPredecessorTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName))
+		{
+			if (index == callIndex) break;
+			index++;
+		}
+
+		///////////////////////////////////////
+		// 8- Expand (selected) WorkPlan Systems
+		///////////////////////////////////////
+		var expandWorkPlanTimer = new DebugTimer(context, 0, "Expand All WorkPlan Systems", true);
+		var resExpandWorkPlan = ExpandPrimitives.expandSystem(context, resWorkPlan, 0);
+		if (resExpandWorkPlan != null)
+			WK_PL = WK_PL.merge(resExpandWorkPlan);
+		expandWorkPlanTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName))
+		{
+			if (index == callIndex) break;
+			index++;
+		}
+
+		///////////////////////////////////////
+		// 9- Retrieves implemented processes for all WorkPlan\Operation and Children (on doit faire un merge des deux expand precedants puis nav)
+		///////////////////////////////////////
+		var getPrcsTimer = new DebugTimer(context, 0, "Retrieves implemented processes for all WorkPlan Operation and Children", true);
+		var InputWk = resWorkPlanTemp.merge(resExpandPredecessorWorkPlan);
+		InputWk = InputWk.merge(resWorkPlan);
+		InputWk = InputWk.merge(resExpandWorkPlan);
+		var resGetProcess = NavigationPrimitives.navigateFromWorkPlanToProcess(context, InputWk, navModeWP);
+		if (resGetProcess != null)
+			PRCS = PRCS.merge(resGetProcess);
+		getPrcsTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionWorkPlanProcessPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 10- Expand All Processes retrieved from WorkPlan Systems
+		///////////////////////////////////////
+		var expandProcessTimer = new DebugTimer(context, 0, "Expand All Processes retrieved from WorkPlan Systems", true);
+		var resExpandProcess = ExpandPrimitives.expandProcess(context, resGetProcess, 0);
+		if (resExpandProcess != null)
+			PRCS = PRCS.merge(resExpandProcess);
+		expandProcessTimer.complete();
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandProcessPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 11- Retrieves implemented products for all Processes
+		///////////////////////////////////////
+		var navigateToProductTimer = new DebugTimer(context, 0, "Retrieves implemented products for all Processes", true);
+		var navModePrc = [false, false, true];
+		var InputProcess = resGetProcess.merge(resExpandProcess);
+		var resGetProduct = NavigationPrimitives.navigateFromProcessToProduct(context, InputProcess, navModePrc);
+		navigateToProductTimer.complete();
+		if (resGetProduct != null)
+			PRD = PRD.merge(resGetProduct);
+		if (completionID.equalsIgnoreCase(UC1CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionProcessProductPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 12- Expand Products 
+		///////////////////////////////////////
+		var expandProductTimer = new DebugTimer(context, 0, "Expand All Product", true);
+		var resExpandProduct = ExpandPrimitives.expandProduct(context, resGetProduct, 0);
+		if (resExpandProduct != null)
+			PRD = PRD.merge(resExpandProduct);
+		expandProductTimer.complete();
+		break;
+	}
+
+	///////////////////////////////////////
+	// 13- Open(PRD,PRCS,PROD_SYS,WK_PL,RSC)
+	///////////////////////////////////////
+	outputData.add("Product", PRD);
+	outputData.add("Process", PRCS);
+	outputData.add("System", PROD_SYS);
+	outputData.add("WorkPlan", WK_PL);
+	outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

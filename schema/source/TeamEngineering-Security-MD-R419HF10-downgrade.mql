@@ -1,0 +1,367 @@
+# File: TeamEngineering-Security-MD-R419HF10-downgrade.mql
+# Description: This file upgrades VPLM security data from R419 GA to R419 HF10 for One-Click
+#
+# MBH 17:11:13 Created file
+# MBH 17:11:13 FUN074776 : Provide configuration to allow REVISE even if component is reserved by someone else
+# MBH 17:11:13 FUN074328 : Provide configuration to prevent Leader access role from MODIFYING content in Frozen maturity state
+# MBH 17:11:13 FUN074182 : Provide configuration for AUTOMATIC RESERVATION for newly created Component (Reference) and Usage (Instance)
+# MBH 17:11:13 FUN073421 : Provide additional configuration for allowing content TRANSFER OWNERSHIP Responsible / Organization / Collaborative Space
+# MBH 17:11:13 FUN073805 : Classification of Released Object Leader Role
+# MBH 17:12:11 IR-564732-3DEXPERIENCER2017x: delegation of read/show access bits within 3DPart when Ref in Folder with minors involvement
+# MBH 17:12:14 IR-568955-3DEXPERIENCER2017x: not possible to revised reserved content
+
+# FUN074776
+modify policy VPLM_SMB_Definition
+  state IN_WORK
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise,changetype single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state FROZEN
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state RELEASED
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])";
+
+modify policy VPLM_SMB_Definition_Document
+  state IN_WORK
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership]) && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent] && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')"
+  state FROZEN
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership]) && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent] && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')"
+  state RELEASED
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership]) && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')"
+    remove login VPLMCreator key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent] && (attribute[PLMDMTDocument.V_CheckedOutUser] == '')";
+
+modify policy VPLM_SMB_Evaluation
+  state IN_WORK
+    login VPLMExperimenter key ExtendedSingleCtxConnectAccessOnSingleOrg majorrevise,changetype,fromconnect,fromdisconnect single organization single project inclusive reserve filter ""
+    login VPLMExperimenter key ExtendedSingleCtxConnectAccessOnAnyOrg majorrevise,changetype,fromconnect,fromdisconnect single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnSingleOrg majorrevise,changetype single organization single project inclusive reserve
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnAnyOrg majorrevise,changetype single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise,changetype single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state FROZEN
+    login VPLMExperimenter key ExtendedSingleCtxConnectAccessOnSingleOrg majorrevise,fromconnect,fromdisconnect single organization single project inclusive reserve filter ""
+    login VPLMExperimenter key ExtendedSingleCtxConnectAccessOnAnyOrg majorrevise,fromconnect,fromdisconnect single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnSingleOrg majorrevise single organization single project inclusive reserve
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnAnyOrg majorrevise single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state RELEASED
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMExperimenter key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])";
+
+modify policy VPLM_SMB_Resource
+  state IN_WORK
+    login VPLMProjectAdministrator key ExtendedSingleCtxModifyAccess modify,delete,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg modify,delete,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg modify,delete,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccess majorrevise,changetype single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrg majorrevise,changetype single organization single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrg majorrevise,changetype single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccessNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise,changetype single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state FROZEN
+    login VPLMProjectAdministrator key ExtendedSingleCtxModifyAccess modify,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg modify,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg modify,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccess majorrevise,changetype single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrg majorrevise,changetype single organization single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrg majorrevise,changetype single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccessNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise,changetype single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise,changetype single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])"
+  state RELEASED
+    login VPLMProjectAdministrator key ExtendedSingleCtxPromoteAccess promote,demote,revise,majorrevise single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxPromoteAccessOnSingleOrg promote,demote,revise,majorrevise single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxPromoteAccessOnAnyOrg promote,demote,revise,majorrevise single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccess revise,majorrevise single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrg revise,majorrevise single organization single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrg revise,majorrevise single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectAdministrator key ExtendedSingleCtxReviseAccessNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnSingleOrgNoReserve majorrevise single organization single project filter "expression[AllowReviseOfReservedContent]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxReviseAccessOnAnyOrgNoReserve majorrevise single project filter "expression[AllowReviseOfReservedContent] && (!expression[VPLMStrictOrgOwnership])";
+
+# FUN074328
+modify policy VPLM_SMB_Definition
+  state FROZEN
+    login VPLMProjectLeader key ExtendedSingleCtxLockAccessOnSingleOrg lock,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxLockAccessOnAnyOrg lock,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    user VPLMProjectLeader key ExtendedMultiCtxLockAccessOnAnyOrg lock,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxLockAccessOnSingleOrg lock,reserve single organization single project inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg1 modify,checkin,changename single project context reserve filter "expression[VPLMStrictLocking_Definition] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg2 modify,checkin,changename single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition]) && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg1 modify,checkin,changename single organization single project context reserve filter "expression[VPLMStrictLocking_Definition]"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg2 modify,checkin,changename single organization single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition])"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg1 modify,checkin,changename single project context reserve filter "expression[VPLMStrictLocking_Definition] && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg2 modify,checkin,changename single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg1 modify,checkin,changename single organization single project context reserve filter "expression[VPLMStrictLocking_Definition] && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg2 modify,checkin,changename single organization single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition]) && expression[MultiContextualAuthoringAbility]";
+
+modify policy VPLM_SMB_Evaluation
+  state FROZEN
+    remove login VPLMProjectLeader key ExtendedSingleCtxPromotionAccessOnSingleOrg promote,demote single organization single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxPromotionAccessOnAnyOrg promote,demote single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg modify,checkin,lock,changename,reserve single organization single project inclusive reserve filter "expression[AllowFrozenContentMod]"
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg modify,checkin,lock,changename,reserve single project inclusive reserve filter "expression[AllowFrozenContentMod] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg modify,checkin,lock,promote,demote,changename,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg modify,checkin,lock,promote,demote,changename,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg modify,checkin,lock,changename,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg modify,checkin,lock,changename,reserve single organization single project inclusive reserve filter "expression[MultiContextualAuthoringAbility]";
+
+modify policy VPLM_SMB_Resource
+  state FROZEN
+    remove login VPLMProjectLeader key ExtendedSingleCtxPromotionAccessOnSingleOrg promote,demote single organization single project inclusive reserve
+    remove login VPLMProjectLeader key ExtendedSingleCtxPromotionAccessOnAnyOrg promote,demote single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg modify,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg modify,checkin,lock,promote,demote,majorrevise,changename,changetype,fromconnect,fromdisconnect,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg modify,checkin,lock,changename,fromconnect,fromdisconnect,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg modify,checkin,lock,changename,fromconnect,fromdisconnect,reserve single organization single project inclusive reserve filter "expression[MultiContextualAuthoringAbility]";
+    
+modify policy VPLM_SMB_Definition_Document
+  state FROZEN
+    login VPLMProjectLeader key ExtendedSingleCtxLockAccessOnSingleOrg lock,changetype,reserve single organization single project inclusive reserve filter ""
+    login VPLMProjectLeader key ExtendedSingleCtxLockAccessOnAnyOrg lock,changetype,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg1 modify,checkin,changename single project context reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMStrictLocking_Definition]"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg2 modify,checkin,changename single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (!expression[VPLMStrictLocking_Definition])"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg1 modify,checkin,changename single organization single project context reserve filter "expression[VPLMStrictLocking_Definition]"
+    login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg2 modify,checkin,changename single organization single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition])"
+    user VPLMProjectLeader key ExtendedMultiCtxLockAccessOnAnyOrg lock,reserve single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxLockAccessOnSingleOrg lock,reserve single organization single project inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg1 modify,checkin,changename single project context reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMStrictLocking_Definition] && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg2 modify,checkin,changename single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (!expression[VPLMStrictLocking_Definition]) && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg1 modify,checkin,changename single organization single project context reserve filter "expression[VPLMStrictLocking_Definition] && expression[MultiContextualAuthoringAbility]"
+    user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg2 modify,checkin,changename single organization single project inclusive reserve filter "(!expression[VPLMStrictLocking_Definition]) && expression[MultiContextualAuthoringAbility]";
+
+modify rule VPLM_SMB_INSTANCE
+  remove login VPLMProjectLeader key ExtendedSingleCtxAccess1 modify,checkin,lock,create,changename,changetype,fromconnect,toconnect,todisconnect,reserve,delete,fromdisconnect inclusive reserve filter "expression[AllowFrozenContentMod] && (from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK,FROZEN' ',')"
+  login VPLMProjectLeader key ExtendedSingleCtxAccess1 modify,checkin,lock,create,changename,changetype,fromconnect,toconnect,todisconnect,reserve inclusive reserve filter "(from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK,FROZEN' ',')"
+  login VPLMProjectLeader key ExtendedSingleCtxAccess2 delete,fromdisconnect inclusive reserve filter "(from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK' ',')"
+  remove user VPLMProjectLeader key ExtendedMultiCtxAccess1 modify,checkin,lock,create,changename,changetype,fromconnect,toconnect,todisconnect,reserve,delete,fromdisconnect inclusive reserve filter "expression[AllowFrozenContentMod] && expression[MultiContextualAuthoringAbility] && (from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK,FROZEN' ',')"
+  user VPLMProjectLeader key ExtendedMultiCtxAccess1 modify,checkin,lock,create,changename,changetype,fromconnect,toconnect,todisconnect,reserve inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK,FROZEN' ',')"
+  user VPLMProjectLeader key ExtendedMultiCtxAccess2 delete,fromdisconnect inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (from.current.access[fromconnect] == TRUE) && (from.current matchlist 'PRIVATE,REMOVED,DEFAULT,IN_WORK' ',')";
+
+modify policy VPLM_SMB_CX_Definition
+  state DEFAULT
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg4 fromdisconnect,delete,lock,reserve single project filter "(!expression[VPLMStrictOrgOwnership]) && (to[VPLMrel/PLMConnection/V_Owner].from.current.access[modify] == TRUE)"
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg4 fromdisconnect,delete,lock,reserve single organization single project filter "(to[VPLMrel/PLMConnection/V_Owner].from.current.access[modify] == TRUE)"
+    remove user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg4 fromdisconnect,delete,lock,reserve single project filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (to[VPLMrel/PLMConnection/V_Owner].from.current.access[modify] == TRUE)"
+    remove user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg4 fromdisconnect,delete,lock,reserve single organization single project filter "expression[MultiContextualAuthoringAbility] && (to[VPLMrel/PLMConnection/V_Owner].from.current.access[modify] == TRUE)";
+
+modify policy VPLM_SMB_PORT_Definition
+  state DEFAULT
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnAnyOrg3 delete,fromdisconnect,lock,reserve single project filter "(!expression[VPLMStrictOrgOwnership]) && (to[VPLMrel/PLMPort/V_Owner].from.current.access[modify] == TRUE)"
+    remove login VPLMProjectLeader key ExtendedSingleCtxModifyAccessOnSingleOrg3 delete,fromdisconnect,lock,reserve single organization single project filter "(to[VPLMrel/PLMPort/V_Owner].from.current.access[modify] == TRUE)"
+    remove user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnAnyOrg3 delete,fromdisconnect,lock,reserve  single project filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (to[VPLMrel/PLMPort/V_Owner].from.current.access[modify] == TRUE)"
+    remove user VPLMProjectLeader key ExtendedMultiCtxModifyAccessOnSingleOrg3 delete,fromdisconnect,lock,reserve single organization single project filter "expression[MultiContextualAuthoringAbility] && (to[VPLMrel/PLMPort/V_Owner].from.current.access[modify] == TRUE)";
+
+# FUN073421
+modify policy VPLM_SMB_Definition
+  allstate
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    remove user VPLMTeamManager key ExtendedMultiCtxChangeownerAccess_AnyOrgSinglePrj changeowner single project filter "(context.role.role.ancestor == VPLMProjectAdministrator)"
+  state PRIVATE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "expression[VPLMTransferByOwner] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state IN_WORK
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "expression[VPLMTransferByOwner] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state FROZEN
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "expression[VPLMTransferByOwner] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state RELEASED
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "expression[VPLMTransferByOwner] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state OBSOLETE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "expression[VPLMTransferByOwner] && (!expression[VPLMStrictOrgOwnership])"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+modify policy VPLM_SMB_Definition_Document
+  allstate
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible])"
+    remove login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    remove user VPLMTeamManager key ExtendedMultiCtxChangeownerAccess_AnyOrgSinglePrj changeowner single project filter "(context.role.role.ancestor == VPLMProjectAdministrator)"
+  state PRIVATE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMCreator key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state IN_WORK
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state FROZEN
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state RELEASED
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state OBSOLETE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMCreator key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+modify policy VPLM_SMB_Evaluation
+  allstate
+    remove login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible])"
+    remove login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve
+    remove user VPLMExperimenter key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMExperimenter key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMExperimenter key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMExperimenter key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    remove user VPLMTeamManager key ExtendedMultiCtxChangeownerAccess_AnyOrgSinglePrj changeowner single project filter "(context.role.role.ancestor == VPLMProjectAdministrator)"
+  state PRIVATE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state IN_WORK
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state FROZEN
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state RELEASED
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state OBSOLETE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMExperimenter key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+modify policy VPLM_SMB_Resource
+  allstate
+    remove login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible])"
+    remove login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve
+    remove user VPLMProjectLeader key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMProjectLeader key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMProjectLeader key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMProjectLeader key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    remove user VPLMTeamManager key ExtendedMultiCtxChangeownerAccess_AnyOrgSinglePrj changeowner single project filter "(context.role.role.ancestor == VPLMProjectAdministrator)"
+  state PRIVATE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) expression[VPLMTransferByOwner]"
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state IN_WORK
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state FROZEN
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state RELEASED
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]"
+  state OBSOLETE
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMProjectLeader key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+modify policy VPLM_SMB_Management
+  allstate
+    remove login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership])"
+    remove login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible])"
+    remove login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve
+    remove user VPLMViewer key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg1 changeowner single project inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && (!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMViewer key ExtendedMultiCtxChangeOwnerAccessOnAnyOrg2 changeowner single project context owner inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMViewer key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg1 changeowner single project single organization inclusive reserve filter "(!expression[RestrictTransferToResponsible]) && expression[MultiContextualAuthoringAbility]"
+    remove user VPLMViewer key ExtendedMultiCtxChangeOwnerAccessOnSingleOrg2 changeowner single project single organization context owner inclusive reserve filter "expression[MultiContextualAuthoringAbility]"
+    remove user VPLMTeamManager key ExtendedMultiCtxChangeownerAccess_AnyOrgSinglePrj changeowner single project filter "(context.role.role.ancestor == VPLMProjectAdministrator)"
+  state DEFAULT
+    login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve
+    login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+    login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+modify rule VPLM_SMB_INSTANCE
+  remove user VPLMTeamManager key ExtendedMultiCtxChangeOwnerAccess changeowner filter "from.current.access[changeowner] == TRUE"
+  remove user VPLMViewer key ExtendedMultiCtxChangeOwnerAccess changeowner filter "from.current.access[changeowner] == TRUE"
+  login VPLMTeamManager key ExtendedSingleCtxChangeOwnerAccess changeowner single project no reserve filter ""
+  login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnAnyOrg changeowner single project context owner no reserve filter "(!expression[VPLMStrictOrgOwnership]) && expression[VPLMTransferByOwner]"
+  login VPLMViewer key ExtendedSingleCtxChangeOwnerAccessOnSingleOrg changeowner single organization single project context owner no reserve filter "expression[VPLMTransferByOwner]";
+
+# FUN073805
+modify policy VPLM_SMB_Definition
+  state RELEASED
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnAnyOrg modify single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnSingleOrg modify single project single organization inclusive reserve filter "(program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnAnyOrg modify single project inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnSingleOrg modify single project single organization inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)";
+
+modify policy VPLM_SMB_Definition_Document
+  state RELEASED
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnAnyOrg modify single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnSingleOrg modify single project single organization inclusive reserve filter "(program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnAnyOrg modify single project inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnSingleOrg modify single project single organization inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)";
+
+modify policy VPLM_SMB_Evaluation
+  state RELEASED
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnAnyOrg modify single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnSingleOrg modify single project single organization inclusive reserve filter "(program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnAnyOrg modify single project inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnSingleOrg modify single project single organization inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)";
+
+modify policy VPLM_SMB_Resource
+  state RELEASED
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnAnyOrg modify single project inclusive reserve filter "(!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove login VPLMProjectLeader key ExtendedModifyAccessForClassification_SingleCtxOnSingleOrg modify single project single organization inclusive reserve filter "(program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnAnyOrg modify single project inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (!expression[VPLMStrictOrgOwnership]) && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)"
+    remove user VPLMProjectLeader key ExtendedModifyAccessForClassification_MultiCtxOnSingleOrg modify single project single organization inclusive reserve filter "expression[MultiContextualAuthoringAbility] && (program[emxLibraryCentralClassificationAttributesBase -method CheckCurrentContextofclass]==true)";
+
+# IR-564732-3DEXPERIENCER2017x
+modify policy VPLM_SMB_Definition
+  allstate remove user VPLMLocalCrossOrgContextAccess key ExtendedAggrObjectPrivateReadAccess
+  read,show,checkout
+  localfilter "(majorid.bestsofar.to[VPMRepInstance].from.current.access[$ACCESS] == TRUE) && attribute[LPAbstractRepReference.V_isMandatory]";
+
+# IR-568955-3DEXPERIENCER2017x
+modify policy VPLM_SMB_Definition
+  allstate
+    revoke public key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve
+    revoke owner key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve;
+
+modify policy VPLM_SMB_Definition_Document
+  allstate
+    revoke public key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve
+    revoke owner key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve;
+
+modify policy VPLM_SMB_Evaluation
+  allstate
+    revoke public key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve
+    revoke owner key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve;
+
+modify policy VPLM_SMB_Resource
+  allstate
+    revoke public key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve
+    revoke owner key DSCoreReservationCheck modify,delete,checkin,lock,changeowner,promote,demote,revise,majorrevise,approve,reserve;
+

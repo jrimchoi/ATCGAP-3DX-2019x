@@ -1,0 +1,1215 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.EmxTableRowId;
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.esrinquiry.ESRInquiryException;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants.Action;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangePolicy;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangePolicyState;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService.ChangeType;
+import com.dassault_systemes.enovia.lsa.ticket.services.EventService;
+import com.dassault_systemes.enovia.lsa.ticket.services.HistoryService;
+import com.dassault_systemes.enovia.lsa.ticket.services.MyComplaintWorkQueueService;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.matrixone.apps.productline.Model;
+import com.matrixone.apps.productline.Product;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws ESRInquiryException
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws ESRInquiryException {
+		super();
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	/**
+	 * Gets EventService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return EventService implementation reference.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	private EventService getEventService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			EventService eventService = (EventService) component.getService(EventService.class);
+			return eventService;
+		}
+		catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	/**
+	 * Gets MyComplaintWorkQueueService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return MyComplaintWorkQueueService implementation reference
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	private MyComplaintWorkQueueService getMyComplaintWorkQueueService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			MyComplaintWorkQueueService myComplaintWorkQueueService = (MyComplaintWorkQueueService) component
+					.getService(MyComplaintWorkQueueService.class);
+			return myComplaintWorkQueueService;
+
+		}
+		catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	/**
+	 * Gets HistoryService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return HistorService implementation reference
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 */
+	private HistoryService getHistoryService(Context context) throws ESRInquiryException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			HistoryService historyService = (HistoryService) component.getService(HistoryService.class);
+			return historyService;
+		}
+		catch (ComponentException exception) {
+			throw new ESRInquiryException(exception);
+		}
+	}
+
+	// start code for History
+
+	/**
+	 * Method to get contents of History of particular key given
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of values for key
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getHistoryContents(Context context, String args[], String key) throws ESRInquiryException {
+		List keyList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			for (Object object : objectList) {
+				Map mapObject = (Map) object;
+				String strObjectKey = (String) mapObject.get(key);
+				keyList.add(strObjectKey);
+			}
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+		return keyList;
+	}
+
+	/**
+	 * Method to get Name Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Names
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnName(Context context, String args[]) throws ESRInquiryException {
+		List nameList = new StringList();
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			Iterator objectListIterator = objectList.iterator();
+
+			while (objectListIterator.hasNext()) {
+				Map mapObject = (Map) objectListIterator.next();
+				String strObjectName = (String) mapObject.get(DomainConstants.SELECT_NAME);
+				String strId = (String) mapObject.get(DomainConstants.SELECT_ID);
+				String strName = "";
+				if (UIUtil.isNullOrEmpty(strId)) {
+					strName = "<b>" + strObjectName + "</b>";
+				}
+				else {
+					strName = TicketUtil.getObjectLink(context, strId, strObjectName);
+				}
+				nameList.add(strName);
+			}
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+		return nameList;
+	}
+
+	/**
+	 * Method to get Time Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Time
+	 * @throws ESRInquiryException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryTime(Context context, String args[]) throws ESRInquiryException {
+		return getHistoryContents(context, args, TicketConstants.SELECT_TIME);
+	}
+
+	/**
+	 * Method to get User Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Users
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryUser(Context context, String args[]) throws ESRInquiryException {
+		List userList = new StringList();
+		try {
+			List tempList = getHistoryContents(context, args, TicketConstants.SELECT_USER);
+
+			for (Object user : tempList) {
+				String strName = (String) user;
+				String strFullName = PersonUtil.getFullName(context, strName);
+				userList.add(strFullName);
+			}
+		}
+		catch (FrameworkException e) {
+			throw new ESRInquiryException(e);
+		}
+		return userList;
+	}
+
+	/**
+	 * Method to get Action Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Actions
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryAction(Context context, String args[]) throws ESRInquiryException {
+		List getActionList = getHistoryContents(context, args, TicketConstants.SELECT_ACTION);
+		HistoryService historyService = getHistoryService(context);
+		List<String> actionList = historyService.trimCustomActionInList(getActionList);
+
+		return actionList;
+	}
+
+	/**
+	 * Method to get State Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of States
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryState(Context context, String args[]) throws ESRInquiryException {
+		return getHistoryContents(context, args, DomainConstants.SELECT_STATES);
+	}
+
+	/**
+	 * Method to get Description Column Data of History Table
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds objectList
+	 * @return List of Descriptions
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	public List getColumnHistoryDescription(Context context, String args[]) throws ESRInquiryException {
+		return getHistoryContents(context, args, DomainConstants.SELECT_DESCRIPTION);
+	}
+
+	/**
+	 * Method to get History of all the Parent Objects and their Related Objects
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds selected Filter Action and Search Filter Text in program
+	 *            map
+	 * @return MapList of Objects along containing History information
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInquiryHistory(Context context, String args[]) throws ESRInquiryException {
+		try {
+			MapList mlist = new MapList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectID = (String) programMap.get(TicketConstants.OBJECTID);
+			DomainObject dmoInquiry = DomainObject.newInstance(context, strObjectID);
+
+			String strActionSelected = (String) programMap.get(TicketConstants.SELECT_INQFILTERACTION);
+			String strFilterSearch = (String) programMap.get(TicketConstants.SELECT_INQSEARCHFILTER);
+
+			HistoryService historyService = getHistoryService(context);
+			MapList tempList = historyService.getHistory(context, strObjectID, strActionSelected, strFilterSearch);
+			mlist.addAll(tempList);
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_CONTACT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CONTACT);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_MODEL);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+
+			List<Map<?, ?>> relObj = historyService.getAllComplaintRelatedItems(context, dmoInquiry, sbRelPattern.toString(),
+					sbTypePattern.toString());
+			if (relObj.size() > 0) {
+				String strRelatedItems = Helper.getI18NString(context, Helper.StringResource.COLS, "PQC.Common.AssociatedItemsHistory");
+				Map history = historyService.populateHistoryData("", strRelatedItems, "", "", "", "", "");
+				mlist.add(history);
+			}
+			for (Object relObjects : relObj) {
+				Map mapRelObjects = (Map) relObjects;
+				String id = (String) mapRelObjects.get(DomainConstants.SELECT_ID);
+				tempList = historyService.getHistory(context, id, strActionSelected, strFilterSearch);
+				mlist.addAll(tempList);
+			}
+			return mlist;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+
+	}
+
+	/**
+	 * This method displays the possible values of Action to be selected by user
+	 * to filter the History.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            hold program map
+	 * @return Map of Actions
+	 * @throws ESRInquiryException
+	 *             if the operation fails
+	 */
+
+	public Map getFilterRanges(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(TicketConstants.REQUESTMAP);
+			String strObjectID = (String) requestMap.get(TicketConstants.PARENT_OID);
+			DomainObject dmoInquiry = DomainObject.newInstance(context, strObjectID);
+			Map hmaplist = new HashMap();
+			hmaplist = UINavigatorUtil.getHistoryData(context, strObjectID);
+			List<String> actionArray = (List) hmaplist.get(TicketConstants.SELECT_ACTION);
+			List<String> uniqueValueArray = new StringList();
+
+			for (String action : actionArray) {
+				if (!uniqueValueArray.contains(action)) {
+					uniqueValueArray.add(action);
+				}
+			}
+			StringList actionList = new StringList();
+			actionList.add(TicketConstants.SELECT_ALL);
+
+			StringBuilder sbRelPattern = new StringBuilder();
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_CONTACT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT);
+			sbRelPattern.append(TicketConstants.COMMA);
+			sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+
+			StringBuilder sbTypePattern = new StringBuilder();
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_CONTACT);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(DomainSymbolicConstants.SYMBOLIC_type_Products);
+			sbTypePattern.append(TicketConstants.COMMA);
+			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+
+			HistoryService historyService = getHistoryService(context);
+			List<Map<?, ?>> relObj = historyService.getAllComplaintRelatedItems(context, dmoInquiry, sbRelPattern.toString(),
+					sbTypePattern.toString());
+			for (Object relObjects : relObj) {
+				Map hmRel = (Map) relObjects;
+				String id = (String) hmRel.get(DomainConstants.SELECT_ID);
+				Map hmaplistRel = new HashMap();
+				hmaplistRel = UINavigatorUtil.getHistoryData(context, id);
+				List<String> actionArrayRel = (List) hmaplistRel.get(TicketConstants.SELECT_ACTION);
+				List<String> getTrimList = historyService.trimCustomActionInList(actionArrayRel);
+				for (String action : getTrimList) {
+					if (!uniqueValueArray.contains(action)) {
+						uniqueValueArray.add(action);
+					}
+				}
+			}
+			for (Object action : uniqueValueArray) {
+				String getActionRel = (String) action;
+				actionList.add(getActionRel);
+			}
+			Map rangeMap = new HashMap();
+			rangeMap.put(TicketConstants.FIELD_CHOICES, actionList);
+
+			return rangeMap;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	// end History
+
+	/**
+	 * promotes the Inquiry from create to InProcess state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionSubmitToReviewInquiry(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.INPROCESS, "", strInquiryId);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshComplaint");
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * promotes Inquiry from InProcess to Closed state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionCloseInquiry(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strReasonForClosure = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.CLOSED, strReasonForClosure, strInquiryId);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshComplaint");
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * promotes the Inquiry from Create/In Process to Invalid state.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionInvalidInquiry(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strInvalidateRationale = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.INVALID, strInvalidateRationale, strInquiryId);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshComplaint");
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Sets the new owner for the Inquiries and for all its associated events
+	 * and investigation objects as well.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public void transferInquiryOwnership(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrParentOID = (String[]) programMap.get(TicketConstants.PARENT_OID);
+			if (Helper.isNullOrEmpty(arrParentOID)) {
+				String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+				List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+				arrParentOID = new String[] { emxTableRowIds.get(0).getObjectId() };
+			}
+			String[] arrNewOwnerOID = (String[]) programMap.get(TicketConstants.FIELD_NEW_OWNER_OID);
+			String[] arrTransferReason = (String[]) programMap.get(TicketConstants.FIELD_TRANSFER_REASON);
+
+			DomainObject dmoNewOwner = DomainObject.newInstance(context, arrNewOwnerOID[0]);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			context.setCustomData("transferReason", arrTransferReason[0]);
+			complaintTicketService.transferOwnership(context, dmoNewOwner, arrTransferReason[0], Action.TRANSFER,arrParentOID[0]);
+
+//			if (TicketUtil.checkUserRoles(context, dmoNewOwner, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+//				MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+//				myComplaintWorkQueueService.setComplaintsAsAssigned(context, arrParentOID);
+//			}
+			if (DomainObject.newInstance(context, arrParentOID[0]).checkAccess(context, (short) AccessConstants.cChangeOwner)) {
+				MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+				myComplaintWorkQueueService.setComplaintsAsAssigned(context, arrParentOID);
+			}
+			else {
+				MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+				myComplaintWorkQueueService.removeComplaintAsAssigned(context, arrParentOID);
+			}
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * This method gives stringList of person objectIds which are to be excluded
+	 * in Full search List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return StringList of ObjectIDs to exclude
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	public StringList getExcludedOwnerOIDInquiry(Context context, String[] args) throws ESRInquiryException {
+		try {
+			StringList slOwnerExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(TicketConstants.OBJECTID);
+			String[] arrDmoComplaint = { strObjectId };
+			String strCurrentState = new String();
+			List<Map<?, ?>> resultMap = QueryUtil.getInfo(context, arrDmoComplaint,
+					Helper.stringList(DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_OWNER));
+			for (Object objMap : resultMap) {
+				Map<?, ?> mapOwner = (Map) objMap;
+				strCurrentState = (String) mapOwner.get(DomainConstants.SELECT_CURRENT);
+				String strOwnerName = (String) mapOwner.get(DomainConstants.SELECT_OWNER);
+				slOwnerExclusion.add(PersonUtil.getPersonObjectID(context, strOwnerName));
+			}
+			//TODO
+//			StringBuilder sbTypePattern = new StringBuilder();
+//			sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_PERSON);
+//			String strWhereExp = "current==policy_Person.state_Active";
+//			List<Map<?, ?>> returnMap = QueryUtil.findObjects(context, sbTypePattern.toString(), strWhereExp,
+//					Helper.stringList(DomainConstants.SELECT_ID));
+//			for (Object obj : returnMap) {
+//				Map personMap = (Map) obj;
+//				String strPersonId = (String) personMap.get(DomainConstants.SELECT_ID);
+//				DomainObject dmoPerson = DomainObject.newInstance(context, strPersonId);
+//				Person person = (Person) dmoPerson;
+//				StringList slRoles = new StringList();
+//				slRoles = person.getRoleAssignments(context);
+//				if (null != strCurrentState && null != slRoles) {
+//					if ((strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+//							TicketConstants.SYMBOLIC_POLICY_STATE_CREATE))) && slRoles.contains(TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+//						slOwnerExclusion.add(strPersonId);
+//					}
+//					if ((strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD,
+//							TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS)))
+//							&& !(slRoles.contains(TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER) || slRoles
+//									.contains(TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR))) {
+//						slOwnerExclusion.add(strPersonId);
+//					}
+//				}
+//			}
+			return slOwnerExclusion;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Reopens the Inquiry.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to be called for page refresh.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String reopenInquiry(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strReopenRationale = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.promoteComplaintTicket(context, ChangePolicyState.CREATE, strReopenRationale, strInquiryId);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "actionRefreshComplaint");
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Excludes the already associated Assignees with the Equipment Service
+	 * Request from Search List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return list containing ids which needs to be excluded from Assignee
+	 *         search.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedAssigneeOIDInquiry(Context context, String[] args) throws ESRInquiryException {
+		try {
+			StringList slAssigneeExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = (String) programMap.get(TicketConstants.OBJECTID);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			List<Map<?, ?>> lsMapAssignee = complaintTicketService.getAssignees(context, DomainObject.newInstance(context, strInquiryId));
+			for (Map<?, ?> objInfo : lsMapAssignee) {
+				String strObjectId = (String) objInfo.get(DomainConstants.SELECT_ID);
+				slAssigneeExclusion.add(strObjectId);
+			}
+			return slAssigneeExclusion;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * gives all the assignees associated with the Inquiry.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return maplist having all Assignee Ids.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInquiryAssignees(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strInquiryId = (String) programMap.get(TicketConstants.OBJECTID);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			List<Map<?, ?>> returnMap = complaintTicketService.getAssignees(context, DomainObject.newInstance(context, strInquiryId));
+			MapList mlAssignees = new MapList(returnMap);
+			return mlAssignees;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * adds parsons to Inquiry as Assignees
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function to refresh page.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionAddExistingAssigneesToInquiry(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrInquiryIds = (String[]) programMap.get(TicketConstants.OBJECTID);
+			DomainObject dmoInquiry = DomainObject.newInstance(context, arrInquiryIds[0]);
+			List<String> listAssigneeIds;
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+			listAssigneeIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listAssigneeIds.add(rowId.getObjectId());
+			}
+			String[] assigneeIds = listAssigneeIds.toArray(new String[listAssigneeIds.size()]);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			complaintTicketService.addAssigneesToComplaintTicket(context, dmoInquiry, assigneeIds);
+
+			//TODO
+//			for (int j = assigneeIds.length - 1; j >= 0; j--) {
+//				if (TicketUtil.checkUserRoles(context, DomainObject.newInstance(context, assigneeIds[j]),
+//						TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR)) {
+//					MyComplaintWorkQueueService myComplaintWorkQueueService = getMyComplaintWorkQueueService(context);
+//					myComplaintWorkQueueService.setComplaintsAsAssigned(context, arrInquiryIds);
+//				}
+//			}
+
+			return "refreshOpener()";
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * removes the Assignees from the Inquiry.
+	 * 
+	 * @param context
+	 *            ENOVIA context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to refresh page.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveInquiryAssignees(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] arrInquiryIds = (String[]) programMap.get(TicketConstants.OBJECTID);
+			DomainObject dmoInquiry = DomainObject.newInstance(context, arrInquiryIds[0]);
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+			List<String> listAssigneeIds = new ArrayList<String>(tableRowIds.length);
+			List<String> listAssigneeRelIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listAssigneeIds.add(rowId.getObjectId());
+				listAssigneeRelIds.add(rowId.getRelationshipId());
+			}
+			String[] assigneeIds = listAssigneeIds.toArray(new String[listAssigneeIds.size()]);
+			String[] assigneeRelIds = listAssigneeRelIds.toArray(new String[listAssigneeRelIds.size()]);
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+
+			DomainObject dmoRoute = null;
+			String strWhere = DomainConstants.SELECT_CURRENT
+					+ "=='"
+					+ TicketUtil
+							.getStateName(context, TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD, TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS)
+					+ "'";
+			List<Map<?, ?>> mapList = QueryUtil.getRelatedObjects(context, dmoInquiry, DomainSymbolicConstants.SYMBOLIC_relationship_ObjectRoute,
+					DomainSymbolicConstants.SYMBOLIC_type_Route, Helper.stringList(DomainConstants.SELECT_ID),
+					Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), false, true, (short) 0, strWhere, null);
+			if (!mapList.isEmpty()) {
+				for (Map<?, ?> map : mapList) {
+					dmoRoute = DomainObject.newInstance(context, (String) map.get(DomainConstants.SELECT_ID));
+				}
+				complaintTicketService.removeApproversFromRoute(context, dmoInquiry, assigneeIds);
+			}
+			complaintTicketService.removeComplaintTicketAssignees(context, assigneeRelIds);
+//TODO
+			for (int j = assigneeIds.length - 1; j >= 0; j--) {
+				if (TicketUtil.checkUserRoles(context, DomainObject.newInstance(context, assigneeIds[j]),
+						"role_ComplaintInvestigator")) {
+					MyComplaintWorkQueueService mycomplaintworkqueueservice = getMyComplaintWorkQueueService(context);
+					mycomplaintworkqueueservice.removeComplaintAsAssigned(context, arrInquiryIds);
+					break;
+				}
+			}
+
+			return "refreshOpenerWindow()";
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Creates Inquiry,creates default event, create Contacts if does not exist,
+	 * connect product to the default event, and associate event and contact to
+	 * Inquiry.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing value for Inquiry Object Id.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createInquiry(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<String, String> inquiryAttributeMap = new HashMap<String, String>();
+			Map<String, String> eventAttributeMap = new HashMap<String, String>();
+			Map<String, String> modelAttributeMap = new HashMap<String, String>();
+			String strProductModelId = (String) programMap.get(TicketConstants.PRODUCT_MODEL_OID);
+			String strReleasedProductId = (String) programMap.get("ReleasedProduct");
+
+			// Attribute Map for Inquiry
+			inquiryAttributeMap
+					.put(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Originator), context.getUser());
+
+			// Attribute Map for Event
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EXPERIENCE_CODE),
+					TicketConstants.UNKNOWN);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_PRIMARY_EVENT), TicketConstants.TRUE);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_EVENT_DETAIL),
+					(String) programMap.get(TicketConstants.FIELD_DESCRIBE_PROBLEM));
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EVENT_TIMING), TicketConstants.UNKNOWN);
+			eventAttributeMap.put(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Originator), context.getUser());
+
+			// Attribute Map for Complaint Event Product Relationship
+			modelAttributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_SERIAL_NUMBER),
+					(String) programMap.get(TicketConstants.FIELD_SERIAL_NUMBER));
+
+			DomainObject dmoModel = DomainObject.newInstance(context, strProductModelId);
+			if (!Helper.isNullOrEmpty(strReleasedProductId)) {
+				dmoModel = DomainObject.newInstance(context, strReleasedProductId);
+			}
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoInquiry = complaintTicketService.createComplaintTicket(context, TicketConstants.SYMBOLIC_TYPE_INQUIRY,
+					TicketConstants.SYMBOLIC_POLICY_TICKET_RECORD, dmoModel, inquiryAttributeMap, eventAttributeMap, modelAttributeMap);
+
+			returnMap.put(DomainConstants.SELECT_ID, dmoInquiry.getObjectId());
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * gives all the Products associated with the Events of the Equipment
+	 * Service Request Ticket.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return maplist having all Assignee Ids.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInquiryProducts(Context context, String[] args) throws ESRInquiryException {
+		try {
+			MapList returnMapList = new MapList();
+			StringList checkStringList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strInquiryId = (String) programMap.get(TicketConstants.OBJECTID);
+			EventService eventService = getEventService(context);
+			List<Map<?, ?>> lsMapEvents = eventService.getEvents(context, DomainObject.newInstance(context, strInquiryId));
+			for (Object obj : lsMapEvents) {
+				Map eventMap = (Map) obj;
+				String strEventId = (String) eventMap.get(DomainConstants.SELECT_ID);
+				MapList mpListProducts = eventService.getEventProducts(context, DomainObject.newInstance(context, strEventId));
+				if (mpListProducts.size() > 0) {
+					Iterator iterator = mpListProducts.iterator();
+					while (iterator.hasNext()) {
+						Map<?, ?> mpProducts = (Map) iterator.next();
+						String strProductIds = (String) mpProducts.get(DomainConstants.SELECT_ID);
+						if (!checkStringList.contains(strProductIds)
+								&& (Helper.getTypeKindOf(context, DomainObject.newInstance(context, strProductIds),
+										TicketConstants.SYMBOLIC_TYPE_MODEL)).containsValue(Boolean.TRUE)) {
+							checkStringList.add(strProductIds);
+							returnMapList.add(mpProducts);
+						}
+					}
+				}
+			}
+
+			return returnMapList;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Excludes the already associated Products with the Inquiry Event from
+	 * Search List.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return list containing ids which needs to be excluded from Products
+	 *         search.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.ExcludeOIDProgramCallable
+	public StringList getExcludedProductsOIDEvent(Context context, String[] args) throws ESRInquiryException {
+		try {
+			StringList slProductExclusion = new StringList();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = (String) programMap.get(TicketConstants.OBJECTID);
+			EventService eventService = getEventService(context);
+			List<Map<?, ?>> lsMapEvents = eventService.getEvents(context, DomainObject.newInstance(context, strInquiryId));
+			for (Object obj : lsMapEvents) {
+				Map eventMap = (Map) obj;
+				String strEventId = (String) eventMap.get(DomainConstants.SELECT_ID);
+				MapList mpListProducts = eventService.getEventProducts(context, DomainObject.newInstance(context, strEventId));
+				if (mpListProducts.size() > 0) {
+					Iterator iterator = mpListProducts.iterator();
+					while (iterator.hasNext()) {
+						Map<?, ?> mpProducts = (Map) iterator.next();
+						String strProductId = (String) mpProducts.get(DomainConstants.SELECT_ID);
+						if (!slProductExclusion.contains(strProductId)) {
+							slProductExclusion.add(strProductId);
+						}
+					}
+				}
+
+			}
+			return slProductExclusion;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Adds Products to Inquiry Event
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function to refresh page.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public void actionAddExistingProductsToEvent(Context context, String[] args) throws ESRInquiryException {
+		try {
+			List<String> listProductIds = new ArrayList<String>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestValuesMap = (Map<?, ?>) programMap.get("requestValuesMap");
+			String[] strParentId = (String[]) requestValuesMap.get("objectId");
+			String[] strProductModelId = (String[]) requestValuesMap.get("ProductModelOID");
+			String[] strReleasedProductId = (String[]) requestValuesMap.get("ReleasedProduct");
+			EventService eventService = getEventService(context);
+			List<Map<?, ?>> lsMapEvents = eventService.getEvents(context, DomainObject.newInstance(context, strParentId[0]));
+			List<String> slEventIds = new ArrayList<String>(lsMapEvents.size());
+			for (Map<?, ?> obj : lsMapEvents) {
+				Map<?, ?> eventMap = obj;
+				slEventIds.add((String) eventMap.get(DomainConstants.SELECT_ID));
+			}
+			listProductIds.add(strReleasedProductId[0]);
+			listProductIds.add(strProductModelId[0]);
+
+			String[] eventIds = slEventIds.toArray(new String[slEventIds.size()]);
+			eventService.addProductsToEvent(context, eventIds, listProductIds);
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Removes the Products from the Inquiry Event.
+	 * 
+	 * @param context
+	 *            ENOVIA context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return javascript function name to refresh page.
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionRemoveInquiryProducts(Context context, String[] args) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] tableRowIds = (String[]) programMap.get(TicketConstants.EMX_TABLE_ROW_ID);
+			List<String> prdL = new ArrayList<>();
+			List<String> prdrelL = new ArrayList<>();
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(tableRowIds);
+			List<String> listProductRelIds = new ArrayList<String>(tableRowIds.length);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				listProductRelIds.add(rowId.getRelationshipId());
+				List<Map<?, ?>> eventM = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, rowId.getObjectId()),
+						TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_EVENT,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), true, false,
+						(short) 1, "to[Complaint Event].from.id==" + rowId.getParentObjectId(), new String());
+				List<Map<?, ?>> mlEventsProductList = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, (String) eventM.get(0)
+						.get(DomainConstants.SELECT_ID)), TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT,
+						TicketConstants.SYMBOLIC_type_Products, Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE,
+								DomainConstants.SELECT_NAME, DomainConstants.SELECT_REVISION), Helper.stringList(DomainRelationship.SELECT_ID),
+						false, true, (short) 1, new String(), new String());
+				for (Map<?, ?> mlEventsProduct : mlEventsProductList) {
+					prdL.add((String) mlEventsProduct.get(DomainConstants.SELECT_ID));
+					prdrelL.add((String) mlEventsProduct.get(DomainRelationship.SELECT_ID));
+				}
+				Model objModel = new Model();
+				String strRootId = objModel.getDerivationRoot(context, rowId.getObjectId());
+				List<Map<?, ?>> mlDerivations = Product.getMainDerivations(context, strRootId);
+				for (Map<?, ?> product : mlDerivations) {
+					String prodId = (String) product.get(DomainConstants.SELECT_ID);
+					if (prdL.contains(prodId) && !listProductRelIds.contains(prodId)) {
+						for (Map<?, ?> mlEventsProduct : mlEventsProductList) {
+							if (prodId.equals(mlEventsProduct.get(DomainConstants.SELECT_ID))) {
+								listProductRelIds.add((String) mlEventsProduct.get(DomainRelationship.SELECT_ID));
+							}
+						}
+					}
+				}
+			}
+			String[] productRelIds = listProductRelIds.toArray(new String[listProductRelIds.size()]);
+			EventService eventService = getEventService(context);
+			eventService.removeEventProduct(context, productRelIds);
+			return "refreshOpenerWindow()";
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Converts the Inquiry into Complaint
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Javascript function name to open Complaint Power View
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionConvertToComplaint(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strTypeChangeJustification = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoConverted = complaintTicketService.convertComplaintTicket(context, DomainObject.newInstance(context, strInquiryId),
+					ChangeType.COMPLAINT, ChangePolicy.COMPLAINT_RECORD, strTypeChangeJustification);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "openComplaintTicketPowerView", dmoConverted.getObjectId(context));
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	/**
+	 * Converts the Inquiry into Equipment Service Request
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Javascript function name to open Equipment Service Request Power
+	 *         View
+	 * @throws ESRInquiryException
+	 *             if operation fails.
+	 */
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String actionConvertToEquipmentServiceRequest(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String strInquiryId = ((String[]) programMap.get(TicketConstants.PARENT_OID))[0];
+			String strTypeChangeJustification = ((String[]) programMap.get(TicketConstants.COMMENTS))[0];
+			ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+			DomainObject dmoConverted = complaintTicketService.convertComplaintTicket(context, DomainObject.newInstance(context, strInquiryId),
+					ChangeType.EQUIPMENT_SERVICE_REQUEST, ChangePolicy.TICKET_RECORD, strTypeChangeJustification);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "openComplaintTicketPowerView", dmoConverted.getObjectId(context));
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	public boolean checkAccessOnPasswordField(Context context, String args[]) throws ESRInquiryException {
+
+		try {
+			boolean bResult = false;
+			String strPasswordSetting = Helper.getProperty(context, "emxFramework.Routes.EnableFDA");
+			if (!Helper.isNullOrEmpty(strPasswordSetting)) {
+				bResult = Boolean.parseBoolean(strPasswordSetting);
+			}
+			return bResult;
+		}
+		catch (Exception exception) {
+			throw new ESRInquiryException(exception);
+		}
+
+	}
+
+	public String showProductsForModel(Context context, String args[]) throws ESRInquiryException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] parentOID = (String[]) programMap.get("parentOID");
+			String[] emxTableRowIdActual = (String[]) programMap.get("emxTableRowIdActual");
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowIdActual);
+
+			String modelId = emxTableRowIds.get(0).getObjectId();
+
+			String headerString = new StringBuilder()
+					.append(Helper.getI18NString(context, Helper.StringResource.COLS, "PQC.ReleaseProductSelection.ForModel.Header")).append(" ")
+					.append(DomainObject.newInstance(context, modelId).getName(context)).toString();
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "addProductModelToInquiryNext", parentOID[0], modelId, headerString);
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+
+	public Vector<String> getProductLine(Context context, String args[]) throws ESRInquiryException {
+		try {
+			StringBuffer sbProductLineIcon = new StringBuffer();
+			String strObjectIcon = UINavigatorUtil.getTypeIconProperty(context, DomainConstants.TYPE_PRODUCTLINE);
+			sbProductLineIcon.append("<img src=\"../common/images/");
+			sbProductLineIcon.append(XSSUtil.encodeForURL(context, strObjectIcon));
+			sbProductLineIcon.append("\" border=\"0\"/>");
+
+			final String PRODUCT_LINE_NAME = "to[" + PropertyUtil.getSchemaProperty(context, "relationship_ProductLineModels") + "].from.name";
+			final String PRODUCT_LINE_ID = "to[" + PropertyUtil.getSchemaProperty(context, "relationship_ProductLineModels") + "].from.id";
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlObject = (MapList) programMap.get(TicketConstants.OBJECTLIST);
+			Vector<String> vcProduct = new Vector<String>(mlObject.size());
+			Iterator<?> objectListItr = mlObject.iterator();
+			while (objectListItr.hasNext()) {
+				Map<?, ?> objectMap = (Map<?, ?>) objectListItr.next();
+				String objectId = (String) objectMap.get(DomainObject.SELECT_ID);
+				List<Map<?, ?>> productInfo = QueryUtil.getInfo(context, new String[] { objectId },
+						Helper.stringList(PRODUCT_LINE_NAME, PRODUCT_LINE_ID));
+				String productLineId = (String) productInfo.get(0).get(PRODUCT_LINE_ID);
+				if (!Helper.isNullOrEmpty(productLineId)) {
+					StringBuffer sbHref = new StringBuffer();
+					sbHref.append(sbProductLineIcon.toString());
+					sbHref.append("<a href=\"javascript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert");
+					sbHref.append("&amp;objectId=");
+					sbHref.append(XSSUtil.encodeForJavaScript(context, productLineId));
+					sbHref.append("'");
+					sbHref.append(", '800', '700', 'true', 'popup')\">");
+					sbHref.append(XSSUtil.encodeForHTML(context, (String) productInfo.get(0).get(PRODUCT_LINE_NAME)));
+					sbHref.append("</a>");
+					vcProduct.add(sbHref.toString());
+				}
+				else {
+					vcProduct.add(DomainConstants.EMPTY_STRING);
+				}
+			}
+			return vcProduct;
+		}
+		catch (Exception e) {
+			throw new ESRInquiryException(e);
+		}
+	}
+}
+

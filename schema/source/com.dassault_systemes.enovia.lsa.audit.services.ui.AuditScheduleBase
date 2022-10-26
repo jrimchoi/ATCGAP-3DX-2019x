@@ -1,0 +1,720 @@
+/************************************************************************************************************
+ * /* AuditScheduleBase
+ ** 
+ * Copyright (c) 2014-2018 Dassault Systemes All Rights Reserved. This program
+ * contains proprietary and trade secret information of Dassault Systemes
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ ** 
+ * 
+ * 
+ * Author Date Description
+ * 
+ * SCT 09-APR-2007 AuditScheduleBase program to handle Audit Schedule type
+ ************************************************************************************************************/
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.audit.AuditConstants;
+import com.dassault_systemes.enovia.lsa.audit.AuditException;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UISearch;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Attribute;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+
+	}
+
+	/**
+	 * This method is executed if a method is not specified. -> Does nothing
+	 * right now
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @return always 0
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public int mxMain(Context context, String[] args) throws Exception {
+		return 0;
+	}
+
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map createAutoNamed(Context context, String[] args) throws Exception {
+		HashMap<String, String> returnMap = new HashMap<String, String>();
+		try {
+			// Get form info
+			ComponentsUtil.checkLicenseReserved(context, AuditConstants.QIC_FULL_USER_LICENSE_TRIGRAM);
+			final String ATTRIBUTE_COMMENTS = PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_COMMENTS);
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String strDescription = (String) programMap.get(AuditConstants.FIELD_DESCRIPTION);
+			String strTitle = (String) programMap.get(AuditConstants.FIELD_TITLE);
+			String strComments = (String) programMap.get(AuditConstants.FIELD_COMMENTS);
+			// Create autonamed object
+			String sNewObjId = FrameworkUtil.autoName(context, AuditConstants.REG_TYPE_AUDITSCHEDULE, "", AuditConstants.REG_POLICY_AUDITSCHEDULE,
+					"");
+			DomainObject newObj = DomainObject.newInstance(context, sNewObjId);
+			newObj.openObject(context);
+			if (!Helper.isNullOrEmpty(strDescription)) {
+				newObj.setDescription(context, strDescription);
+			}
+			if (!Helper.isNullOrEmpty(strTitle)) {
+				newObj.setAttributeValue(context, DomainObject.ATTRIBUTE_TITLE, strTitle);
+			}
+			if (!Helper.isNullOrEmpty(strComments)) {
+				newObj.setAttributeValue(context, ATTRIBUTE_COMMENTS, strComments);
+			}
+			newObj.closeObject(context, true);
+			returnMap.put("id", sNewObjId);
+		}
+
+		catch (Exception ex) {
+			throw new Exception(ex);
+		}
+
+		return returnMap;
+	}
+
+	public Object getRelatedAuditScopeValue(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		String strObjectId = (String) programMap.get("objectId");
+		DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+
+		String subsys = doObject.getInfo(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_SUBSYSTEM));
+
+		String[] split = subsys.split(",");
+		StringBuffer strBufferOutput = new StringBuffer();
+
+		for (String str : split) {
+			String key = "emxFramework.Range.Audit_Sub-System." + str;
+			String value = i18nNow.getI18nString(key.trim().replace(' ', '_'), "emxFrameworkStringResource", context.getSession().getLanguage());
+
+			if (strBufferOutput.length() == 0)
+				strBufferOutput.append(value);
+
+			else
+				strBufferOutput.append("," + value);
+		}
+
+		return strBufferOutput.toString();
+	}
+
+	/**
+	 * Gets all the audits related to the parent schedule and all its child
+	 * schedules.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the all audit
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllAudit(Context context, String[] args) throws Exception {
+		MapList mFinalList = new MapList();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+			// Object select list
+			StringList sListObjectSelect = new StringList();
+			sListObjectSelect.add(DomainConstants.SELECT_ID);
+			// relationship select list
+			StringList sListRelselect = new StringList();
+			sListRelselect
+					.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITNEXTSCHEDULEAUDIT)));
+			sListRelselect.add(DomainConstants.SELECT_FROM_NAME);
+			sListRelselect.add(DomainConstants.SELECT_FROM_ID);
+			// Get the Audit Schedule up to n level
+			MapList mRelatedAuditSchedule = doObject.getRelatedObjects(context,
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+					PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDITSCHEDULE), false, true, 0, sListObjectSelect, sListRelselect,
+					"", "", null, null, null);
+
+			Hashtable htAuditSchedule = new Hashtable();
+			// add parent schedule object to rollup all the audit objects
+			htAuditSchedule.put(DomainConstants.SELECT_ID, strObjectId);
+			mRelatedAuditSchedule.add(htAuditSchedule);
+
+			// iterate the all Audit schedule
+			Iterator auditScheduleitr = mRelatedAuditSchedule.iterator();
+			Hashtable mapAuditSchedule = null;
+			String strAuditScheduleId = "";
+			DomainObject doAuditSchedule = null;
+			MapList mRelatedAudit = null;
+			while (auditScheduleitr.hasNext()) {
+				mRelatedAudit = new MapList();
+				mapAuditSchedule = (Hashtable) auditScheduleitr.next();
+				strAuditScheduleId = (String) mapAuditSchedule.get(DomainConstants.SELECT_ID);
+				doAuditSchedule = DomainObject.newInstance(context, strAuditScheduleId);
+				// get the related Audit for each Audit schedule
+				mRelatedAudit = doAuditSchedule.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_TYPE_AUDIT), false, true, 0, sListObjectSelect, sListRelselect,
+						null, "", null, null, null);
+
+				mFinalList.addAll(mRelatedAudit);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return mFinalList;
+	}
+
+	/**
+	 * get the related Schedules for the audit and will be displayed in the Roll
+	 * ups for Schedules
+	 * 
+	 * @param context
+	 * @param args
+	 * @return Vector ( list of schedule names )
+	 * @throws Exception
+	 */
+	public Vector<String> getAuditRelatedSchedule(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramListMap = (HashMap) programMap.get("paramList");
+		// String strObjectId = (String)paramListMap.get("objectId");
+
+		MapList mlObjectList = (MapList) programMap.get("objectList");
+
+		Vector<String> vColumnValues = new Vector<String>(mlObjectList.size());
+		// String strAuditObjectId="";
+
+		try {
+			Iterator itr = mlObjectList.iterator();
+			// DomainObject doAuditObj = null;
+
+			while (itr.hasNext()) {
+				StringBuffer strFormLink = new StringBuffer();
+				Map map = (Map) itr.next();
+				// strAuditObjectId = (String) map.get(
+				// DomainConstants.SELECT_ID );
+				// doAuditObj = new DomainObject(strAuditObjectId);
+				strFormLink.append("<a href = \"JavaScript:emxTableColumnLinkClick('../common/emxTree.jsp?mode=insert&suiteKey=LQIAudit&objectId=");
+				strFormLink.append(XSSUtil.encodeForJavaScript(context, (String) map.get(DomainConstants.SELECT_FROM_ID)));
+				strFormLink.append("', '650', '450', 'false', 'popup', '')\"");
+				strFormLink.append(" >" + XSSUtil.encodeForJavaScript(context, (String) map.get(DomainConstants.SELECT_FROM_NAME)) + "</a>");
+
+				vColumnValues.add(strFormLink.toString());
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return vColumnValues;
+	}
+
+	/**
+	 * Gets the audit schedule.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the audit schedule
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditSchedule(Context context, String[] args) throws Exception {
+		MapList mRelatedAuditSchedule = new MapList();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			String strtype = (String) programMap.get("type");
+			DomainObject doObject = DomainObject.newInstance(context, strObjectId);
+			// Object select list
+			StringList sListObjectSelect = new StringList();
+			sListObjectSelect.add(DomainConstants.SELECT_ID);
+			// relationship select list
+			StringList sListRelselect = new StringList();
+			// sListRelselect.add(AuditConstants.SELECT_AUDITNEXTSCHEDULEAUDIT);
+			sListRelselect
+					.add(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_AUDITNEXTSCHEDULEAUDIT)));
+
+			// Get the related Audit Schedule/audit based on type passes from
+			// command
+			mRelatedAuditSchedule = doObject.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE),
+					strtype, false, true, 1, sListObjectSelect, sListRelselect, "", "", null, null, null);
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return mRelatedAuditSchedule;
+	}
+
+	/**
+	 * Gets the audit schedule.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the audit schedule
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String connectSchedule(Context context, String[] args) throws AuditException {
+
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get(AuditConstants.OBJECT_ID);
+
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) programMap.get(AuditConstants.EMX_TABLE_ROW_ID);
+			if (!Helper.isNullOrEmpty(objectIds) && !Helper.isNullOrEmpty(emxTableRowId)) {
+
+				DomainObject doAuditScheduleObject = DomainObject.newInstance(context, objectIds[0]);
+				for (int i = 0; i < emxTableRowId.length; ++i) {
+					StringList sListObjectSelect = new StringList();
+					sListObjectSelect.add(DomainConstants.SELECT_ID);
+					String strMessage = "";
+
+					MapList mRelatedAuditSchedule = doAuditScheduleObject.getRelatedObjects(context,
+							PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE), "*", sListObjectSelect, null, true, false,
+							(short) 0, "", "");
+					if (!mRelatedAuditSchedule.isEmpty()) {
+						Iterator itrMap = mRelatedAuditSchedule.iterator();
+						Map tempMap = null;
+						String strTempId = "";
+						// int intCount = 0;
+						while (itrMap.hasNext()) {
+							tempMap = (Map) itrMap.next();
+							strTempId = (String) tempMap.get(DomainConstants.SELECT_ID);
+							if (strTempId.equals(emxTableRowId[i])) {
+								strMessage = i18nNow.getI18nString("LQIAudit.Message.ParentofCurrent", "LQIAuditStringResource",
+										context.getLocale().toString());
+								mqlNotice(context, strMessage);
+								return null;
+							}
+						}
+					}
+
+					StringTokenizer strTokenizer = new StringTokenizer(emxTableRowId[i], "|");
+					String objectId = strTokenizer.nextToken();
+					doAuditScheduleObject.addToObject(context,
+							new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE)), objectId);
+				}
+			}
+
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER);
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+		}
+	}
+
+	/**
+	 * This method displays mql notice message.
+	 *
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param notice
+	 *            String containing notice message
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since AEF Rossini
+	 */
+
+	public static void mqlNotice(Context context, String notice) throws Exception {
+		MqlUtil.mqlCommand(context, "notice $1", notice);
+	}
+
+	/**
+	 * Gets the Audit Schedules which are in Approved state This method is
+	 * invoked by Search Command. Using emxSearch:getGeneralSearchResult as
+	 * example, given the state condition in the where clause in this method
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the Audit Schedule object details
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAuditScheduleSearchResult(Context context, String[] args) throws Exception {
+		MapList totalresultList = null;
+		try {
+			/**
+			 * // Get the parameter Hashmap. HashMap paramMap = (HashMap)
+			 * JPO.unpackArgs(args); String strObjectId = (String)
+			 * paramMap.get("objectId"); String strSearchMode = (String)
+			 * paramMap.get("searchmode"); String strObjName=""; String strName
+			 * = (String) paramMap.get("txtName"); String strQueryLimit =
+			 * (String) paramMap.get("QueryLimit"); String strWhereExp = "";
+			 * char chDblQuotes = '\"'; String strTxtFormat = "*"; String
+			 * strTxtSearch = ""; String strtype = (String)
+			 * paramMap.get("type");
+			 * 
+			 * String strVault = PersonUtil.getDefaultVault(context); //setting
+			 * the query limit if it is blank if ( strQueryLimit == null ||
+			 * strQueryLimit.equals("null") || strQueryLimit.equals("") ) {
+			 * strQueryLimit = "100"; } //if name is blank the setting the name
+			 * * if ( strName == null || strName.equalsIgnoreCase("null") ||
+			 * strName.length() <= 0 ) { strName = "*"; }
+			 * 
+			 * //Where condition -->State=Approved strWhereExp += "(current =='"
+			 * +${CLASS:AuditConstants}.STATE_APPROVED+"')";
+			 */
+
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+
+			// Retrieve Search criteria
+			String selType = (String) paramMap.get("txtTypeActual");
+			String txtName = (String) paramMap.get("txtName");
+			String txtRev = (String) paramMap.get("txtRev");
+			String txtDiscussionKeywords = (String) paramMap.get("txtDiscussionKeywords");
+
+			String txtVault = "";
+
+			String txtVaultOption = (String) paramMap.get("vaultSelction");
+			String includeVersionObjects = (String) paramMap.get("includeVersionObjects");
+			if (txtVaultOption == null) {
+				txtVaultOption = "";
+			}
+
+			// get the vaults based upon vault option selection.
+			txtVault = PersonUtil.getSearchVaults(context, true, txtVaultOption);
+
+			// trimming
+			txtVault = txtVault.trim();
+
+			if ("".equals(txtVault)) {
+				txtVault = PersonUtil.getDefaultVault(context);
+			}
+
+			String queryLimit = (String) paramMap.get("QueryLimit");
+			String latestRevision = (String) paramMap.get("latestRevision");
+
+			if (queryLimit == null || "null".equals(queryLimit) || "".equals(queryLimit)) {
+				queryLimit = (String) paramMap.get("queryLimit");
+				if (queryLimit == null || "null".equals(queryLimit) || "".equals(queryLimit)) {
+					queryLimit = "100";
+				}
+			}
+
+			if (txtName == null || txtName.equalsIgnoreCase("null") || txtName.length() <= 0) {
+				txtName = "*";
+			}
+
+			if (txtRev == null || txtRev.equalsIgnoreCase("null") || txtRev.length() <= 0) {
+				txtRev = "*";
+			}
+
+			String txtOwner = "*";
+
+			StringBuffer sWhereExp = new StringBuffer(256);
+			String txtFormat = "*";
+			String txtSearch = "";
+
+			if (latestRevision != null) {
+				sWhereExp.append("(revision == last)");
+			}
+
+			String advWhereExp = UISearch.getAdvanceSearchWhereExpression(context, paramMap);
+			// only the Schedules in Approved state should be showed in the
+			// result table
+			if ("".equals(advWhereExp)) {
+				advWhereExp = "(Current ~= const\"*Approved*\")";
+			}
+			else {
+				advWhereExp = advWhereExp + " &&" + "(Current ~= const\"*Approved*\")";
+			}
+			if (!"".equals(advWhereExp)) {
+				if (!"".equals(sWhereExp.toString())) {
+					sWhereExp.append(" && ");
+				}
+				sWhereExp.append("(");
+				sWhereExp.append(advWhereExp);
+				sWhereExp.append(")");
+			}
+
+			SelectList resultSelects = new SelectList(7);
+			resultSelects.add(DomainConstants.SELECT_ID);
+			resultSelects.add(DomainConstants.SELECT_TYPE);
+			resultSelects.add(DomainConstants.SELECT_NAME);
+			resultSelects.add(DomainConstants.SELECT_REVISION);
+			resultSelects.add(DomainConstants.SELECT_DESCRIPTION);
+			resultSelects.add(DomainConstants.SELECT_CURRENT);
+			resultSelects.add(DomainConstants.SELECT_POLICY);
+
+			if (includeVersionObjects == null)
+				resultSelects.add("attribute[" + DomainConstants.ATTRIBUTE_IS_VERSION_OBJECT + "]");
+			// **********************************//
+			if (txtDiscussionKeywords != null && !"null".equals(txtDiscussionKeywords) && !"".equals(txtDiscussionKeywords)
+					&& !"*".equals(txtDiscussionKeywords)) {
+				resultSelects.add("relationship[" + DomainConstants.RELATIONSHIP_THREAD + "].to.id");
+			}
+			if (DomainConstants.TYPE_BUG.equals(selType)) {
+				resultSelects.add("attribute[" + DomainConstants.ATTRIBUTE_TITLE + "]");
+				resultSelects.add("attribute[" + DomainConstants.ATTRIBUTE_KEYWORDS + "]");
+			}
+
+			totalresultList = new MapList();
+			totalresultList = DomainObject.findObjects(context, selType, txtName, txtRev, txtOwner, txtVault, sWhereExp.toString(), null, true,
+					resultSelects, Short.parseShort(queryLimit), txtFormat, txtSearch);
+
+			// *****added for the bug 339627*****//
+			if (includeVersionObjects == null) {
+				for (int count = 0; count < totalresultList.size(); count++) {
+					Map allresultElements = (Map) totalresultList.get(count);
+					String isVersionObject = (String) allresultElements.get("attribute[Is Version Object]");
+					if (isVersionObject.equalsIgnoreCase("true")) {
+						totalresultList.remove(count);
+						count--;
+					}
+				}
+			}
+			/**
+			 * //find all object which setisfy the condition totalresultList =
+			 * DomainObject.findObjects(context, strtype, strName, "*", "*",
+			 * strVault, strWhereExp, null, true, resultSelects,
+			 * Short.parseShort(strQueryLimit), strTxtFormat, strTxtSearch);
+			 * 
+			 * //Comment the below out because the current object will not be in
+			 * Approved state, so it will not be in totalresultList //Code to
+			 * remove the same object from the result set in AddExisting Case if
+			 * (null != strSearchMode && !"".equals(strSearchMode) &&
+			 * "addexisting".equals( strSearchMode )) { DomainObject newObj =
+			 * DomainObject.newInstance(context, strObjectId); //Getting the
+			 * name of Parent object String strCurrentObj =
+			 * newObj.getInfo(context, DomainConstants.SELECT_NAME); for (int
+			 * iCnt = 0; iCnt < totalresultList.size(); iCnt++) { HashMap
+			 * fieldMap = (HashMap) totalresultList.get(iCnt); strObjName =
+			 * (String) fieldMap.get("name"); //If the parent object's name is
+			 * there in result set if (null != strObjName && !"".equals(
+			 * strCurrentObj ) && strCurrentObj.equals( strObjName )) {
+			 * //Removing the entry totalresultList.remove(fieldMap); } } }
+			 */
+			// Code to remove the same object from the result set in AddExisting
+			// Case Ends here.
+			return totalresultList;
+
+		}
+		catch (Exception objException) {
+			return totalresultList;
+		}
+	}
+
+	/**
+	 * Gets the Audit for connected to Audit Schedule.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the Audit
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.dassault_systemes.enovia.lsa.LSACommonExecuteCallable
+	public String connectAuditToSchedule(Context context, String[] args) throws AuditException {
+		String strObjectId = AuditConstants.STR_EMPTY;
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String[] objectIds = (String[]) programMap.get("objectId");
+
+			if (!Helper.isNullOrEmpty(objectIds)) {
+				strObjectId = objectIds[0];
+			}
+
+			// String parentId = (String)programMap.get("parentOID");
+			// Read Input Table into an Array
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			DomainObject doAuditScheduleObject = DomainObject.newInstance(context, strObjectId);
+			for (int i = 0; i < emxTableRowId.length; ++i) {
+				StringList sListObjectSelect = new StringList();
+				sListObjectSelect.add(DomainConstants.SELECT_ID);
+				String strMessage = "";
+
+				MapList mRelatedAuditSchedule = doAuditScheduleObject.getRelatedObjects(context,
+						PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE), "*", sListObjectSelect, null, true, false,
+						(short) 0, "", "");
+				if (!mRelatedAuditSchedule.isEmpty()) {
+					Iterator itrMap = mRelatedAuditSchedule.iterator();
+					Map tempMap = null;
+					String strTempId = "";
+					// int intCount = 0;
+					while (itrMap.hasNext()) {
+						tempMap = (Map) itrMap.next();
+						strTempId = (String) tempMap.get(DomainConstants.SELECT_ID);
+						if (strTempId.equals(emxTableRowId[i])) {
+							strMessage = i18nNow.getI18nString("LQIAudit.Message.ParentofCurrent", "LQIAuditStringResource",
+									context.getLocale().toString());
+							mqlNotice(context, strMessage);
+							return null;
+						}
+					}
+				}
+
+				StringTokenizer strTokenizer = new StringTokenizer(emxTableRowId[0], "|");
+				String objectId = strTokenizer.nextToken();
+
+				doAuditScheduleObject.addToObject(context,
+						new RelationshipType(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE)), objectId);
+				sendMailToAuditLead(context, objectId);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw new AuditException(e);
+		}
+		return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, AuditConstants.REFRESH_OPENER);
+	}
+
+	private void sendMailToAuditLead(Context context, String objectId) throws Exception {
+
+		DomainObject auditObj = DomainObject.newInstance(context, objectId);
+		String auditNum = auditObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+		StringList objSelects = new StringList(1);
+		StringList relSelects = new StringList(1);
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		relSelects.addElement(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_NEXTSCHEDULEDAUDIT));
+
+		Map auditSched = auditObj.getRelatedObject(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_REL_AUDITSCHEDULE), false,
+				objSelects, relSelects);
+
+		String plannedScheduledDate = (String) auditSched.get(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_NEXTSCHEDULEDAUDIT));
+
+		DomainObject auditSchedObj = DomainObject.newInstance(context, (String) (auditSched.get(DomainConstants.SELECT_ID)));
+
+		String schedNum = auditSchedObj.getInfo(context, DomainConstants.SELECT_NAME);
+		// String plannedStartDate = auditObj.getInfo(context,
+		// AuditConstants.SELECT_AUDIT_PLANNEDSTARTDATE);
+		String plannedStartDate = auditObj.getInfo(context,
+				DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDSTARTDATE)));
+		// String plannedEndDate = auditObj.getInfo(context,
+		// AuditConstants.SELECT_AUDIT_PLANNEDENDDATE);
+		String plannedEndDate = auditObj.getInfo(context,
+				DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_PLANNEDENDDATE)));
+
+		Attribute tlAttr = auditObj.getAttributeValues(context, PropertyUtil.getSchemaProperty(context, AuditConstants.SYM_ATTR_LEADAUDITOR));
+		String tl = tlAttr.getValue();
+
+		if (tl.compareTo("") != 0) {
+			// String lastName = tl.split(",")[0].trim();
+			// String firstName = tl.split(",")[1].trim();
+			StringList toList = new StringList();
+			// Person.doesPersonExists(context, "");
+
+			objSelects.addElement(DomainConstants.SELECT_ID);
+
+			String whereExpression = "( " + Person.SELECT_NAME + "==\"" + tl + "\" )";
+
+			MapList objList = DomainObject.findObjects(context, DomainConstants.TYPE_PERSON, null, whereExpression, objSelects);
+
+			for (int i = 0; i < 1; i++) {
+
+				Map personMap = (Map) objList.get(i);
+				String objId = (String) personMap.get(DomainConstants.SELECT_ID);
+
+				DomainObject personObj = DomainObject.newInstance(context, objId);
+				String personName = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+				toList.add(personName);
+			}
+
+			String subject = auditNum + " has been added to Audit Schedule.";
+
+			String body = "";
+
+			body += auditNum + " as been added to Audit Schedule " + schedNum;
+			body += "\n\nPlanned Scheduled Date: " + plannedScheduledDate;
+			body += "\n\nPlanned Start Date: " + plannedStartDate;
+			body += "\n\nPlanned End Date: " + plannedEndDate;
+			body += "\nYou can use this link to go to audit schedule " + schedNum + ":\n";
+			body += MailUtil.getBaseURL(context) + "?objectId=" + (String) (auditSched.get(DomainConstants.SELECT_ID));
+
+			Helper.sendMail(context, subject, body, toList);
+
+		}
+	}
+
+	/**
+	 * Gets the audit schedule.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the audit schedule
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAudits(Context context, String[] args) throws Exception {
+		MapList mRelatedAudits = new MapList();
+		try {
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			String strAuditsFilter = (String) programMap.get("QICAuditsFilter");
+			if (UIUtil.isNotNullAndNotEmpty(strAuditsFilter) && strAuditsFilter.equals("All Audits")) {
+				mRelatedAudits = getAllAudit(context, args);
+			}
+			else {
+
+				mRelatedAudits = getAuditSchedule(context, args);
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return mRelatedAudits;
+	}
+}
+

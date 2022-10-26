@@ -1,0 +1,112 @@
+/*
+**  DSCWebFormActionsLink
+**
+**  Copyright Dassault Systemes, 1992-2007.
+**  All Rights Reserved.
+**  This program contains proprietary and trade secret information of Dassault Systemes and its 
+**  subsidiaries, Copyright notice is precautionary only
+**  and does not evidence any actual or intended publication of such program
+**
+**  Program to display Action Icons
+*/
+import com.matrixone.MCADIntegration.server.beans.MCADMxUtil;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Vector;
+import matrix.db.*;
+import matrix.util.MatrixException;
+
+ 
+public class ${CLASSNAME} extends ${CLASS:DSCWebFormActionsLinkBase}
+{		
+    /**
+	   * Constructor.
+	   *
+	   * @param context the eMatrix <code>Context</code> object
+	   * @param args holds no arguments
+	   * @throws Exception if the operation fails
+	   * @since Sourcing V6R2008-2
+	   */
+	public ${CLASSNAME} (Context context, String[] args) throws Exception
+	{
+	  super(context, args);
+	}	
+      
+	@Override
+    protected String addViewerLink(Context context, String objectId) throws MatrixException
+	{
+		BusinessObject	bus	= null;
+		try
+		{	
+			BusinessObjectList allObjectList	= new BusinessObjectList();
+
+			String	viewableRel			= MCADMxUtil.getActualNameForAEFData(context, "relationship_Viewable");
+			String	derivedOutputRel	= MCADMxUtil.getActualNameForAEFData(context, "relationship_DerivedOutput");
+			ArrayList	relList	= new ArrayList();
+			relList.add(viewableRel);
+			relList.add(derivedOutputRel);
+
+			bus		= new BusinessObject(objectId);
+			allObjectList	= getAllDerivedOutputObjects(context, bus, relList);
+			allObjectList.addElement(bus);
+
+			HashMap paramMap		= new HashMap();
+			paramMap.put("objectList", allObjectList);
+                        if (this.paramMap != null && this.paramMap.containsKey("fieldMap")) {
+                            paramMap.put("fieldMap", this.paramMap.get("fieldMap"));
+                        }
+                        //drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+			Vector ret = (Vector)JPO.invoke(context, "drlTools_DSCShowViewerLink", null, "getHtmlString", JPO.packArgs(paramMap), Vector.class);
+			//drV6Tools
+                        StringBuffer htmlBuffer = new StringBuffer(300);
+			htmlBuffer.append("&nbsp;");
+			for (int i = 0; i < ret.size(); i++)
+			{
+				String html = (String)ret.elementAt(i);
+				htmlBuffer.append(html);
+			}
+			return htmlBuffer.toString();
+		}
+		catch (Exception e)
+		{
+			e.printStackTrace();
+		}
+		return "";
+	}
+                
+	private BusinessObjectList getAllDerivedOutputObjects(Context context, BusinessObject bus, ArrayList<String> relList)throws Exception
+	{
+		BusinessObjectList derivedOutputObjList	= new BusinessObjectList();
+
+		java.util.List<BusinessObjectList> tempListInList		= new java.util.ArrayList<BusinessObjectList>();
+
+		Iterator<String>	relItr	= relList.iterator();
+		while(relItr.hasNext())
+		{
+			String	relName	= (String)relItr.next();
+			tempListInList.add(util.getRelatedBusinessObjects(context, bus, relName, "from"));
+		}
+
+		if(null != tempListInList && tempListInList.size() > 0)
+		{
+			Iterator busObjItr = tempListInList.iterator();
+			while(busObjItr.hasNext())
+			{
+				BusinessObjectList	tempList	= (BusinessObjectList)busObjItr.next();
+				if(null != tempList && tempList.size() > 0)
+				{
+					BusinessObjectItr tempObjItr = new BusinessObjectItr(tempList);			
+					while(tempObjItr.next())
+					{
+						derivedOutputObjList.addElement(tempObjItr.obj());
+					}
+				}
+			}
+		}
+		return derivedOutputObjList;
+	}               
+ 
+}
+
+

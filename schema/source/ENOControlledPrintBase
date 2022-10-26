@@ -1,0 +1,2673 @@
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import com.matrixone.apps.domain.util.CASAuthentication;
+import com.dassault_systemes.enovia.controlledprinting.ControlledPrintingConstants;
+import com.dassault_systemes.enovia.controlledprinting.ControlledPrintingUtil;
+import com.dassault_systemes.enovia.controlledprinting.LSAUIForm;
+import com.dassault_systemes.enovia.controlledprinting.TableRowId;
+import com.dassault_systemes.enovia.controlledprinting.service.ControlledPrintingService;
+import com.dassault_systemes.enovia.controlledprinting.service.impl.ControlledPrintingServiceImpl;
+import com.matrixone.apps.common.Person;
+import com.matrixone.apps.domain.DomainAccess;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.MyOutputStream;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.domain.util.mxFtp;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+
+public class ${CLASSNAME} {
+
+	public static final String	ControlledCopy	= "ControlledCopy";
+	public static String		PDFFooterSource	= "PDFFooterSource";
+	static final protected Object _lock = new Object();
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public String preProcessControlledPrint(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String documentObjectId = DomainObject.EMPTY_STRING;
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			String strProgramMethodName[]=(String[]) programMap.get("FileProgram");
+			String strFileProgramName=DomainObject.EMPTY_STRING;
+			if(null!=strProgramMethodName)
+				strFileProgramName=strProgramMethodName[0];
+
+			if (emxTableRowId != null && emxTableRowId.length > 0) {
+				StringList slTableRowIds = FrameworkUtil.split(emxTableRowId[0], "|");
+				documentObjectId = (String) slTableRowIds.get(0);
+				DomainObject dobj = DomainObject.newInstance(context, documentObjectId);
+				return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "openControlledPrintForm", documentObjectId,strFileProgramName);
+			}
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new Exception(e.getLocalizedMessage());
+		}
+		return "";
+	}
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public String actionOpenRenderPDFDialog(Context context, String[] args) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			
+			String renderPDF = String.valueOf(ControlledPrintingUtil.isRenderPDFTrue(context));
+			if("false".equalsIgnoreCase(renderPDF))
+			{
+				String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+					context.getLocale(), "enoControlledPrinting.ControlledPrint.ControlledPrintFailure");
+				throw new  Exception(strMessage);
+			}
+			
+			String strURL = "../controlledPrinting/enoControlledPrintPDFDisplay.jsp?executeAction=ENOControlledPrint:getControlledCopy&validateToken=false";
+				for (Iterator iterator = programMap.keySet().iterator(); iterator.hasNext();) {
+
+					String strKey=(String) iterator.next();
+					String[] value=(String [])programMap.get(strKey);
+				if (value != null) {
+						strURL+="&";
+					if (!"File".equals(strKey)) {
+						strURL += strKey + "=" + XSSUtil.encodeForURL(value[0]);
+					}
+					else {
+						strURL+=strKey+"="+XSSUtil.encodeForURL(value[0]);
+						for (int i = 1; i < value.length; i++) {
+							strURL += "," + value[i];
+						}
+					}
+					}
+				}
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "openRenderPDFDialog", strURL);
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public  String getControlledCopy(Context context, String args[]) throws Exception {
+		try {
+			// ContextUtil.startTransaction(context, false);
+			Map programMap = JPO.unpackArgs(args);
+			String[] strComments = (String[]) programMap.get("Comments");
+			String[] strRecepients = (String[]) programMap.get("RecipientsOID");
+			String[] strFileIdArr = (String[]) programMap.get("File");
+			String[] strFileId = {};
+			if (null != strFileIdArr) {
+				strFileId = strFileIdArr[0].split(",");
+			}
+			String[] printMethod = (String[]) programMap.get("PrintMethod");
+			String[] PrinterName = (String[]) programMap.get("PrinterName");
+			String[] SetDefaultPrinter = (String[]) programMap.get("SetDefaultPrinter");
+			
+			String[] imageData = (String[]) programMap.get("ImageData");
+			String[] strProgramMethodName = (String[]) programMap.get("FileProgram");
+			String[] strRenderObjId = (String[]) programMap.get("objectId");
+			String strRenderObjectId = strRenderObjId[0];
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			String strReturnValue = DomainConstants.EMPTY_STRING;
+			Map<String, Map<String, String>> filesToBeConvertedInPDF = new HashMap<>();
+
+			if (null != strProgramMethodName && UIUtil.isNotNullAndNotEmpty(strProgramMethodName[0])) {
+				String strProgramName = (String) FrameworkUtil.split(strProgramMethodName[0], ":").get(0);
+				String strMethodName = (String) FrameworkUtil.split(strProgramMethodName[0], ":").get(1);
+				// Following method will return Map with documentId as a key and
+				// list of check out files path.
+				filesToBeConvertedInPDF = JPO.invoke(context, strProgramName, null, strMethodName, args, Map.class);
+				// strFileId =(String[]) ((Map)
+				// filesToBeConvertedInPDF.get(strRenderObjectId)).keySet().toArray();
+			} else
+			{
+				Map mCheckoutFiles= service.performCheckout(context, strRenderObjectId, strFileId,true);
+				filesToBeConvertedInPDF.put(strRenderObjectId,mCheckoutFiles);
+			}
+		
+
+			if(null!=filesToBeConvertedInPDF && !filesToBeConvertedInPDF.isEmpty()) {
+				Map mFilePrintNumber = service.createControlledPrint(context, strRenderObjectId, filesToBeConvertedInPDF,
+						strComments[0], strRecepients);
+				String strRelId=(String) mFilePrintNumber.get("ControlledPrintRecipientRelID");
+				String strControlledPrintObject = (String) mFilePrintNumber.get("ControlledPrintId");
+				StringList slFileNames = (StringList) mFilePrintNumber.get("FileNames");
+				programMap.put("FilePrintNumber", mFilePrintNumber);
+				programMap.put("ControlledPrintDownloadObjectId", strRenderObjectId);
+				programMap.put("UseControlledPrintFooterId", "false");
+				programMap.put("UseControlledPrintHeaderId", "true");
+				programMap.put("ControlledCopy", "true");
+				programMap.put("objectId", strControlledPrintObject);
+				programMap.put("includeHTML", "true");
+				programMap.put("current", "Released");
+				programMap.put("ControlledPrintRecipientRelID", strRelId);
+				if(ControlledPrintingConstants.RANGE_PRINT_USING_SERVER.equals(printMethod[0]))
+				{
+					programMap.put("Print", "true");
+					programMap.put("PrinterName", PrinterName[0]);
+					if(SetDefaultPrinter!=null&&SetDefaultPrinter.length>0)
+					{
+						MqlUtil.mqlCommand(context, "modify $1 $2 add property $3 value $4",true,"Person",context.getUser().toString(),ControlledPrintingConstants.PROPERTY_DEFAULT_PRINTER,PrinterName[0]);
+					}
+				}
+
+				String[] methodArgs = JPO.packArgs(programMap);
+				String zipFileName = service.downloadControlledCopy(context, strRenderObjectId, strControlledPrintObject, slFileNames, methodArgs);
+				// strReturnValue =
+				// ControlledPrintingUtil.encodeFunctionForJavaScript(context,
+				// false, "navigateToServlet", zipFileName, imageData[0]);
+				strReturnValue = zipFileName + "|" + imageData[0]+ "|" + printMethod[0];
+			}
+			// ContextUtil.commitTransaction(context);
+			return strReturnValue;
+
+		} catch (Exception e) {
+			// ContextUtil.abortTransaction(context);
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public static Boolean validateAuthentication(Context context, String strUserName, String strPassword) throws Exception {
+		Boolean flag = false;
+		boolean extAuth = false;
+		try {
+			String contextUser = context.getUser();
+			String contextPassword = context.getPassword();
+			String showUserName = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.ShowUserNameForFDA");
+			String sExternalAuthentication = EnoviaResourceBundle.getProperty(context, "emxFramework.External.Authentication");
+
+			if (!UIUtil.isNullOrEmpty(sExternalAuthentication) && (sExternalAuthentication.equalsIgnoreCase(Boolean.TRUE.toString()))) {
+				extAuth = true;
+			}
+
+			if (Boolean.parseBoolean(showUserName)) {
+				if (strUserName.equals(contextUser)) {
+					if (extAuth) {
+						flag = authenticateCredentials(context, contextUser, strPassword);
+					}
+					else if (strPassword.equals(contextPassword)) {
+						flag = true;
+					}
+				}
+			}
+			else {
+				if (extAuth) {
+					flag = authenticateCredentials(context, contextUser, strPassword);
+				}
+				else if (strPassword.equals(contextPassword)) {
+					flag = true;
+				}
+
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		return flag;
+	}
+	public static boolean authenticateCredentials(Context context, String contextUser, String strPassword) {
+		try {
+			String passportURL = PropertyUtil.getEnvironmentProperty(context, "PASSPORT_URL");
+			boolean is3DPassportServerInUse = (passportURL != null && passportURL.length() > 0);
+			if (is3DPassportServerInUse) {
+				try {
+					CASAuthentication casAuthentication = new CASAuthentication(passportURL);
+					casAuthentication.authenticate(contextUser, strPassword);
+					return true;
+				}
+				catch (Exception e) {
+					return false;
+				}
+			}
+			return false;
+		}
+		catch (Exception e) {
+			return false;
+		}
+	}
+
+	
+	public Map getFileName(Context context, String args[]) throws Exception
+	{
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get("paramMap");
+			String objectId = (String) paramMap.get("objectId");
+			List<String> slFileId = ControlledPrintingUtil.getConnectedFilesFromTheObject(context, objectId);
+			List<String> slCheckList = new StringList();
+			List<String> slCheckChoice = new StringList();
+			for (String fileId : slFileId) {
+				DomainObject dobjFile = DomainObject.newInstance(context, fileId);
+				BusinessObject boFilePreviousVersion = dobjFile.getPreviousRevision(context);
+				if (boFilePreviousVersion.exists(context)) {
+					dobjFile = DomainObject.newInstance(context, boFilePreviousVersion.getObjectId(context));
+				}
+				String filename = dobjFile.getInfo(context,
+						DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title)));
+				String fileinterface = dobjFile.getInfo(context,"interface");
+				if(!PropertyUtil.getSchemaProperty(context, "interface_SystemGeneratedPrint").equals(fileinterface))
+				{
+				slCheckList.add(filename);
+				slCheckChoice.add(fileId);
+			}
+			}
+
+			Map fieldMap = new HashMap();
+			fieldMap.put("field_choices", slCheckChoice);
+			fieldMap.put("field_display_choices", slCheckList);
+
+			return fieldMap;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+	public static List<String> getFooterControlledCopy(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slAssigneeList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+			for (Map map : mlObjectList) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrintMessage.Footer.ControlledCopy");
+				slAssigneeList.add(strMessage);
+			}
+
+			return slAssigneeList;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public static List<String> getFooterTNR(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slFooterTNR = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+
+			StringList slSelects = new StringList();
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_TYPE);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+
+			for (Map map : mlObjectList) {
+				String documentId = (String) map.get("DocumentId");
+				DomainObject dobj = DomainObject.newInstance(context, documentId);
+
+				Map mInfo = dobj.getInfo(context, slSelects);
+
+				String type = (String) mInfo.get(DomainConstants.SELECT_TYPE);
+				String name = (String) mInfo.get(DomainConstants.SELECT_NAME);
+				String revision = (String) mInfo.get(DomainConstants.SELECT_REVISION);
+				slFooterTNR.add(" " + type + "| " + name + " |" + revision + " ");
+
+			}
+
+			return slFooterTNR;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public static List<String> getFooterPrintNumber(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slPrintNumber = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map mParamList =(Map) programMap.get("paramList");
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+
+			for (Map map : mlObjectList) {
+				String id = (String) map.get(DomainConstants.SELECT_ID);
+				DomainObject dobj = DomainObject.newInstance(context, id);
+				Map mFilePrintNumber = (Map) map.get("FilePrintNumber");
+
+				String strFileName = (String) map.get("FileName");
+				String number="";
+				try {
+					number = (String) mFilePrintNumber
+						.get(strFileName.substring(0, strFileName.lastIndexOf(".")));
+				} catch (Exception e) {
+					
+				}
+				slPrintNumber.add(number);
+			}
+
+			return slPrintNumber;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+	public static String getFooterPageNumber(Context context, String args[]) throws Exception {
+				return "&amp;[Page] of &amp;[Pages]";
+
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getControlledPrint(Context context, String args[]) throws Exception {
+
+
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String strObjectId = (String) programMap.get("objectId");
+		DomainObject dobjDocument = DomainObject.newInstance(context, strObjectId);
+		String strAttrRecallStatus = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+		ControlledPrintingService service = new ControlledPrintingServiceImpl();
+		List<Map> mlRelatedObjects = service.getControlledPrintRecipients(context, dobjDocument);
+		MapList mlOutput =new MapList();
+
+		Iterator<Map> mapItr = mlRelatedObjects.iterator();
+		while(mapItr.hasNext())
+		{
+			Map map = mapItr.next();
+			String strRecallStatus = map.get("attribute[Controlled Print Recall Status].value").toString();
+			if(strRecallStatus.equalsIgnoreCase(ControlledPrintingConstants.Range_Failed)||strRecallStatus.equalsIgnoreCase(ControlledPrintingConstants.Range_Recalled)){
+			map.put("disableSelection","true");
+			}
+				mlOutput.add(map);
+		}
+		return mlOutput;
+
+	}
+
+
+	public List<String> getControlledPrintIssuedByPersonName(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slAssigneeList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map mpRequest = (Map) programMap.get("paramList");
+    		String strReportFormat = (String) mpRequest.get(ControlledPrintingConstants.REPORTFORMAT);
+
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+			for (Map map : mlObjectList) {
+				String strName = (String) map.get(DomainConstants.SELECT_OWNER);
+				if (UIUtil.isNotNullAndNotEmpty(strName)) {
+					String strTypePerson=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+					String strOwnerBus = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 $5", true, strTypePerson, strName, "-", "id",
+							"dump");
+					if (UIUtil.isNotNullAndNotEmpty(strOwnerBus)) {
+						String strOwnerId = PersonUtil.getPersonObjectID(context, strName);
+						strName = PersonUtil.getFullName(context, strName);
+						if (UIUtil.isNotNullAndNotEmpty(strName)&&UIUtil.isNullOrEmpty(strReportFormat)) {
+							strName = ControlledPrintingUtil.getObjectLink(context, strOwnerId, strName);
+						}
+					}
+
+				}
+				slAssigneeList.add(strName != null ? strName : "");
+			}
+
+
+			return slAssigneeList;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public List<String> getControlledPrintRecipientName(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slAssigneeList = new StringList();
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strAttrFirstName = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_FirstName);
+			String strAttrLastName = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_LastName);
+			String strTypeContact = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_TYPE_CONTACT);
+
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+			Map mpRequest = (Map) programMap.get("paramList");
+			String strReportFormat = (String) mpRequest.get(ControlledPrintingConstants.REPORTFORMAT);
+			for (Map map : mlObjectList) {
+				String strName = (String) map.get(DomainConstants.SELECT_NAME);
+				String strPersonId = (String) map.get(DomainConstants.SELECT_ID);
+				String strTYPE = (String) map.get(DomainConstants.SELECT_TYPE);
+				DomainObject dobj = DomainObject.newInstance(context, strPersonId);
+				if (UIUtil.isNullOrEmpty(strName)) {
+					strName = dobj.getInfo(context, DomainConstants.SELECT_NAME);
+				}
+				if (UIUtil.isNotNullAndNotEmpty(strName) && strTYPE.equals(strTypePerson)) {
+					strName = PersonUtil.getFullName(context, strName);
+				}
+				else if (UIUtil.isNotNullAndNotEmpty(strName) && strTYPE.equals(strTypeContact)) {
+
+					StringList slSelect = new StringList();
+					slSelect.add(DomainObject.getAttributeSelect(strAttrFirstName));
+					slSelect.add(DomainObject.getAttributeSelect(strAttrLastName));
+					Map<String, String> mPersonInfo = dobj.getInfo(context, slSelect);
+					strName = mPersonInfo.get(DomainObject.getAttributeSelect(strAttrFirstName)) + " "
+							+ mPersonInfo.get(DomainObject.getAttributeSelect(strAttrLastName));
+				}
+
+				if (UIUtil.isNotNullAndNotEmpty(strName)&&UIUtil.isNullOrEmpty(strReportFormat)) {
+					strName = ControlledPrintingUtil.getObjectLink(context, strPersonId, strName);
+				}
+
+				slAssigneeList.add(strName != null ? strName : "");
+			}
+
+			return slAssigneeList;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public boolean showFileField(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			List<String> slFile = ControlledPrintingUtil.getConnectedFilesFromTheObject(context, strObjectId);
+			if (slFile == null || slFile.size() <= 1)
+				return false;
+			return true;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+	public boolean showFileFieldforPDFGeneration(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get("objectId");
+			List<String> slFile = ControlledPrintingUtil.getConnectedFilesFromTheObject(context, strObjectId);
+			if (slFile == null || slFile.size() == 0 )
+				return false;
+			return true;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public List<String> getControlledPrintDate(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slAssigneeList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+			for (Map map : mlObjectList) {
+				String strName = (String) map.get(DomainConstants.SELECT_NAME);
+				if (UIUtil.isNotNullAndNotEmpty(strName)) {
+					String strTypePerson=PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+					String strOwnerBus = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 $5", true, strTypePerson, strName, "-", "id",
+							"dump");
+					if (UIUtil.isNotNullAndNotEmpty(strOwnerBus)) {
+						String strOwnerId = PersonUtil.getPersonObjectID(context, strName);
+						strName = PersonUtil.getFullName(context, strName);
+						if (UIUtil.isNotNullAndNotEmpty(strName)) {
+							strName = ControlledPrintingUtil.getObjectLink(context, strOwnerId, strName);
+						}
+					}
+
+				}
+				slAssigneeList.add(strName != null ? strName : "");
+			}
+
+			return slAssigneeList;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+	public void sendNotificationToControlledPrintRecipients(Context context, String args[]) throws Exception {
+		try {
+
+			String objectId = args[0];
+			DomainObject dobj = DomainObject.newInstance(context, objectId);
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+
+			StringList sList = new StringList();
+			sList.addElement(DomainConstants.SELECT_ID);
+			sList.addElement(DomainConstants.SELECT_NAME);
+			sList.addElement(DomainConstants.SELECT_TYPE);
+			sList.addElement(DomainConstants.SELECT_REVISION);
+			sList.addElement(DomainConstants.SELECT_ORIGINATED);
+			List<Map> revisionsList = dobj.getRevisionsInfo(context, sList, new StringList(0));
+			List<Map> mlRecipients = new MapList();
+			for (Map mRevision : revisionsList) {
+				mlRecipients = new MapList();
+				String strRevisonObjectId = (String) mRevision.get(DomainConstants.SELECT_ID);
+				String strRevisonObjectType = (String) mRevision.get(DomainConstants.SELECT_TYPE);
+				String strRevisonObjectName = (String) mRevision.get(DomainConstants.SELECT_NAME);
+				String strRevisonObjectRevision = (String) mRevision.get(DomainConstants.SELECT_REVISION);
+
+				if (!strRevisonObjectId.equals(objectId))
+					mlRecipients.addAll(service.getControlledPrintRecipients(context, DomainObject.newInstance(context, strRevisonObjectId)));
+				StringList slRecipientname = new StringList();
+				StringList slConatctRecipientname = new StringList();
+				for (Map mRecipient : mlRecipients) {
+					String name = (String) mRecipient.get(DomainConstants.SELECT_NAME);
+					String strType=(String)mRecipient.get(DomainObject.SELECT_TYPE);
+					if(strType.equals(DomainObject.TYPE_PERSON)){
+						if (!slRecipientname.contains(name))
+							slRecipientname.add(name);
+					}
+				}
+				ControlledPrintingUtil.sendActualNotificationToUser(context, objectId, "enoControlledPrinting.Recipients.Subject",
+						"enoControlledPrinting.Recipients.MailBody", slRecipientname, null, new String[] { strRevisonObjectType,
+						strRevisonObjectName, strRevisonObjectRevision });
+				String strMessage=MessageUtil.getMessage(context, null, "enoControlledPrinting.Recipients.Subject",
+						new String[] {strRevisonObjectType,strRevisonObjectName, strRevisonObjectRevision}, null, context.getLocale(),
+						ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+				${CLASS:emxNotificationUtil}.sendJavaMail(context, slConatctRecipientname, null, null, strMessage,strMessage, strMessage, context.getUser(), null, null, "Email");
+
+
+			}
+
+
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public MapList getFilterPrint(Context context, String args[]) throws Exception {
+		try {
+			String strTypePerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+			String strTypeContact = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_TYPE_CONTACT);
+			String strTypeControlledPrint = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_TYPE_CONTROLLED_PRINT);
+			String strRelControlledPrintREcipient = PropertyUtil.getSchemaProperty(context,	ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_CONTROLLED_PRINT_RECIPIENT);
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strPrint_RecipientOID = (String) programMap.get("Print_Recipient");
+			String strPrint_Number = (String) programMap.get("Print_Number");
+			String strPrint_Date_from = (String) programMap.get("Print_Date_from");
+			String strIssued_By = (String) programMap.get("Issued_By");
+			String strRecallValue = (String) programMap.get("RecallStatus");
+			String strPrint_Date_to = (String) programMap.get("Print_Date_to");
+			String strSource = (String) programMap.get("Source");
+			String strAttrRecallStatus = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+			Date selectedPrintDate=null;
+			int result=0;
+
+			StringBuffer sbWhere=new StringBuffer();
+			StringBuffer sbRelWhere = new StringBuffer();
+			if(!(UIUtil.isNotNullAndNotEmpty(strPrint_RecipientOID)||UIUtil.isNotNullAndNotEmpty(strPrint_Date_from)||UIUtil.isNotNullAndNotEmpty(strPrint_Number)||UIUtil.isNotNullAndNotEmpty(strIssued_By)||UIUtil.isNotNullAndNotEmpty(strRecallValue)||UIUtil.isNotNullAndNotEmpty(strSource))){
+				String strDefaultSearchPeriod=EnoviaResourceBundle.getProperty(context, "enoControlledPrinting.ControlledPrint.SearchPeriod");
+				int duration=Integer.parseInt(strDefaultSearchPeriod);
+				Date toDate= new Date();
+				Calendar cal = Calendar.getInstance();
+				cal.add(Calendar.MONTH, -duration);
+				Date fromdate=cal.getTime();
+				SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.ENGLISH);
+				strPrint_Date_from=  sdf.format(fromdate);
+				strPrint_Date_to=sdf.format(toDate);
+				sbRelWhere.append(DomainRelationship.SELECT_OWNER).append("=='").append(context.getUser()).append("'");
+			}
+			if(UIUtil.isNotNullAndNotEmpty(strPrint_RecipientOID))
+				sbWhere.append("id =='").append(strPrint_RecipientOID ).append("'");
+
+			if(UIUtil.isNotNullAndNotEmpty(strIssued_By))
+			{
+				DomainObject dobj = DomainObject.newInstance(context, strIssued_By);
+				String issuedByName = dobj.getInfo(context, DomainConstants.SELECT_NAME);
+				sbRelWhere.append(DomainRelationship.SELECT_OWNER).append("=='").append(issuedByName).append("'");
+			}
+
+			if(UIUtil.isNotNullAndNotEmpty(strRecallValue)){
+				if(UIUtil.isNotNullAndNotEmpty(sbRelWhere.toString()))
+					sbRelWhere.append("&&");
+				sbRelWhere.append("attribute[Controlled Print Recall Status].value").append(" ~~ const \"").append(strRecallValue).append("\"");
+			}
+
+			if(UIUtil.isNotNullAndNotEmpty(strPrint_Number)){
+				if(UIUtil.isNotNullAndNotEmpty(sbRelWhere.toString()))
+					sbRelWhere.append("&&");
+				sbRelWhere.append("attribute[Controlled Print Number].value").append(" ~~ const \"").append(strPrint_Number).append("\"");
+			}
+			if(UIUtil.isNotNullAndNotEmpty(strSource)){
+				if(UIUtil.isNotNullAndNotEmpty(sbRelWhere.toString()))
+					sbRelWhere.append("&&");
+				sbRelWhere.append(DomainRelationship.SELECT_FROM_NAME).append(" =='").append(strSource).append("'");
+			}
+
+
+
+			StringList strList = new StringList();
+			strList.add(DomainConstants.SELECT_NAME);
+			strList.add(DomainConstants.SELECT_TYPE);
+			strList.add(DomainConstants.SELECT_ID);
+			strList.add(DomainRelationship.SELECT_ID);
+
+
+
+			List<Map> mlControlledPrint = DomainObject.findObjects(context, strTypeControlledPrint, null, "", strList);
+			MapList mlRelatedObjects = new MapList();
+			MapList mlControlledPrints = new MapList();
+			MapList mlOutput = new MapList();
+
+			for (Map mControlledPrint : mlControlledPrint) {
+				String strControlledPrintId = (String) mControlledPrint.get(DomainObject.SELECT_ID);
+
+				StringList slRelSelects = new StringList();
+				slRelSelects.add(DomainRelationship.SELECT_ID);
+				slRelSelects.add(DomainRelationship.SELECT_FROM_ID);
+				slRelSelects.add(DomainRelationship.SELECT_OWNER);
+				slRelSelects.add(DomainRelationship.SELECT_ORIGINATED);
+				slRelSelects.add("attribute["+PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER)+"].value");
+				slRelSelects.add("attribute["+PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL)+"].value");
+
+				StringList slObjectSelects = new StringList();
+				slObjectSelects.add(DomainConstants.SELECT_ID);
+				slObjectSelects.add(DomainConstants.SELECT_NAME);
+				slObjectSelects.add(DomainConstants.SELECT_DESCRIPTION);
+				slObjectSelects.add(DomainConstants.SELECT_OWNER);
+
+				mlRelatedObjects.addAll(DomainObject.newInstance(context, strControlledPrintId).getRelatedObjects(context, strRelControlledPrintREcipient, // String
+						// relPattern
+						strTypePerson + "," + strTypeContact, // String typePattern
+						slObjectSelects, // StringList objectSelects,
+						slRelSelects, // StringList relationShipselect,
+						false, // boolean getTo,
+						true, // boolean getFrom,
+						(short) 0, // short recurseToLevel,
+						sbWhere.toString(), // String objectWhere,
+						sbRelWhere.toString(), // String relationshipWhere,
+						0)); // int limit
+			}
+
+			for(Object obj:mlRelatedObjects){
+				Map map=(Map)obj;
+				String strPrintDate=(String)map.get(DomainRelationship.SELECT_ORIGINATED);
+				if(UIUtil.isNotNullAndNotEmpty(strPrint_Date_from)){
+
+					result=ControlledPrintingUtil.compareDates(context, strPrintDate, strPrint_Date_from);
+					if(result==0||result==1){
+						result=ControlledPrintingUtil.compareDates(context, strPrintDate, strPrint_Date_to);
+						if(result==0||result==-1)
+							mlControlledPrints.add(map);
+					}
+				}else
+					mlControlledPrints.add(map);
+			}
+
+			for(Object obj:mlControlledPrints){
+				Map map = (Map)obj;
+				String strRecallStatus = map.get(DomainRelationship.getAttributeSelect(strAttrRecallStatus)).toString();
+				if(strRecallStatus.equalsIgnoreCase(ControlledPrintingConstants.Range_Failed)||strRecallStatus.equalsIgnoreCase(ControlledPrintingConstants.Range_Recalled)){
+				map.put("disableSelection","true");
+				}
+					mlOutput.add(map);
+			}
+
+			return mlOutput;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public String submitPrintFilter(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String strPrint_RecipientOID[] = (String[]) programMap.get("Print_RecipientOID");
+		String strPrint_NumberDisplay[] = (String[]) programMap.get("Print_Number");
+		String strIsssued_ByOID[] = (String[]) programMap.get("Issued_ByOID");
+		String strPrint_DateValue[] = (String[]) programMap.get("Print_Date");
+		String strRecallValue[] = (String[]) programMap.get("Recall");
+		String strPrintDate_To[] = (String[]) programMap.get("PrintDate_To");
+		String strSource[] = (String[]) programMap.get("Source");
+
+		int flag=0;
+		if(UIUtil.isNotNullAndNotEmpty(strPrint_DateValue[0])||UIUtil.isNotNullAndNotEmpty(strPrintDate_To[0])){
+			if(UIUtil.isNotNullAndNotEmpty(strPrint_DateValue[0])&&!UIUtil.isNotNullAndNotEmpty(strPrintDate_To[0])){
+				Date toDate= new Date();
+				SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.ENGLISH);
+				strPrintDate_To[0]=sdf.format(toDate);
+			}else
+				flag=1;
+			if(UIUtil.isNotNullAndNotEmpty(strPrint_DateValue[0])&&UIUtil.isNotNullAndNotEmpty(strPrintDate_To[0])){
+				int result=ControlledPrintingUtil.compareDates(context, strPrint_DateValue[0], strPrintDate_To[0]);
+				if(result==0||result==-1)
+					flag=0;
+			}
+			if(flag==1){
+				String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.Label.PrintDateAlert");
+
+				return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertAndRefresh", strMessage);
+			}
+		}
+
+		return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "submitSearchFilter", strPrint_NumberDisplay[0],
+				strPrint_DateValue[0],strPrintDate_To[0], strPrint_RecipientOID[0], strIsssued_ByOID[0],strRecallValue[0],strSource[0]);
+	}
+
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public  String  recallControlledPrint(Context context, String args[]) throws Exception {
+		try {
+			//Map returnMap=new HashMap<>();
+
+			Map programMap = JPO.unpackArgs(args);
+		
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+
+			String strMessage = new String();
+
+			for(String strRowId: emxTableRowId){
+				TableRowId tr = new TableRowId(strRowId);
+				String strRelId = tr.getRelationshipId();
+				String strObjectId=tr.getObjectId();
+				String strAttrPrintNumber=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER);
+				String strAttrReason=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_COMMENT);
+				String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+
+				StringList slRelSelect=new StringList();
+				slRelSelect.add("attribute["+strAttrPrintNumber+"]");
+				slRelSelect.add("attribute["+strAttrReason+"]");
+				slRelSelect.add(DomainRelationship.SELECT_TO_NAME);
+				slRelSelect.add(DomainRelationship.SELECT_TO_TYPE);
+				slRelSelect.add(DomainRelationship.SELECT_TO_ID);
+				slRelSelect.add(DomainRelationship.SELECT_OWNER);
+				slRelSelect.add(DomainRelationship.SELECT_ORIGINATED);
+				slRelSelect.add(DomainRelationship.SELECT_FROM_NAME);
+				slRelSelect.add(DomainRelationship.SELECT_FROM_ID);
+				String strRecallVal=DomainRelationship.getAttributeValue(context, strRelId, strAttrRecall);
+				if(!strRecallVal.equals(ControlledPrintingConstants.Range_RecalledInitiated)&&!strRecallVal.equals(ControlledPrintingConstants.Range_Recalled)&&!strRecallVal.equals(ControlledPrintingConstants.Range_Failed)){
+					DomainRelationship doRel=DomainRelationship.newInstance(context, strRelId);
+					MapList mlRelationshipData = DomainRelationship.getInfo(context, new String[] { strRelId },slRelSelect );
+					Map map=(Map)mlRelationshipData.get(0);
+					String strCPNumber=(String)	map.get("attribute["+strAttrPrintNumber+"]");
+					String strReason=(String)	map.get("attribute["+strAttrReason+"]");
+					String strRecipient=(String)	map.get(DomainRelationship.SELECT_TO_NAME);
+					String strType=(String)	map.get(DomainRelationship.SELECT_TO_TYPE);
+					String strIssuedBy=(String)map.get(DomainRelationship.SELECT_OWNER);
+					String strPrintDate=(String)map.get(DomainRelationship.SELECT_ORIGINATED);
+					String strSource=(String)map.get(DomainRelationship.SELECT_FROM_NAME);
+					strObjectId=(String)map.get(DomainRelationship.SELECT_FROM_ID);
+
+
+
+
+					String strFormHeader = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+							context.getLocale(), "enoControlledPrinting.Header.Print");
+					strFormHeader=strFormHeader.replace(" ","");
+					String strMailSubject= EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+							context.getLocale(), "enoControlledPrinting.AuthenticateMailSubject");
+					String strLinkClickhere= EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+							context.getLocale(), "enoControlledPrinting.ClickHere");
+
+					String strBaseUrl=MailUtil.getBaseURL(context);
+					if(strBaseUrl.contains("emxNavigator.jsp")){
+						strBaseUrl=strBaseUrl.replace("emxNavigator.jsp", "emxForm.jsp");
+					}
+
+					String	strLink=strBaseUrl+"?form=ControlledPrintRecallForm&toolbar=ControlledPrintingAuthenticate&formHeader="+XSSUtil.encodeForJavaScript(context,strFormHeader)+"&SuiteDirectory=ControlledPrinting&objectId="+strObjectId+"&relId="+strRelId+"";
+					strLink+="&a=emxNavigator.jsp&b=emxTree.jsp&treeMenu=RecallTreeMenu";
+
+					StringBuilder sbSubmitURL=new StringBuilder();
+					sbSubmitURL.append(strBaseUrl).append("?form=ControlledPrintRecallForm&toolbar=ControlledPrintingAuthenticate&formHeader="+XSSUtil.encodeForHTML(context,strFormHeader)+"&SuiteDirectory=ControlledPrinting");
+					sbSubmitURL.append("&objectId=").append(XSSUtil.encodeForJavaScript(context,strObjectId));
+					sbSubmitURL.append("&relId=").append(XSSUtil.encodeForJavaScript(context, strRelId));
+
+					String strMailLink="<a href="+XSSUtil.encodeForHTML(context,sbSubmitURL.toString())+">"+strLinkClickhere+"</a>";
+
+
+					String strMailBody=MessageUtil.getMessage(context, null, "enoControlledPrinting.AuthenticateMailBody",
+							new String[] {strCPNumber,strIssuedBy,strPrintDate,strSource,strReason,strMailLink}, null, context.getLocale(),
+							ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+					if(strType.equals(PropertyUtil.getSchemaProperty(context,ControlledPrintingConstants.SYMBOLIC_TYPE_CONTACT )))
+						strMailBody=MessageUtil.getMessage(context, null, "enoControlledPrinting.AuthenticateMailBodyForContact",
+								new String[] {strCPNumber,strIssuedBy,strPrintDate,strSource,strReason}, null, context.getLocale(),
+								ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+					String strMailBodyForIconMail=MessageUtil.getMessage(context, null, "enoControlledPrinting.AuthenticateMailBody",
+							new String[] {strCPNumber,strIssuedBy,strPrintDate,strSource,strReason,strLink}, null, context.getLocale(),
+							ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+
+					if(strType.equals(DomainConstants.TYPE_PERSON)){
+						${CLASS:emxNotificationUtil}.sendJavaMail(context, new StringList(strRecipient), null, null, strMailSubject,
+								strMailBodyForIconMail, strMailBody, context.getUser(), null, null, "IconMail");
+
+
+
+					//Grant access to recepients for  setting value of  Recall
+					DomainAccess.createObjectOwnership(context, map.get(DomainRelationship.SELECT_FROM_ID).toString(), map.get(DomainRelationship.SELECT_TO_ID).toString(), "read,show,modify", DomainAccess.COMMENT_MULTIPLE_OWNERSHIP, true,
+							true);
+					}
+					//MqlUtil.mqlCommand(context, "mod bus $1 grant $2 access $3", map.get(DomainRelationship.SELECT_FROM_ID).toString(),strRecipient,"read,modify");
+					//recall attribute set to Initiated.
+					DomainRelationship.setAttributeValue(context, strRelId, strAttrRecall, ControlledPrintingConstants.Range_RecalledInitiated);
+					String strPrintNumberVal=DomainRelationship.getAttributeValue(context, strRelId, strAttrPrintNumber);
+					if(strMessage.isEmpty()){
+						strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+								context.getLocale(), "enoControlledPrinting.AuthenticationNotification") + strPrintNumberVal;
+						}else{
+							strMessage = strMessage + "," + strPrintNumberVal;
+						}
+
+
+
+				}
+			}
+			if(strMessage.isEmpty()){
+				strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.AuthenticationInitiated");
+			}
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "refreshPrintPage", strMessage);
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public  String setPrintAsFailed(Context context, String args[]) throws Exception {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+
+			String strMessage = new String();
+
+			for(String strRowId: emxTableRowId){
+				TableRowId tr = new TableRowId(strRowId);
+				String strRelId = tr.getRelationshipId();
+				String strObjectId=tr.getObjectId();
+
+				String strAttrPrintNumber=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER);
+				String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+
+				String strRecallVal=DomainRelationship.getAttributeValue(context, strRelId, strAttrRecall);
+				if(strRecallVal.equalsIgnoreCase(ControlledPrintingConstants.Range_Issued)){
+					DomainRelationship.setAttributeValue(context, strRelId, strAttrRecall, ControlledPrintingConstants.Range_Failed);
+					String strPrintNumberVal=DomainRelationship.getAttributeValue(context, strRelId, strAttrPrintNumber);
+
+					if(strMessage.isEmpty()){
+						strMessage =  EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+								context.getLocale(), "enoControlledPrinting.ControlledPrint.ControlledPrintSetFailed") + strPrintNumberVal;
+						}else{
+							strMessage = strMessage + ", " + strPrintNumberVal;
+						}
+				}
+
+			}
+			if(strMessage.isEmpty()){
+				strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.ControlledPrint.ControlledPrintSetFailedCheckMessage");
+			}
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "refreshPrintPage", strMessage);
+
+		} catch (Exception e) {
+			String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+					context.getLocale(), "enoControlledPrinting.ControlledPrint.ControlledPrintSetFailedCheckMessage");
+			throw new Exception(strMessage);
+		}
+	}
+
+	public String authenticateControlledPrintRecall(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String strRelId[] = (String[]) programMap.get("relId");
+		String strObjectId[] = (String[]) programMap.get("objectId");
+
+		String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+
+		String strAttrRecallVal=DomainRelationship.getAttributeValue(context, strRelId[0], strAttrRecall);
+
+		if(strAttrRecallVal.equals(ControlledPrintingConstants.Range_RecalledInitiated))
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "acknowledgeRecall", strRelId[0],
+					strObjectId[0]);
+		else if(strAttrRecallVal.equals(ControlledPrintingConstants.Range_Recalled)){
+			String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+					context.getLocale(), "enoControlledPrinting.AcknowledgeAlert");
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "closePopup", strMessage);
+		}else{
+			String strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+					context.getLocale(), "enoControlledPrinting.AcknowledgeNotInitiated");
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "closePopup", strMessage);
+		}
+
+
+	}
+
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public String submitRecalledControlledPrint(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String strRelId[] = (String[]) programMap.get("relId");
+		String strObjectId[] = (String[]) programMap.get("objectId");
+		String strPasswordSetting = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA");
+		String strComment = EnoviaResourceBundle.getProperty(context,ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE , context.getLocale(),
+				"enoControlledPrinting.RecallControlledPrint.ReadUnderstoodStatement");
+		boolean checkPassword = Boolean.parseBoolean(strPasswordSetting);
+		String strMessage = DomainObject.EMPTY_STRING;
+		Map<String, String> mReturnMap = new HashMap<>();
+
+		String[] strPassword = (String[]) programMap.get("password");
+		String[] strreadAndUnderstood = (String[]) programMap.get("readAndUnderstood");
+		String strUser=context.getUser();
+		String strPW=context.getPassword();
+		String strUserPassword="";
+		boolean authenticate = true;
+		boolean extAuth = false;
+		if(strPassword!=null)
+			strUserPassword=strPassword[0];
+
+		String sExternalAuthentication = EnoviaResourceBundle.getProperty(context, "emxFramework.External.Authentication");
+			if (!UIUtil.isNullOrEmpty(sExternalAuthentication) && (sExternalAuthentication.equalsIgnoreCase(ControlledPrintingConstants.TRUE)))
+			extAuth = true;
+
+		if (strreadAndUnderstood!=null ) {
+
+			if(checkPassword)
+			{
+
+				authenticate=validateAuthentication(context, strUser, strUserPassword);
+			}
+			if (authenticate) {
+
+				String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+
+				DomainRelationship.setAttributeValue(context, strRelId[0], strAttrRecall,ControlledPrintingConstants.Range_Recalled);
+				strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.AcknowledgeSuccessfull");
+				return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "refreshPage", strMessage);
+			}
+
+			else {
+				strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+						"enoControlledPrinting.ErrorMsg.IncorrectPassword");
+			}
+		}
+		else {
+			strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+					"enoControlledPrinting.ErrorMsg.ReadUnderstoodCheckboxNotChecked");
+		}
+
+
+		return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertAndRefresh", strMessage);
+	}
+
+
+	public String getFieldReadUnderstood(Context context, String[] args) throws Exception {
+		String strLabel = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+				"enoControlledPrinting.RecallControlledPrint.ReadUnderstoodStatement");
+
+		StringBuilder sbreadAndUnderstood = new StringBuilder();
+		sbreadAndUnderstood
+		.append("<input type = \"checkbox\" id =\"readAndUnderstood\" title =\"readAndUnderstood\" name =\"readAndUnderstood\" value =\"IAgree\" required =\"true\"> "
+				+ strLabel);
+		sbreadAndUnderstood
+		.append("<script>var readUnderstoodField = document.getElementById('calc_ReadAndUnderstood');readUnderstoodField.children[0].className = 'labelRequired';</script>");
+		return sbreadAndUnderstood.toString();
+
+	}
+
+	public String getPasswordField(Context context, String args[]) {
+		StringBuilder sbPassword = new StringBuilder();
+		sbPassword.append("<input type = \"password\" name =\"password\" id=\"passid\" size=\"20\">");
+
+		sbPassword.append("<script>var passwordField = document.getElementById('calc_Password');\npasswordField.children[0].className = 'labelRequired';</script>");
+		return sbPassword.toString();
+
+	}
+
+	public boolean checkAccessOnPasswordField(Context context, String args[]) throws Exception {
+
+		try {
+			boolean bResult = false;
+			String strPasswordSetting = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA");
+			if (!UIUtil.isNullOrEmpty(strPasswordSetting)) {
+				bResult = Boolean.parseBoolean(strPasswordSetting);
+			}
+			return bResult;
+		}
+		catch (Exception exception) {
+			throw new Exception(exception);
+		}
+
+	}
+	public Map<String,StringList> getRecallAttributeRanges(Context context, String args[]) throws Exception {
+		Map<String, StringList> attributeRangeMap = new HashMap<String, StringList>();
+		try {
+			String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+			StringList slAttributeRange = FrameworkUtil.getRanges(context, strAttrRecall);
+
+			if (!ControlledPrintingUtil.isNullOrEmpty(slAttributeRange)) {
+				attributeRangeMap.put("field_choices", slAttributeRange);
+				attributeRangeMap.put("field_display_choices",
+						i18nNow.getAttrRangeI18NStringList(strAttrRecall, slAttributeRange, context.getSession().getLanguage()));
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		return attributeRangeMap;
+
+
+
+	}
+
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList getSourceIncludeList(Context context, String args[]) throws Exception {
+
+		try {
+			StringList strList = new StringList();
+			strList.add(DomainConstants.SELECT_NAME);
+			strList.add(DomainConstants.SELECT_TYPE);
+			strList.add(DomainConstants.SELECT_ID);
+			strList.add(DomainRelationship.SELECT_ID);
+			List<Map> mlControlledPrint = DomainObject.findObjects(context, "Controlled Print", null, "", strList);
+			List<Map> mlRelatedObjects = new MapList();
+			MapList mlControlledPrints = new MapList();
+			for (Map mControlledPrint : mlControlledPrint) {
+				String strControlledPrintId = (String) mControlledPrint.get(DomainObject.SELECT_ID);
+
+				StringList slRelSelects = new StringList();
+
+				StringList slObjectSelects = new StringList();
+				slObjectSelects.add(DomainConstants.SELECT_ID);
+				slObjectSelects.add(DomainConstants.SELECT_NAME);
+				slObjectSelects.add(DomainConstants.SELECT_DESCRIPTION);
+				slObjectSelects.add(DomainConstants.SELECT_OWNER);
+
+				mlRelatedObjects.addAll(DomainObject.newInstance(context, strControlledPrintId).getRelatedObjects(context, "Controlled Print", // String
+						// relPattern
+						"*", // String typePattern
+						slObjectSelects, // StringList objectSelects,
+						slRelSelects, // StringList relationShipselect,
+						true, // boolean getTo,
+						false, // boolean getFrom,
+						(short) 0, // short recurseToLevel,
+						null, // String objectWhere,
+						null, // String relationshipWhere,
+						0)); // int limit
+			}
+			StringList slIncludeId= new StringList();
+			for (Map map:mlRelatedObjects){
+				slIncludeId.add((String)map.get(DomainObject.SELECT_ID));
+			}
+			return slIncludeId;
+		}
+		catch (Exception exception) {
+			throw new Exception(exception);
+		}
+
+
+	}
+
+	public List<String> getControlledPrintSource(Context context, String args[]) throws Exception {
+		try {
+
+			List<String> slAssigneeList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strRelation =PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_CONTROLLED_PRINT);
+			List<Map<?, ?>> mlObjectList = (List<Map<?, ?>>) programMap.get(ControlledPrintingConstants.OBJECTLIST);
+			Map mpRequest = (Map) programMap.get("paramList");
+    		String strReportFormat = (String) mpRequest.get(ControlledPrintingConstants.REPORTFORMAT);
+			for (Map map : mlObjectList) {
+				String strSourceId = (String) map.get(DomainRelationship.SELECT_FROM_ID);
+				DomainObject dObj= DomainObject.newInstance(context, strSourceId);
+				StringList slselect=new StringList();
+				slselect.add(DomainObject.SELECT_ID);
+				slselect.add(DomainObject.SELECT_NAME);
+				slselect.add(DomainObject.SELECT_REVISION);
+				Map mapCP = dObj.getRelatedObject(context, strRelation, true, slselect,
+						new StringList(DomainRelationship.SELECT_ID));
+				if (mapCP != null && mapCP.size() > 0)
+				{
+					if(UIUtil.isNullOrEmpty(strReportFormat))
+					{
+					
+					slAssigneeList.add(ControlledPrintingUtil.getObjectLink(context, (String) mapCP.get(DomainObject.SELECT_ID),
+							(String) mapCP.get(DomainObject.SELECT_NAME) + " " + (String) mapCP.get(DomainObject.SELECT_REVISION)));
+					}
+					else
+					{
+						slAssigneeList.add((String) mapCP.get(DomainObject.SELECT_NAME) + " " + (String) mapCP.get(DomainObject.SELECT_REVISION));
+					}
+				}
+				else {
+					try {
+						ContextUtil.pushContext(context, PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_person_UserAgent),
+								DomainConstants.EMPTY_STRING, DomainConstants.EMPTY_STRING);
+						mapCP = dObj.getRelatedObject(context, strRelation, true, slselect, new StringList(DomainRelationship.SELECT_ID));
+						if (mapCP != null && mapCP.size() > 0)
+ {
+							DomainObject domObj = DomainObject.newInstance(context, (String) mapCP.get(DomainObject.SELECT_ID));
+							String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type",
+									domObj.getInfo(context, DomainConstants.SELECT_TYPE), true);
+							String typeIcon;
+							try {
+								typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon." + strTypeSymName);
+							}
+							catch (FrameworkException e) {
+								typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon.defaultType");
+							}
+							StringBuilder sbLink = new StringBuilder();
+							if(UIUtil.isNullOrEmpty(strReportFormat))
+							{
+							
+							sbLink.append("<img src = \"images/").append(typeIcon).append("\"/>&#160;");
+							sbLink.append((String) mapCP.get(DomainObject.SELECT_NAME));
+							sbLink.append(" ");
+							sbLink.append((String) mapCP.get(DomainObject.SELECT_REVISION));
+							}
+							else
+							{
+								sbLink.append((String) mapCP.get(DomainObject.SELECT_NAME));
+								sbLink.append(" ");
+								sbLink.append((String) mapCP.get(DomainObject.SELECT_REVISION));
+							}
+								
+							slAssigneeList.add(sbLink.toString());
+						}
+					}
+
+					finally {
+						ContextUtil.popContext(context);
+
+					}
+				}
+
+			}
+			return slAssigneeList;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+
+	}
+
+
+	public String acknowledgeControlledPrintRecalling(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+		String[] rowIds = (String[]) programMap.get("rowIdss");
+		if(rowIds!=null)
+		{
+			String rowId=rowIds[0];
+			List<String> slRowIds=FrameworkUtil.split(rowId, "*");
+			emxTableRowId=slRowIds.toArray(new String[slRowIds.size()]);
+		}
+
+
+		StringBuilder rowIDString = new StringBuilder("");
+		if(emxTableRowId.length > 0){
+					for (int i=0; i< emxTableRowId.length;i++)
+			{
+				rowIDString = rowIDString.append((String)emxTableRowId[i]);
+				rowIDString = rowIDString.append("*");
+			}
+		}
+		rowIDString.deleteCharAt(rowIDString.length()-1);
+		String strRelId[] = (String[]) programMap.get("relId");
+		String strObjectId[] = (String[]) programMap.get("objectId");
+		String strPasswordSetting = EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA");
+		String strComment = EnoviaResourceBundle.getProperty(context,ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE , context.getLocale(),
+				"enoControlledPrinting.RecallControlledPrint.ReadUnderstoodStatement");
+		boolean checkPassword = Boolean.parseBoolean(strPasswordSetting);
+		String strMessage = DomainObject.EMPTY_STRING;
+		Map<String, String> mReturnMap = new HashMap<>();
+
+		String[] strPassword = (String[]) programMap.get("password");
+		String[] strreadAndUnderstood = (String[]) programMap.get("readAndUnderstood");
+		String strUser=context.getUser();
+		String strPW=context.getPassword();
+		String strUserPassword="";
+		boolean authenticate = true;
+		boolean extAuth = false;
+		if(strPassword!=null)
+			strUserPassword=strPassword[0];
+
+		String sExternalAuthentication = EnoviaResourceBundle.getProperty(context, "emxFramework.External.Authentication");
+			if (!UIUtil.isNullOrEmpty(sExternalAuthentication) && (sExternalAuthentication.equalsIgnoreCase(ControlledPrintingConstants.TRUE)))
+			extAuth = true;
+
+		if (strreadAndUnderstood!=null ) {
+
+			if(checkPassword)
+			{
+			authenticate=validateAuthentication(context, strUser, strUserPassword);
+			}
+			if (authenticate) {
+
+				StringList slRelId= new StringList();
+				String strAttrRecall=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_RECALL);
+				String strAttrPrintNumber=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER);
+				String strRecallVal=DomainObject.EMPTY_STRING;
+				String strPrintNumberVal=DomainObject.EMPTY_STRING;
+				for(String strRowId: emxTableRowId){
+					TableRowId tr = new TableRowId(strRowId);
+					String strRelationshipId= tr.getRelationshipId();
+					strObjectId[0]=tr.getObjectId();
+					strRecallVal=DomainRelationship.getAttributeValue(context, strRelationshipId, strAttrRecall);
+					strPrintNumberVal=DomainRelationship.getAttributeValue(context, strRelationshipId, strAttrPrintNumber);
+					if(strRecallVal.equalsIgnoreCase(ControlledPrintingConstants.Range_RecalledInitiated)){
+						DomainRelationship.setAttributeValue(context, strRelationshipId, strAttrRecall,ControlledPrintingConstants.Range_Recalled);
+					}
+					else{
+						slRelId.add(strPrintNumberVal);
+					}
+
+				}
+				if(ControlledPrintingUtil.isNullOrEmpty(slRelId))
+					strMessage=EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+							"enoControlledPrinting.Acknowledged");
+				else
+				strMessage=MessageUtil.getMessage(context, null, "enoControlledPrinting.CanNotAcknowledge",
+						new String[] {slRelId.toString()}, null, context.getLocale(),
+						ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+				return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "refreshPage", strMessage);
+			}
+
+			else {
+				strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+						"enoControlledPrinting.ErrorMsg.IncorrectPassword");
+			}
+		}
+		else {
+			strMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+					"enoControlledPrinting.ErrorMsg.ReadUnderstoodCheckboxNotChecked");
+		}
+		return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertAndRefreshAcknowledgeRecall", strMessage, rowIDString.toString());
+	}
+
+
+	public void sendNotificationForControlPrinting(Context context, String args[]) throws Exception {
+		try {
+			String strAttrCPNumber=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER);
+			String objectId = args[0];
+			DomainObject dobj = DomainObject.newInstance(context, objectId);
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			StringList slSelects = new StringList();
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_TYPE);
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			slSelects.add("attribute["+PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title)+"]");
+
+			Map mInfo = dobj.getInfo(context, slSelects);
+
+			String type = (String) mInfo.get(DomainConstants.SELECT_TYPE);
+			String name = (String) mInfo.get(DomainConstants.SELECT_NAME);
+			String revision = (String) mInfo.get(DomainConstants.SELECT_REVISION);
+			String title = (String) mInfo.get("attribute["+PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_Title)+"]");
+
+			String strMailSubject=MessageUtil.getMessage(context, null, "enoControlledPrinting.Recipients.MailSubject",
+					new String[] {type,name, revision}, null, context.getLocale(),
+					ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+			List<Map>	mlRecipients=service.getControlledPrintRecipients(context, dobj);
+			for (Map mRecipient : mlRecipients) {
+				String strName = (String) mRecipient.get(DomainConstants.SELECT_NAME);
+				String strType=(String) mRecipient.get(DomainConstants.SELECT_TYPE);
+				String strOwner=(String)mRecipient.get(DomainRelationship.SELECT_OWNER);
+				String strCPNumber=(String)mRecipient.get("attribute[" + strAttrCPNumber + "].value");
+				DomainObject dPer= DomainObject.newInstance(context, PersonUtil.getPersonObjectID(context, strOwner));
+				StringList slPerSelects = new StringList();
+				slPerSelects.add( Person.SELECT_FIRST_NAME);
+				slPerSelects.add( Person.SELECT_LAST_NAME);
+				Map mPerInfo = dPer.getInfo(context, slPerSelects);
+				String strFirstName=(String)mPerInfo.get(Person.SELECT_FIRST_NAME);
+				String strLastName=(String)mPerInfo.get(Person.SELECT_LAST_NAME);
+				String strOwnerFullName=strFirstName+" "+strLastName;
+				String strMailBodyForOwner=MessageUtil.getMessage(context, null, "enoControlledPrinting.ControlledPrintOwner.MailBody",
+						new String[] {strCPNumber,type,name, revision,title,strName}, null, context.getLocale(),
+						ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+
+				String strMailBody=MessageUtil.getMessage(context, null, "enoControlledPrinting.Recipients.MailBody",
+						new String[] {strCPNumber,type,name, revision,title,strOwnerFullName}, null, context.getLocale(),
+						ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE);
+
+				${CLASS:emxNotificationUtil}.sendJavaMail(context, new StringList(strOwner), null, null, strMailSubject,strMailBodyForOwner, strMailBodyForOwner, "User Agent", null, null, "both");
+				if(strType.equals(DomainConstants.TYPE_PERSON))
+				${CLASS:emxNotificationUtil}.sendJavaMail(context, new StringList(strName), null, null, strMailSubject,strMailBody, strMailBody, "User Agent", null, null, "both");
+
+			}
+
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	public String setRecipientName(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String[] strArrRowId = (String[]) inputMap.get("emxTableRowId");
+			String[] fieldNameActual = (String[]) inputMap.get("fieldNameActual");
+			String objectId = "";
+			List<String> lsIds = new StringList();
+			if (FrameworkUtil.split(strArrRowId[0], "|").size() == 1) {
+				objectId = strArrRowId[0];
+				lsIds.add(strArrRowId[0]);
+			}
+			else {
+				List<TableRowId> rowIds = TableRowId.getTableRowIds(strArrRowId);
+				TableRowId rowId = rowIds.get(0);
+				objectId = rowId.getObjectId();
+				lsIds.add(objectId);
+			}
+			StringList slObjectSelect = new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_NAME);
+			slObjectSelect.add(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_FIRST_NAME));
+			slObjectSelect.add(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_LAST_NAME));
+
+			List<Map<?, ?>> mlInfo = DomainObject.getInfo(context, lsIds.toArray(new String[0]), slObjectSelect);
+			Map<?, ?> mpInfo = mlInfo.get(0);
+			if ("".equalsIgnoreCase(objectId)) {
+				objectId = (String) mpInfo.get(DomainConstants.SELECT_ID);
+			}
+
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(
+					context,
+					false,
+					"setFormFieldValue",
+					fieldNameActual[0],
+					objectId,
+					(String) mpInfo.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_FIRST_NAME)) + " "
+							+ (String) mpInfo.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_LAST_NAME)));
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+	public String addApproverTableHTMLFile(Context context, String args[]) throws Exception {
+		try {
+
+			String File_Name = "ApproverTable.html";
+			Map programMap = JPO.unpackArgs(args);
+			String current = (String) programMap.get("current");
+
+			String objectId = (String) programMap.get("downloadObjectId");
+			String controlledCopy = (String) programMap.get("ControlledCopy");
+			if ("true".equalsIgnoreCase(controlledCopy)) {
+				objectId = (String) programMap.get("ControlledPrintDownloadObjectId");
+			}
+			String approverPageAPI=ControlledPrintingUtil.getPropertyName(context, objectId, "ApproversPage", "ApproversPageRequired");
+			if (UIUtil.isNullOrEmpty(approverPageAPI))
+				return "";
+
+			String prog = approverPageAPI.substring(0, approverPageAPI.lastIndexOf(':'));
+			String method = approverPageAPI.substring(approverPageAPI.lastIndexOf(':') + 1);
+			programMap.put("objectId", objectId);
+			args = JPO.packArgs(programMap);
+			return JPO.invoke(context, prog, null, method, args, String.class);
+
+
+		} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+
+
+
+	public String getOverlayForPDF(Context context, String args[]) throws Exception {
+		try {
+			StringBuilder sbOverlayTags = new StringBuilder();
+			String headerOverlayFile = "HeaderOverlay.html";
+			String footerOverlayFile = "FooterOverlay.html";
+			Map programMap = JPO.unpackArgs(args);
+			Object ccOriginal = programMap.get("ControlledPrintOriginal");
+			if (null != ccOriginal && "true".equalsIgnoreCase((String) ccOriginal))
+				return DomainConstants.EMPTY_STRING;
+			Object oDocId = programMap.get("downloadObjectId");
+			String objectId = "";
+			if (oDocId instanceof String) {
+				objectId = (String) programMap.get("downloadObjectId");
+					} else {
+				String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+				if (strDocIdArray != null && strDocIdArray.length > 0)
+					objectId = strDocIdArray[0];
+			}
+			boolean bControlledCopy = false;
+			String controlledCopy = (String) programMap.get("ControlledCopy");
+			if ("true".equalsIgnoreCase(controlledCopy)) {
+				objectId = (String) programMap.get("ControlledPrintDownloadObjectId");
+				bControlledCopy = true;
+			}
+			mxFtp mxFtp = (mxFtp) programMap.get("mxFtp");
+			Map propertyMap = (Map) programMap.get("propertyMap");
+			String outputTempDir = (String) programMap.get("outputDir");
+
+			StringList objectSelects = new StringList(DomainConstants.SELECT_TYPE);
+			objectSelects.add(DomainConstants.SELECT_NAME);
+			objectSelects.add(DomainConstants.SELECT_CURRENT);
+			objectSelects.add(DomainConstants.SELECT_ORGANIZATION);
+			Map<String, String> objectMap = DomainObject.newInstance(context, objectId).getInfo(context, objectSelects);
+			String type = objectMap.get(DomainConstants.SELECT_TYPE);
+			String strHeaderForm = "";
+			String strHeaderRequired = "";
+				//TODO 
+			//strHeaderForm = getHeaderFormName(context, objectMap, type, strHeaderForm, "");
+			if (UIUtil.isNullOrEmpty(strHeaderForm))
+						//strHeaderForm = getHeaderFormName(context, objectMap, type, strHeaderForm, "Default");
+			if (UIUtil.isNullOrEmpty(strHeaderForm)) {
+							String defaultType = PropertyUtil
+						.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_TYPE_CONTROLLED_PRINT)
+								.replaceAll(" ", "");
+							String strHeaderRequiredProperty = new StringBuilder("enoControlledPrinting.")
+						.append(defaultType.replaceAll(" ", "")).append(".").append("Default.HeaderRequired")
+						.toString();
+					strHeaderRequired = EnoviaResourceBundle.getProperty(context, strHeaderRequiredProperty);
+					if ("Yes".equals(strHeaderRequired)) {
+										String strHeaderProperty = new StringBuilder("enoControlledPrinting.")
+							.append(defaultType.replaceAll(" ", "")).append(".").append("Default.Header").toString();
+						try {
+							strHeaderForm = EnoviaResourceBundle.getProperty(context, strHeaderProperty);
+										} catch (Exception ex) {
+
+						}
+					}
+				}
+			if (UIUtil.isNotNullAndNotEmpty(strHeaderForm)) {
+				if (!UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+					sbOverlayTags.append("<JOB:OVERLAYS ENABLED=\"Yes\" >\n");
+							MapList headerValues = new LSAUIForm().evaluateForm(context, objectId, strHeaderForm,
+						context.getLocale().toString());
+				sbOverlayTags.append(createHTMLForOverlay(context, headerValues, mxFtp, propertyMap, outputTempDir,
+						headerOverlayFile, "TopCenter"));
+			}
+
+			String strFooterForm = "";
+			String strFooterRequired = "";
+				if (UIUtil.isNullOrEmpty(strFooterForm))
+						if (UIUtil.isNullOrEmpty(strFooterForm)) {
+							String defaultType = PropertyUtil
+						.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_TYPE_CONTROLLED_PRINT)
+							.replaceAll(" ", "");
+								String strFooterRequiredProperty = new StringBuilder("enoControlledPrinting.")
+						.append(defaultType.replaceAll(" ", "")).append(".").append("Default.FooterRequired")
+						.toString();
+					strFooterRequired = EnoviaResourceBundle.getProperty(context, strFooterRequiredProperty);
+					if("Yes".equals(strFooterRequired)){
+										String strFooterProperty = new StringBuilder("enoControlledPrinting.")
+							.append(defaultType.replaceAll(" ", "")).append(".").append("Default.PDFFooterOverlay")
+							.toString();
+					try {
+						strFooterForm = EnoviaResourceBundle.getProperty(context, strFooterProperty);
+					} catch (Exception ex) {
+
+						}
+					}
+
+				}
+
+			if (UIUtil.isNotNullAndNotEmpty(strFooterForm)) {
+				if (!UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+					sbOverlayTags.append("<JOB:OVERLAYS ENABLED=\"Yes\" >\n");
+							MapList footerValues = new LSAUIForm().evaluateForm(context, objectId, strFooterForm,
+						context.getLocale().toString());
+				sbOverlayTags.append(createHTMLForOverlay(context, footerValues, mxFtp, propertyMap, outputTempDir,
+						footerOverlayFile, "BottomCenter"));
+			}
+			if (UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+				sbOverlayTags.append("</JOB:OVERLAYS>\n");
+			return sbOverlayTags.toString();
+			} catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	private String createHTMLForOverlay(Context context, MapList formValues, mxFtp mxFtp, Map propertyMap, String outputTempDir, String fileName,
+			String alignment) throws Exception {
+
+		List<Map> leftValues = new MapList();
+		List<Map> centerValues = new MapList();
+		List<Map> rightValues = new MapList();
+		for (Object objField : formValues) {
+			Map mpField = (Map) objField;
+			String groupName = (String) ((Map) mpField.get("Settings")).get("Group Name");
+			switch (groupName) {
+			case "Left":
+				leftValues.add(mpField);
+				break;
+			case "Center":
+				centerValues.add(mpField);
+				break;
+			case "Right":
+				rightValues.add(mpField);
+				break;
+			default:
+				break;
+			}
+		}
+
+		int maxSize = leftValues.size() > centerValues.size()
+				? leftValues.size() > rightValues.size() ? leftValues.size() : rightValues.size()
+						: centerValues.size() > rightValues.size() ? centerValues.size() : rightValues.size();
+
+		StringBuilder sbTable = new StringBuilder();
+		sbTable.append("<!DOCTYPE html>");
+		sbTable.append("<html>");
+		sbTable.append("<body>");
+
+		sbTable.append("<table border=\"0\" style=\"width:100%;opacity:0.3;\"  cellspacing=\"0\" >");
+		String value = "";
+		String align = "left";
+		for (int i = 0; i < maxSize; i++) {
+			sbTable.append("<tr>");
+			if (leftValues.size() > i) {
+															align = UIUtil
+										.isNotNullAndNotEmpty((String) ((Map) leftValues.get(i).get("Settings")).get("Group Name"))
+										? (String) ((Map) leftValues.get(i).get("Settings")).get("Alignment") : "left";
+							} else {
+				value = "&nbsp;";
+				align = "left";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:33%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			if (centerValues.size() > i) {
+								align = UIUtil
+										.isNotNullAndNotEmpty((String) ((Map) centerValues.get(i).get("Settings")).get("Group Name"))
+										? (String) ((Map) centerValues.get(i).get("Settings")).get("Alignment") : "left";
+							} else {
+				value = "&nbsp;";
+				align = "center";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:34%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			if (rightValues.size() > i) {
+								align = UIUtil
+										.isNotNullAndNotEmpty((String) ((Map) rightValues.get(i).get("Settings")).get("Group Name"))
+										? (String) ((Map) rightValues.get(i).get("Settings")).get("Alignment") : "left";
+							} else {
+				value = "&nbsp;.";
+				align = "right";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:33%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			sbTable.append("</tr>");
+		}
+
+		sbTable.append("</table>");
+		sbTable.append("</body>");
+		sbTable.append("</html>");
+		mxFtp.create(fileName);
+		if (mxFtp.exists(fileName)) {
+			BufferedOutputStream buf = new BufferedOutputStream(new MyOutputStream(mxFtp));
+			buf.write(sbTable.toString().getBytes());
+			buf.flush();
+			buf.close();
+		}
+		StringBuilder sbInput = new StringBuilder();
+		sbInput.append("<JOB:OVERLAY ENABLED=\"Yes\" PATH=\"");
+		sbInput.append(propertyMap.get("RemoteAdlibOutputFolder") + outputTempDir);
+		sbInput.append("\\");
+		sbInput.append(fileName);
+		sbInput.append("\" ALIGNMENT=\"" + alignment + "\" HORIZONTAL=\"0\" VERTICAL=\"0\" >\n");
+						sbInput.append(
+								"<JOB:OVERLAYCROP MODE=\"CropToContentEdge\" PADDINGLEFT=\"0.25\" PADDINGRIGHT=\"0.25\" PADDINGBOTTOM=\"0.25\" PADDINGTOP=\"0.25\" />\n");
+		sbInput.append("</JOB:OVERLAY>\n");
+		return sbInput.toString();
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 *            objectId is required as 0 arguments
+	 * @return
+	 * @throws MatrixException 
+	 */
+	public int generateUncontrolledPDFOnObjectPromote(Context context, String args[]) throws MatrixException {
+		try {
+			if (args == null || args.length < 1) {
+				throw new IllegalArgumentException();
+			}
+
+			
+			if (ControlledPrintingUtil.isRenderPDFTrue(context)&& ControlledPrintingUtil.isActivationModeAutomatic(context))
+			{	
+
+			String strDocId = args[0];
+
+			Map programMap = new HashMap();
+			programMap.put("strDocId", strDocId);
+			programMap.put("RevisePDF", "false");
+			runPDFCreationJob(context,args);
+			
+			return 0;
+			}
+			else
+				return 0;
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+
+
+	public void runPDFCreationJob(Context context, String[] args) throws MatrixException {
+
+		String strDocId = DomainConstants.EMPTY_STRING;
+		// Push Context is required for stamping User Agent in History
+		// related to Uncontrolled PDF as concern raised by Customer
+		boolean pushContextFlag = false;
+		try {
+			strDocId = args[0];
+			String strRevisePDF = args[1];
+
+			if (!ControlledPrintingConstants.USER_AGENT.equals(context.getUser())) {
+				ContextUtil.pushContext(context,
+						PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_person_UserAgent),
+						"", "");
+				pushContextFlag = true;
+			}
+
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			service.deleteAllJobs(context, DomainObject.newInstance(context,strDocId));
+			synchronized (_lock) {
+				PropertyUtil.setGlobalRPEValue(context, "FROMPDFTRIGGER", "TRUE");
+				service.updateUncontrolledPDF(context, strDocId,new String[] {},Boolean.valueOf(strRevisePDF));
+				PropertyUtil.setGlobalRPEValue(context, "FROMPDFTRIGGER", DomainConstants.EMPTY_STRING);
+			}
+
+		} catch (Exception e) {
+			try {
+				PropertyUtil.setGlobalRPEValue(context, "FROMPDFTRIGGER", DomainConstants.EMPTY_STRING);
+				ControlledPrintingUtil.sendNotifications(context, strDocId,
+						"enoControlledPrinting.Notification.PDFConversionJobFailedPromoteSubject",
+						"enoControlledPrinting.Notification.PDFConversionJobFailedPromote",
+						new StringList(context.getUser()), null, DomainConstants.EMPTY_STRING, new String[] {strDocId});
+			} catch (Exception e1) {
+				throw new MatrixException(e.getLocalizedMessage());
+			}
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+		finally {
+			if (pushContextFlag)
+				ContextUtil.popContext(context);
+		}
+	}
+
+
+	public boolean checkManualPDFEnable(Context context, String[] args) throws Exception {
+		
+		Map programMap = JPO.unpackArgs(args);
+		String strDocId = (String) programMap.get(ControlledPrintingConstants.OBJECTID);
+		
+		ControlledPrintingService service = new ControlledPrintingServiceImpl();
+		List<Map> mlFile=service.getActiveVersionDocuments(context, strDocId, "");
+		if(mlFile.size()>0 && ControlledPrintingUtil.isRenderPDFTrue(context)&& ControlledPrintingUtil.isActivationModeManual(context) )
+		{
+			return true;
+		}
+		return false;
+		
+	}
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public String generatePDF(Context context, String[] args) throws Exception {
+		
+		Map programMap = JPO.unpackArgs(args);
+		String[] strDocId = (String[]) programMap.get(ControlledPrintingConstants.OBJECTID);
+		String[] strFiles = (String[]) programMap.get("File");
+		
+		boolean isRenderPDF=ControlledPrintingUtil.isRenderPDFTrue(context);
+		if(isRenderPDF&& ControlledPrintingUtil.isActivationModeManual(context) && ControlledPrintingUtil.isRenditionModeConsolidated(context) && strFiles== null  )
+		{
+			return pdfProcess(context, strDocId,new String[] {});
+		}
+		
+		if(isRenderPDF&& ControlledPrintingUtil.isActivationModeManual(context) && strFiles== null && ControlledPrintingUtil.isRenditionModeIndividual(context) )
+		{
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "openGeneratePDFForm", strDocId[0]);
+		}
+		else if(isRenderPDF&& strFiles!=null && ControlledPrintingUtil.isActivationModeManual(context))
+		{
+			return pdfProcess(context, strDocId,strFiles);
+		}
+		
+		return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "refreshPage" );
+	}
+
+	private String pdfProcess(Context context, String[] strDocId,String strFiles[]) throws MatrixException, FrameworkException {
+		boolean pushContextFlag = false;
+		try 
+		{
+			if (!ControlledPrintingConstants.USER_AGENT.equals(context.getUser())) {
+				ContextUtil.pushContext(context,
+						PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_person_UserAgent),
+						"", "");
+				pushContextFlag = true;
+			}
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			String pdfGenerationInProgress=PropertyUtil.getGlobalRPEValue(context, "APPENDIXPDF");
+			
+			if(UIUtil.isNotNullAndNotEmpty(pdfGenerationInProgress))
+				return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertMessage", "PDF Generation is in progress");
+				
+			
+			PropertyUtil.setGlobalRPEValue(context, "APPENDIXPDF", "TRUE");
+			service.deleteAllJobs(context, DomainObject.newInstance(context,strDocId[0]));
+			synchronized (_lock) {
+				
+				for(int i=0;i<strFiles.length;i++)
+				{
+					DomainObject dobj=DomainObject.newInstance(context, strFiles[i]);
+					if(service.isUnControlledPDFFile(context,dobj))
+					{
+						BusinessObject busFile=dobj.getPreviousRevision(context);
+						if(busFile.exists(context))
+						{
+							
+							 dobj=DomainObject.newInstance(context, busFile.getObjectId(context));
+							strFiles[i]=dobj.getInfo(context,DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+						}
+						else
+						{
+							strFiles[i]=dobj.getInfo(context,DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+						}
+				}
+					else {
+					strFiles[i]=dobj.getInfo(context,DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE));
+					}
+				}				service.updateUncontrolledPDF(context, strDocId[0],strFiles,false);
+				PropertyUtil.setGlobalRPEValue(context, "APPENDIXPDF", DomainConstants.EMPTY_STRING);
+			}
+			 String message=EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.Notice.PDFConversionJobStartedOnPromoteDemote");
+			 
+			 ControlledPrintingUtil.sendNotifications(context, strDocId[0],
+						"enoControlledPrinting.Notice.PDFConversionJobStartedOnPromoteDemote",
+						"enoControlledPrinting.Notice.PDFConversionJobStartedOnPromoteDemote",
+						new StringList(context.getUser()), null, DomainConstants.EMPTY_STRING, new String[] {strDocId[0]});
+			 
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertMessage", message);
+		}
+		catch (Exception e) {
+			try {
+				PropertyUtil.setGlobalRPEValue(context, "FROMPDFTRIGGER", DomainConstants.EMPTY_STRING);
+				ControlledPrintingUtil.sendNotifications(context, strDocId[0],
+						"enoControlledPrinting.Notification.PDFConversionJobFailedPromoteSubject",
+						"enoControlledPrinting.Notification.PDFConversionJobFailedPromote",
+						new StringList(context.getUser()), null, DomainConstants.EMPTY_STRING, new String[] {strDocId[0]});
+			} catch (Exception e1) {
+				throw new MatrixException(e.getLocalizedMessage());
+			}
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+		finally {
+			if (pushContextFlag)
+				ContextUtil.popContext(context);
+		}
+	}
+			
+	/**
+	 * Trigger method to generate uncontrolled pdf on checkin
+	 * 
+	 * @param context
+	 * @param args
+	 * @throws MatrixException
+	 */
+	public void generateUnControlledPDFCopyOnCheckin(Context context, String[] args) throws MatrixException {
+		try {
+	String strObjectId = args[0];
+			if (ControlledPrintingUtil.isRenderPDFTrue(context)&& ControlledPrintingUtil.isActivationModeAutomatic(context))
+			{	
+if(ControlledPrintingUtil.isRenditionModeConsolidated(context))
+						{
+					ControlledPrintingService service = new ControlledPrintingServiceImpl();
+					service.deleteAllJobs(context, DomainObject.newInstance(context,strObjectId));
+						}
+
+			DomainObject object = DomainObject.newInstance(context, strObjectId);
+			String objPolicy = object.getPolicy(context).toString();
+
+			String policy = args[2];
+			policy=PropertyUtil.getSchemaProperty(context, policy);
+			if (!objPolicy.equals(policy)) {
+				return;
+			}
+			
+			String states= args[3];
+			List<String> slSymbolicStates=FrameworkUtil.split(states, ",");
+			List<String> slStates=new StringList();
+			for(String strSymState:slSymbolicStates)
+			{
+				String strStatename = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, policy,
+						strSymState);
+				if(UIUtil.isNotNullAndNotEmpty(strStatename))
+					slStates.add(strStatename);
+			}
+			String strCurrentState=object.getInfo(context, DomainObject.SELECT_CURRENT);
+			if(!slStates.contains(strCurrentState))
+				return;
+			
+				
+			String strFilePath = args[1];
+			String fileType = strFilePath.substring(strFilePath.lastIndexOf(".") + 1);
+			if (EnoviaResourceBundle.getProperty(context, "DownloadPackage.ExcludedFileTypesFromPDF")
+					.contains(fileType)) {
+				return;
+			}
+
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+				if(	checkIfUncontrolledFile(context,strObjectId,args[1]))
+				return;
+				
+			String strFileName = new StringBuilder(strFilePath
+					.substring(strFilePath.lastIndexOf(java.io.File.separator) + 1, strFilePath.length()))
+					.toString();
+			args[1]=strFileName;
+			args[2] = context.getUser();
+			generateUnControlledPDFCopyOnCheckinProcess(context, args);
+			MqlUtil.mqlCommand(context, "notice $1", MessageUtil.getMessage(context, null,
+					"enoControlledPrinting.Notice.PDFConversionJobStartedOnCheckin",
+					new String[] {
+							args[1].substring(args[1].lastIndexOf(java.io.File.separator) + 1, args[1].length()) },
+					null, context.getLocale(), ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE));
+			}
+			else {
+				return;
+			}
+		}
+		catch (Exception e) {
+			throw new MatrixException(e);
+		}
+	}
+private boolean checkIfUncontrolledFile(Context context, String strObjectId, String FileName) throws FrameworkException {
+		// TODO Auto-generated method stub
+	StringBuilder strWhereClause = new StringBuilder();
+	DomainObject object = DomainObject.newInstance(context, strObjectId);
+	
+	strWhereClause.append (DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_TITLE))
+	.append(" == '").append(FileName).append("'");
+	
+	StringList slSelects=new StringList();
+	slSelects.add(DomainConstants.SELECT_ID);
+	slSelects.add("interface");
+	
+	List<Map> mlFiles = object.getRelatedObjects(context,
+			PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_ACTIVE_VERSION),
+			DomainObject.QUERY_WILDCARD,
+			slSelects, new StringList(), true, true, (short) 1, strWhereClause.toString(),
+			DomainConstants.EMPTY_STRING, 0);
+	if(mlFiles.size()>0)
+	{
+		Map mFile=mlFiles.get(0);
+		Object interfaceFile=mFile.get("interface");
+		if(interfaceFile!=null && PropertyUtil.getSchemaProperty(context, "interface_SystemGeneratedPrint").equals((String)interfaceFile))
+				return true;
+		
+	
+	}
+	return false;
+}
+
+public void addAppendixNumber(Context context, String[] args) throws MatrixException {
+		
+//		if (!ControlledPrintingUtil.isRenderPDFTrue(context))
+//			return;
+		
+		System.out.println("================================================");
+		String strObjectId = args[0];
+
+		DomainObject document = DomainObject.newInstance(context, strObjectId);
+		String objPolicy = document.getPolicy(context).toString();
+
+		String policy = args[2];
+		policy=PropertyUtil.getSchemaProperty(context, policy);
+		if (!objPolicy.equals(policy)) {
+			return;
+		}
+		
+		String states= args[3];
+		List<String> slSymbolicStates=FrameworkUtil.split(states, ",");
+		List<String> slStates=new StringList();
+		for(String strSymState:slSymbolicStates)
+		{
+			String strStatename = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, policy,
+					strSymState);
+			if(UIUtil.isNotNullAndNotEmpty(strStatename))
+				slStates.add(strStatename);
+		}
+		String strCurrentState=document.getInfo(context, DomainObject.SELECT_CURRENT);
+		if(!slStates.contains(strCurrentState))
+			return;
+		
+		Map mFileIds=getDocumentFileList(context, document);
+		List<String> slFileId=new StringList();
+		String filename=args[1];
+		int filesize=mFileIds.size();
+		if(UIUtil.isNotNullAndNotEmpty(filename) && filesize>1)
+		{
+			String fileId=(String)mFileIds.get(filename);;
+			
+			String formattedFileNumber=String.format("%03d",filesize-1);
+			DomainObject fileObject=DomainObject.newInstance(context,fileId);
+			fileObject.setAttributeValue(context, "Title",filename+"_"+formattedFileNumber);
+			
+					
+		}
+	}
+	
+	public int returnFourDigitNo(int number)
+	{
+	    int threeDigitNo = 0;
+	    int length = String.valueOf(number).length();
+	    if(length == 1)
+	    {
+	        threeDigitNo = 00+number;
+	    }
+	    if(length == 2)
+	    {
+	        threeDigitNo = 0+number;
+	    }
+	    if(length == 3)
+	    {
+	        threeDigitNo = number;
+	    }
+	    return threeDigitNo;
+	}
+	
+	private Map getDocumentFileList(Context context,DomainObject dobj) throws FrameworkException
+	{
+		List<String> slFileId = new StringList();
+		List<String> slFileNames = new StringList();
+		String RELATIONSHIP_ACTIVE_VERSION = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_ActiveVersion);
+		String pdfInterface=PropertyUtil.getSchemaProperty(context, "interface_SystemGeneratedPrint");
+		StringList slSelects=new StringList();
+		
+		slSelects.add("from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.id");
+		slSelects.add("from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.attribute[Title]");
+		slSelects.add("from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.interface");
+		
+		
+		Map  mDocInfo= dobj.getInfo(context, slSelects);
+		Map mReturn =new HashMap();
+		slFileId= (List<String>) mDocInfo.get("from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.id");
+		slFileNames= (List<String>) mDocInfo.get("from[" + RELATIONSHIP_ACTIVE_VERSION + "].to.attribute[Title]");
+		
+		for(int i=0;i<slFileNames.size();i++)
+		{
+			String strFileName=slFileNames.get(i);
+			String fileId=slFileId.get(i);
+			DomainObject fileObject=DomainObject.newInstance(context,fileId);
+			String fileinterface=fileObject.getInfo(context, "interface");
+			if(!pdfInterface.equals(fileinterface))
+				mReturn.put(strFileName, slFileId.get(i));
+			
+		}
+		
+		return mReturn;
+	}
+
+	public void generateUnControlledPDFCopyOnCheckinProcess(Context context, String args[]) throws MatrixException {
+		String strDocId = args[0];
+		String strFileName = args[1];
+		String[] newArgs = new String[] {strFileName };
+		boolean pushContextFlag = false;
+		try {
+
+			if (!ControlledPrintingConstants.USER_AGENT.equals(context.getUser())) {
+				ContextUtil.pushContext(context,
+						PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_person_UserAgent),
+						"", "");
+				pushContextFlag = true;
+			}
+
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			boolean checkReviseNative= checkReviseNative(context, strDocId);
+			service.deleteJobs(context, DomainObject.newInstance(context,strDocId));
+			service.updateUncontrolledPDF(context, strDocId,new String[] {strFileName},checkReviseNative);
+		} catch (Exception e) {
+			try {
+				ControlledPrintingUtil.sendNotifications(context, strDocId,
+						"enoControlledPrinting.Notification.PDFConversionJobFailedCheckinSubject",
+						"enoControlledPrinting.Notification.PDFConversionJobFailedCheckin", new StringList(args[2]),
+						null, DomainConstants.EMPTY_STRING, newArgs);
+			} catch (Exception e1) {
+				throw new MatrixException(e.getLocalizedMessage());
+			}
+			throw new MatrixException(e.getLocalizedMessage());
+		} finally {
+			if (pushContextFlag)
+				ContextUtil.popContext(context);
+		}
+	}
+	private boolean checkReviseNative(matrix.db.Context context, String strDocId) throws Exception {
+
+		try {
+			DomainObject dobj=DomainObject.newInstance(context,strDocId);
+			String strCurrent=dobj.getInfo(context, DomainObject.SELECT_CURRENT);
+			if(strCurrent.equals("Draft")||
+					strCurrent.equals("In Work")||strCurrent.equals("In Approval"))
+				return false;
+			return true;
+		} catch (FrameworkException e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+	//TODO
+	/**
+	 * Method to restart failed pdf conversion job
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws MatrixException
+	 */
+	@com.dassault_systemes.enovia.controlledprinting.ExecuteCallable
+	public String restartFailedPDFConversion(Context context, String[] args) throws MatrixException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String[] oDocId = (String[]) programMap.get(ControlledPrintingConstants.OBJECTID);
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			List<Map> mlPendingJobs = service.getFailedJobs(context, oDocId[0]);
+			Map mpReturn = new HashMap();
+			String strErrorMessage=DomainObject.EMPTY_STRING;
+			if (mlPendingJobs.size() > 0) {
+				for (Map mPendingJob : mlPendingJobs) {
+					String strJobId=(String) mPendingJob.get(DomainObject.SELECT_ID);
+					String strFileName=(String) mPendingJob.get(DomainObject.getAttributeSelect(PropertyUtil.getSchemaProperty(context,ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_INPUT_FILE)));
+					DomainObject dobJob=DomainObject.newInstance(context,strJobId);
+					dobJob.deleteObject(context, true);
+					strFileName=strFileName.substring(strFileName.lastIndexOf(File.separator)+1,strFileName.length());
+					generateUnControlledPDFCopyOnCheckinProcess(context, new String[]{oDocId[0],strFileName,context.getUser().toString()});
+				}
+				strErrorMessage = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.Label.PDFConversionJobRestarted");
+				
+			} else {
+				strErrorMessage= EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE,
+						context.getLocale(), "enoControlledPrinting.Label.NoFailedJobFound");
+			}
+			return ControlledPrintingUtil.encodeFunctionForJavaScript(context, false, "alertAndRefreshTreeDetailsPage", strErrorMessage);
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+	/**
+	 * Access program for Restart PDF conversion job command
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws MatrixException
+	 */
+	public boolean checkAccessForRestartFailedPDFConversionCommand(Context context, String[] args) throws MatrixException {
+		try {
+			if (!ControlledPrintingUtil.isRenderPDFTrue(context))
+				return false;
+			Map programMap = JPO.unpackArgs(args);
+			String oDocId = (String) programMap.get(ControlledPrintingConstants.OBJECTID);
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			List<Map> mlPendingJobs = service.getFailedJobs(context, oDocId);
+
+			if(mlPendingJobs!=null && mlPendingJobs.size()>0)
+					return true;
+			return false;
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+	//TODO: Check for delete job push/pop
+	public int generateUnControlledPDFonDelete(Context context, String args[]) throws MatrixException {
+		try {
+			boolean deletefile=true;
+			String strObjectID = args[0];
+			String strFromObjectId = args[1];
+			String strPDFObjectPolicy = PropertyUtil.getSchemaProperty(context,args[2]);
+
+			DomainObject dObj = DomainObject.newInstance(context, strObjectID);
+			StringList slSelects=new StringList();
+			slSelects.add(DomainObject.SELECT_POLICY);
+			slSelects.add(ControlledPrintingConstants.INTERFACE);
+			slSelects.add(DomainObject.SELECT_REVISION);
+			slSelects.add(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE));
+
+			Map mDocFileInfo=dObj.getInfo(context,slSelects);
+			String strPolicy = (String) mDocFileInfo.get(DomainObject.SELECT_POLICY);
+			
+			String strRevision = (String) mDocFileInfo.get(DomainObject.SELECT_REVISION);
+			String strFileName = (String) mDocFileInfo.get(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE));
+
+			//Deleted object after getting object required information
+			strFromObjectId = dObj.getInfo(context, "to[" +  PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_relationship_ActiveVersion) + "].from.id");
+
+			String strInterface =dObj.getInfo(context,ControlledPrintingConstants.INTERFACE);
+			// to check if Controlled Document is getting delete. this value is "Yes" if Controlled Document is getting delete otherwise it is null.
+			String isControlledDocumentDelete = context.getCustomData("isControlledDocumentDelete");
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+
+			if (strPolicy.equals(PropertyUtil.getSchemaProperty(context,
+					DomainSymbolicConstants.SYMBOLIC_policy_Version)) && UIUtil.isNullOrEmpty(isControlledDocumentDelete)) {
+				DomainObject dCDObj = DomainObject.newInstance(context, strFromObjectId);
+			if (UIUtil.isNotNullAndNotEmpty(strRevision) && Integer.valueOf(strRevision) > 1) {   
+
+					
+					String strCDPolicy = dCDObj.getInfo(context, DomainObject.SELECT_POLICY);
+
+					if (strCDPolicy.equals(strPDFObjectPolicy) && (UIUtil.isNullOrEmpty(strInterface))) {
+						String []customArgs=new String[3];
+						customArgs[0] = strFromObjectId;
+						customArgs[1] = strFileName;
+						customArgs[2] = context.getUser();
+						generateUnControlledPDFCopyOnCheckinProcess(context, customArgs);;
+					}
+				}
+				else{
+					service.deleteFileJob(context,strFromObjectId,strFileName);
+					if(!checkIfUncontrolledFile(context, strFromObjectId, strFileName))
+					{
+						if(ControlledPrintingUtil.isRenditionModeConsolidated(context))
+						{
+							deletefile=false;
+							if(dObj.exists(context))
+								dObj.deleteObject(context); 
+							pdfProcess(context, new String[] {strFromObjectId}, new String[] {});
+							System.out.println("===================");
+						}
+						else
+					service.deleteUncontrolledGenerateFile(context, strFromObjectId, new String[] {strFileName});
+			}
+			}
+			}
+			if(dObj.exists(context) && deletefile)
+				dObj.deleteObject(context); 
+
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+		return 1; // return 1 is required because it is override and we are performing the delete object
+	}
+
+
+	public Map getHeaderForPDF(Context context, String args[]) throws MatrixException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			//Below line is required for downloadpackage.
+			Object oDocId = programMap.get("downloadObjectId");
+
+			String strDocId = DomainConstants.EMPTY_STRING;
+			String strHeaderApproach = DomainConstants.EMPTY_STRING;
+
+			if (oDocId instanceof String) {
+				strDocId = (String) programMap.get("downloadObjectId");
+			} else {
+				String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+				if (strDocIdArray!=null&&strDocIdArray.length>0)
+					strDocId = strDocIdArray[0];
+			}
+			String strObjType = DomainObject.newInstance(context, strDocId).getInfo(context,
+					DomainConstants.SELECT_TYPE);
+			String strProperty = "enoControlledPrinting." + strObjType.replaceAll(" ", "") + "."
+					+ "PDFHeaderGenerationApproach";
+			try {
+				strHeaderApproach = EnoviaResourceBundle.getProperty(context, strProperty);
+			} catch (Exception ex) {
+				strProperty = "enoControlledPrinting.Default.PDFHeaderGenerationApproach";
+				strHeaderApproach = EnoviaResourceBundle.getProperty(context, strProperty);
+			}
+			if (!UIUtil.isNullOrEmpty(strHeaderApproach) && strHeaderApproach.equalsIgnoreCase("table")) {
+				return getHeaderOrFooterForPDFUsingTable(context, args,true);
+			} else {
+				return getHeaderOrFooterForPDFUsingForm(context, args,true);
+			}
+
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+	public Map getHeaderOrFooterForPDFUsingForm(Context context, String args[],boolean isHeader) throws Exception {
+		try {
+			Map<String, String> headerMap = new HashMap<>();
+			Map programMap = JPO.unpackArgs(args);
+			
+			String strDocId= getObjectIdForPDF(context,programMap,isHeader);
+			
+			if(UIUtil.isNotNullAndNotEmpty(strDocId))
+			{
+				String strFormName="";
+				if(isHeader)
+					strFormName = ControlledPrintingUtil.getPropertyName(context, strDocId,"PDFHeaderOverlay","HeaderRequired");
+				else
+					strFormName = ControlledPrintingUtil.getPropertyName(context, strDocId,"PDFFooterOverlay","FooterRequired");
+				headerMap=ControlledPrintingUtil.getFormMap(context, strDocId,strFormName);
+			}
+			return headerMap;
+		}
+
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	private String getObjectIdForPDF(Context context, Map programMap,boolean isHeader) {
+		Object oDocId = (Object) programMap.get("downloadObjectId");
+
+		String strDocId = DomainConstants.EMPTY_STRING;
+		String customArgs = DomainConstants.EMPTY_STRING;
+		if (oDocId instanceof String) {
+			strDocId = (String) programMap.get("downloadObjectId");
+			customArgs = (String) programMap.get("PrintType");
+		} else {
+			String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+			String[] customArgsArray = (String[]) programMap.get("PrintType");
+			if (strDocIdArray != null && strDocIdArray.length > 0)
+				strDocId = strDocIdArray[0];
+			if (customArgsArray != null && customArgsArray.length > 0)
+				customArgs = customArgsArray[0];
+		}
+
+		if (UIUtil.isNullOrEmpty(customArgs)) {
+			boolean useControlledPrintId=false;
+			if(isHeader)
+			{
+				String strHeaderRequired = (String) programMap.get("NoHeader");
+				if(UIUtil.isNotNullAndNotEmpty(strHeaderRequired)&&Boolean.valueOf(strHeaderRequired))
+					strDocId="";
+				else{
+					String strUseControlledPrintId = (String) programMap.get("UseControlledPrintHeaderId");
+					if(UIUtil.isNotNullAndNotEmpty(strUseControlledPrintId)){
+						useControlledPrintId=Boolean.valueOf(strUseControlledPrintId);
+					}
+				}
+			}
+			else{
+				String strFooterRequired = (String) programMap.get("NoFooter");
+				if(UIUtil.isNotNullAndNotEmpty(strFooterRequired)&&Boolean.valueOf(strFooterRequired))
+					strDocId="";
+				else{
+					String strUseControlledPrintId = (String) programMap.get("UseControlledPrintFooterId");
+					if(UIUtil.isNotNullAndNotEmpty(strUseControlledPrintId)){
+						useControlledPrintId=Boolean.valueOf(strUseControlledPrintId);
+					}
+				}
+				
+			}
+			if(useControlledPrintId)
+			{
+				String stControlledPrintId = (String) programMap.get("ControlledPrintDownloadObjectId");
+				strDocId = stControlledPrintId;
+			}
+			
+		}
+		return strDocId;
+	}
+
+	public Map getHeaderOrFooterForPDFUsingTable(Context context, String args[],boolean isHeader) throws MatrixException {
+		try {
+			
+			Map programMap = JPO.unpackArgs(args);
+			String strDocId= getObjectIdForPDF(context,programMap,isHeader);
+			Map<String, String> headerMap=new HashMap();
+			if(UIUtil.isNotNullAndNotEmpty(strDocId))
+			{
+				String strHeaderTable="";
+				if(isHeader)
+					strHeaderTable = ControlledPrintingUtil.getPropertyName(context, strDocId,"PDFHeader","HeaderRequired");
+					
+				else
+					strHeaderTable=ControlledPrintingUtil.getPropertyName(context, strDocId,"PDFFooter","FooterRequired");
+				headerMap =ControlledPrintingUtil.getTableMap(context, strDocId,strHeaderTable, programMap);
+			}
+			return headerMap;
+		}
+
+		catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public Map getFooterForPDF(Context context, String args[]) throws MatrixException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Object oDocId = programMap.get("downloadObjectId");
+
+			String strDocId = DomainConstants.EMPTY_STRING;
+			String strFooterApproach = DomainConstants.EMPTY_STRING;
+
+			if (oDocId instanceof String) {
+				strDocId = (String) programMap.get("downloadObjectId");
+			} else {
+				String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+				if (strDocIdArray!=null&&strDocIdArray.length>0)
+					strDocId = strDocIdArray[0];
+			}
+			String strObjType = DomainObject.newInstance(context, strDocId).getInfo(context,
+					DomainConstants.SELECT_TYPE);
+			String strProperty = "enoControlledPrinting." + strObjType.replaceAll(" ", "") + "."
+					+ "PDFFooterGenerationApproach";
+			try {
+				strFooterApproach = EnoviaResourceBundle.getProperty(context, strProperty);
+			} catch (Exception ex) {
+				
+				strProperty = "enoControlledPrinting.Default.PDFFooterGenerationApproach";
+				strFooterApproach = EnoviaResourceBundle.getProperty(context, strProperty);
+			}
+			if (UIUtil.isNotNullAndNotEmpty(strFooterApproach) && strFooterApproach.equalsIgnoreCase("table")) {
+				return getHeaderOrFooterForPDFUsingTable(context, args,false);
+			} else {
+				return getHeaderOrFooterForPDFUsingForm(context, args, false);
+			}
+
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+
+
+	public Map getWaterMarkForPDF(Context context, String args[]) throws MatrixException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Object oDocId = programMap.get("downloadObjectId");
+
+			String strDocId = DomainConstants.EMPTY_STRING;
+			String customArgs = DomainConstants.EMPTY_STRING;
+			if (oDocId instanceof String) {
+				strDocId = (String) programMap.get("downloadObjectId");
+				customArgs = (String) programMap.get("PrintType");
+			} else {
+				String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+				String[] customArgsArray = (String[]) programMap.get("PrintType");
+				if (strDocIdArray != null && strDocIdArray.length > 0)
+					strDocId = strDocIdArray[0];
+				if (customArgsArray != null && customArgsArray.length > 0)
+					customArgs = customArgsArray[0];
+			}
+			Map<String, String> watermarkMap = new HashMap<>();
+			if (UIUtil.isNullOrEmpty(customArgs)) {
+				return watermarkMap;
+			}
+			String strSelectable = ControlledPrintingUtil.getPropertyName(context,strDocId,"Watermark","WatermarkRequired");
+			if(UIUtil.isNotNullAndNotEmpty(strSelectable))
+				watermarkMap=ControlledPrintingUtil.getWaterMarkMap(context,strDocId,strSelectable);
+			
+			return watermarkMap;
+		} catch (Exception e) {
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+	public String getNameRevisionForHeader(Context context, String[] args) throws MatrixException{
+		try{
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap=(Map)programMap.get(ControlledPrintingConstants.REQUESTMAP);
+			String strDocId = (String) requestMap.get(ControlledPrintingConstants.OBJECTID);
+			DomainObject dObj=DomainObject.newInstance(context,strDocId);
+			StringList slSelect=new StringList();
+			slSelect.add(DomainObject.SELECT_NAME);
+			slSelect.add(DomainObject.SELECT_REVISION);
+			Map<String,String> mInfo=	dObj.getInfo(context, slSelect);
+			String name = (String) mInfo.get(DomainConstants.SELECT_NAME);
+			String revision = (String) mInfo.get(DomainConstants.SELECT_REVISION);
+			String	slHeaderNR= name + " |" + revision ;
+			return slHeaderNR;
+		}catch(Exception e){
+			throw new MatrixException(e.getLocalizedMessage());
+		}
+	}
+
+	private String getFieldDisplayValue(Context context, Map mpField) throws Exception {
+			String value = (String) (mpField.get("Value"));
+		String label = (String) (mpField.get("Label"));
+		Map settings = (Map) (mpField.get("Settings"));
+		String format = null != settings.get("format") ? (String) settings.get("format") : "";
+		if ("date".equalsIgnoreCase(format)) {
+			SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			if (UIUtil.isNotNullAndNotEmpty(value))
+				value = new SimpleDateFormat("MMM dd, yyyy").format(sdf.parse(value));
+		}
+		value = DomainConstants.EMPTY_STRING.equalsIgnoreCase(label) || "(Untitled)".equalsIgnoreCase(label) ? value : new StringBuilder(label)
+				.append(": ").append(value).toString();
+		return value;
+	}
+
+	public static List<String> getControlledPrintPage(Context context, String[] args) throws Exception{
+		List<String> lDescritionList=new StringList();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramList");
+		List<Map> objectList =  (List<Map>) programMap.get("objectList");
+		String strAttrCPNumber = PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_NUMBER);
+
+
+		StringList slSelects=new StringList();
+		slSelects.add(DomainConstants.SELECT_TYPE);
+		slSelects.add(DomainConstants.SELECT_NAME);
+		slSelects.add(DomainConstants.SELECT_DESCRIPTION);
+
+		for(Map map: objectList){
+
+			String strId= (String) map.get(DomainRelationship.SELECT_FROM_ID);
+			String strRelId = (String) map.get(DomainRelationship.SELECT_ID);
+			String strName = map.get("attribute[" + strAttrCPNumber + "].value").toString();
+
+			StringBuffer sbLink=new StringBuffer();
+			sbLink.append("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?treeLabel=").append(XSSUtil.encodeForJavaScript(context,strName)).append("&amp;objectId=");
+			sbLink.append(XSSUtil.encodeForJavaScript(context,strId)).append("&amp;relId=").append(XSSUtil.encodeForJavaScript(context,strRelId));
+            sbLink.append("&amp;treeMenu=type_ControlledPrint");
+		    sbLink.append("', '930', '650', 'true')\" >");
+		    sbLink.append(strName);
+			sbLink.append("</a>");
+
+			lDescritionList.add( sbLink.toString());
+
+		}
+		return lDescritionList;
+
+	}
+
+	public static String getControlledPrintRecipent(Context context, String[] args) throws Exception{
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strRelId =  requestMap.get("relId").toString();
+		String strObjectId =  requestMap.get("objectId").toString();
+		String PFmode=(String)requestMap.get(ControlledPrintingConstants.PFMODE);
+		String strRelation =PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_CONTROLLED_PRINT);
+		String strRecepient=DomainObject.EMPTY_STRING;
+
+		StringList slselect=new StringList();
+		slselect.add("from.name");
+		slselect.add("from.id");
+
+		Map map= (Map) DomainRelationship.getInfo(context, new String[] { strRelId }, slselect ).get(0);
+		String recipientID = map.get("from.id").toString();
+		String recipientName = map.get("from.name").toString();
+		recipientName=PersonUtil.getFullName(context,recipientName);
+		if(UIUtil.isNotNullAndNotEmpty(PFmode)&&PFmode.equalsIgnoreCase("true"))
+			strRecepient=recipientName;
+		else
+			strRecepient= ControlledPrintingUtil.getObjectLink(context, recipientID, recipientName);
+
+		return strRecepient;
+
+	}
+
+public static String getControlledPrintSourceField(Context context, String[] args) throws Exception{
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strRelId =  requestMap.get("relId").toString();
+		String PFmode=(String)requestMap.get(ControlledPrintingConstants.PFMODE);
+		String strObjectId =  requestMap.get("objectId").toString();
+		String strRelation =PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_CONTROLLED_PRINT);
+		String strSource=DomainObject.EMPTY_STRING;
+
+		StringList slselect=new StringList();
+		slselect.add("from["+strRelation+"].to.id");
+		slselect.add("from["+strRelation+"].to.name");
+
+		StringList selectFrom = new StringList();
+		selectFrom.add(DomainObject.SELECT_TO_ID);
+		selectFrom.add(DomainObject.SELECT_TO_NAME);
+
+		DomainObject dom = DomainObject.newInstance(context, strObjectId);
+		Map map= (Map) dom.getRelatedObject(context, strRelation, true, slselect, selectFrom);
+	
+		String strID = map.get(DomainObject.SELECT_TO_ID).toString();
+		String strName = map.get(DomainObject.SELECT_TO_NAME).toString();
+		if(UIUtil.isNotNullAndNotEmpty(PFmode)&&PFmode.equalsIgnoreCase("true")){
+			strSource=strName;
+		}else{
+			strSource=ControlledPrintingUtil.getObjectLink(context, strID, strName);;
+		}
+		
+		return strSource;
+
+	}
+
+public static String getControlledPrintIssuedBy(Context context, String args[]) throws Exception {
+	try {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String strObjectId =  requestMap.get("objectId").toString();
+		String PFmode=(String)requestMap.get(ControlledPrintingConstants.PFMODE);
+		String strRelation =PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_RELATIONSHIP_CONTROLLED_PRINT);
+        String strIssuedByName=DomainObject.EMPTY_STRING;
+        
+		StringList slselect= new StringList();
+		StringList selectFrom = new StringList();
+		selectFrom.add(DomainObject.SELECT_OWNER);
+		DomainObject dom = DomainObject.newInstance(context, strObjectId);
+		Map map= (Map) dom.getRelatedObject(context, strRelation, true, slselect, selectFrom);
+		String strName = map.get(DomainObject.SELECT_OWNER).toString();
+		String strOwnerId = PersonUtil.getPersonObjectID(context, strName);
+		strName=PersonUtil.getFullName(context, strName);
+		if(UIUtil.isNotNullAndNotEmpty(PFmode)&&PFmode.equalsIgnoreCase("true")){
+			strIssuedByName=strName;
+		}else
+			strIssuedByName=ControlledPrintingUtil.getObjectLink(context, strOwnerId, strName);
+		
+		return strIssuedByName;
+	}
+	catch (Exception e) {
+		throw new Exception(e);
+	}
+
+}
+
+
+public Map<String,List<String>> getPrintMethodOptions(Context context,String args[]) throws Exception {
+	try {
+		String strPrintUsingServer = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+				"enoControlledPrinting.Range.PrintUsingServer");
+		String PrintUsingLocalMachine = EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),
+				"enoControlledPrinting.Range.PrintUsingLocalMachine");
+		List<String> slPrintOption = new StringList();
+		slPrintOption.add(ControlledPrintingConstants.RANGE_PRINT_USING_SERVER);
+		slPrintOption.add(ControlledPrintingConstants.RANGE_PRINT_USING_LOCALMACHINE);
+		List<String> slPrintOptionDisplay = new StringList();
+		slPrintOptionDisplay.add(strPrintUsingServer);
+		slPrintOptionDisplay.add(PrintUsingLocalMachine);
+		Map<String, List<String>> rangeMap = new HashMap<String, List<String>>();
+		rangeMap.put(ControlledPrintingConstants.FIELD_CHOICES, slPrintOption);
+		rangeMap.put(ControlledPrintingConstants.FIELD_DISPLAY_CHOICES, slPrintOptionDisplay);
+		return rangeMap;
+	} catch (Exception e) {
+		throw new Exception(e);
+	}
+}
+
+public Map<String,List<String>> getPrinters(Context context,String args[]) throws Exception {
+	try {
+		String strPrinterName=EnoviaResourceBundle.getProperty(context, "enoControlledPrinting.PrinterNames");
+		String strPrinterDisplayName=EnoviaResourceBundle.getProperty(context, "enoControlledPrinting.PrinterDisplayNames");
+		List<String> slPrinterList = new StringList();
+		List<String> slPrinterDisplayList = new StringList();
+		
+		slPrinterList=FrameworkUtil.split(strPrinterName, ",");
+		slPrinterDisplayList=FrameworkUtil.split(strPrinterDisplayName, ",");
+		
+		String strDefaultPrinter=MqlUtil.mqlCommand(context, "print $1 $2 select $3 dump","Person",context.getUser(),"Property[Default Printer].value");
+		
+		Map<String, List<String>> rangeMap = new HashMap<String, List<String>>();
+		rangeMap.put(ControlledPrintingConstants.FIELD_CHOICES, slPrinterList);
+		rangeMap.put(ControlledPrintingConstants.FIELD_DISPLAY_CHOICES, slPrinterDisplayList);
+		return rangeMap;
+	} catch (Exception e) {
+		throw new Exception(e);
+	}
+}
+public String getDefaultPrinter(Context context,String args[]) throws Exception {
+	
+	String strDefaultPrinter=MqlUtil.mqlCommand(context, "print $1 $2 select $3 dump","Person",context.getUser(),"Property[Default Printer].value");
+	
+	return strDefaultPrinter;
+}
+
+public Map<String,List<String>> getSetPrinterDefaultField(Context context,String args[]) throws Exception {
+	try {
+		
+		String SetASDefault=EnoviaResourceBundle.getProperty(context, ControlledPrintingConstants.CONTROLLED_PRINT_STRINGRESOURCE, context.getLocale(),"enoControlledPrint.Range.SetASDefault");
+		List<String> slSetDefault = new StringList();
+		slSetDefault.add(SetASDefault);
+		Map<String, List<String>> rangeMap = new HashMap<String, List<String>>();
+		rangeMap.put(ControlledPrintingConstants.FIELD_CHOICES, slSetDefault);
+		rangeMap.put(ControlledPrintingConstants.FIELD_DISPLAY_CHOICES, slSetDefault);
+		return rangeMap;
+	} catch (Exception e) {
+		throw new Exception(e);
+	}
+}
+
+public Map<String,StringList> getAttributeRangesforPrintReason(Context context, String args[]) throws Exception {
+		Map<String, StringList> attributeRangeMap = new HashMap<String, StringList>();
+		try {
+			String strAttrPrintReason=PropertyUtil.getSchemaProperty(context, ControlledPrintingConstants.SYMBOLIC_ATTRIBUTE_CONTROLLED_PRINT_REASON);
+			StringList slAttributeRange = FrameworkUtil.getRanges(context, strAttrPrintReason);
+
+			if (!ControlledPrintingUtil.isNullOrEmpty(slAttributeRange)) {
+				attributeRangeMap.put("field_choices", slAttributeRange);
+				attributeRangeMap.put("field_display_choices",
+						i18nNow.getAttrRangeI18NStringList(strAttrPrintReason, slAttributeRange, context.getSession().getLanguage()));
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+		return attributeRangeMap;
+	}
+
+
+
+}
+
+

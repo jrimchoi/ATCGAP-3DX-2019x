@@ -1,0 +1,2729 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.text.ParseException;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Locale;
+import java.util.Map;
+import java.util.TimeZone;
+import java.util.Vector;
+
+import matrix.db.AccessConstants;
+import matrix.db.AttributeList;
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.IconMail;
+import matrix.db.JPO;
+import matrix.db.Relationship;
+import matrix.db.RelationshipType;
+import matrix.db.Signature;
+import matrix.db.SignatureItr;
+import matrix.db.State;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.common.InboxTask;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+
+/**
+ * Contains methods that are generic for all Action Item derivatives.
+ */
+@Deprecated
+public class ${CLASSNAME} {
+
+	public final static String	RELATIONSHIP_ACTION_CONNECT		= "connect";
+
+	public final static String	RELATIONSHIP_ACTION_DISCONNECT	= "disconnect";
+
+	/**
+	 * Constructs a new {@code $ CLASSNAME} object.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * Generates and returns a list of HTML snippets for each of the displayed
+	 * action items. The HTML snippets represent checkboxes and are enabled and
+	 * disabled depending upon the state of the action item they represent.
+	 * Action items in the Create and Assigned states have enabled checkboxes,
+	 * while items in other states have disabled checkboxes.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @returns A list of checkbox HTML snippets for each of the displayed
+	 *          action items.
+	 */
+	public static Vector<String> getTC_ActionItemCheckboxes(Context context, String[] args) throws Exception {
+		// TODO: Remove team central prefix
+		Vector<String> resultList = new Vector<String>();
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+
+		// Get the state names for Create and Assigned
+		// TODO: Remove underscores from local variable names
+		String state_Create = FrameworkUtil.lookupStateName(context, ${CLASS:iwActionItemStaticVariables}.POLICY_ACTION_ITEM, "state_Create");
+		String state_Assigned = FrameworkUtil.lookupStateName(context, ${CLASS:iwActionItemStaticVariables}.POLICY_ACTION_ITEM, "state_Assigned");
+
+		if (relBusObjPageList != null) {
+			// Iterate over the object list, pulling out the object ids
+			// TODO: Unnecessary. We don't need to iterate over the list
+			// multiple times. This may be faster computationally, but it's
+			// more difficult to read.
+			String objIdArray[] = new String[relBusObjPageList.size()];
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				objIdArray[i] = (String) ((Map<?, ?>) relBusObjPageList.get(i)).get("id");
+			}
+
+			// Get the list of objects with their current states
+			SelectList listSelect = new SelectList(1);
+			listSelect.addElement("current");
+			BusinessObjectWithSelectList resultSelectList = null;
+			resultSelectList = BusinessObject.getSelectBusinessObjectData(context, objIdArray, listSelect);
+
+			// Iterate over the object list and generate checkbox HTML for each
+			resultList = new Vector<String>(relBusObjPageList.size());
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String selectValue = resultSelectList.getElement(i).getSelectData("current");
+				String objectId = objIdArray[i];
+
+				String colValue = null;
+				if (!selectValue.equals(state_Create) && !selectValue.equals(state_Assigned)) {
+					// Show a disabled checkbox if the item is not in the create
+					// or assigned state
+					String msg = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.ErrorMsg.NoRemoveStartedTask");
+
+					colValue = getDisabledCheckbox(context, msg);
+				}
+				else {
+					colValue = getEnabledCheckbox(context, objectId);
+				}
+				resultList.add(colValue);
+			}
+		}
+		return resultList;
+	}
+
+	/**
+	 * Returns an HTML snippet representing an enabled checkbox for the given
+	 * {@code objectId}.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param objectId
+	 *            Object id for the object represented by this checkbox.
+	 * @return An HTML snippet representing an enabled checkbox for the given
+	 *         {@code objectId}.
+	 */
+	public static String getEnabledCheckbox(Context context, String objectId) throws Exception {
+		String enabledHTML = "<input type=\"checkbox\" name=\"emxTableRowId\" value=\"" + objectId
+				+ "\" onclick=\"doCheckboxClick(this);\"><script>strPageIDs += \"" + objectId + "\" + \"~\";</script>";
+		return enabledHTML;
+	}
+
+	/**
+	 * Returns an HTML snippet representing a disabled checkbox. The disabled
+	 * checkbox also displays the given {@code message} on hover.
+	 * 
+	 * Instead of setting a html checkbox to 'disabled' it displays an image of
+	 * a disabled checkbox. This is done because javascript can be executed to
+	 * select or deselect all checkboxes. The html disabled checkbox will still
+	 * get checked when the javascript is run. Are we ever in a position where
+	 * the javascript code will do such a thing, or we don't trust the
+	 * javascript written against the table?
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param message
+	 *            The message to display over the checkbox on hover.
+	 * @return An HTML snippet representing a disabled checkbox, with the given
+	 *         {@code message} displayed on hover.
+	 */
+	public static String getDisabledCheckbox(Context context, String message) throws Exception {
+		String disabledHTML = "&nbsp;<img src=\"../common/images/utilCheckOffDisabled.gif\" alt=\"" + message + "\">";
+		return disabledHTML;
+	}
+
+	/**
+	 * Create a link to launch the Approval Matrix for an item in a table.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Argument data structure.
+	 * @return String List of all HTML column values
+	 */
+	public StringList launchApprovalMatrix(Context context, String[] args) throws Exception {
+		try {
+			StringList urlList = new StringList();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			// TODO: What does 'aiMap' stand for?
+			MapList aiMap = (MapList) programMap.get("objectList");
+			Map<?, ?> paramMap = (Map<?, ?>) programMap.get("paramList");
+			String objectId = (String) paramMap.get("objectId");
+
+			// Added to allow adhoc approvers to be turned off for Action Tasks.
+			// Default behavior is still to use adhoc approvers
+			String strAdHoc = (String) paramMap.get("IWAllowAdhoc");
+
+			if (Helper.isNullOrEmpty(strAdHoc) || !"false".equalsIgnoreCase(strAdHoc)) {
+				strAdHoc = "true";
+			}
+
+			// Iterate over the list of objects in the table
+			Iterator itr = aiMap.iterator();
+			while (itr.hasNext()) {
+				Map<?, ?> m = (Map<?, ?>) itr.next();
+				String sAIId = (String) m.get("id");
+				String html = DomainConstants.EMPTY_STRING;
+
+				// add style sheet
+				String sStyleSheet = "<script type=\"text/javascript\"> addStyleSheet(\"iwCommonStyles\", \"../common/styles/\"); </script>";
+				html = sStyleSheet;
+
+				// Get the object's current state
+				DomainObject doActionItem = new DomainObject(sAIId);
+				String sCurrent = doActionItem.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+				if (sCurrent.equalsIgnoreCase("Create")) {
+
+					String AssignResponsibility = "emxFramework.ActionItem.Heading.SelectUsersForTask";
+
+					String selectUsers = "emxFramework.ActionItem.Heading.SelectUsersForTask";
+
+					// If the object is in Create, setup a link to the AM dialog
+					DomainObject parentObj = DomainObject.newInstance(context, objectId);
+					String amURL = DomainConstants.EMPTY_STRING;
+					String suiteKey = "LSACommonFramework";
+					if (parentObj.isKindOf(context, "Complaint")) {
+						amURL += "../components/iwComplaintApprovalMatrixDialogFS.jsp?allowAdHoc=" + strAdHoc
+								+ "&cmd=promote&processChildren=false&heading=" + AssignResponsibility + "&subHeading=" + selectUsers
+								+ "&export=false&objectId=" + sAIId + "&startImmediately=true&suiteKey=" + suiteKey;
+					}
+					else {
+						amURL += "../components/iw_ApprovalMatrixDialogFS.jsp?allowAdHoc=" + strAdHoc + "&cmd=promote&processChildren=false&heading="
+								+ AssignResponsibility + "&subHeading=" + selectUsers + "&export=false&objectId=" + sAIId
+								+ "&startImmediately=true&suiteKey=" + suiteKey;
+					}
+					amURL = amURL.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+					String clickToAssign = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.ClickToAssign");
+					clickToAssign = clickToAssign.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+					amURL = "<a href=\"JavaScript:emxTableColumnLinkClick('" + amURL
+							+ "', '600', '600', 'true', 'popup', '')\"><img src=\"../common/images/iconSmallAssignee2.gif\" border=\"0\" title=\""
+							+ clickToAssign + "\" /></a>";
+
+					html += amURL;
+				}
+				else if ("Assigned".equalsIgnoreCase(sCurrent)) {
+
+					// Get all of the unstarted routes to which the current
+					// object is attached
+					// TODO: Could this be negatively affected by OOTB routes
+					// that this object may be attached to?
+					String whereClause = "(attribute[Route Status] == 'Not Started')";
+					StringList objSelects = new StringList();
+					objSelects.addElement(DomainConstants.SELECT_ID);
+					MapList routeObjects = doActionItem.getRelatedObjects(context, "Object Route", DomainConstants.QUERY_WILDCARD, objSelects,
+							new StringList(), false, true, (short) 1, whereClause, null, 0, null, null, null);
+
+					// If the route has not been started, setup a link to start
+					// the route
+					if (routeObjects.size() > 0) {
+						Iterator routeItr = routeObjects.iterator();
+						Map<?, ?> routeObject = (Map<?, ?>) routeItr.next();
+						String sRouteId = (String) routeObject.get(DomainConstants.SELECT_ID);
+
+						String startRouteURL = "../common/iwExecute.jsp?program=IW_ApprovalMatrix:startRoute&routeId=" + sRouteId
+								+ "&complete=javascript:top.refreshTablePage()";
+						startRouteURL = startRouteURL.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+						String clickToStart = Helper
+								.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.ClickToStart");
+						clickToStart = clickToStart.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+						startRouteURL = "<a href=\"JavaScript:emxTableColumnLinkClick('"
+								+ startRouteURL
+								+ "', '600', '600', 'true', 'listHidden', '')\"><img src=\"../common/images/iconActionPromote.gif\" border=\"0\" title=\""
+								+ clickToStart + "\"/></a>";
+
+						html += startRouteURL;
+					}
+
+					// Generate a link to open the modify dialog for this action
+					// item
+					// TODO: Any reason this farms out the HTML creation to
+					// another method, while the others do not? We should also
+					// guard the execution with a conditional so it doesn't run
+					// every time.
+					String modifyActionTask = getTC_ActionItemInboxTaskUpdateIcon(context, sAIId);
+
+					// Decide which HTML to display in the table
+					if (html.equals("")) {
+						html += modifyActionTask;
+					}
+					else {
+						html += " " + modifyActionTask;
+					}
+				}
+
+				// Wrap in a div element to center the HTML
+				html = "<div class=\"alignCenter\">" + html + "</div>";
+				urlList.addElement(html);
+			}
+
+			return urlList;
+		}
+		catch (Exception e) {
+			// TODO: What does wrapping in a FrameworkException add?
+			throw new FrameworkException(e);
+		}
+	}
+
+	/**
+	 * Returns a MapList of objectIds for Routes connected to an Action Item
+	 * 
+	 * @return routeList
+	 * @throws Exception
+	 */
+	protected static MapList getRelatedRoutes(Context context, DomainObject actionItemObj) throws Exception {
+		// First get the routes that aren't Rejected
+		String objWhereClause = "attribute[Route Status] != Rejected";
+
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		MapList routeList = actionItemObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE,
+				objSelects, new StringList(), false, true, (short) 1, objWhereClause, "", 0, null, null, null);
+
+		return routeList;
+	}
+
+	/**
+	 * Returns a StringBuffer containing names of each Assigned To user for the
+	 * MapList of Routes in the format of "Last, First (username)"
+	 * 
+	 * @param context
+	 * @param routeList
+	 * @return sPersonBuf
+	 * @throws Exception
+	 */
+	protected static StringBuffer getRelatedPersons(Context context, MapList routeList) throws Exception {
+		StringBuffer sPersonBuf = new StringBuffer();
+		// for all routes
+		for (int i = 0; i < routeList.size(); i++) {
+
+			// Now get the route object
+			DomainObject routeObj = new DomainObject((String) ((Map<?, ?>) routeList.get(i)).get(DomainConstants.SELECT_ID));
+
+			// get the related person objects
+			MapList personList = routeObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_ROUTE_NODE, DomainConstants.TYPE_PERSON,
+					new StringList(DomainConstants.SELECT_ID), new StringList(), false, true, (short) 1, DomainConstants.EMPTY_STRING,
+					DomainConstants.EMPTY_STRING, 0, null, null, null);
+
+			// loop through the results - if multiple approvers concat the
+			// approvers to string buffer
+			for (int j = 0; j < personList.size(); j++) {
+
+				// Get the person object
+				DomainObject personObj = DomainObject.newInstance(context, (String) ((Map<?, ?>) personList.get(j)).get(DomainConstants.SELECT_ID));
+
+				// get the user name attributes
+				String last = personObj.getAttributeValue(context, DomainConstants.ATTRIBUTE_LAST_NAME);
+				String first = personObj.getAttributeValue(context, DomainConstants.ATTRIBUTE_FIRST_NAME);
+				String login = personObj.getInfo(context, DomainConstants.SELECT_NAME);
+
+				// if only one person, or this is last person, no newline
+				if (personList.size() == 1 || personList.size() - 1 == j) {
+					// set user w/o newline at end
+					sPersonBuf.append(last);
+					sPersonBuf.append(", ");
+					sPersonBuf.append(first);
+					sPersonBuf.append(" (");
+					sPersonBuf.append(login);
+					sPersonBuf.append(")");
+				}
+
+				// else add new line
+				else {
+					sPersonBuf.append(last);
+					sPersonBuf.append(", ");
+					sPersonBuf.append(first);
+					sPersonBuf.append(" (");
+					sPersonBuf.append(login);
+					sPersonBuf.append(")<br />");
+				}
+
+			}
+
+		}
+		return sPersonBuf;
+	}
+
+	/**
+	 * Returns a StringBuffer containing due dates of each Inbox TasK for the
+	 * MapList of Routes in the format of "Jan 1, 2008"
+	 * 
+	 * @param context
+	 * @param routeList
+	 * @return
+	 * @throws Exception
+	 */
+	protected static StringBuffer getRelatedInboxTasksDueDates(Context context, MapList routeList, String timezone) throws Exception {
+		StringBuffer sDueDateBuf = new StringBuffer();
+		// for all routes
+		for (int i = 0; i < routeList.size(); i++) {
+
+			// Now get the route object
+			DomainObject routeObj = new DomainObject((String) ((Map<?, ?>) routeList.get(i)).get(DomainConstants.SELECT_ID));
+
+			// get the related inbox task objects
+			MapList inboxTaskList = routeObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_ROUTE_TASK, DomainConstants.TYPE_INBOX_TASK,
+					new StringList(DomainConstants.SELECT_ID), new StringList(), true, false, (short) 1, DomainConstants.EMPTY_STRING,
+					DomainConstants.EMPTY_STRING, 0, null, null, null);
+
+			// loop through the results - if multiple approvers concat the
+			// approvers to string buffer
+			for (int j = 0; j < inboxTaskList.size(); j++) {
+
+				// Get the inbox task object
+				DomainObject inboxTaskObj = DomainObject.newInstance(context,
+						(String) ((Map<?, ?>) inboxTaskList.get(j)).get(DomainConstants.SELECT_ID));
+
+				// get the "Scheduled Completion Date" attribute
+				String dueDate = inboxTaskObj.getAttributeValue(context, DomainConstants.ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+
+				// try to format date string
+				double dbTimeZone = Double.parseDouble(timezone);
+				dueDate = eMatrixDateFormat.getFormattedDisplayDate(dueDate, dbTimeZone, Locale.getDefault());
+
+				// if only one inbox task, or this is last inbox task, no
+				// newline
+				if (inboxTaskList.size() == 1 || inboxTaskList.size() - 1 == j) {
+					// set user w/o newline at end
+					sDueDateBuf.append(dueDate);
+
+				}
+
+				// else add new line
+				else {
+					sDueDateBuf.append(dueDate);
+					sDueDateBuf.append("<br />");
+
+				}
+
+			}
+
+		}
+		return sDueDateBuf;
+	}
+
+	/**
+	 * Returns a Vector of Strings containing Assigned To column values for
+	 * iwActionTasks table each String is in programHTMLOutput format
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Argument data structure.
+	 * @return Vector of HTML column values
+	 * @throws Exception
+	 */
+	public static Vector<String> getAssignedToColumn(Context context, String[] args) throws Exception {
+
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList mlBusObjList = (MapList) programMap.get("objectList");
+		// HashMap hmParamMap = (HashMap) programMap.get("paramList");
+
+		Vector<String> returnVal = new Vector<String>(mlBusObjList.size());
+
+		// Iterate over the list of objects from the table
+		for (int i = 0; i < mlBusObjList.size(); i++) {
+			// Get the current object's state
+			String sObjId = (String) ((Map<?, ?>) mlBusObjList.get(i)).get(DomainConstants.SELECT_ID);
+			DomainObject actionItemObj = new DomainObject(sObjId);
+			String strState = actionItemObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+			// If action item is Assigned, get the list of approvers
+			if ("Assigned".equals(strState)) {
+
+				// get assigned to user(s)
+				// methods to first get related routes, then get related persons
+				StringBuffer assignedToVal = getRelatedPersons(context, getRelatedRoutes(context, actionItemObj));
+
+				// add string buf contents to ret vector
+				returnVal.add(assignedToVal.toString());
+
+			}
+
+			// if action item is NOT assigned
+			else {
+				returnVal.add(DomainConstants.EMPTY_STRING);
+			}
+
+		}
+
+		return returnVal;
+	}
+
+	/**
+	 * Returns a Vector of Strings containing Due Date column values for
+	 * iwActionTasks table each String is in programHTMLOutput format
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Argument data structure.
+	 * @return Vector of HTML column values
+	 * @throws Exception
+	 */
+	public static Vector<String> getDueDateColumn(Context context, String[] args) throws Exception {
+
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList mlBusObjList = (MapList) programMap.get("objectList");
+		Map<?, ?> hmParamMap = (Map<?, ?>) programMap.get("paramList");
+
+		// get timezone... used for date format
+		String timezone = (String) hmParamMap.get("timeZone");
+		// double dbTimeZone = Double.parseDouble(timezone);
+
+		Vector<String> returnVal = new Vector<String>(mlBusObjList.size());
+
+		// Iterate over the list of objects from the table
+		for (int i = 0; i < mlBusObjList.size(); i++) {
+			// Get the current object's state
+			String sObjId = (String) ((Map<?, ?>) mlBusObjList.get(i)).get(DomainConstants.SELECT_ID);
+			DomainObject actionItemObj = new DomainObject(sObjId);
+			String strState = actionItemObj.getInfo(context, DomainConstants.SELECT_CURRENT);
+
+			// If action item is Assigned, get the list of due dates
+			if (strState.equals("Assigned")) {
+
+				// get due dates
+				// methods to first get related routes, then get
+				StringBuffer dueDateVal = getRelatedInboxTasksDueDates(context, getRelatedRoutes(context, actionItemObj), timezone);
+
+				// bug fix #21062
+				// String date =
+				// eMatrixDateFormat.getFormattedDisplayDate(dueDateVal.toString(),
+				// dbTimeZone, Locale.getDefault());
+				// add string buf contents to ret vector
+				returnVal.add(dueDateVal.toString());
+			}
+
+			// if action item is NOT assigned
+			else {
+				returnVal.add(DomainConstants.EMPTY_STRING);
+			}
+
+		}
+
+		return returnVal;
+	}
+
+	/**
+	 * Returns a list of approval statuses for each of the action items in the
+	 * table. If the action item is assigned, the selected approvers are
+	 * displayed. If the action item is complete, the item is marked as
+	 * 'Approved'. If the action item has not yet been assigned, show any
+	 * previous actions that have occurred such as whether or not the item had
+	 * been previously rejected.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @return A list of approval statuses for each of the action items in the
+	 *         table.
+	 */
+	public static Object getApprovalStatus(Context context, String[] args) throws MatrixException {
+		Vector<String> vApproverList = new Vector<String>();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList mlBusObjList = (MapList) programMap.get("objectList");
+			Map<?, ?> hmParamMap = (Map<?, ?>) programMap.get("paramList");
+
+			if (mlBusObjList == null) {
+				return null;
+			}
+
+			// Iterate over the list of objects from the table
+			for (int i = 0; i < mlBusObjList.size(); i++) {
+				// Get the current object's state
+				String sObjId = (String) ((Map<?, ?>) mlBusObjList.get(i)).get("id");
+				DomainObject objObject = new DomainObject(sObjId);
+				String strState = objObject.getInfo(context, DomainObject.SELECT_CURRENT);
+
+				String strListOfApprovers = DomainConstants.EMPTY_STRING;
+
+				// If action item is Assigned, get the list of approvers
+				if ("Assigned".equals(strState)) {
+					// TODO: Replace deprecated code.
+					ContextUtil.pushContext(context);
+					strListOfApprovers = getApproversForRoute(context, objObject, hmParamMap);
+					ContextUtil.popContext(context);
+				}
+				// If action item is in Create, display previous actions on the
+				// item
+				else if ("Create".equals(strState)) {
+
+					// Get the list of previous routes, if any
+					StringList objSelects2 = new StringList();
+					objSelects2.addElement(DomainConstants.SELECT_ID);
+					// TODO: Why concatenate string literals in this way?
+					String whereClause = "(" + "attribute[" + "Route Status" + "]" + " == " + "\"" + "Rejected" + "\"" + ")";
+					MapList routeObjects2 = objObject.getRelatedObjects(context, "Object Route", "*", objSelects2, new StringList(), false, true,
+							(short) 0, whereClause, null, 0, null, null, null);
+
+					// TODO: Flip these conditionals so it's easier to
+					// understand
+					if (!(routeObjects2.isEmpty())) {
+						// strListOfApprovers =
+						// "Review Rejected or Action Item Demoted";
+						strListOfApprovers = Helper.getI18NString(context, Helper.StringResource.LSA,
+								"emxFramework.ActionItem.Message.ReviewRejectdDemoted");
+
+					}
+					else {
+						// strListOfApprovers = "Not Submitted";
+						strListOfApprovers = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.NotSubmitted");
+					}
+				}
+				// If action item is Complete, just display 'Approved'
+				else if ("Complete".equals(strState)) {
+					// strListOfApprovers = "Approved";
+					strListOfApprovers = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.Approved");
+				}
+
+				vApproverList.add(strListOfApprovers);
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return vApproverList;
+	}
+
+	/**
+	 * Returns a pseudo-HTML snippet containing the list of approver names for
+	 * the route to which the given {@code objObject} is attached. The names are
+	 * formatted for display.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param objObject
+	 *            The object whose routes to search for approvers.
+	 * @param paramList
+	 *            A pass-through parameter list for methods called by this
+	 *            method.
+	 * @return A pseudo-HTML snippet containing the list of approver names for
+	 *         the route to which the given {@code objObject} is attached.
+	 */
+	public static String getApproversForRoute(Context context, DomainObject objObject, Map<?, ?> paramList) throws FrameworkException, Exception {
+		// TODO: DomainObject objObject?
+
+		// TODO: Variable name misleading as it may not contain the list of
+		// approvers.
+		StringBuffer strListOfApprovers = null;
+
+		// Get the list of started routes to which objObject is attached
+		String whereClause = "(attribute[Route Status] == 'Started')";
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		MapList routeObjects = objObject.getRelatedObjects(context, "Object Route", "*", objSelects, new StringList(), false, true, (short) 0,
+				whereClause, null, 0, null, null, null);
+
+		// TODO: Why are we using an iterator? We're not iterating.
+		Iterator itr = routeObjects.iterator();
+		if (itr.hasNext()) {
+			// Setup the select list for persons attached to the route
+			objSelects.addElement(DomainConstants.SELECT_NAME);
+			String strFirstName = PropertyUtil.getSchemaProperty(context, "attribute_FirstName");
+			String strLastName = PropertyUtil.getSchemaProperty(context, "attribute_LastName");
+			objSelects.addElement("attribute[" + strFirstName + "]");
+			objSelects.addElement("attribute[" + strLastName + "]");
+
+			// Setup the select list for the Route->RouteNode relationship
+			StringList slRelationshipSelects = new StringList();
+			slRelationshipSelects.addElement("attribute[Approval Status]");
+			slRelationshipSelects.addElement("attribute[Scheduled Completion Date]");
+
+			// Get the route object
+			Map<?, ?> childMap = (Map<?, ?>) itr.next();
+			String strRouteId = (String) childMap.get(DomainConstants.SELECT_ID);
+			DomainObject doRoute = new DomainObject(strRouteId);
+
+			// Get the list of persons assigned as approvers on this route
+			// TODO: Why concatenate string literals in this way?
+			// TODO: This variable is never used again. Setting it is
+			// unnecessary.
+			whereClause = "(" + "Route Status" + " == " + "\"" + "Started" + "\"" + ")";
+			MapList assigneeObjects = doRoute.getRelatedObjects(context, PropertyUtil.getSchemaProperty(context, "relationship_RouteNode"), "*",
+					objSelects, slRelationshipSelects, false, true, (short) 0, null, null, 0, null, null, null);
+
+			Iterator itr2 = assigneeObjects.iterator();
+			// TODO: Why set this variable again?
+			strListOfApprovers = new StringBuffer();
+
+			// Iterate over the list of approvers on the route
+			String strApprovalDueDate = "";
+			while (itr2.hasNext()) {
+				// Display the approver's name and approval status as follows:
+				// <first_initial>. <last_name>: <approval_status>
+				Map<?, ?> assigneeMap = (Map<?, ?>) itr2.next();
+				strListOfApprovers.append(((String) assigneeMap.get("attribute[First Name]")).trim() + " ");
+				strListOfApprovers.append(((String) assigneeMap.get("attribute[Last Name]")).trim());
+				if (((String) assigneeMap.get("attribute[Approval Status]")).equals("Approve")) {
+					strListOfApprovers.append(":Approved");
+				}
+				else {
+					strListOfApprovers.append(":");
+				}
+
+				// Use XHTML compliant markup.
+				strListOfApprovers.append("<br/>");
+				strApprovalDueDate = DBDateTimeToDisplayDateTime(context, (String) assigneeMap.get("attribute[Scheduled Completion Date]"), true,
+						paramList);
+			}
+
+			// Add the due date to the end of the approver list
+			strListOfApprovers.append("Due: " + strApprovalDueDate);
+
+		}
+		else {
+			// Get the list of unstarted routes to which objObject is attached
+			whereClause = "(attribute[Route Status] == 'Not Started')";
+			routeObjects = objObject.getRelatedObjects(context, "Object Route", "*", objSelects, new StringList(), false, true, (short) 0,
+					whereClause, null, 0, null, null, null);
+			strListOfApprovers = new StringBuffer();
+			if (routeObjects.size() > 0) {
+				// Get the unstarted, attached route
+				// TODO: Why setup an iterator to get the first element?
+				Iterator routeItr = routeObjects.iterator();
+				Map<?, ?> routeObject = (Map<?, ?>) routeItr.next();
+				String sRouteId = (String) routeObject.get(DomainConstants.SELECT_ID);
+				Route thisRoute = new Route(sRouteId);
+
+				// Get the list of approvers attached to the route
+				StringList routeSelects = new StringList();
+				routeSelects.addElement(DomainConstants.SELECT_ID);
+				MapList mlMembers = thisRoute.getRouteMembers(context, routeSelects, new StringList(), false);
+
+				// strListOfApprovers = "Approval assigned but not started.";
+				strListOfApprovers.append(Helper.getI18NString(context, Helper.StringResource.LSA,
+						"emxFramework.ActionItem.Message.AssignedNotStarted"));
+
+				// Iterate over the route's approvers
+				Iterator routeMemberItr = mlMembers.iterator();
+				while (routeMemberItr.hasNext()) {
+					// Display the approver's first initial and last name
+					Map<?, ?> routeMemberMap = (Map<?, ?>) routeMemberItr.next();
+					String sPersonId = (String) routeMemberMap.get("id");
+					DomainObject doPerson = new DomainObject(sPersonId);
+
+					// Use XHTML compliant markup.
+					strListOfApprovers.append("<br/>");
+					strListOfApprovers.append(doPerson.getAttributeValue(context, "First Name").trim().charAt(0) + ".");
+					strListOfApprovers.append(doPerson.getAttributeValue(context, "Last Name"));
+
+				}
+			}
+		}
+
+		return strListOfApprovers.toString();
+	}
+
+	/**
+	 * This method will be used to format dates where the timezone and locale
+	 * are provided by the system (often via the browser and/or client pc). In
+	 * other words, the 'paramList' map is provided and it contains:<br>
+	 * 'timeZone' - an integer value relative to GMT<br>
+	 * 'localeObj' - a Locale object that is used to determine format<br>
+	 * The format is the default format of the eMatrixDateFormat class.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param databaseValue
+	 *            - value that will be formatted
+	 * @param displayTime
+	 *            - true - show the time; false - date, only.
+	 * @param paramList
+	 *            - contains two key/value pairs: timeZone and localeObj
+	 * @return formatted date
+	 * @throws ParseException
+	 * @throws FrameworkException
+	 */
+	static public String DBDateTimeToDisplayDateTime(Context context, String databaseValue, boolean displayTime, Map<?, ?> paramList)
+			throws ParseException, FrameworkException {
+		// TODO: Rename method according to java best practices.
+
+		String string = DomainConstants.EMPTY_STRING;
+		String timeZone = (String) paramList.get("timeZone");
+		Object localeObj = paramList.get("localeObj");
+
+		if (timeZone != null && timeZone.length() > 0 && localeObj != null) {
+			Locale locale = (Locale) localeObj;
+			string = DBDateTimeToDisplayDateTime(context, databaseValue, displayTime, ${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_FORMAT,
+					new Double(timeZone).doubleValue(), locale);
+		}
+		else {
+			string = DBDateTimeToDisplayDateTime(context, databaseValue, displayTime, ${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_FORMAT,
+					${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_TIMEZONE, null);
+		}
+		return string;
+	}
+
+	/**
+	 * This method will be used to format dates where the developer provides all
+	 * of the appropriate parameters. This method is overloaded, try one of the
+	 * other methods, first.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param databaseValue
+	 *            - value that will be formatted
+	 * @param displayTime
+	 *            - true - show the time; false - date, only.
+	 * @param format
+	 *            - standard Java formats (0 - 3); any value outside of this
+	 *            range will then utilize the 'default' format established in
+	 *            eMatrixDateFormat
+	 * @param timeZoneOffset
+	 *            - (-12 <-> +13) (Can be a fraction, i.e. Newfoundland = -3.5);
+	 *            if 'USE_PERSON_TIMEZONE' is passed, the timezone set via Tools
+	 *            -> Preferences... will be used
+	 * @param locale
+	 *            - Locale provided by browser; if 'null', then the user's
+	 *            language set via Tools -> Preferences, will be utilized to
+	 *            create a Locale object.
+	 * @return formatted date
+	 * @throws ParseException
+	 * @throws FrameworkException
+	 */
+	static public String DBDateTimeToDisplayDateTime(Context context, String databaseValue, boolean displayTime, int format, double timeZoneOffset,
+			Locale locale) throws ParseException, FrameworkException {
+		String string = "";
+		if (databaseValue != null && !databaseValue.trim().equals(DomainConstants.EMPTY_STRING)) {
+			// Identify Format
+			int format1 = format;
+
+			if (format == ${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_FORMAT) {
+				format1 = PersonUtil.getPreferenceDateFormatValue(context);
+			}
+
+			// Identify TimeZone
+			double timeZoneOffset1 = timeZoneOffset;
+
+			if (timeZoneOffset == ${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_TIMEZONE) {
+				TimeZone tz = TimeZone.getTimeZone(PersonUtil.getActualTimeZonePreference(context));
+				timeZoneOffset1 = tz.getRawOffset() / 3600000d; // Using 'raw'
+																// offset
+																// because the
+				// 'getActualTimeZonePreference method accounts for
+				// daylight savings.
+			}
+
+			// Identify Locale
+			Locale locale1 = locale;
+
+			if (locale1 == null) {
+				// 1/2007 - Update for Java 1.3 compatibility.
+				locale1 = new Locale(PersonUtil.getLanguage(context), DomainConstants.EMPTY_STRING);
+			}
+
+			string = eMatrixDateFormat.getFormattedDisplayDateTime(context, databaseValue, displayTime, format1, timeZoneOffset1, locale1);
+		}
+		return string;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param rootId
+	 * @return
+	 * @throws Exception
+	 */
+	public static int sendActionItemCompleted(Context context, String objectId) throws Exception {
+
+		final String baseURL = com.matrixone.apps.domain.util.MailUtil.getBaseURL(context);
+		Map<?, ?> relatedObjectMap = getRelatedObject(context, objectId);
+		// String id = (String) relatedObjectMap.get("id");
+		String name = (String) relatedObjectMap.get("name");
+		String owner = (String) relatedObjectMap.get("owner");
+		String current = (String) relatedObjectMap.get("current");
+
+		String url = baseURL + "/common/emxNavigator.jsp?objectId=" + objectId;
+
+		StringList toList = new StringList();
+		toList.addElement(owner);
+
+		/*
+		 * String subject = "Action Item(s) Completed for " + name; String body
+		 * = "Action Item(s) completed for the " + current + " state of " +
+		 * name; body += "\n"; body += "You can use this link to go to " + name
+		 * + ":\n"; body += url;
+		 */
+
+		String subject = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.SubjectCompletedFor") + " " + name;
+		String body = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.BodyCompletedFor");
+		body += " " + current + " ";
+		body += Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.BodyStateOf");
+		body += " " + name + "\n";
+		body += Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.BodyUseThisLink");
+		body += " " + name + ":\n" + url;
+
+		return sendMail(context, subject, body, toList);
+	}
+
+	private static int sendMail(Context context, String subject, String body, StringList toList) throws Exception {
+		int retVal = 0;
+
+		// for some reason, Matrix is not sending mail to all users in
+		// stringlist
+		// so we have to send each of them separately
+
+		for (int i = 0; i < toList.size(); i++) {
+			String user = (String) toList.elementAt(i);
+
+			if (Helper.isNullOrEmpty(user)) {
+				continue;
+			}
+
+			StringList sl = new StringList(user);
+
+			try {
+				IconMail iconMailObj = new IconMail();
+				iconMailObj.create(context);
+				iconMailObj.setMessage(body);
+				iconMailObj.setToList(sl);
+				iconMailObj.send(context, subject);
+			}
+			catch (Exception e) {
+				retVal = 1;
+				break;
+			}
+		}
+		return retVal;
+	}
+
+	private static Map<?, ?> getRelatedObject(Context context, String objectId) {
+
+		MapList rootObj = null;
+
+		try {
+			// Expand to the related object to find the owner of the object.
+
+			DomainObject dob = new DomainObject(objectId);
+
+			// getRelatedObjects - Start
+			String relPattern = ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM;
+			String typePattern = "*";
+			StringList busSelects = new StringList();
+			busSelects.add("id");
+			busSelects.add("name");
+			busSelects.add("owner");
+			busSelects.add("current");
+			StringList relSelects = new StringList();
+			boolean to = true;
+			boolean from = false;
+			short recurseToLevel = 1;
+			String busWhere = "";
+			String relWhere = "";
+
+			rootObj = dob.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, to, from, recurseToLevel, busWhere, relWhere,
+					0, null, null, null);
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return (Map<?, ?>) rootObj.get(0);
+	}
+
+	/**
+	 * This method gets the List of Routes on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return MapList contains list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public MapList getApprovals_Routes(Context context, String[] args) throws Exception {
+		MapList returnMapList = new MapList();
+
+		try {
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) paramMap.get("objectId");
+			DomainObject doObject = DomainObject.newInstance(context);
+			doObject.setId(objectId);
+			matrix.db.StateList statelist = doObject.getStates(context);
+
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(doObject.SELECT_ID);
+			objSelects.addElement(doObject.SELECT_NAME);
+			StringList relSelects = new StringList(3);
+			relSelects.addElement("attribute[Approval Status]");
+			relSelects.addElement("attribute[Actual Completion Date]");
+			relSelects.addElement("attribute[Comments]");
+
+			State state;
+			String strState;
+			String strSymbolicState;
+			String strWhere;
+			String strSigner;
+
+			for (int i = 0; i < statelist.size(); i++) {
+				state = (State) statelist.elementAt(i);
+				strState = state.getName();
+				strSymbolicState = "state_" + strState;
+				strWhere = "attribute[Route Base State]==" + strSymbolicState;
+
+				MapList mlRoutes = doObject.getRelatedObjects(context, doObject.RELATIONSHIP_OBJECT_ROUTE, // relationship
+																											// pattern
+						doObject.TYPE_ROUTE, // object pattern
+						objSelects, // object selects
+						new StringList(), // relationship selects
+						false, // to direction
+						true, // from direction
+						(short) 1, // recursion level
+						null, // object where clause
+						strWhere, 0, null, null, null); // relationship where
+														// clause
+
+				for (int j = 0; j < mlRoutes.size(); j++) {
+					DomainObject doRoute = new DomainObject((String) ((Map<?, ?>) mlRoutes.get(j)).get(doObject.SELECT_ID));
+
+					MapList mlTasks = doRoute.getRelatedObjects(context, doRoute.RELATIONSHIP_ROUTE_NODE, // relationship
+																											// pattern
+							doRoute.TYPE_PERSON, // object pattern
+							objSelects, // object selects
+							relSelects, // relationship selects
+							false, // to direction
+							true, // from direction
+							(short) 1, // recursion level
+							null, // object where clause
+							null, 0, null, null, null); // relationship where
+														// clause
+
+					for (int k = 0; k < mlTasks.size(); k++) {
+						Map hm = new HashMap();
+						Map<?, ?> taskMap = (Map<?, ?>) mlTasks.get(k);
+
+						strSigner = (String) taskMap.get(doObject.SELECT_NAME);
+						try {
+							strSigner = PersonUtil.getFullName(context, strSigner);
+						}
+						catch (Exception e) {
+							// Try to convert the login name to a full name
+							// If it fails do nothing just use the login name
+						}
+
+						hm.put("id", taskMap.get(doObject.SELECT_ID));
+						hm.put("signer", strSigner);
+						hm.put("status", taskMap.get("attribute[Approval Status]"));
+						hm.put("date", taskMap.get("attribute[Actual Completion Date]"));
+						hm.put("comments", taskMap.get("attribute[Comments]"));
+
+						if (k == 0) {
+							hm.put("state", strState);
+							hm.put("route", ((Map) mlRoutes.get(j)).get(doObject.SELECT_NAME));
+						}
+						else {
+							hm.put("state", DomainConstants.EMPTY_STRING);
+							hm.put("route", DomainConstants.EMPTY_STRING);
+						}
+						returnMapList.add(hm);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+		return returnMapList;
+	}
+
+	/**
+	 * This method gets the List of Signatures on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return MapList contains list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public MapList getApprovals_Signatures(Context context, String[] args) throws Exception {
+		MapList returnMapList = new MapList();
+
+		try {
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) paramMap.get("objectId");
+			DomainObject doObject = DomainObject.newInstance(context);
+			doObject.setId(objectId);
+
+			matrix.db.StateList statelist = doObject.getStates(context);
+
+			StringList objSelects = new StringList(2);
+			objSelects.addElement(doObject.SELECT_ID);
+			objSelects.addElement(doObject.SELECT_NAME);
+			StringList relSelects = new StringList(3);
+			relSelects.addElement("attribute[Approval Status]");
+			relSelects.addElement("attribute[Actual Completion Date]");
+			relSelects.addElement("attribute[Comments]");
+
+			State state;
+			State nextState;
+			Signature signature;
+			String strSigner;
+			String strStatus;
+			String strResult;
+
+			for (int h = 0; h < statelist.size(); h++) {
+				state = (State) statelist.elementAt(h);
+				for (int i = 0; i < statelist.size(); i++) {
+					nextState = (State) statelist.elementAt(i);
+					int j = 0;
+					for (SignatureItr signatureitr = new SignatureItr(doObject.getSignatures(context, state, nextState)); signatureitr.next();) {
+						j++;
+						Map hm = new HashMap();
+
+						boolean approve = false;
+						boolean reject = false;
+						boolean ignore = false;
+
+						signature = signatureitr.obj();
+						if (signature.isApproved())
+							strStatus = "Approved";
+						else if (signature.isRejected())
+							strStatus = "Rejected";
+						else if (signature.isIgnored())
+							strStatus = "Ignore";
+						else if (signature.isSigned())
+							strStatus = "Signed";
+						else
+							strStatus = "Not Signed";
+
+						strSigner = signature.getSigner();
+						try {
+							strSigner = PersonUtil.getFullName(context, strSigner);
+						}
+						catch (Exception e) {
+							// Try to convert the login name to a full name
+							// If it fails do nothing just use the login name
+						}
+
+						strResult = MqlUtil.mqlCommand(context, "print bus $1 select $2", objectId, "policy.state[" + state.getName()
+								+ "].signature[" + signature.getName() + "].approve");
+
+						if (strResult.indexOf("approve") != -1)
+							approve = true;
+
+						strResult = MqlUtil.mqlCommand(context, "print bus $1 select $2", objectId, "policy.state[" + state.getName()
+								+ "].signature[" + signature.getName() + "].reject");
+						if (strResult.indexOf("reject") != -1)
+							reject = true;
+
+						strResult = MqlUtil.mqlCommand(context, "print bus $1 select $2", objectId, "policy.state[" + state.getName()
+								+ "].signature[" + signature.getName() + "].ignore");
+						if (strResult.indexOf("ignore") != -1)
+							ignore = true;
+
+						// if the signature is a branch and not a real
+						// signature, don't put in the HashMmap.
+						if (approve || reject || ignore) {
+							hm.put("id", String.valueOf(h) + String.valueOf(j));
+							hm.put("signature", signature.getName());
+							hm.put("signer", strSigner);
+							hm.put("status", strStatus);
+							hm.put("comments", signature.getComment());
+							returnMapList.add(hm);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+
+		return returnMapList;
+	}
+
+	/**
+	 * This method gets the List of Demote Reasons on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return MapList contains list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public MapList getApprovals_Demotions(Context context, String[] args) throws Exception {
+		MapList returnMapList = new MapList();
+
+		try {
+			Map<?, ?> paramMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String objectId = (String) paramMap.get("objectId");
+			DomainObject doObject = DomainObject.newInstance(context);
+			doObject.setId(objectId);
+
+			String historyRecord;
+			String previousHistoryRecord;
+			String nextHistoryRecord;
+			String demotedBy;
+			String date;
+			String demotedFrom;
+			String demoteReason;
+
+			StringList slHistory = doObject.getHistory(context);
+			for (int i = 0; i < slHistory.size(); i++) {
+				historyRecord = ((String) slHistory.elementAt(i)).trim();
+				if (historyRecord.startsWith("(Demote Reason)")) {
+					Map hm = new HashMap();
+
+					// Since the "Demote Reason" is logged as User Agent we need
+					// to find
+					// the actually "demote" entry to pull the user. So check
+					// the
+					// history
+					// entry before and after the "Demote Reason".
+					previousHistoryRecord = ((String) slHistory.elementAt(i - 1)).trim();
+					nextHistoryRecord = ((String) slHistory.elementAt(i + 1)).trim();
+					if (previousHistoryRecord.startsWith("demote"))
+						demotedBy = previousHistoryRecord.substring(previousHistoryRecord.indexOf("user:") + 6,
+								previousHistoryRecord.indexOf("time:") - 2).trim();
+					else if (nextHistoryRecord.startsWith("demote"))
+						demotedBy = nextHistoryRecord.substring(nextHistoryRecord.indexOf("user:") + 6, nextHistoryRecord.indexOf("time:") - 2)
+								.trim();
+					else
+						demotedBy = DomainConstants.EMPTY_STRING;
+
+					try {
+						demotedBy = PersonUtil.getFullName(context, demotedBy);
+					}
+					catch (Exception e) {
+						// Try to convert the login name to a full name
+						// If it fails do nothing just use the login name
+					}
+
+					// Parse the history
+					date = historyRecord.substring(historyRecord.indexOf("time:") + 6, historyRecord.indexOf("state:") - 2).trim();
+					demotedFrom = historyRecord.substring(historyRecord.indexOf("state:") + 7, historyRecord.indexOf("comment:") - 2).trim();
+					demoteReason = historyRecord.substring(historyRecord.indexOf("comment:") + 9, historyRecord.length()).trim();
+
+					hm.put("id", String.valueOf(i));
+					hm.put("date", date);
+					hm.put("demotedBy", demotedBy);
+					hm.put("demotedFrom", demotedFrom);
+					hm.put("demoteReason", demoteReason);
+					returnMapList.add(hm);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+		return returnMapList;
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getState(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "state");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getRoute(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "route");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getSigner(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "signer");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getStatus(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "status");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getDate(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "date");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getComments(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "comments");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getSignature(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "signature");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getDemotedBy(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "demotedBy");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getDemotedFrom(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "demotedFrom");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the List of Column values on an object.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            HashMap of parameters
+	 * @return Vector containing list of table columns
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public Vector getDemoteReason(Context context, String[] args) throws Exception {
+		try {
+			return getColumn(context, args, "demoteReason");
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+	}
+
+	/**
+	 * This method gets the column text.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            contains a Map with the following entries: objectList contains
+	 *            a MapList
+	 * @return Vector contains list of row text
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+
+	public Vector getColumn(Context context, String[] args, String column) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector vec = new Vector(relBusObjPageList.size());
+		try {
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String strName = (String) ((Map<?, ?>) relBusObjPageList.get(i)).get(column);
+				vec.addElement(strName);
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.toString());
+		}
+		return vec;
+	}
+
+	public static void connectObjects(Context context, String parentSymbolicTypeName, String sParentName, String sParentRev,
+			String parentSymbolicVaultName, String childSymbolicType, String sChildName, String sChildRev, String childSymbolicVaultName,
+			String symbolicRelationshipName, boolean fromDirection, AttributeList attLst) throws MatrixException {
+		// Get symbollic name mappings
+		String sParentType = PropertyUtil.getSchemaProperty(context, parentSymbolicTypeName);
+		String sParentVault = PropertyUtil.getSchemaProperty(context, parentSymbolicVaultName);
+		String sChildType = PropertyUtil.getSchemaProperty(context, childSymbolicType);
+		String sChildVault = PropertyUtil.getSchemaProperty(context, childSymbolicVaultName);
+
+		BusinessObject parent = new BusinessObject(sParentType, sParentName, sParentRev, sParentVault);
+
+		BusinessObject child = new BusinessObject(sChildType, sChildName, sChildRev, sChildVault);
+
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_CONNECT, fromDirection, attLst);
+	}
+
+	/**
+	 * This method connects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parent
+	 * @param childSymbolicType
+	 * @param sChildName
+	 * @param sChildRev
+	 * @param childSymbolicVaultName
+	 * @param symbolicRelationshipName
+	 * @param fromDirection
+	 * @param attLst
+	 *            - Attribute List
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void connectObjects(Context context, BusinessObject parent, String childSymbolicType, String sChildName, String sChildRev,
+			String childSymbolicVaultName, String symbolicRelationshipName, boolean fromDirection, AttributeList attLst) throws MatrixException {
+		// Get symbolic name mappings
+		String sChildType = PropertyUtil.getSchemaProperty(context, childSymbolicType);
+		String sChildVault = PropertyUtil.getSchemaProperty(context, childSymbolicVaultName);
+
+		BusinessObject child = new BusinessObject(sChildType, sChildName, sChildRev, sChildVault);
+
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_CONNECT, fromDirection, attLst);
+	}
+
+	/**
+	 * This method connects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parent
+	 * @param child
+	 * @param symbolicRelationshipName
+	 * @param fromDirection
+	 * @param attLst
+	 *            - Attribute List
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void connectObjects(Context context, BusinessObject parent, BusinessObject child, String symbolicRelationshipName,
+			boolean fromDirection, AttributeList attLst) throws MatrixException {
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_CONNECT, fromDirection, attLst);
+	}
+
+	/**
+	 * This method disconnects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parentSymbolicTypeName
+	 * @param sParentName
+	 * @param sParentRev
+	 * @param parentSymbolicVaultName
+	 * @param childSymbolicType
+	 * @param sChildName
+	 * @param sChildRev
+	 * @param childSymbolicVaultName
+	 * @param symbolicRelationshipName
+	 * @param fromDirection
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void disconnectObjects(Context context, String parentSymbolicTypeName, String sParentName, String sParentRev,
+			String parentSymbolicVaultName, String childSymbolicType, String sChildName, String sChildRev, String childSymbolicVaultName,
+			String symbolicRelationshipName, boolean fromDirection) throws MatrixException {
+		// Get symbolic name mappings
+		String sParentType = PropertyUtil.getSchemaProperty(context, parentSymbolicTypeName);
+		String sParentVault = PropertyUtil.getSchemaProperty(context, parentSymbolicVaultName);
+		String sChildType = PropertyUtil.getSchemaProperty(context, childSymbolicType);
+		String sChildVault = PropertyUtil.getSchemaProperty(context, childSymbolicVaultName);
+
+		BusinessObject parent = new BusinessObject(sParentType, sParentName, sParentRev, sParentVault);
+
+		BusinessObject child = new BusinessObject(sChildType, sChildName, sChildRev, sChildVault);
+
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_DISCONNECT, fromDirection, null);
+	}
+
+	/**
+	 * This method disconnects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parent
+	 * @param childSymbolicType
+	 * @param sChildName
+	 * @param sChildRev
+	 * @param childSymbolicVaultName
+	 * @param symbolicRelationshipName
+	 * @param fromDirection
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void disconnectObjects(Context context, BusinessObject parent, String childSymbolicType, String sChildName, String sChildRev,
+			String childSymbolicVaultName, String symbolicRelationshipName, boolean fromDirection) throws MatrixException {
+		// Get symbolic name mappings
+		String sChildType = PropertyUtil.getSchemaProperty(context, childSymbolicType);
+		String sChildVault = PropertyUtil.getSchemaProperty(context, childSymbolicVaultName);
+
+		BusinessObject child = new BusinessObject(sChildType, sChildName, sChildRev, sChildVault);
+
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_DISCONNECT, fromDirection, null);
+	}
+
+	/**
+	 * This method disconnects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parent
+	 * @param child
+	 * @param symbolicRelationshipName
+	 * @param fromDirection
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void disconnectObjects(Context context, BusinessObject parent, BusinessObject child, String symbolicRelationshipName,
+			boolean fromDirection) throws MatrixException {
+		connectDisconnectObjects(context, parent, child, symbolicRelationshipName, RELATIONSHIP_ACTION_DISCONNECT, fromDirection, null);
+	}
+
+	/**
+	 * This method disconnects objects.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param parent
+	 * @param relationship
+	 * @throws MatrixException
+	 *             if the operation fails
+	 */
+	public static void disconnectObjects(Context context, BusinessObject parent, Relationship relationship) throws MatrixException {
+		try {
+			// Connect/Disconnect the BO's and catch any errors
+			parent.open(context);
+			parent.close(context);
+
+			parent.disconnect(context, relationship);
+		}
+		catch (MatrixException e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
+	/*
+	 * Updated 10/10/2005 - DKA: Use 'isOpen()' method to determine if the
+	 * object needs to be 'opened' and 'closed'. @param context the eMatrix
+	 * <code>Context</code> object @param parent @param child @param symRelation
+	 * 
+	 * @param fromDirection @param attLst - Attribute List @throws
+	 * MatrixException if the operation fails
+	 */
+	private static void connectDisconnectObjects(Context context, BusinessObject parent, BusinessObject child, String symRelation, String sAction,
+			boolean fromDirection, AttributeList attLst) throws MatrixException {
+		// Get symbolic name mappings
+		String sRelation = PropertyUtil.getSchemaProperty(context, symRelation);
+
+		try {
+			// Connect/Disconnect the BO's and catch any errors
+			// Update
+			if (!parent.isOpen()) {
+				parent.open(context);
+				parent.close(context);
+			}
+
+			// Update
+			if (!child.isOpen()) {
+				child.open(context);
+				child.close(context);
+			}
+
+			Relationship rel = null;
+
+			if (sAction.equals(RELATIONSHIP_ACTION_DISCONNECT)) {
+				parent.disconnect(context, new RelationshipType(sRelation), fromDirection, child);
+			}
+			else {
+				rel = parent.connect(context, new RelationshipType(sRelation), fromDirection, child);
+			}
+
+			/*
+			 * If an AttributeList is passed in, then we will try to update the
+			 * relationship
+			 */
+			if ((attLst != null) && (attLst.size() > 0)) {
+				if (!rel.isOpen()) {
+					rel.open(context);
+				}
+				rel.setAttributes(context, attLst);
+				rel.update(context);
+				if (rel.isOpen()) {
+					rel.close(context);
+				}
+			}
+		}
+		catch (MatrixException e) {
+			e.printStackTrace();
+			throw e;
+		}
+	}
+
+	/**
+	 * May, 2007<br>
+	 * darina<br>
+	 * Provide an icon for Assignee and Scheduled Completion Date modify.
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of checkbox code
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static String getTC_ActionItemInboxTaskUpdateIcon(Context context, String objectId) throws Exception {
+		String label = "";
+		StringBuffer html = new StringBuffer();
+
+		// Check the access to determine editability.
+		DomainObject actionItem = DomainObject.newInstance(context, objectId);
+		boolean hasModifyAccess = actionItem.checkAccess(context, (short) AccessConstants.cModify);
+
+		if (!hasModifyAccess) {
+			// the previous call to check access returned false. However we must
+			// make one
+			// additional check to see if the current user is the assignee. And
+			// if so
+			// grant them access to reassign.
+			hasModifyAccess = checkActionItemAccess(context, objectId);
+		}
+
+		if (hasModifyAccess) {
+			String relPattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.RELATIONSHIP_OBJECT_ROUTE;
+			String typePattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_ROUTE;
+
+			StringList busSelects = new StringList(1);
+			busSelects.add(DomainConstants.SELECT_ID);
+
+			String busWhere = "current == Define || current == 'In Process'";
+			String relWhere = "";
+
+			MapList routeList = actionItem.getRelatedObjects(context, relPattern, typePattern, busSelects, new StringList(), false, // to,
+					true, // from,
+					(short) 1, // recurseToLevel,
+					busWhere, relWhere);
+
+			if (routeList.size() > 0) {
+				String routeId = (String) ((Map<?, ?>) routeList.get(0)).get(DomainConstants.SELECT_ID);
+
+				String clickToUpdate = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionItem.Message.ClickToUpdate");
+
+				clickToUpdate = clickToUpdate.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+				label = "<img class=\"AM_Assignee\" src=\"../common/images/iconSmallAssigneeChange.gif\" title=\"" + clickToUpdate + "\"/>";
+
+				String reassignModifyDate = Helper.getI18NString(context, Helper.StringResource.LSA,
+						"emxFramework.ActionItem.Heading.ReassignModifyDate");
+
+				// replace '&' with '&amp;' to make it work for structure
+				// browser
+				String url = "../common/emxTableEdit.jsp?program=iwActionItem:getRouteNodesAndInboxTasks&table=iwActionItemEditUserAndDate&objectId="
+						+ routeId + "&header=" + reassignModifyDate
+						+ "&sortColumnName=Task Sequence&sortDirection=ascending&postProcessJPO=iwActionItem:updateAssigneeAndDueDate"
+						+ "&findMxLink=false&HelpMarker=LA19&suiteKey=LSACommonFramework";
+
+				url = url.replaceAll("&", "&amp;").replaceAll("'", "&#44;").replaceAll("\"", "&quot;");
+
+				html.append("<a href=\"javascript:emxTableColumnLinkClick('");
+				// encoded url does not work in structure browser on firefox
+				// html.append(FrameworkUtil.encodeURL(url));
+				html.append(url);
+				html.append("', '750', '550', 'true', 'popup', '')\">");
+				html.append(label);
+				html.append("</a>");
+			}
+		}
+
+		return html.toString();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static MapList getRouteNodesAndInboxTasks(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		String objectId = (String) programMap.get("objectId");
+		MapList maplist = getRouteNodesAndInboxTasks(context, objectId);
+
+		/*
+		 * Sort through and return the active tasks/ nodes, only.
+		 */
+		MapList activeList = new MapList();
+		Iterator itr = maplist.iterator();
+		while (itr.hasNext()) {
+			Map<?, ?> map = (Map<?, ?>) itr.next();
+			String type = (String) map.get("type");
+			String current = (String) map.get("current");
+
+			if (!type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK)
+					|| (type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK) && current.equals("Assigned"))) {
+				activeList.add(map);
+			}
+		}
+
+		return activeList;
+	}
+
+	/**
+	 * Updated - Bug 42625 Previously this method used a single expand to get
+	 * the relevant data. This no longer works with 2012x. (Not clear which
+	 * release caused this to stop working.) This may stem from the fact that
+	 * identical attributes exist on the type and relationship; when the
+	 * resultant map is provided, incorrect results occur. To remedy, we'll
+	 * replace the single expand with two expands.
+	 * 
+	 * @param context
+	 * @param routeId
+	 * @return
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static MapList getRouteNodesAndInboxTasks(Context context, String routeId) throws Exception {
+		MapList combinedMapList = new MapList();
+		Route route = new Route(routeId);
+
+		// Bug 42625 - Start
+		// First, expand along the Route Node relationship
+		String relPattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.RELATIONSHIP_ROUTE_NODE;
+		String typePattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_PERSON;
+
+		StringList busSelects = new StringList(8);
+		busSelects.add(DomainConstants.SELECT_ID);
+		busSelects.add(DomainConstants.SELECT_TYPE);
+		busSelects.add(DomainConstants.SELECT_NAME);
+		busSelects.add(DomainConstants.SELECT_CURRENT);
+		StringList relSelects = new StringList(6);
+		relSelects.add(DomainConstants.SELECT_RELATIONSHIP_ID);
+		relSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+		relSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+		relSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_TITLE);
+		relSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_SEQUENCE);
+		relSelects.add(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_IW_ROUTE_TASK_USER);
+
+		String busWhere = "";
+		String relWhere = "";
+
+		MapList maplist = route.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, false, // to,
+				true, // from
+				(short) 1,// recurseToLevel,
+				busWhere, relWhere, 100);
+
+		// Second, expand along the Route Task relationship to Inbox Task
+		// objects
+		relPattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.RELATIONSHIP_ROUTE_TASK;
+		typePattern = ${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK;
+
+		busSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+		busSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_NODE_ID);
+		busSelects.add(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+		busSelects.add(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_IW_ROUTE_TASK_USER);
+
+		MapList maplist1 = route.getRelatedObjects(context, relPattern, typePattern, busSelects, new StringList(), true, // to,
+				false, // from
+				(short) 1,// recurseToLevel,
+				busWhere, relWhere, 100);
+
+		// Combine the lists
+		maplist.addAll(maplist1);
+		// Bug 42625 - End
+
+		// Combine the Inbox Task object results with the Route Node results
+		if (maplist.size() > 0) {
+
+			// Process all of the Route Node Id relationship objects, first
+			Iterator itr = maplist.iterator();
+
+			// Map the route node id to the results for easy match
+			// once we process the Inbox Tasks
+			Map nodeIdToMap = new HashMap();
+
+			while (itr.hasNext()) {
+				Map<?, ?> map = (Map<?, ?>) itr.next();
+				String type = (String) map.get(DomainConstants.SELECT_TYPE);
+				if (!type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK)) {
+					nodeIdToMap.put(map.get(DomainConstants.SELECT_RELATIONSHIP_ID), map);
+				}
+			}
+
+			// Now, with all the Route Node's captured, we'll combine the Inbox
+			// Task
+			// data with the Route Node data (from which the Inbox Task was
+			// created)
+			itr = maplist.iterator();
+
+			while (itr.hasNext()) {
+				Map<?, ?> inboxTaskMap = (Map<?, ?>) itr.next();
+				String type = (String) inboxTaskMap.get(DomainConstants.SELECT_TYPE);
+				if (type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK)) {
+					String routeNodeId = (String) inboxTaskMap.get(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_NODE_ID);
+					Map routeNodeMap = (Map<?, ?>) nodeIdToMap.get(routeNodeId);
+					// We want to keep the Route Node's "id[connection]" value
+					inboxTaskMap.remove("id[connection]");
+					// We want to keep the Route Node's
+					// "attribute[IW Route Task User]" value
+					// Bug 42625 - Start
+					// inboxTaskMap.remove(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+					inboxTaskMap.remove(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_IW_ROUTE_TASK_USER);
+					// Bug 42625 - End
+					if (routeNodeMap != null)
+						routeNodeMap.putAll(inboxTaskMap);
+				}
+			}
+
+			// Sort order, then title
+			combinedMapList.addAll(nodeIdToMap.values());
+			combinedMapList.sortStructure(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_SEQUENCE, "ascending", "integer");
+		}
+
+		return combinedMapList;
+	}
+
+	/**
+	 * Updated - Bug 42625 Modified to support persisting a change in the task
+	 * due date. The DOM has changed, therefore not all fields are still
+	 * available, including that which captured the current (database) value of
+	 * the "Scheduled Completion Date".
+	 * 
+	 * 04/2007 - DA<br>
+	 * Ok... The processing of the editable table is complicated by the fact
+	 * that one of the column's is a drop down created via programHTMLOutput.
+	 * (Had to do this because the drop-down content was unique to a row. The
+	 * range program function works at a table level, not a row level.) Note:
+	 * Had to modify the range value of ootb attribute "Date Offset From" to
+	 * allow for an 'empty string' as an allowed value.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return result: 1 == fail, !1 == pass or developer defined meaning.
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	static public Map<?, ?> updateAssigneeAndDueDate(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+		// String tzOffset = (String) requestMap.get("timeZone");
+		double clientTZOffset = (new Double((String) requestMap.get("timeZone"))).doubleValue();
+		Locale locale = (Locale) requestMap.get("localeObj");
+		Map returnMap = new HashMap();
+
+		try {
+			// Process each row
+			String objectId = null;
+			String relId = null;
+			String newAssignee = null;
+			String currentAssingee = null;
+			String newDueDate = null;
+			String newDueDateMSValue = null;
+			// Bug 42625 - Start
+			// String currentDueDate = null;
+			// Bug 42625 - End
+
+			int rowNumber = 0;
+			int safetyValue = 0;
+
+			while (requestMap.containsKey("objectId" + rowNumber) && safetyValue < 30) {
+				objectId = (String) requestMap.get("objectId" + rowNumber);
+				relId = (String) requestMap.get("relId" + rowNumber);
+				newAssignee = (String) requestMap.get("Assignee" + rowNumber);
+				currentAssingee = (String) requestMap.get("Assignee" + rowNumber + "fieldValue");
+				newDueDate = (String) requestMap.get("Due Date" + rowNumber);
+				newDueDateMSValue = (String) requestMap.get("Due Date" + rowNumber + "_msvalue");
+				// milisecond is not updated when using mass update toolbar
+				// command
+				// newDueDate = convertMStoMatrixDate(newDueDateMSValue);
+
+				// Bug 42625 - Start
+				// currentDueDate = (String) requestMap.get("Due Date" +
+				// rowNumber + "fieldValue");
+				// Bug 42625 - End
+
+				// Check that values are provided
+				if (relId == null || relId.length() == 0 || objectId == null || objectId.length() == 0 || newAssignee == null
+						|| newAssignee.length() == 0)
+					// throw new
+					// MatrixException("Update Assignee and Due Date: parameter values are null");
+					throw new MatrixException(Helper.getI18NString(context, Helper.StringResource.LSA,
+							"emxFramework.ActionItem.ErrorMsg.AssigneDateNull"));
+
+				/*
+				 * Format dates for compare and write to db.
+				 */
+				HashMap argMap = new HashMap();
+				argMap.put("localeObj", ${CLASS:iwActionItemStaticVariables}.DEFAULT_LOCALE);
+
+				String newDueDateFormatted = "";
+
+				if (newDueDate != null && newDueDate.length() > 0)
+					// newDueDateFormatted =
+					// DBDateTimeToDisplayDateTime(context, newDueDate, false);
+					// format to input format instead of display format
+					newDueDateFormatted = eMatrixDateFormat.getFormattedInputDate(context, newDueDate, clientTZOffset, locale);
+
+				// String currentDueDateFormatted =
+				// DBDateTimeToDisplayDateTime(context, currentDueDate, false);
+				// not use display format. by default, input format and database
+				// data format are the same, if not the same, just reset the
+				// value
+				// Bug 42625 - Start
+				// String currentDueDateFormatted = currentDueDate;
+				// Bug 42625 - End
+
+				/*
+				 * We need to process the Inbox Task and Route Node differently
+				 */
+				DomainObject dob = new DomainObject(objectId);
+				String type = dob.getInfo(context, DomainConstants.SELECT_TYPE);
+
+				if (type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK)) {
+					InboxTask it = new InboxTask(objectId);
+
+					// Update the dates
+					// Bug 42625 - Start
+					// Read current value from database
+					String currentDueDateFormatted = it.getInfo(context,
+							${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+					// Bug 42625 - End
+					if (currentDueDateFormatted != null && !currentDueDateFormatted.equals(newDueDateFormatted)) {
+						// Update the Inbox Task
+						it.setAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_SCHEDULED_COMPLETION_DATE,
+								newDueDateFormatted);
+						// Synchronize the Inbox Task data with the respective
+						// Route Node
+						// data
+						String routeNodeId = it.getInfo(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_NODE_ID);
+						DomainRelationship dr = new DomainRelationship(routeNodeId);
+						dr.setAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_SCHEDULED_COMPLETION_DATE,
+								newDueDateFormatted);
+					}
+
+					// Reassign the Task
+					if (!currentAssingee.equals(newAssignee)) {
+						it.delegateTask(context, PersonUtil.getPersonObjectID(context, newAssignee));
+					}
+				}
+				else {
+					// Update the Route Node
+					DomainRelationship dr = new DomainRelationship(relId);
+					// Bug 42625 - Start
+					// Read current value from database
+					String currentDueDateFormatted = dr.getAttributeValue(context,
+							${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+					// Bug 42625 - End
+					if (currentDueDateFormatted != null && !currentDueDateFormatted.equals(newDueDateFormatted)) {
+						dr.setAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_SCHEDULED_COMPLETION_DATE,
+								newDueDateFormatted);
+						// dr.setAttributeValue(context,
+						// ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_DATE_OFFSET_FROM,
+						// "");
+						dr.setAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_DUE_DATE_OFFSET, "");
+					}
+
+					if (!currentAssingee.equals(newAssignee)) {
+						String newAssigneeId = PersonUtil.getPersonObjectID(context, newAssignee);
+						DomainObject newAssigneeDob = new DomainObject(newAssigneeId);
+						DomainRelationship.setToObject(context, relId, newAssigneeDob);
+
+						dr.open(context);
+
+						BusinessObject route = dr.getFrom();
+
+						DomainObject d = new DomainObject(route.getObjectId());
+
+						StringList stringlist = new StringList();
+						stringlist.clear();
+						stringlist.add("id");
+						stringlist.add("type");
+						stringlist.add("name");
+						stringlist.add("grantor");
+						stringlist.add("grantee");
+						stringlist.add("granteeaccess");
+
+						Map map1 = d.getInfo(context, stringlist);
+
+						String routeId = (String) map1.get("id");
+
+						StringList gAcess = (StringList) map1.get("granteeaccess");
+						String granteeAcess = (String) gAcess.get(0);
+
+						MqlUtil.mqlCommand(context, "modify bus $1 revoke grantee $2", false, routeId, currentAssingee);
+
+						ContextUtil.pushContext(context, DomainConstants.PERSON_ROUTE_DELEGATION_GRANTOR, null, context.getVault().getName());
+
+						MqlUtil.mqlCommand(context, "modify bus $1 grant $2 access $3", false, routeId, newAssignee, granteeAcess);
+						ContextUtil.popContext(context);
+					}
+				}
+
+				rowNumber++;
+				safetyValue++;
+			} // End while (requestMap.containsKey("objectId" + rowNumber) &&
+				// safetyValue < 30)
+		}
+		catch (Exception e) {
+			// Exception should not be used to detect a normal/ foreseeable
+			// condition.
+			// String errorMsg = "Exception: " + e;
+			e.printStackTrace();
+			throw e;
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * May, 2007<br>
+	 * darina<br>
+	 * Generate a drop-down list containing users of a given role. 'Select' the
+	 * current assignee.
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of checkbox code
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_ActionItemInboxTaskAssingee(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			InboxTask it = null;
+			String objectId = null;
+			StringBuffer html = null;
+
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String type = (String) ((Hashtable) relBusObjPageList.get(i)).get("type");
+				String taskAssignee;
+				String routeTaskUser;
+				String iwRouteTaskUser;
+
+				// Get Task Assignee and Route Task User
+				if (type.equals(${CLASS:IW_ApprovalMatrix_StaticVariables}.TYPE_INBOX_TASK)) {
+					// Get all of the users for the role associated with the
+					// Inbox Task
+					// Get the IW Route Task User for each task
+
+					objectId = (String) ((Hashtable) relBusObjPageList.get(i)).get("id");
+					// dob = new DomainObject(objectId);
+					it = new InboxTask(objectId);
+					taskAssignee = it.getTaskAssignee(context);
+					routeTaskUser = (String) ((Hashtable) relBusObjPageList.get(i))
+							.get(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+					iwRouteTaskUser = (String) ((Hashtable) relBusObjPageList.get(i))
+							.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_IW_ROUTE_TASK_USER);
+				}
+				else {
+					taskAssignee = (String) ((Hashtable) relBusObjPageList.get(i)).get("name");
+					routeTaskUser = (String) ((Hashtable) relBusObjPageList.get(i))
+							.get(${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_TASK_USER);
+					iwRouteTaskUser = (String) ((Hashtable) relBusObjPageList.get(i))
+							.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_IW_ROUTE_TASK_USER);
+				}
+
+				String relId = (String) ((Hashtable) relBusObjPageList.get(i)).get(DomainConstants.SELECT_RELATIONSHIP_ID);
+				Relationship rel = new Relationship(relId);
+				rel.open(context);
+				DomainObject drRoute = new DomainObject(rel.getFrom());
+				rel.close(context);
+				String routeScope = drRoute.getInfo(context, "attribute[Restrict Members]");
+
+				StringList userListForRoleOrGroup = null;
+
+				// check first that Route Task User is set, if not use IW Route
+				// Task User.
+				if (routeTaskUser == null || routeTaskUser.length() == 0)
+					routeTaskUser = iwRouteTaskUser;
+
+				// If now RTU value exists, default to 'Employee'
+				if (routeTaskUser == null || routeTaskUser.length() == 0)
+					routeTaskUser = "role_Employee";
+
+				// Get all the users for a given role
+				if (routeTaskUser != null && (routeTaskUser.startsWith("role") || routeTaskUser.startsWith("group"))) {
+					String realRoleOrGroupName = PropertyUtil.getSchemaProperty(context, routeTaskUser);
+
+					if (routeTaskUser.startsWith("role")) {
+						userListForRoleOrGroup = ${CLASS:IW_ApprovalMatrix}.getUsersForRole(context, realRoleOrGroupName, routeScope, objectId, "");
+					}
+					else {
+						userListForRoleOrGroup = ${CLASS:IW_ApprovalMatrix}.getUsersForGroup(context, realRoleOrGroupName, routeScope, objectId, "");
+					}
+				}
+
+				Map<?, ?> userMap = null;
+				MapList userMapList = formatUserNameMapList(context, userListForRoleOrGroup);
+				String name = null;
+				String formattedName = null;
+				String selected = null;
+
+				// Process the results and create combobox
+				html = new StringBuffer();
+				// onChange=\"saveFieldObj(this)\"
+				html.append("<select id=\"Assignee" + i + "Id\" name=\"Assignee" + i + "\" >");
+
+				// Process each user, 'select' the current user
+				for (int j = 0; j < userMapList.size(); j++) {
+					userMap = (Map<?, ?>) userMapList.get(j);
+					name = (String) userMap.get("name");
+					formattedName = (String) userMap.get("formattedName");
+					if (taskAssignee.equals(name)) {
+						selected = "selected";
+					}
+					else {
+						selected = "";
+					}
+
+					html.append("<option value=\"" + name + "\"" + selected + ">" + formattedName + "</option>");
+				}
+
+				html.append("</select></td><input type=\"hidden\" name=\"Assignee" + i + "fieldValue\"  value=\"" + taskAssignee + "\">");
+				resultList.add(html.toString());
+			} // End for (int i = 0; i < relBusObjPageList.size(); i++)
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * May 12, 2007<br>
+	 * darina<br>
+	 * <br>
+	 * Task Due Date values
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Task Due Date values
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_TaskDueDate(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String id = (String) ((Hashtable) relBusObjPageList.get(i)).get("id[connection]");
+				DomainRelationship routeNode = new DomainRelationship(id);
+				String s = routeNode.getAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_SCHEDULED_COMPLETION_DATE);
+				resultList.add(s);
+			}
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * May 12, 2007<br>
+	 * darina<br>
+	 * <br>
+	 * Task Title values
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Task Title values
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_TaskTitle(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String id = (String) ((Hashtable) relBusObjPageList.get(i)).get("id[connection]");
+				DomainRelationship routeNode = new DomainRelationship(id);
+				String s = routeNode.getAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_TITLE);
+				resultList.add(s);
+			}
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * May 12, 2007<br>
+	 * darina<br>
+	 * <br>
+	 * Task Instruction values
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Task Instruction values
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_TaskInstructions(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String id = (String) ((Hashtable) relBusObjPageList.get(i)).get("id[connection]");
+				DomainRelationship routeNode = new DomainRelationship(id);
+				String s = routeNode.getAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_ROUTE_INSTRUCTIONS);
+				resultList.add(s);
+			}
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * May 12, 2007<br>
+	 * darina<br>
+	 * <br>
+	 * Task Sequence values
+	 * 
+	 * @param context
+	 *            the Matrix <code>Context</code> object
+	 * @param args
+	 *            holds the following input arguments: 0 - HashMap programMap
+	 * @returns vector of Task Sequence values
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Vector getTC_TaskSequence(Context context, String[] args) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		MapList relBusObjPageList = (MapList) programMap.get("objectList");
+		Vector resultList = new Vector();
+
+		if (relBusObjPageList != null) {
+			for (int i = 0; i < relBusObjPageList.size(); i++) {
+				String id = (String) ((Hashtable) relBusObjPageList.get(i)).get("id[connection]");
+				DomainRelationship routeNode = new DomainRelationship(id);
+				String s = routeNode.getAttributeValue(context, ${CLASS:IW_ApprovalMatrix_StaticVariables}.ATTRIBUTE_ROUTE_SEQUENCE);
+				StringBuffer strOutput = new StringBuffer();
+				strOutput.append("<div class=\"inputField\" rowspan=\"0\" colspan=\"1\">");
+				strOutput.append(s);
+				strOutput.append("<input type=\"hidden\" name=\"Task Sequence" + i + "\" value=\"" + s + "\">");
+				strOutput.append("</div>");
+
+				resultList.add(strOutput.toString());
+			}
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * October 2, 2007 TJH
+	 * 
+	 * This program is for the table iwActionItemEditUserAndDate. The Due Date
+	 * column Update Function is set to this so that nothing happens during the
+	 * core update. The postProcessJPO will take care of all the updating.
+	 */
+	public static void doNothing(Context context, String[] args) throws Exception {
+
+	}
+
+	public static MapList formatUserNameMapList(Context context, matrix.util.List userList) throws Exception {
+		MapList returnMap = new MapList();
+
+		Map userMap = null;
+		ListIterator listIterator = userList.listIterator();
+		String userName = null;
+		String userNameFormatted = null;
+
+		while (listIterator.hasNext()) {
+			userMap = new HashMap();
+			userName = (String) listIterator.next();
+			userNameFormatted = formatUserName(context, userName);
+			userMap.put("name", userName);
+			userMap.put("formattedName", userNameFormatted);
+			returnMap.add(userMap);
+		}
+
+		returnMap.sort("formattedName", "ascending", "String");
+
+		return returnMap;
+	}
+
+	/**
+	 * format a username into firstname lastname (username).
+	 * 
+	 * @param context
+	 * @param userName
+	 *            - userName to be formatted
+	 * @return String - formatted user name
+	 * @throws Exception
+	 */
+	public static String formatUserName(Context context, String userName) throws Exception {
+		String formattedUserName = "";
+
+		try {
+			String sFirstNameResult = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", "Person", userName, "-",
+					"attribute[First Name]");
+
+			String sLastNameResult = MqlUtil
+					.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", "Person", userName, "-", "attribute[Last Name]");
+
+			formattedUserName = sFirstNameResult + " " + sLastNameResult + " (" + userName + ")";
+		}
+		catch (Exception e) {
+			System.err.println(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + e);
+		}
+
+		return formattedUserName;
+	}
+
+	/**
+	 * Method used to save a date/time selected from the eMatrix pop-up date
+	 * selector from the user's timezone/locale to the server's settings.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param displayDateTimeValue
+	 *            - value from form that will be converted to server settings
+	 * @param timeZoneOffset
+	 *            - (-12 <-> +13) (Can be a fraction, i.e. Newfoundland = -3.5)
+	 * @param locale
+	 *            - Locale provided by browser
+	 * @return
+	 * @throws Exception
+	 */
+	static public String CalendarPopUpDisplayDateToDBDateTime(Context context, String displayDateTimeValue, double timeZoneOffset, Locale locale)
+			throws Exception {
+		String string = eMatrixDateFormat.getFormattedInputDate(context, displayDateTimeValue, timeZoneOffset, locale);
+
+		return string;
+	}
+
+	/**
+	 * Method used to save a date/time selected from the eMatrix pop-up date
+	 * selector from the user's timezone/locale to the server's settings.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param displayDateTimeValue
+	 *            - value from form that will be converted to server settings
+	 * @param paramList
+	 *            - contains two key/value pairs: timeZone and localeObj
+	 * @return
+	 * @throws Exception
+	 */
+	static public String CalendarPopUpDisplayDateToDBDateTime(Context context, String displayDateTimeValue, Map paramList) throws Exception {
+		String string = "";
+
+		if (paramList != null) {
+			String timeZone = (String) paramList.get("timeZone");
+			double timeZoneOffset1 = 0d;
+
+			/*
+			 * Note: If the user has set a timezone preference, then this
+			 * 'timeZone' parameter is irrelevant.
+			 */
+			if (timeZone == null || timeZone.length() == 0) {
+				String formattedSelectedDate = eMatrixDateFormat.getFormattedInputDate(displayDateTimeValue,
+						${CLASS:iwActionItemStaticVariables}.DEFAULT_MS_OFFSET, ${CLASS:iwActionItemStaticVariables}.DEFAULT_LOCALE);
+				Date selectedDate = eMatrixDateFormat.getJavaDate(formattedSelectedDate);
+				// timeZoneOffset1 =
+				// defaultTimeZone.getOffset(selectedDate.getTime()); // Not
+				// Java 1.3 compat
+				timeZoneOffset1 = getOffset(selectedDate, ${CLASS:iwActionItemStaticVariables}.DEFAULT_APPLICATION_TIME_ZONE);
+				timeZoneOffset1 /= -3600000d;
+			}
+			else {
+				timeZoneOffset1 = Double.parseDouble(timeZone);
+			}
+
+			string = CalendarPopUpDisplayDateToDBDateTime(context, displayDateTimeValue, timeZoneOffset1, (Locale) paramList.get("localeObj"));
+		}
+
+		return string;
+	}
+
+	/**
+	 * Added in order to be Java 1.3.1 compatible. If you are using Java 1.4 or
+	 * later, use the TimeZone.getOffset(long) method instead.
+	 * 
+	 * @deprecated
+	 * @param date
+	 * @param tz
+	 * @return
+	 */
+	@Deprecated
+	public static int getOffset(Date date, TimeZone tz) {
+		int daylightSavingsOffset = 0;
+		int offset = 0;
+
+		if (tz.inDaylightTime(date)) {
+			if (tz.useDaylightTime())
+				daylightSavingsOffset = 3600000;
+			offset = tz.getRawOffset() + daylightSavingsOffset;
+		}
+		else {
+			offset = tz.getRawOffset();
+		}
+		return offset;
+	}
+
+	/**
+	 * This method will be used to format dates where the timezone and locale
+	 * are provided by preferences selected by the user via eMatrix function.
+	 * (i.e. Tools -> Preferences -> etc.) The format is the default format of
+	 * the eMatrixDateFormat class.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param databaseValue
+	 *            - value that will be formatted
+	 * @param displayTime
+	 *            - true - show the time; false - date, only.
+	 * @return formatted date
+	 * @throws ParseException
+	 * @throws FrameworkException
+	 */
+	static public String DBDateTimeToDisplayDateTime(Context context, String databaseValue, boolean displayTime) throws ParseException,
+			FrameworkException {
+		String string = DBDateTimeToDisplayDateTime(context, databaseValue, displayTime,
+				${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_FORMAT, ${CLASS:iwActionItemStaticVariables}.USE_PERSON_PREFERENCE_TIMEZONE,
+				null);
+
+		return string;
+	}
+
+	/**
+	 * This method is used to format dates where the ms value is passed from the
+	 * UI. The format is the default format of the eMatrixDateFormat class.
+	 * 
+	 * @param context
+	 *            - eMatrix context object
+	 * @param newObj
+	 *            - new object target to the date attribute change
+	 * @param paramMap
+	 *            - contains two key/value pairs: timeZone and localeObj
+	 * @return formatted date
+	 * @throws ParseException
+	 * @throws FrameworkException
+	 */
+	private static String convertMStoMatrixDate(String msDateValue) throws Exception {
+		String emxDate = "";
+		if (msDateValue.length() > 0) {
+			Date javaDate = new Date(Long.parseLong(msDateValue));
+			int iMonth = javaDate.getMonth() + 1;
+			int iDay = javaDate.getDate();
+			int iYear = javaDate.getYear() + 1900;
+			emxDate = "" + iMonth + "/" + iDay + "/" + iYear + " 12:00:00 PM";
+		}
+		return emxDate;
+	}
+
+	/**
+	 * Returns all Action Items attached to a Domain Object.
+	 * 
+	 * @param context
+	 *            - User context
+	 * @param actionItemObj
+	 *            - The Domiain Object in which Action Items are related to.
+	 * @param objWhereClause
+	 *            - Additional where clause to limit the Routes returned Use
+	 *            "current != Complete" for incomplete Action Items.
+	 * @return MapList of Action Items with objectId.
+	 * @throws Exception
+	 */
+	protected static MapList getRelatedActionItems(Context context, DomainObject domainObj, String objWhereClause) throws Exception {
+		// First get the routes that aren't Rejected
+
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		MapList routeList = domainObj.getRelatedObjects(context, ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM,
+				${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_ITEM, objSelects, new StringList(), false, true, (short) 1, objWhereClause, "", 0,
+				null, null, null);
+
+		return routeList;
+	}
+
+	/**
+	 * Returns all Routes related to an Domain Object. Normally used to return
+	 * all Routes related to an Action Item.
+	 * 
+	 * @param context
+	 *            - User context
+	 * @param domainObj
+	 *            - The Domain Object in which Routes are related to.
+	 * @param objWhereClause
+	 *            - Additional where clause to limit the Routes returned. Use
+	 *            "attribute[Route Status] != Rejected && attribute[Route Status] != Finished"
+	 *            for unfinished Routes.
+	 * @return MapList of Routes with objectId.
+	 * @throws Exception
+	 */
+	protected static MapList getRelatedRoutes(Context context, DomainObject domainObj, String objWhereClause) throws Exception {
+
+		StringList objSelects = new StringList();
+		objSelects.addElement(DomainConstants.SELECT_ID);
+
+		MapList routeList = domainObj.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE, objSelects,
+				new StringList(), false, true, (short) 1, objWhereClause, "", 0, null, null, null);
+
+		return routeList;
+	}
+
+	/**
+	 * Deletes all Uncompleted Action Items. Usually used for Invalidation.
+	 * Since Action Items can only be Started, Assigned, or Completed they must
+	 * be deleted. Otherwise they would be able to be assigned or reassigned if
+	 * they where not completed.
+	 * 
+	 * @param context
+	 *            - User context
+	 * @param domainObj
+	 *            - The Domain Object which the Action Items are attached to
+	 * @param comment
+	 *            - Comments to add to routes before they are rejected.
+	 * @throws Exception
+	 */
+	public static void deleteUncompletedActionItems(Context context, DomainObject domainObj, String comment) throws Exception {
+		// Only get the action items that are not yet completed. Leave the reast
+		// for a record.
+		MapList relatedActionItemsMapList = getRelatedActionItems(context, domainObj, "current != Complete");
+		Iterator relatedActionItemsIterator = relatedActionItemsMapList.iterator();
+		while (relatedActionItemsIterator.hasNext()) {
+			Map relatedActionItemMap = (Map) relatedActionItemsIterator.next();
+			String actionItemId = (String) relatedActionItemMap.get(DomainConstants.SELECT_ID);
+			DomainObject actionItemObj = DomainObject.newInstance(context, actionItemId);
+
+			// Rejected routes are left as a record, and do not affect the
+			// approval process.
+			MapList relatedRoutesMapList = getRelatedRoutes(context, actionItemObj,
+					${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_STATUS + " != Rejected" + " && "
+							+ ${CLASS:IW_ApprovalMatrix_StaticVariables}.SELECT_ATTRIBUTE_ROUTE_STATUS + " != Finished");
+			Iterator relatedRoutesIterator = relatedRoutesMapList.iterator();
+			while (relatedRoutesIterator.hasNext()) {
+				Map relatedRouteMap = (Map) relatedRoutesIterator.next();
+				String routeId = (String) relatedRouteMap.get(DomainConstants.SELECT_ID);
+				${CLASS:IW_InboxTask}.rejectRoute(context, routeId, comment);
+			}
+			try {
+				pushSuperUser(context);
+				actionItemObj.deleteObject(context);
+			}
+			catch (Exception e) {
+				throw e;
+			}
+			finally {
+				ContextUtil.popContext(context);
+			}
+		}
+	}
+
+	public static boolean checkActionItemAccess(Context context, String strObjectId) throws Exception {
+		boolean bShowHasAccess = false;
+
+		StringList sListSelects = new StringList();
+		sListSelects.add(DomainConstants.SELECT_ID);
+		sListSelects.add(DomainConstants.SELECT_NAME);
+
+		StringList sListTaskAssignee = new StringList();
+		String userName = context.getUser();
+		try {
+			DomainObject domainObject = DomainObject.newInstance(context, strObjectId);
+			// String strObjectType = domainObject.getInfo(context,
+			// DomainConstants.SELECT_TYPE);
+			// com.matrixone.apps.common.Person currUser =
+			// com.matrixone.apps.common.Person.getPerson(context);
+
+			MapList routeObjectList = domainObject.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainConstants.TYPE_ROUTE,
+					true, true, 1, null, null, null, "", null, null, null);
+			for (Iterator iterRoute = routeObjectList.iterator(); iterRoute.hasNext();) {
+				Map routeElement = (Map) iterRoute.next();
+				String strRouteObjectId = (String) routeElement.get(DomainConstants.SELECT_ID);
+				DomainObject doRouteTask = DomainObject.newInstance(context, strRouteObjectId);
+
+				MapList personMapList = doRouteTask.getRelatedObjects(context, DomainConstants.RELATIONSHIP_PROJECT_ROUTE + ","
+						+ DomainConstants.RELATIONSHIP_ROUTE_NODE, DomainConstants.TYPE_PERSON, true, true, 1, sListSelects, null, null, "", null,
+						null, null);
+				for (Iterator iterPerson = personMapList.iterator(); iterPerson.hasNext();) {
+					Map personMap = (Map) iterPerson.next();
+					sListTaskAssignee.add((String) personMap.get(DomainConstants.SELECT_NAME));
+				}
+			}
+
+			if (sListTaskAssignee.contains(userName)) {
+				bShowHasAccess = true;
+			}
+			else {
+				bShowHasAccess = false;
+			}
+
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
+		return bShowHasAccess;
+	}
+
+    public static void pushSuperUser(Context context) throws MatrixException, FrameworkException {
+		ContextUtil.pushContext(context);
+	}
+}
+

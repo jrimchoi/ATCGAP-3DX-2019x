@@ -1,0 +1,290 @@
+
+import java.util.HashMap;
+import java.util.Vector;
+
+import matrix.db.Context;
+import matrix.db.FileList;
+import matrix.db.JPO;
+import matrix.util.MatrixException;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.LSALicense;
+import com.dassault_systemes.enovia.lsa.ncr.NCRConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Default JPO constructor
+	 * 
+	 * @param context
+	 *            id of the business object
+	 * @param params
+	 *            none expected
+	 * @throws Exception
+	 */
+	public ${CLASSNAME}(Context context, String[] params) throws Exception {
+		super();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getNCROpenNCRsSummaryReport(Context context, String[] args) throws Exception {
+		return new MapList();
+	}
+
+	public Vector getNCROpenNCRsSummaryReportColumnDisplay(Context context, String[] args) throws Exception {
+		return new Vector();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getNCRProductControlRunDispositionReport(Context context, String[] args) throws Exception {
+		return new MapList();
+	}
+
+	public Vector getNCRProductControlRunDispositionSummaryReportColumnDisplay(Context context, String[] args) throws Exception {
+		return new Vector();
+	}
+
+	public String getNCRProductControlSummaryField(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+		HashMap reqMap = (HashMap) programMap.get("requestMap");
+		String reportFormat = (String) reqMap.get("reportFormat");
+		String returnStr = "";
+
+		DomainObject ncrObj = DomainObject.newInstance(context, objectId);
+
+		StringList objSelects = new StringList(); // object selects
+		objSelects.addElement(DomainConstants.SELECT_ID);
+		objSelects.addElement(DomainConstants.SELECT_CURRENT);
+		objSelects.addElement(DomainConstants.SELECT_MODIFIED);
+		objSelects.addElement(DomainConstants.SELECT_DESCRIPTION);
+
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_LOT_NUMBER + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_WORK_ORDER + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_ITEM_CODE + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_ITEM_DESCRIPTION + "]");
+
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_TOTAL_QTY_UOM + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECTIVE_QTY_UOM + "]");
+
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_DEFECT_RATE + "]");
+		objSelects.addElement("attribute[" + NCRConstants.SYMBOLIC_ATTRIBUTE_NCR_PC_PROPOSED_DISPOSITION + "]");
+		StringList relSelects = new StringList(); // relationship selects
+		relSelects.addElement(DomainConstants.SELECT_RELATIONSHIP_ID);
+
+		String whereExp = "(attribute[NCR PC Entry Type]=='Incident')";
+		MapList objList = ncrObj.getRelatedObjects(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL, NCRConstants.SYMBOLIC_TYPE_NCR,
+				objSelects, relSelects, false, true, (short) 1, whereExp, "", 0);
+		objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+		returnStr += NCRProductControlSummaryPrintLots(context, "Incident", objList, reportFormat, args);
+
+		whereExp = "(attribute[NCR PC Entry Type]=='Bounding')";
+		objList = ncrObj.getRelatedObjects(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL, NCRConstants.SYMBOLIC_TYPE_NCR,
+				objSelects, relSelects, false, true, (short) 1, whereExp, "", 0);
+		objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+		returnStr += NCRProductControlSummaryPrintLots(context, "Bounding", objList, reportFormat, args);
+
+		whereExp = "(attribute[NCR PC Entry Type]=='Pending Bounding')";
+		objList = ncrObj.getRelatedObjects(context, NCRConstants.SYMBOLIC_RELATIONSHIP_NCR_PRODUCT_CONTROL, NCRConstants.SYMBOLIC_TYPE_NCR,
+				objSelects, relSelects, false, true, (short) 1, whereExp, "", 0);
+		objList.sortStructure(DomainConstants.SELECT_DESCRIPTION, "ascending", "String");
+
+		returnStr += NCRProductControlSummaryPrintLots(context, "Pending Bounding", objList, reportFormat, args);
+
+		return returnStr;
+	}
+
+	public String NCRProductControlSummaryPrintLots(Context context, String type, MapList objList, String reportFormat, String[] args)
+			throws Exception {
+		return "";
+	}
+
+	public String getNCRProductControlApprovalsField(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+
+		return getNCRProductControlApprovalsField(context, objectId, null, args);
+	}
+
+	public String getNCRProductControlApprovalsField(Context context, String objId, String reportFormat, String[] args) throws Exception {
+		return "";
+	}
+
+	public String getNCRCorrectionField(Context context, String[] args) throws Exception {
+		return "";
+	}
+
+	/**
+	 * Format i18n date. added for fixing the bug 15047
+	 * 
+	 * @param context
+	 *            the context
+	 * @param date
+	 *            the date
+	 * @param languageStr
+	 *            the language str
+	 * @param timeZoneOffset
+	 *            the time zone offset
+	 * 
+	 * @return the string
+	 */
+	public static String formatI18nDate(Context context, String date, String languageStr, double timeZoneOffset) {
+		return "";
+	}
+
+	public String getNCRTasksField(Context context, String[] args) throws Exception {
+		return "";
+	}
+
+	public String getNCRCommentField(Context context, String[] args) throws Exception {
+		return "";
+	}
+
+	public String getNCRFilesField(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+		HashMap reqMap = (HashMap) programMap.get("requestMap");
+		String reportFormat = (String) reqMap.get("reportFormat");
+		String returnStr = "";
+		String label = "    ";
+		String field = ": ";
+		String newLine = "\n";
+		String beginTable = "";
+		String endTable = "";
+		String beginBold = "";
+		String endBold = "";
+		String beginRow = "";
+		String endRow = "\n";
+
+		String i18nAttachments = Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.CommonLabel.Attachments");
+		String i18nNoAttachments = Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.OpenNCRSummaryReport.NoAttachments");
+		String i18nFileName = Helper.getI18NString(context, Helper.StringResource.NCR, "LQINCR.Attachments.FileName");
+
+		if (reportFormat == null) {
+			label = "<td class=\"label\" rowspan=\"1\" >";
+			field = "</td><td class=\"field\" colspan=\"10\">";
+			beginRow = "<tr>";
+			endRow = "</td></td>";
+			newLine = "<br>";
+			beginTable = "<table border=\"0\" width=\"99%\" cellpadding=\"5\" cellspacing=\"2\">";
+			endTable = "</table>";
+			returnStr = "<script type=\"text/javascript\">addStyleSheet(\"emxUIForm\");</script>";
+			beginBold = "<b>";
+			endBold = "</b>";
+		}
+
+		returnStr = beginBold + i18nAttachments + endBold + newLine + newLine;
+
+
+		DomainObject domainObj = new DomainObject(objectId);
+
+		// loop through all files.
+		FileList fileList = domainObj.getFiles(context);
+
+		if (fileList.size() == 0)
+			return returnStr += i18nNoAttachments;
+
+		for (int j = 0; j < fileList.size(); ++j) {
+			matrix.db.File file = (matrix.db.File) fileList.get(j);
+			String fileName = file.getName();
+
+			returnStr += beginTable;
+			returnStr += beginRow + label + i18nFileName + " " + field + fileName + endRow;
+			returnStr += endTable;
+		}
+
+		return returnStr;
+	}
+
+	public String getNCRApprovalsField(Context context, String[] args) throws Exception {
+		return "";
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static HashMap loadAuditSummaryReport(Context context, String[] args) throws Exception {
+		// The code was written this way so that we can check the license before
+		// invoking emxForm.jsp for the
+		// report
+		HashMap returnMap = new HashMap();
+		HashMap programMap = JPO.unpackArgs(args);
+		String objectId = (String) programMap.get("objectId");
+
+		String callback = "javascript:";
+		callback += "var auditSummaryHREF = \"../common/emxForm.jsp?form=PQCNCRAuditSummaryReport&header=LQINCR.NCRAuditSummaryReport.Header&formHeader=LQINCR.NCRAuditSummaryReport.Header&HelpMarker=NCR30&RegisteredSuite=LQINCR&suiteKey=LQINCR&objectId="
+				+ objectId + "\";";
+		callback += "top.location.href = auditSummaryHREF;";
+
+		try {
+			Helper.isLicenseAssigned(context, LSALicense.COLS);
+		}
+		catch (MatrixException e) {
+			returnMap.put("Message", e.getLocalizedMessage());
+			callback = "javascript:top.close();";
+		}
+
+		returnMap.put("callback", callback);
+		return returnMap;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static HashMap loadProductControlDispositionReport(Context context, String[] args) throws Exception {
+		// The code was written this way so that we can check the license before
+		// invoking emxForm.jsp for the
+		// report
+
+		HashMap returnMap = new HashMap();
+
+		String callback = "javascript:";
+		callback += "var productControlDispositionHREF = \"../common/emxForm.jsp?form=PQCNCRProductControlDispositionReport&header=LQINCR.PCDispositionSummaryReport.Header&formHeader=LQINCR.PCDispositionSummaryReport.Header&selection=single&HelpMarker=NCR33&RegisteredSuite=LQINCR&suiteKey=LQINCR&objectId=$<tableIds>\";";
+		callback += "top.location.href = productControlDispositionHREF;";
+
+		try {
+			Helper.isLicenseAssigned(context, LSALicense.COLS);
+		}
+		catch (MatrixException e) {
+			returnMap.put("Message", e.getLocalizedMessage());
+			callback = "javascript:top.close();";
+		}
+
+		returnMap.put("callback", callback);
+		return returnMap;
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static HashMap loadSummaryReport(Context context, String[] args) throws Exception {
+		// The code was written this way so that we can check the license before
+		// invoking emxForm.jsp for the
+		// report
+		HashMap returnMap = new HashMap();
+		HashMap programMap = JPO.unpackArgs(args);
+		String[] objectId = (String[]) programMap.get("objectId");
+
+		String callback = "javascript:";
+		callback += "var summaryHREF = \"../common/emxForm.jsp?form=PQCNCRSummaryReport&header=LQINCR.NCRSummaryReport.Header&formHeader=LQINCR.NCRSummaryReport.Header&HelpMarker=NCR36&RegisteredSuite=LQINCR&suiteKey=LQINCR&objectId="
+				+ objectId[0] + "\";";
+		callback += "top.location.href = summaryHREF;";
+
+		try {
+			Helper.isLicenseAssigned(context, LSALicense.COLS);
+		}
+		catch (MatrixException e) {
+			returnMap.put("Message", e.getLocalizedMessage());
+			callback = "javascript:top.close();";
+		}
+
+		returnMap.put("callback", callback);
+		return returnMap;
+	}
+}
+

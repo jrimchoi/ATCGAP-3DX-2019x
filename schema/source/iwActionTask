@@ -1,0 +1,590 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Map;
+
+import matrix.db.Attribute;
+import matrix.db.AttributeList;
+import matrix.db.AttributeType;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.Policy;
+import matrix.db.StateRequirementItr;
+import matrix.db.StateRequirementList;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.i18nNow;
+
+/**
+ * 
+ */
+@Deprecated
+public class ${CLASSNAME} extends ${CLASS:iwActionItem} {
+	/*
+	 * TODO: This class uses instance variables which may cause a problem in a
+	 * high-use environment. Since JPOs are not instantiated for each call to
+	 * their methods, two users making a call to the same method at the same
+	 * time may overwrite one another's instance variables.
+	 * 
+	 * TODO: Most of these methods also seem to be generic enough to be placed
+	 * in the superclass ${CLASS:iwActionItem}. Others may be made generic by
+	 * accepting a 'type' argument and using that to perform findObject queries.
+	 */
+
+	/** List of templates already connected to the target object. */
+	private MapList	connectedActionTasks;
+
+	/** Object id for the target object. */
+	private String	rootId	= null;
+
+	/**
+	 * Constructs a new instance of the {@code ${CLASSNAME}} class.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+		super(context, args);
+	}
+
+	/**
+	 * Retrieve the list of future states for the policy of the given object.
+	 * This method first determines the given object's current state and policy,
+	 * and then returns a list of states which includes the object's current
+	 * state as well as all states configured to be later in the lifecycle.
+	 * 
+	 * <p />
+	 * For example, given an object with policy 'PolicyA' and current state
+	 * 'Review'
+	 * 
+	 * <p />
+	 * PolicyA: <br />
+	 * Initiate -> Review -> Approved -> Closed
+	 * 
+	 * <p />
+	 * this method will return the list {Review, Approved, Closed}.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @return HashMap containing range for state
+	 */
+	public static Object getRangeForActionState(Context context, String[] args) throws Exception {
+		try {
+			// TODO: Generic method. Move to Action Item JPO. May actually be
+			// more appropriate to move this method to a utility class.
+			// TODO: Rename method as it doesn't really describe what the method
+			// does.
+
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			String objectId = (String) paramMap.get("objectId");
+
+			// Retrieve the target object and its current state
+			DomainObject dob = new DomainObject(objectId);
+			// TODO: DomainObject.getInfo?
+			SelectList selectList = new SelectList(1);
+			selectList.addCurrentState();
+			String currentState = dob.select(context, selectList).getSelectData("current");
+
+			// Get the full list of states for the target object's policy
+			dob.open(context);
+			Policy policy = dob.getPolicy(context);
+			StringList statesForObjectIWStandard = getParentStandardStates(context, policy);
+			dob.close(context);
+
+			HashMap tempMap = new HashMap();
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+
+			// Find the current state's index in full list
+			int pos = statesForObjectIWStandard.indexOf(currentState);
+
+			// Iterate over the full list of states, starting from the current
+			// state, and add them to the return list
+			for (int i = pos; i < statesForObjectIWStandard.size() - 1; i++) {
+				String s = (String) statesForObjectIWStandard.get(i);
+				fieldRangeValues.addElement(s);
+				// fieldDisplayRangeValues.addElement(s);
+				fieldDisplayRangeValues.addElement(i18nNow.getStateI18NString(policy.getName(), s, context.getSession().getLanguage()));
+			}
+
+			tempMap.put("field_choices", fieldRangeValues);
+			tempMap.put("field_display_choices", fieldDisplayRangeValues);
+
+			return tempMap;
+		}
+		catch (Exception x) {
+			x.printStackTrace();
+			throw x;
+
+		}
+	}
+
+	/**
+	 * Gets Range For Action State
+	 * 
+	 * @param context
+	 * @param args
+	 * @return HashMap containing range for state
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public static Object getRangeForParentActionState(Context context, String[] args) throws Exception {
+		try {
+			// TODO: Generic method. Move to Action Item JPO.
+
+			HashMap programMap = (HashMap) JPO.unpackArgs(args);
+			HashMap paramMap = (HashMap) programMap.get("paramMap");
+			String objectId = (String) paramMap.get("objectId");
+
+			// Get the action item object
+			DomainObject dob = new DomainObject(objectId);
+
+			// Get the object to which the action item is attached (target
+			// object)
+			StringList busSelects = new StringList();
+			busSelects.add("id");
+			busSelects.add("name");
+			busSelects.add("owner");
+			busSelects.add("current");
+			StringList relSelects = new StringList();
+			Map parents = dob.getRelatedObject(context, ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM, false, busSelects, relSelects);
+			String sID = (String) parents.get("id");
+			dob = new DomainObject(sID);
+
+			// TODO: Refactor out into common method. This method has the same
+			// code as getRangeForActionState from this point forward.
+
+			// Retrieve the target object's current state
+			SelectList selectList = new SelectList(1);
+			selectList.addCurrentState();
+			String currentState = dob.select(context, selectList).getSelectData("current");
+
+			// Get the full list of states for the target object's policy
+			dob.open(context);
+			Policy policy = dob.getPolicy(context);
+			StringList statesForObjectIWStandard = getParentStandardStates(context, policy);
+			dob.close(context);
+
+			HashMap tempMap = new HashMap();
+			StringList fieldRangeValues = new StringList();
+			StringList fieldDisplayRangeValues = new StringList();
+
+			// Find the current state's index in full list
+			int pos = statesForObjectIWStandard.indexOf(currentState);
+
+			// Iterate over the full list of states, starting from the current
+			// state, and add them to the return list
+			for (int i = pos; i < statesForObjectIWStandard.size() - 1; i++) {
+				String s = (String) statesForObjectIWStandard.get(i);
+				fieldRangeValues.addElement(s);
+				fieldDisplayRangeValues.addElement(i18nNow.getStateI18NString(policy.getName(), s, context.getSession().getLanguage()));
+			}
+
+			tempMap.put("field_choices", fieldRangeValues);
+			tempMap.put("field_display_choices", fieldDisplayRangeValues);
+
+			return tempMap;
+		}
+		catch (Exception x) {
+			x.printStackTrace();
+			throw x;
+
+		}
+	}
+
+	/**
+	 * Retrieves the list of states for the given {@code policy}.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param policy
+	 *            The policy from which to retrieve a list of states.
+	 * @return The list of states for the given {@code policy}.
+	 */
+	private static StringList getParentStandardStates(Context context, Policy policy) throws Exception {
+		// TODO: More of a utility method than a Action Task-specific method.
+
+		StringList stateList = new StringList();
+
+		try {
+			StateRequirementList stateReqList = policy.getStateRequirements(context);
+			StateRequirementItr stateItr = new StateRequirementItr(stateReqList);
+
+			// Iterate over the state list, adding them to the return list
+			while (stateItr.next()) {
+				stateList.add(stateItr.obj().getName());
+			}
+		}
+		catch (MatrixException e) {
+			e.printStackTrace();
+		}
+
+		return stateList;
+	}
+
+	/**
+	 * Retrieves the list of Action Task Templates which are not yet connected
+	 * to the target object.
+	 * 
+	 * <p />
+	 * Note that the templates themselves are never connected to a target
+	 * object. Rather, an Action Task is created which is based on the template
+	 * and this instance is connected to the target object.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @returns The list of Action Item Templates which are not yet connected to
+	 *          the target object.
+	 */
+	private MapList getNonConnectedActionTasks(Context context) throws Exception {
+		// TODO: Change the algorithm in this method to simplify the process.
+		// Right now the entire list of templates is traversed 3 or 4 times for
+		// every connected task.
+
+		// Retrieve list of tasks already connected to the target object
+		// TODO: We should be able to do this right here, inline.
+		this.fetchConnectedData(context);
+
+		// Retrieve the full list of templates
+		// TODO: This variable name is initially misleading. Some are connected.
+		MapList nonConnectedList = new MapList(${CLASS:iwActionTaskTemplate}.getAllSorted(context));
+
+		// Iterate over the list of connected action tasks
+		Iterator lstItr = this.connectedActionTasks.iterator();
+		while (lstItr.hasNext()) {
+			Map map = (Map) lstItr.next();
+			String actionTaskName = (String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_NAME);
+			map = ${CLASS:iwActionTaskTemplate}.getAllSortedMap(context, actionTaskName);
+
+			// If the current task does not start with 'Other:', remove it from
+			// the full list
+			if (!actionTaskName.startsWith("Other:") && nonConnectedList.contains(map)) {
+				nonConnectedList.remove(map);
+			}
+		}
+
+		return nonConnectedList;
+	}
+
+	/**
+	 * 
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 */
+	public void fetchConnectedData(Context context) throws Exception {
+		// TODO: This method seems to simply encapsulate an API call. Is there
+		// a reason this needs to be its own method?
+		// TODO: If this method ends up being used, shouldn't it be
+		// protected/private?
+
+		String relPattern = "";
+		String typePattern = ${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_TASK;
+		SelectList busSelects = ${CLASS:iwActionItemStaticVariables}.actionTaskSelectList;
+
+		SelectList relSelects = new SelectList();
+		boolean to = false;
+		boolean from = true;
+		short recurseToLevel = 1;
+		String busWhere = "";
+		String relWhere = "";
+		DomainObject dob = new DomainObject(this.rootId);
+
+		// TODO: Why store this in an instance variable? Isn't this prone to
+		// breaking since JPOs are not instantiated for each call?
+		this.connectedActionTasks = dob.getRelatedObjects(context, relPattern, typePattern, busSelects, relSelects, to, from, recurseToLevel,
+				busWhere, relWhere, 0, null, null, null);
+	}
+
+	/**
+	 * Retrieves the list of Action Task Templates which are not yet connected
+	 * to the target object.
+	 * 
+	 * <p />
+	 * Note that the templates themselves are never connected to a target
+	 * object. Rather, an Action Task is created which is based on the template
+	 * and this instance is connected to the target object.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @returns The list of Action Item Templates which are not yet connected to
+	 *          the target object.
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getNonConnectedActionTasksForAddTable(Context context, String[] args) throws Exception {
+		// TODO: Is this method necessary? Seems to be almost a carbon copy of
+		// ${CLASSNAME}.getNonConnectedActionTasks.
+
+		MapList resultList = new MapList();
+
+		// Retrieve the target object id
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+		// TODO: Why store this in an instance variable? Isn't this prone to
+		// breaking since JPOs are not instantiated for each call?
+		this.rootId = (String) programMap.get("objectId");
+
+		// Retrieve the list of templates that are not yet connected
+		MapList list = this.getNonConnectedActionTasks(context);
+		ListIterator lstItr = list.listIterator();
+
+		while (lstItr.hasNext()) {
+			Map map = (Map) lstItr.next();
+			String id = (String) map.get(DomainConstants.SELECT_ID);
+			HashMap hm = new HashMap();
+			hm.put("id", id);
+			// TODO: What is this?
+			hm.put("id[connection]", null);
+			resultList.add(hm);
+		}
+
+		return resultList;
+	}
+
+	/**
+	 * Creates and attaches new Action Tasks to a given object. The task objects
+	 * to be created are based on the list of template ids found in the
+	 * {@code args} parameter. After each task object is created, it is attached
+	 * to the target object whose object id is also passed via the {@code args}
+	 * parameter.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param args
+	 *            Arguments data structure.
+	 * @return
+	 */
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public HashMap addActionTasksFromTable(Context context, String[] args) throws Exception {
+		/*
+		 * TODO: Any way to make this method more generic so all applications
+		 * using Action Items may call it with a 'type' argument?
+		 */
+
+		HashMap returnMap = new HashMap();
+
+		try {
+			// Retrieve the target object id and the list of template ids
+			HashMap mapArgs = (HashMap) JPO.unpackArgs(args);
+			String objectId = (String) mapArgs.get("objectId");
+			String[] emxTableRowId = (String[]) mapArgs.get("emxTableRowId");
+
+			// Get the target object's current state
+			DomainObject doParent = new DomainObject(objectId);
+			SelectList selectList = new SelectList();
+			selectList.addCurrentState();
+			String currentState = doParent.select(context, selectList).getSelectData("current");
+
+			// Iterate over the template ids, creating a new action task
+			// instance for each
+			String impTaskId = null;
+			for (int i = 0; i < emxTableRowId.length; ++i) {
+				impTaskId = createActionTask(context, currentState, emxTableRowId[i]);
+				// TODO: Can't we connect the objects using the API call?
+				${CLASS:iwActionItem}.connectObjects(context, doParent, new BusinessObject(impTaskId), "relationship_ActionItem", true, null);
+			}
+
+			// Tell application what to do after this method returns
+			// Note that this is necessary since the call to iwExecute.jsp is
+			// embedded within a URL and cannot receive the 'complete' query
+			// string parameter.
+			String strURL = "javascript:getTopWindow().opener.getTopWindow().refreshTablePage();javascript:getTopWindow().window.close();";
+			returnMap.put("callback", strURL);
+		}
+		catch (Exception e) {
+			String strError = e.toString();
+			int colonIndex = strError.lastIndexOf(":");
+			if (colonIndex != -1)
+				strError = strError.substring(colonIndex + 2);
+
+			String strURL = "javascript:alert(\"" + strError.trim() + "\");javascript:getTopWindow().window.close();";
+			returnMap.put("callback", strURL);
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * Creates a new Action Task based on the given {@code templateId}. The task
+	 * object's attributes are initially populated using the template's values
+	 * plus the given {@code parentState}. If the creation succeeds, the newly
+	 * created task's object id is returned.
+	 * 
+	 * @param context
+	 *            Matrix context object.
+	 * @param parentState
+	 *            Name of the state in which the task must be completed.
+	 * @param templateId
+	 *            Object id of the template on which this task is based.
+	 * @return Object id of the newly created task object if the creation
+	 *         succeeds, {@code null} otherwise.
+	 */
+	public String createActionTask(Context context, String parentState, String templateId) throws Exception {
+		/*
+		 * TODO: Any way to make this method and its calling method more
+		 * generic? See above.
+		 */
+
+		String objectId = null;
+
+		// Retrieve the template's attribute values
+		// TODO: There has to be a faster way to do this.
+		// DomainObject.findObject?
+		Map map = ${CLASS:iwActionTaskTemplate}.getAllSortedMap(context, templateId);
+		// String templateName = (String)
+		// map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_TEMPLATE_NAME);
+		String longLabel = (String) map.get(${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_TEMPLATE_LABEL);
+		String description = (String) map.get(DomainConstants.SELECT_DESCRIPTION);
+		String templateName = (String) map.get(DomainConstants.SELECT_NAME);
+		// Create an attribute value list based on the template's values.
+		// This will be used to initialize the action task object
+		AttributeList attLst = new AttributeList();
+		attLst.add(new Attribute(new AttributeType(${CLASS:iwActionItemStaticVariables}.ATTR_ACTION_ITEM_TEMPLATE_NAME), templateName));
+		attLst.add(new Attribute(new AttributeType(${CLASS:iwActionItemStaticVariables}.ATTR_ACTION_ITEM_NAME), longLabel));
+		attLst.add(new Attribute(new AttributeType(${CLASS:iwActionItemStaticVariables}.ATTR_ACTION_ITEM_COMPLETION_STATE), parentState));
+
+		try {
+			// Create a new action task object with a unique name
+			// TODO: Should we be using the FrameworkUtil class to create these?
+			BusinessObject bus = new BusinessObject(${CLASS:iwActionItemStaticVariables}.TYPE_ACTION_TASK, "", "", "");
+			DomainObject dom = new DomainObject(bus);
+			String uniqueName = dom.getUniqueName(${CLASS:iwActionItemStaticVariables}.PREFIX_ACTION_TASK);
+			dom.setName(uniqueName);
+			dom.create(context, ${CLASS:iwActionItemStaticVariables}.POLICY_ACTION_ITEM);
+			objectId = dom.getId();
+
+			// Set the task object's attribute values using the list above
+			dom.setAttributes(context, attLst);
+			dom.setDescription(context, description);
+		}
+		catch (MatrixException e) {
+			String errMsg = "Error: " + e.toString();
+			throw new MatrixException(errMsg);
+		}
+
+		return objectId;
+	}
+
+	@com.matrixone.apps.framework.ui.PostProcessCallable
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public HashMap deleteActionTask(Context context, String[] args) throws Exception {
+		HashMap returnMap = new HashMap();
+		try {
+			// Get Parameters
+			HashMap programArgs = (HashMap) JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programArgs.get("emxTableRowId");
+			String errorMessage = "";
+			String callback = "";
+
+			for (int i = 0; i < emxTableRowId.length; i++) {
+				String actionTaskId = emxTableRowId[i];
+				DomainObject doActionTask = DomainObject.newInstance(context, actionTaskId);
+
+				if (FrameworkUtil.hasAccess(context, doActionTask, "delete")) {
+					doActionTask.deleteObject(context);
+					// callback += "top.objDetailsTree.deleteObject('" +
+					// actionTaskId + "', false);";
+				}
+				else {
+					errorMessage += doActionTask.getInfo(context, ${CLASS:iwActionItemStaticVariables}.SELECT_ATTR_ACTION_ITEM_NAME) + "\n";
+				}
+			}
+
+			// if (!callback.equals(""))
+			// {
+			callback += "parent.document.location.href=parent.document.location.href;";// "top.refreshTablePage();";
+
+			// the following handles the case where objects are open in a
+			// separate
+			// window. We loop through the child windows array and see if the
+			// window has the 'refreshTablePage' function, and if so call it.
+			// If we dont do the check first, but rather just make the call
+			// we end up getting javascript errors when attempting to call
+			// refreshTablePage when it does not exist.
+			callback += "if (parent.childWindows != null ) {for(var i=0; i<parent.childWindows.length; i++){"
+					+ "if(parent.childWindows[i].refreshTablePage){" + "parent.childWindows[i].refreshTablePage();" + "}" + "}}";
+			returnMap.put("callback", "javascript:" + callback);
+			// }
+
+			if (!errorMessage.equals("")) {
+
+				// errorMessage =
+				// "The following Action Tasks could not be deleted because you do not have delete permissions in their current state.\n"
+				// + errorMessage;
+				errorMessage = Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ActionTask.ErrorMsg.NoDeletePermission") + "\n"
+						+ errorMessage;
+
+				returnMap.put("Message", errorMessage);
+			}
+		}
+		catch (Exception mx1E) {
+			mx1E.printStackTrace();
+			return returnMap;
+		}
+
+		return returnMap;
+	}
+
+	/**
+	 * This is used to determine if the command iwActionTaskEditTable should
+	 * appear. If the user has the ability to edit any of the related action
+	 * tasks then access is granted.
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public boolean checkEditAccessForActionTasks(Context context, String[] args) throws Exception {
+		HashMap mapProgram = (HashMap) JPO.unpackArgs(args);
+		String strObjectId = (String) mapProgram.get("objectId");
+
+		DomainObject doAudit = DomainObject.newInstance(context, strObjectId);
+		MapList relationATask = doAudit.getRelatedObjects(context, ${CLASS:iwActionItemStaticVariables}.REL_ACTION_ITEM, "*", // type
+				true, // get to
+				true, // get from
+				1, // recurse level
+				new StringList(), // object selects
+				null, // relation selects
+				"current.access[modify]~~true", // object where clause
+				"", // relationship where clause
+				null, null, null);
+
+		// All we need to do is see if any related objects were found where we
+		// have
+		// modify access. If at least one is found then return true.
+		if (relationATask.size() > 0) {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+
+}
+

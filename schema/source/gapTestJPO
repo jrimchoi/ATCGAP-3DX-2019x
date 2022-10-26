@@ -1,0 +1,106 @@
+
+import java.util.Map;
+import java.util.Vector;
+import java.util.HashMap;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.matrixone.apps.framework.ui.UIUtil;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import com.designrule.drv6tools.Operations;
+import com.designrule.drv6tools.eFunctionType;
+
+public class ${CLASSNAME} {
+	
+	public static final String VAULT_ESERVICE_PRODUCTION =	PropertyUtil.getSchemaProperty("vault_eServiceProduction");
+	public static final String TYPE_INVDRAWING = PropertyUtil.getSchemaProperty("type_INVDrawing");
+	public static final String PERSON_ADMIN_PLATFORM = "admin_platform";
+	public static final String SITE_TBI = "TBI";
+	public static final String ACTION_NAME = "CreateSystemQueueObject";
+
+	public void createQueueObject(Context context, String[] args) throws Exception {
+		boolean isSiteChanged = false;
+		boolean isContextPushed = false;
+		String sSite = DomainConstants.EMPTY_STRING;
+		try {
+			
+			ContextUtil.pushContext(context, PERSON_ADMIN_PLATFORM, null, null);
+			isContextPushed = true;
+			//System.out.println("Context Pushed==="+context.getUser());
+			
+			String sRole = DomainConstants.EMPTY_STRING;
+			Vector<String> ctxRoleList = PersonUtil.getSecurityContextAssignments(context);
+			for(String ctxRole : ctxRoleList) {
+				//System.out.println("ctxRole==="+ctxRole);
+				//if(ctxRole.contains("Common Space")) {
+				if(ctxRole.contains("VPLMAdmin")) {
+					sRole = "ctx::"+ctxRole;
+				}
+			}
+			
+			//System.out.println("sRole==="+sRole);
+			if(UIUtil.isNotNullAndNotEmpty(sRole)) {
+				context.resetRole(sRole);
+			}
+			
+			sSite = MqlUtil.mqlCommand(context, "print person $1 select site dump", context.getUser());
+			
+			if(!sSite.equals(SITE_TBI)) {
+				MqlUtil.mqlCommand(context, "mod person $1 site $2", context.getUser(), SITE_TBI);
+				isSiteChanged = true;
+				//System.out.println("Site Modified From==="+sSite);
+			}
+			
+			StringList objectSelects = new StringList();
+			objectSelects.add(DomainConstants.SELECT_ID);
+			
+			String sWhere = "latest==TRUE && current==RELEASED && from[Derived Output]!=TRUE && from[DRLTools Processor System Queue Object Relationship]!=TRUE";
+			
+			//String sWhere = "latest==TRUE && current==RELEASED && from[Derived Output]!=FALSE && from[Derived Output].to.format.file.format!='PDF' && from[DRLTools Processor System Queue Object Relationship]!=TRUE";
+			
+			
+			//String sWhere = "latest==TRUE && current==RELEASED && from[Derived Output]!=TRUE";
+			MapList mlObjects = DomainObject.findObjects(context, TYPE_INVDRAWING, VAULT_ESERVICE_PRODUCTION, sWhere, objectSelects);
+			
+			//String sObjectId = "65080.62902.26353.25467";
+			Map<String, String[]> paramMap = new HashMap<String, String[]>();
+			//for (int i=0; i<mlObjects.size(); i++) {
+				//System.out.println("mlObjects:::::::"+mlObjects.size());
+			
+			for (int i=0; i<mlObjects.size(); i++) {
+				Map oMap = (Map) mlObjects.get(i);
+				String sObjectId = (String) oMap.get(DomainConstants.SELECT_ID);
+				if(UIUtil.isNotNullAndNotEmpty(sObjectId)) {
+					Operations op = new Operations();
+					op.exec(context, sObjectId, null, null, false, eFunctionType.server, ACTION_NAME, paramMap);
+					System.out.println("sObjectId==="+sObjectId);
+				}
+			}
+			
+		} catch  (Exception ex) {
+			throw ex;
+		} finally {
+			
+			if(isSiteChanged && UIUtil.isNotNullAndNotEmpty(sSite)) {
+				MqlUtil.mqlCommand(context, "mod person $1 site $2", context.getUser(), sSite);
+				//System.out.println("Site Reverted To==="+sSite);
+			}
+			
+			if(isContextPushed) {
+				ContextUtil.popContext(context);
+				//System.out.println("Popped Context===");
+			}
+		}
+	}
+
+}
+
+

@@ -1,0 +1,49 @@
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} extends ${CLASS:ENODCLConfigureChangeOrderUIBase} {
+
+	/**
+	 * Access program to display DCL Configure Effectivity command.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds packed arguments.
+	 * @throws DCLException
+	 *             if operation fails
+	 * @exclude
+	 */
+	public boolean canConfigureDocumentEffectivity(Context context, String args[]) throws DCLException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strInterface = "DCLEffectivity";
+			String strCOId = (String) programMap.get(DCConstants.OBJECTID);
+			String strCOInterface = DCLUtil.mqlCommand(context, "print bus $1 select $2 dump $3", false, strCOId, "interface", "|");
+			StringList sl = FrameworkUtil.split(strCOInterface, "|");
+			String strPolicyFormalChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strPolicyStateApproved = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange,
+					DCLConstants.SYMBOLIC_STATE_APPROVED);
+			if ((!PolicyUtil.checkState(context, strCOId, strPolicyStateApproved, PolicyUtil.GT)) && !sl.isEmpty() && sl != null
+					&& sl.contains(strInterface))
+				return true;
+			return false;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+}
+

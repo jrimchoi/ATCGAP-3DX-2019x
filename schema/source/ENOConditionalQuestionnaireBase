@@ -1,0 +1,482 @@
+import java.io.StringReader;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathFactory;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectItr;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.Group;
+import matrix.db.MQLCommand;
+import matrix.db.RelationshipType;
+import matrix.db.User;
+import matrix.db.UserList;
+import matrix.util.StringList;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalService;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+public class ${CLASSNAME} {
+
+
+	public void executeConditionalMQLConditions(Context context, String args[]) throws Exception {
+		String strObjectId = args[0];
+
+		DomainObject domObj = DomainObject.newInstance(context, strObjectId);
+		String strTypeBusinessRole = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_BusinessRole);
+		String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+		String strAttributeRouteAction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+
+		String type = domObj.getInfo(context, DomainConstants.SELECT_TYPE);
+		String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type", type, true);
+		String strKeyProperty = "enoQuestionnaire." + strTypeSymName + ".";
+
+		List<String> slRoleName = new StringList();
+		List<String> slRoleId = new StringList();
+		List<String> slGroupName = new StringList();
+		List<String> slPersonName = new StringList();
+		List<String> slConditions = new StringList();
+
+		Map<String, String> mSequence = new HashMap<String, String>();
+		Map<String, String> mRouteAction = new HashMap<String, String>();
+
+		int i = 1;
+		while (true) {
+			try {
+				String strCondition = EnoviaResourceBundle.getProperty(context, strKeyProperty + "Condition" + i);
+				slConditions.add(strCondition);
+			}
+			catch (Exception e) {
+				break;
+			}
+			i++;
+		}
+
+		for (String strCondition : slConditions) {
+			List<String> slExpression = FrameworkUtil.split(strCondition, ":");
+			StringBuilder sbObjectWhere = new StringBuilder();
+			sbObjectWhere.append(slExpression.get(0));
+
+			String result = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 where $4 select $5 dump", type, "*", "*", sbObjectWhere.toString(),
+					"id");
+
+			if (UIUtil.isNotNullAndNotEmpty(result)) {
+				List<String> slApprovals = FrameworkUtil.split(slExpression.get(1), ",");
+
+				for (String approvers : slApprovals) {
+
+					List<String> slApproversAndSequence = FrameworkUtil.split(approvers, "#");
+					String approversName = slApproversAndSequence.get(0);
+					List<String> slSequenceAndAction = FrameworkUtil.split(slApproversAndSequence.get(1), "@");
+					String sequence = slSequenceAndAction.get(0);
+					String action = slSequenceAndAction.get(1);
+
+					String strId = DomainConstants.EMPTY_STRING;
+					String strName = PropertyUtil.getSchemaProperty(context, approversName);
+
+					if (approversName.contains("role")) {
+						if (!slRoleName.contains(strName)) {
+							slRoleName.add(strName);
+							strId = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", strTypeBusinessRole, strName, "-", "id");
+							slRoleId.add(strId);
+						}
+					}
+					else if (approversName.contains("group")) {
+						if (!slGroupName.contains(strName))
+							slGroupName.add(strName);
+					}
+					else {
+						strId = PersonUtil.getPersonObjectID(context, approversName);
+						if (!slPersonName.contains(strId))
+							slPersonName.add(strId);
+					}
+					if (UIUtil.isNullOrEmpty(strId))
+						strId = strName;
+					if (!mSequence.containsKey(strId)) {
+						mSequence.put(strId, sequence);
+						mRouteAction.put(strId, action);
+					}
+
+				}
+			}
+		}
+
+		if (slPersonName.size() > 0 || slRoleName.size() > 0 || slGroupName.size() > 0) {
+			ConfigureApprovalService configureService = new ConfigureApprovalServiceImpl();
+			List<Map> mlRelatedRouteTemplate = configureService.getCORouteTemplate(context, strObjectId);
+			String strRouteTemplateId = DomainConstants.EMPTY_STRING;
+			if (mlRelatedRouteTemplate.size() > 0) {
+				Map mRT = mlRelatedRouteTemplate.get(0);
+				strRouteTemplateId = (String) mRT.get(DomainConstants.SELECT_ID);
+			}
+			else
+				strRouteTemplateId = configureService.createAndConnectRouteTemplate(context, strObjectId);
+			Map mRelId = new HashMap();
+			mRelId.putAll(configureService.assignPersonActionTask(context, strRouteTemplateId, (StringList) slPersonName));
+			mRelId.putAll(configureService.assignBusinessRoleActionTask(context, strRouteTemplateId, (StringList) slRoleId, (StringList) slRoleName));
+			mRelId.putAll(configureService.assignGroupActionTask(context, strRouteTemplateId, (StringList) slGroupName));
+
+			for (Iterator iterator = mRelId.keySet().iterator(); iterator.hasNext();) {
+				String strKeyid = (String) iterator.next();
+				Map mAttribute = new HashMap();
+				mAttribute.put(strAttributeRouteSequence, mSequence.get(strKeyid));
+				mAttribute.put(strAttributeRouteAction, mRouteAction.get(strKeyid));
+				configureService.assigneeAttributeValues(context, mRelId.get(strKeyid).toString(), mAttribute);
+			}
+		}
+	}
+	
+	public void executeConditionalQuestionsPageObject(Context context, String args[]) throws Exception {
+		String strObjectId = args[0];
+
+		ConfigureApprovalService configureService = new ConfigureApprovalServiceImpl();
+		List<Map> mlRelatedRouteTemplate = configureService.getCORouteTemplate(context, strObjectId);
+		String strRouteTemplateId = DomainConstants.EMPTY_STRING;
+		if (mlRelatedRouteTemplate.size() > 0) {
+			return;
+		}
+
+		String strAttributeRouteSequence = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteSequence);
+		String strAttributeRouteAction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteAction);
+		String strAttributeRouteInstruction = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_RouteInstructions);
+		String strAttributeRouteDateOffsetFrom = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DateOffsetFrom);
+		String strAttributeRouteDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDateOffset);
+		String strAttributeAllowDelegation = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_AllowDelegation);
+		String ExpType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+
+		List<String> slRoleName = new StringList();
+		List<String> slRoleId = new StringList();
+		List<String> slGroupName = new StringList();
+		List<String> slPersonName = new StringList();
+
+
+		Map mTask = new HashMap<String, String>();
+
+		XPathFactory factory = XPathFactory.newInstance();
+		XPath xpath = factory.newXPath();
+		XPathExpression expr;
+		expr = xpath.compile(new StringBuilder("/ApprovalMatrix/Condition").toString());
+		String xmlData = MQLCommand.exec(context, "print page $1 select content dump", "ConditionalQuestionnaireExpression");
+		InputSource source = new InputSource(new StringReader(xmlData));
+		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+		DocumentBuilder db = dbf.newDocumentBuilder();
+		Document document = db.parse(source);
+
+		Object result = expr.evaluate(document, XPathConstants.NODESET);
+		NodeList conditions = (NodeList) result;
+
+		for (int i = 0; i < conditions.getLength(); i++) {
+
+			String sbObjectWhere = conditions.item(i).getAttributes().getNamedItem("Expression").getNodeValue();
+
+			String queryResult = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 where $4 select $5 dump $6", ExpType, "*", "*",
+					sbObjectWhere.toString(), "id", "|");
+
+			if (UIUtil.isNotNullAndNotEmpty(queryResult) && queryResult.contains(strObjectId)) {
+				Node nNode = conditions.item(i);
+				getApprovals(context, strObjectId, slPersonName, slRoleName, slGroupName, slRoleId, mTask, nNode);
+			}
+		}
+
+		if (slPersonName.size() > 0 || slRoleName.size() > 0 || slGroupName.size() > 0) {
+			if (mlRelatedRouteTemplate.size() > 0) {
+				Map mRT = mlRelatedRouteTemplate.get(0);
+				strRouteTemplateId = (String) mRT.get(DomainConstants.SELECT_ID);
+			}
+			else
+				strRouteTemplateId = configureService.createAndConnectRouteTemplate(context, strObjectId);
+			Map mRelId = new HashMap();
+			mRelId.putAll(configureService.assignPersonActionTask(context, strRouteTemplateId, (StringList) slPersonName));
+			mRelId.putAll(configureService.assignBusinessRoleActionTask(context, strRouteTemplateId, (StringList) slRoleId, (StringList) slRoleName));
+			mRelId.putAll(configureService.assignGroupActionTask(context, strRouteTemplateId, (StringList) slGroupName));
+
+			for (Iterator iterator = mRelId.keySet().iterator(); iterator.hasNext();) {
+				String strKeyid = (String) iterator.next();
+				Map mAttribute = new HashMap();
+				Map mAssignedTask = (Map) mTask.get(strKeyid);
+
+				mAttribute.put(strAttributeRouteSequence, mAssignedTask.get("Sequence"));
+				mAttribute.put(strAttributeRouteAction, mAssignedTask.get("Action"));
+				mAttribute.put(strAttributeRouteInstruction, mAssignedTask.get("Instructions"));
+				mAttribute.put(strAttributeAllowDelegation, mAssignedTask.get("Allow Delegation"));
+				mAttribute.put(strAttributeRouteDueDate, mAssignedTask.get("Due Date"));
+				mAttribute.put(strAttributeRouteDateOffsetFrom, mAssignedTask.get("Date Offset From"));
+
+				configureService.assigneeAttributeValues(context, mRelId.get(strKeyid).toString(), mAttribute);
+			}
+		}
+	}
+
+	private void getApprovals(Context context, String strObjectId, List<String> slPersonName, List<String> slRoleName, List<String> slGroupName,
+			List<String> slRoleId, Map mTask, Node nNode) throws Exception {
+
+		try {
+			String ExpType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+			String strTypeBusinessRole = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_BusinessRole);
+
+			if (nNode.getNodeType() == Node.ELEMENT_NODE) {
+				Element eElement = (Element) nNode;
+				NodeList nlApproverChild = eElement.getChildNodes();
+				for (int l = 0; l < nlApproverChild.getLength(); l++) {
+					Node nApproverNode = nlApproverChild.item(l);
+					String name = nApproverNode.getNodeName();
+					if (name.equals("Approver")) {
+						Element eApproverChild = (Element) nApproverNode;
+						String action = DomainConstants.EMPTY_STRING;
+						String sequence = DomainConstants.EMPTY_STRING;
+						String approversName = DomainConstants.EMPTY_STRING;
+						String instructions = DomainConstants.EMPTY_STRING;
+						String allowDelegation = DomainConstants.EMPTY_STRING;
+						String dueDate = DomainConstants.EMPTY_STRING;
+						String dateOffsetFrom = DomainConstants.EMPTY_STRING;
+
+						if (eApproverChild.getElementsByTagName("Action").item(0) != null)
+							action = eApproverChild.getElementsByTagName("Action").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("Sequence").item(0) != null)
+							sequence = eApproverChild.getElementsByTagName("Sequence").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("User").item(0) != null)
+							approversName = eApproverChild.getElementsByTagName("User").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("Instructions").item(0) != null)
+							instructions = eApproverChild.getElementsByTagName("Instructions").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("AllowDelegation").item(0) != null)
+							allowDelegation = eApproverChild.getElementsByTagName("AllowDelegation").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("DueDateOffset").item(0) != null)
+							dueDate = eApproverChild.getElementsByTagName("DueDateOffset").item(0).getTextContent();
+						if (eApproverChild.getElementsByTagName("DateOffsetFrom") != null)
+							dateOffsetFrom = eApproverChild.getElementsByTagName("DateOffsetFrom").item(0).getTextContent();
+
+						String strId = DomainConstants.EMPTY_STRING;
+						String strName = PropertyUtil.getSchemaProperty(context, approversName);
+
+						if (approversName.contains("role")) {
+							if (!slRoleName.contains(strName)) {
+								slRoleName.add(strName);
+								strId = MqlUtil.mqlCommand(context, "print bus $1 $2 $3 select $4 dump", strTypeBusinessRole, strName, "-", "id");
+								slRoleId.add(strId);
+							}
+						}
+						else if (approversName.contains("group")) {
+
+							Group group = new Group(strName);
+								UserList ul = group.getAssignments(context, true);
+								StringBuilder sb = new StringBuilder();
+								List<String> slGroupUsers = new StringList();
+								for (Object oUser : ul) {
+									User u = (User) oUser;
+									String strUserName = u.toString();
+									slGroupUsers.add(strUserName);
+
+								}
+								if (slGroupUsers.size() == 1) {
+									strId = PersonUtil.getPersonObjectID(context, slGroupUsers.get(0));
+									if (!slPersonName.contains(strId))
+										slPersonName.add(strId);
+								}
+							else if (!slGroupName.contains(strName))
+									slGroupName.add(strName);
+
+						}
+						else {
+							strId = PersonUtil.getPersonObjectID(context, approversName);
+							if (!slPersonName.contains(strId))
+								slPersonName.add(strId);
+						}
+						if (UIUtil.isNullOrEmpty(strId))
+							strId = strName;
+						if (!mTask.containsKey(strId)) {
+							Map mReturn = new HashMap();
+							mReturn.put("Action", action);
+							mReturn.put("Sequence", sequence);
+							mReturn.put("User", approversName);
+							mReturn.put("Allow Delegation", allowDelegation);
+							mReturn.put("Instructions", instructions);
+							mReturn.put("Due Date", dueDate);
+							mReturn.put("Date Offset From", dateOffsetFrom);
+							mTask.put(strId, mReturn);
+						}
+					}
+				}
+
+				for (int j = 0; j < nlApproverChild.getLength(); j++) {
+					Node n2 = nlApproverChild.item(j);
+					String name = n2.getNodeName();
+					if (name.equals("SubCondition")) {
+						Element eApproverChild1 = (Element) n2;
+						String sbObjectWhere = eApproverChild1.getAttributes().getNamedItem("Expression").getNodeValue();
+
+						String queryResult = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 where $4 select $5 dump", ExpType, "*", "*",
+								sbObjectWhere.toString(), "id");
+						if (UIUtil.isNotNullAndNotEmpty(queryResult) && queryResult.contains(strObjectId)) {
+
+							getApprovals(context, strObjectId, slPersonName, slRoleName, slGroupName, slRoleId, mTask, n2);
+						}
+					}
+				}
+			}
+
+		}
+
+		catch (FrameworkException e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+	public void createDummyRoute(Context context, String args[]) throws Exception {
+
+		String strObjectId = args[0];
+		createDummyRoute(context, strObjectId);
+	}
+
+	private void createDummyRoute(Context context, String strObjectId) throws Exception {
+
+		try {
+			DomainObject dobjCO = DomainObject.newInstance(context, strObjectId);
+
+			StringList slObjectSelect = new StringList(4);
+			slObjectSelect.add(DomainConstants.SELECT_ID);
+			slObjectSelect.add(DomainConstants.SELECT_POLICY);
+			slObjectSelect.add("from[" + DomainConstants.RELATIONSHIP_OBJECT_ROUTE + "|to.type=='" + DomainConstants.TYPE_ROUTE_TEMPLATE
+					+ "' && to.revision == to.last &&  attribute[" + DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE + "]==Approval].to.name");
+
+			slObjectSelect.add("from[" + DomainConstants.RELATIONSHIP_OBJECT_ROUTE + "|to.type=='" + DomainConstants.TYPE_ROUTE + "' &&  attribute["
+					+ DomainConstants.ATTRIBUTE_ROUTE_BASE_STATE + "]=='state_InApproval'].to.name");
+
+			MapList resultList = dobjCO.getRelatedObjects(context, "Change Action", "Change Order", slObjectSelect, null, true, false, (short) 1, "",
+					DomainConstants.EMPTY_STRING, 0);
+			String templateId = DomainConstants.EMPTY_STRING;
+			ConfigureApprovalService configureService = new ConfigureApprovalServiceImpl();
+			List<Map> mlAction = configureService.getCORouteTemplate(context, strObjectId);
+			if (mlAction != null && mlAction.size() > 0) {
+				Map mRT = mlAction.get(0);
+				templateId = (String) mRT.get(DomainConstants.SELECT_ID);
+			}
+
+			StringList objectList = new StringList(DomainObject.SELECT_POLICY);
+			objectList.add(DomainObject.SELECT_CURRENT);
+			objectList.add(DomainObject.SELECT_NAME);
+			objectList.add(DomainObject.SELECT_REVISION);
+			objectList.add("to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].from.id");
+			objectList.add("to[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].attribute[" + DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE + "]");
+			objectList.add("to[" + PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE)
+					+ "].from.id");
+			objectList.add("from["
+					+ PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_RELATED_CHANGE_PACKAGE_ITEM) + "].to.id");
+			objectList.add("from[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].to.id");
+			objectList.add("from[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].attribute[" + DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE + "]");
+
+			String strCOName = DomainConstants.EMPTY_STRING;
+			String strCOPolicy = DomainConstants.EMPTY_STRING;
+			String changeTemplateId = DomainConstants.EMPTY_STRING;
+			String QuesRouteTemplateId = DomainConstants.EMPTY_STRING;
+			boolean flag = true;
+
+
+			BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context, new String[] { strObjectId },
+					(StringList) objectList);
+			for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+				BusinessObjectWithSelect bowsTo = itr1.obj();
+				strCOName = bowsTo.getSelectData(DomainConstants.SELECT_NAME);
+				strCOPolicy = bowsTo.getSelectData(DomainConstants.SELECT_POLICY);
+				changeTemplateId = bowsTo.getSelectData("to["
+						+ PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_CHANGE_INSTANCE) + "].from.id");
+				QuesRouteTemplateId = bowsTo.getSelectData("from["
+						+ PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_RELATED_CHANGE_PACKAGE_ITEM)
+						+ "].to.id");
+
+				List<String> routeAttributelist = bowsTo.getSelectDataList("from[" + DomainObject.RELATIONSHIP_OBJECT_ROUTE + "].attribute["
+						+ DomainConstants.ATTRIBUTE_ROUTE_BASE_PURPOSE + "]");
+				if (routeAttributelist != null && !routeAttributelist.isEmpty()) {
+					for (int i = 0; i < routeAttributelist.size(); i++) {
+						String routeBasePourpose = routeAttributelist.get(i);
+						if (UIUtil.isNotNullAndNotEmpty(routeBasePourpose) && routeBasePourpose.equals("Approval")) {
+							flag = false;
+							break;
+						}
+					}
+				}
+
+			}
+
+
+			QuestionService quesService = new QuestionServiceImpl();
+			MapList mpQues = null;
+
+			if (UIUtil.isNotNullAndNotEmpty(changeTemplateId)) {
+				mpQues = quesService.getQuestion(context, changeTemplateId, "Approval", "1",
+						QuestionnaireConstants.MODE_CONFIGURE_CONDITIONAL_QUESTIONNAIRE);
+				if (mpQues != null && mpQues.size() == 0)
+					mpQues = quesService.getQuestion(context, changeTemplateId, "Approval", "1", QuestionnaireConstants.MODE_CONFIGURE_QUESTIONNAIRE);
+
+			}
+
+
+			if (flag && (mpQues != null && mpQues.size() > 0 || UIUtil.isNotNullAndNotEmpty(QuesRouteTemplateId))) {
+				Route routeObj = (Route) DomainObject.newInstance(context, DomainObject.TYPE_ROUTE);
+				;
+				String RoutePolicyAdminAlias = FrameworkUtil.getAliasForAdmin(context, DomainObject.SELECT_POLICY, DomainObject.POLICY_ROUTE, true);
+				String RouteTypeAdminAlias = FrameworkUtil.getAliasForAdmin(context, DomainObject.SELECT_TYPE, DomainObject.TYPE_ROUTE, true);
+				String sProductionVault = PropertyUtil.getSchemaProperty(context, "vault_eServiceProduction");
+				String sRouteId = FrameworkUtil.autoName(context, RouteTypeAdminAlias, "", RoutePolicyAdminAlias, sProductionVault);
+				routeObj.setId(sRouteId);
+				routeObj.setName(context, "DummyRoute_" + strCOName);
+				Map routeObjectRelAttrMap = new HashMap();
+				routeObjectRelAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_BASE_STATE, "state_InApproval");
+				routeObjectRelAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_BASE_POLICY,
+						FrameworkUtil.getAliasForAdmin(context, "Policy", strCOPolicy, false));
+				routeObjectRelAttrMap.put(DomainObject.ATTRIBUTE_ROUTE_BASE_PURPOSE, "Approval");
+				routeObj.open(context);
+				RelationshipType relationshipType = new RelationshipType(DomainObject.RELATIONSHIP_OBJECT_ROUTE);
+				DomainRelationship newRel = routeObj.addFromObject(context, relationshipType, strObjectId);
+				newRel.setAttributeValues(context, routeObjectRelAttrMap);
+
+				if (UIUtil.isNotNullAndNotEmpty(templateId)) {
+					routeObj.connectTemplate(context, templateId);
+					routeObj.addMembersFromTemplate(context, templateId);
+				}
+				else {
+					String owner = dobjCO.getInfo(context, DomainConstants.SELECT_OWNER);
+					configureService.assignPersonActionTask(context, sRouteId,
+							new StringList(PersonUtil.getPersonObject(context, owner).getId(context)));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+
+	}
+
+}
+

@@ -1,0 +1,913 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.StringTokenizer;
+import java.util.TreeMap;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.Program;
+import matrix.util.StringList;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.i18nNow;
+import com.matrixone.apps.framework.ui.UINavigatorUtil;
+
+/*
+ * This class implements Context Sensitive List (CSL) functionality
+ */
+@Deprecated
+public class ${CLASSNAME} {
+
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	private static final String[]	NAME_FORMAT_FIELDS	= { DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORIGINATOR };
+
+	/**
+	 * Returns a combobox html string that represents a context sensitive list
+	 * of values for a form field. This field must belong to a grouping of two
+	 * or more context sensitive fields.
+	 * 
+	 * The fields in the group are context sensitive in the sense that each
+	 * field's list of allowable values is dependent upon the currently selected
+	 * value of its parent field (the fields are listed in parent-child order).
+	 * 
+	 * This methods expect several important parameters to be passed in via the
+	 * programMap (vis the web form settings). More specifically, each web form
+	 * field in the CSL group must be configured as follows: - Field Name: Must
+	 * be symbolic name of the field's attribute - Setting "iwCSL Fields": Must
+	 * be a comma-separated list of all Field Names in the group, in
+	 * parent-child order - Setting "iwCSL Program": This argument may take one
+	 * of two forms: 1. The name of a program object that contains the CSL data
+	 * in it's Code body as plain text 2. The name of a JPO program and method
+	 * ("prog:method") that computes the CSL data and returns it as a TreeMap
+	 */
+	public static String getHtmlForCSL(Context context, String[] args) throws Exception {
+
+		// Parse all the data from the program Map. Note that several special
+		// settings are required.
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+		String languageStr = (String) paramMap.get("languageStr");
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String stringResourceFileId = (String) requestMap.get("StringResourceFileId");
+		String mode = (String) requestMap.get("mode");
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		String thisFieldName = (String) fieldMap.get("name"); // IMPORTANT: The
+																// form field
+																// name must be
+																// the symbolic
+																// name of the
+																// attribute!
+		String thisAttrName = PropertyUtil.getSchemaProperty(context, thisFieldName);
+		String thisFieldLabel = (String) fieldMap.get("label");
+		thisFieldLabel = EnoviaResourceBundle.getProperty(context, stringResourceFileId, context.getLocale(), thisFieldLabel);
+		HashMap settingsMap = (HashMap) fieldMap.get("settings"); // IMPORTANT:
+																	// The form
+																	// field
+																	// must be
+																	// configured
+																	// with
+																	// these
+																	// settings
+		String fields = (String) settingsMap.get("iwCSL Fields"); // comma-separated
+																	// list of
+																	// dependent
+																	// field
+																	// names in
+																	// parent-child
+																	// order
+		String progName = (String) settingsMap.get("iwCSL Program"); // Name of
+																		// the
+																		// program
+																		// whose
+																		// Code
+																		// body
+																		// contains
+																		// the
+																		// entire
+																		// set
+																		// of
+																		// values
+																		// for
+																		// the
+																		// CS
+																		// Lists
+		String addBlank = (String) settingsMap.get("iwCSL AddBlank"); // if =
+																		// "false",
+																		// then
+																		// do
+																		// not
+																		// put
+																		// blank
+																		// values
+																		// at
+																		// top
+																		// of
+																		// the
+																		// list
+		addBlank = (((addBlank == null) || !addBlank.equalsIgnoreCase("false")) ? "true" : "false");
+
+		StringBuffer html = new StringBuffer("");
+
+		// Get the info about this field (will be null if we're Creating a new
+		// object vs. Editing an existing)
+		DomainObject domainObj = null;
+		String thisFieldValue = "";
+		if (objectId != null) {
+			domainObj = DomainObject.newInstance(context, objectId);
+			thisFieldValue = domainObj.getAttributeValue(context, thisAttrName);
+		}
+
+		// If we're in view mode, just return the field value
+		if (mode == null || !mode.equalsIgnoreCase("edit")) {
+			StringList i18nValuesList = i18nNow.getAttrRangeI18NStringList(thisAttrName, new StringList(thisFieldValue), languageStr);
+
+			if (i18nValuesList != null && i18nValuesList.size() != 0 && !"".equals(i18nValuesList.get(0))) {
+				thisFieldValue = (String) i18nValuesList.get(0);
+			}
+			html.append(thisFieldValue);
+			return html.toString();
+		}
+
+		// Convert fields String into fieldNames ArrayList
+		// And get the index of thisFieldName in the list
+		int thisFieldIndex = 0;
+		List<String> fieldNames = new ArrayList<String>();
+		StringTokenizer st = new StringTokenizer(fields, ",");
+		for (int i = 0; st.hasMoreTokens(); i++) {
+			String fieldName = st.nextToken().trim();
+			fieldNames.add(fieldName);
+			if (fieldName.equals(thisFieldName))
+				thisFieldIndex = i;
+		}
+
+		// If necessary, drill down through the valuesMap to get the values for
+		// this particular field
+		// (valuesMap contains all possible values for all fields in the group)
+		TreeMap valuesMap = null;
+		if (thisFieldIndex == 0) {
+			// This is the first field in the list, so it's values are at the
+			// top level of valuesMap
+			valuesMap = getCSLChoicesFromProgram(context, progName);
+		}
+		else if (objectId == null) {
+			// This is a child field (index > 0) and it's parent doesn't have a
+			// value yet, so it needs to be blank
+			valuesMap = null;
+		}
+		else {
+			// get the top-level map
+			valuesMap = getCSLChoicesFromProgram(context, progName);
+			// Drill down through the map to get the sub-map at the level of
+			// this field's parent field
+			for (int i = 0; i < thisFieldIndex; i++) {
+				// Get the value of this field's parent field
+				String parentAttrName = PropertyUtil.getSchemaProperty(context, fieldNames.get(i));
+				String parentAttrValue = domainObj.getAttributeValue(context, parentAttrName);
+
+				// If the parent field has a value, get the list of choices
+				// corresponding to that value
+				if (parentAttrValue != null && !parentAttrValue.equals("")) {
+					try {
+						valuesMap = (TreeMap) valuesMap.get(parentAttrValue);
+					}
+					catch (Exception ex) {
+						valuesMap = null;
+					}
+				}
+				else {
+					// But if the parent doesn't have a value, leave the list
+					// empty
+					valuesMap = null;
+					break;
+				}
+			}
+		}
+
+		// Localize the values
+		valuesMap = localizeCSLChoices(context, thisAttrName, valuesMap, languageStr);
+
+		/*
+		 * Build the HTML to look like this: <select id='attribute_Attr2'
+		 * name='attribute_Attr2' onChange="getChildChoicesAjax(new
+		 * Array('attribute_Attr1', 'attribute_Attr2', 'attribute_Attr3',
+		 * 'attribute_Attr4'), '0', 'progName', true)> <option
+		 * value=''></option> <option value='val1'>localized1</option> <option
+		 * value='val2'>localized2</option> <option
+		 * value='val3'>localized3</option> <option
+		 * value='val4'>localized4</option> </select>
+		 */
+		html.append("\n<select id='" + thisFieldName + "' name='" + thisFieldName + "'");
+
+		// Add the onChange event (unless it's the last field)
+		if (thisFieldIndex < (fieldNames.size() - 1)) {
+			html.append("\n        onChange=\"getChildChoicesAjax(new Array(");
+			for (int i = 0; i < (fieldNames.size() - 1); i++) {
+				html.append("'" + fieldNames.get(i) + "', ");
+			}
+			html.append("'" + fieldNames.get(fieldNames.size() - 1) + "'), '" + thisFieldIndex + "', '" + progName + "', " + addBlank + ")\"");
+		}
+		html.append(">\n");
+
+		// Add the <option> list
+		if (valuesMap == null)
+			html.append("  <option value=''></option>\n");
+		else {
+			if (addBlank.equals("true"))
+				html.append("  <option value=''></option>\n");
+			for (Iterator iter = valuesMap.keySet().iterator(); iter.hasNext();) {
+				String key = (String) iter.next(); // the localized value
+				String val = (String) valuesMap.get(key); // the non-localized
+															// value
+				String selected = ((val.equals(thisFieldValue)) ? "selected" : "");
+				html.append("  <option value='" + val + "' " + selected + ">" + key + "</option>\n");
+			}
+		}
+		html.append("</select>\n");
+
+		// This is how emxForm communicates the Field Label to JavaScript (so it
+		// can be referenced in validation functions)
+		// But when using programHTMLOutput it isn't done by emxForm, so we have
+		// to do it here (if we want to use emx validation methods)
+		html.append("<script language='JavaScript'> try { document.forms['editDataForm']['" + thisFieldName + "'].fieldLabel='" + thisFieldLabel
+				+ "'; } catch(e) {}</script>");
+		return html.toString();
+	}
+
+	/**
+	 * gets all choices for the passed context-sensitive list (Matrix program)
+	 * name
+	 * 
+	 * @return TreeMap of TreeMaps, recursively, one for each level of
+	 *         context-sensitive menu choices
+	 */
+	public static TreeMap getCSLChoicesFromProgram(Context context, String programName) throws Exception {
+
+		// get the list values
+		Program program = new Program(programName, false, false, false, false, false, true);
+		program.open(context);
+		String code = program.getCode(context);
+		program.close(context);
+
+		// put the list values into a more convenient data structure
+		StringTokenizer st = new StringTokenizer(code, "\n");
+		ArrayList lines = new ArrayList();
+		while (st.hasMoreTokens()) {
+			lines.add(st.nextToken());
+		}
+
+		// now get the actual values map
+		return getContextSensitiveListMap(lines, 0);
+	}
+
+	private static TreeMap getContextSensitiveListMap(ArrayList lines, int previousIndent) {
+		TreeMap returnMap = new TreeMap();
+		int currentIndent = 0; // indentation of current line
+		String lineFull = "";
+		String line = "";
+		String key = "";
+
+		while (lines.size() > 0) {
+			// trim right whitespace for accurate count but keep indentation
+			lineFull = trimRight((String) lines.get(0));
+			line = lineFull.trim();
+
+			if (line.startsWith("#") || line.length() == 0) {
+				lines.remove(0);
+				continue;
+			}
+
+			// determine indentation
+			currentIndent = lineFull.length() - line.length();
+
+			if (currentIndent > previousIndent) {
+				returnMap.put(key, getContextSensitiveListMap(lines, currentIndent));
+				key = "";
+			}
+			else if (currentIndent < previousIndent) {
+				if (!key.equals("")) {
+					returnMap.put(key, null);
+				}
+
+				break;
+			}
+			else {
+				if (!key.equals("")) {
+					returnMap.put(key, null);
+				}
+				key = line;
+				lines.remove(0);
+			}
+		}
+
+		if (currentIndent == previousIndent && !key.equals("")) {
+			returnMap.put(key, null);
+		}
+		return returnMap;
+	}
+
+	/**
+	 * returns new String that is identical to the passed String except that it
+	 * has had all trailing whitespace removed
+	 */
+	private static String trimRight(String str) {
+		String retStr = "";
+		if (str.trim().length() != 0) {
+			int rPos = str.length();
+			for (int i = str.length() - 1; i >= 0; i--) {
+				char character = str.charAt(i);
+				if (!Character.isWhitespace(character)) {
+					rPos = i + 1;
+					break;
+				}
+			}
+			retStr = str.substring(0, rPos);
+		}
+		return retStr;
+	}
+
+	/**
+	 * Packages up the TreeMap values into a properly formatted TreeMap, keys
+	 * are localized version string and values are non-localized string
+	 * 
+	 * @param context
+	 *            TODO
+	 * @param attributeName
+	 * @param valuesMap
+	 * @param languageStr
+	 * 
+	 * @return TreeMap where keys are localized version string and values are
+	 *         non-localized string
+	 * @throws Exception
+	 */
+	public static TreeMap localizeCSLChoices(Context context, String attributeName, TreeMap valuesMap, String languageStr) throws Exception {
+
+		// make sure not to break if the option selected by the user
+		// is somehow missing from the list in the database
+		TreeMap result = new TreeMap();
+		if (valuesMap == null)
+			valuesMap = new TreeMap();
+		// create a StringList to hold all the values, so we can get the
+		// localized values all at once
+		StringList valuesList = new StringList();
+		Iterator iter = valuesMap.keySet().iterator();
+		// check to see if this needs to be formatted as a name
+		for (int i = 0; i < NAME_FORMAT_FIELDS.length; i++) {
+			if (attributeName.equals(NAME_FORMAT_FIELDS[i])) {
+
+				while (iter.hasNext()) {
+					String sUserName = (String) iter.next(); // we need to use
+																// only the key
+																// set, not the
+																// child maps
+																// that are in
+																// this map
+					result.put(formatUserName(context, sUserName), sUserName);
+				}
+				return result;
+			}
+		}
+
+		while (iter.hasNext()) {
+			valuesList.add((String) iter.next()); // we need to use only the key set, not
+											// the child maps that are in this
+											// map
+		}
+		StringList i18nValuesList = i18nNow.getAttrRangeI18NStringList(attributeName, valuesList, languageStr);
+
+		for (int j = 0; j < valuesList.size(); j++) {
+			result.put(i18nValuesList.get(j), valuesList.get(j));
+		}
+		return result;
+	}
+
+	/**
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws Exception
+	 */
+	public static TreeMap getCSLChoices(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String languageStr = (String) paramMap.get("languageStr");
+		String parentValues = (String) paramMap.get("parentValues");
+		String listProgramName = (String) paramMap.get("listProgramName");
+		String fieldName = (String) paramMap.get("fieldName");
+		String attrName = PropertyUtil.getSchemaProperty(context, fieldName);
+
+		// Get the complete map of choices
+		TreeMap choicesMap = getCSLChoicesFromProgram(context, listProgramName);
+
+		// Drill down through the map to get the sub-map at the level of this
+		// field's parent field
+		StringTokenizer st = new StringTokenizer(parentValues, "|");
+		for (int i = 0; st.hasMoreTokens(); i++) {
+			String parentValue = st.nextToken().trim();
+			if (parentValue != null && !parentValue.equals(""))
+				choicesMap = (TreeMap) choicesMap.get(parentValue);
+		}
+		return localizeCSLChoices(context, attrName, choicesMap, languageStr);
+	}
+
+	/**
+	 * Sets the value of a form field whose field name is the symbolic name of
+	 * the attribute it controls. This is useful for programHTMLOutput fields so
+	 * you don't have to write a custom update method for each field.
+	 * 
+	 * Prerequisite: The form field name must be the symbolic name of the
+	 * attribute
+	 */
+	public static Object updateFormFieldAttr(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+
+		// If the form is being used to create a new object, there is nothing to
+		// do
+		if (objectId == null) {
+			return Boolean.FALSE;
+		}
+
+		String newValue = (String) paramMap.get("New Value");
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		String fieldName = (String) fieldMap.get("name"); // IMPORTANT: The form
+															// field name must
+															// be the symbolic
+															// name of the
+															// attribute!
+
+		String attrName = PropertyUtil.getSchemaProperty(context, fieldName);
+
+		if (newValue != null) {
+			DomainObject domainObj = DomainObject.newInstance(context, objectId);
+			domainObj.open(context);
+			domainObj.setAttributeValue(context, attrName, newValue);
+			domainObj.close(context);
+		}
+		return Boolean.TRUE;
+	}
+
+	/**
+	 * Gets the attribute choices.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the attribute choices
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Object getCSLAttributeChoices(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings"); // IMPORTANT:
+																	// The form
+																	// field
+																	// must be
+																	// configured
+																	// with
+																	// these
+																	// settings
+		// String languageStr = (String) paramMap.get("languageStr");
+		String listProgramName = (String) settingsMap.get("iwCSL Program");
+		String thisFieldName = (String) settingsMap.get("iwCSL fieldName");
+		String attrName = PropertyUtil.getSchemaProperty(context, thisFieldName);
+		int numTabs = Integer.parseInt((String) settingsMap.get("numberParents"));
+
+		StringList choicesList = new StringList();
+		// StringList choicesLocalizedList = new StringList();
+
+		choicesList = getAttributeCSLChoicesFromProgram(context, listProgramName, numTabs);
+
+		StringList choicesNoDupesList = new StringList();
+		for (int i = 0; i < choicesList.size(); i++) {
+			String choice = (String) choicesList.get(i);
+			Boolean duplicate = false;
+			for (int j = 0; j < choicesNoDupesList.size(); j++) {
+				String choice2 = (String) choicesNoDupesList.get(j);
+				if (choice.equals(choice2)) {
+					duplicate = true;
+				}
+			}
+			if (!duplicate)
+				choicesNoDupesList.add(choice);
+		}
+		choicesNoDupesList.sort();
+		StringList slRangeDisplayValues = UINavigatorUtil.getAttrRangeI18NStringList(attrName, choicesNoDupesList, context.getLocale().toString());
+
+		HashMap hmReturnValues = new HashMap();
+		hmReturnValues.put("field_choices", choicesNoDupesList);
+		hmReturnValues.put("field_display_choices", slRangeDisplayValues);
+		return hmReturnValues;
+	}
+
+	/**
+	 * gets all choices for the passed context-sensitive list (Matrix program)
+	 * name
+	 * 
+	 * @return TreeMap of TreeMaps, recursively, one for each level of
+	 *         context-sensitive menu choices
+	 */
+	public static StringList getAttributeCSLChoicesFromProgram(Context context, String programName, int numTabs) throws Exception {
+		// get the list values
+		Program program = new Program(programName, false, false, false, false, false, true);
+		program.open(context);
+		String code = program.getCode(context);
+		program.close(context);
+
+		// put the list values into a more convenient data structure
+		StringTokenizer st = new StringTokenizer(code, "\n");
+		ArrayList lines = new ArrayList();
+		while (st.hasMoreTokens()) {
+			lines.add(st.nextToken());
+		}
+
+		// now get the actual values map
+		return getAttributeContextSensitiveListMap(lines, 0, numTabs, 0);
+	}
+
+	private static StringList getAttributeContextSensitiveListMap(ArrayList lines, int indent, int numTabs, int prevIndent) {
+		StringList returnMap = new StringList();
+		int currentIndent = 0; // indentation of current line
+		String lineFull = "";
+		String line = "";
+		String key = "";
+		boolean haveNextIndent = false;
+		int nextIndent = 0;
+
+		for (int i = 0; i < lines.size(); i++) {
+			// trim right whitespace for accurate count but keep indentation
+			lineFull = trimRight((String) lines.get(i));
+			line = lineFull.trim();
+
+			if (line.startsWith("#") || line.length() == 0) {
+			}
+			else {
+				currentIndent = lineFull.length() - line.length();
+				if (currentIndent > prevIndent && !haveNextIndent) {
+					nextIndent = currentIndent;
+					haveNextIndent = true;
+				}
+
+				if (numTabs == indent && prevIndent == currentIndent) {
+					key = line;
+					System.out.println(key);
+					returnMap.add(key);
+				}
+
+			}
+		}
+		if (returnMap.size() == 0) {
+			return getAttributeContextSensitiveListMap(lines, indent + 1, numTabs, nextIndent);
+		}
+		else {
+			return returnMap;
+		}
+	}
+
+	public static String getHtmlForCSLWithDefault(Context context, String[] args) throws Exception {
+
+		// Parse all the data from the program Map. Note that several special
+		// settings are required.
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = (HashMap) programMap.get("paramMap");
+		String objectId = (String) paramMap.get("objectId");
+		String languageStr = (String) paramMap.get("languageStr");
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		String stringResourceFileId = (String) requestMap.get("StringResourceFileId");
+		String mode = (String) requestMap.get("mode");
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		String thisFieldName = (String) fieldMap.get("name"); // IMPORTANT: The
+																// form field
+																// name must be
+																// the symbolic
+																// name of the
+																// attribute!
+		String thisAttrName = PropertyUtil.getSchemaProperty(context, thisFieldName);
+		String thisFieldLabel = (String) fieldMap.get("label");
+
+		thisFieldLabel = EnoviaResourceBundle.getProperty(context, stringResourceFileId, context.getLocale(), thisFieldLabel);
+		HashMap settingsMap = (HashMap) fieldMap.get("settings"); // IMPORTANT:
+																	// The form
+																	// field
+																	// must be
+																	// configured
+																	// with
+																	// these
+																	// settings
+		String fields = (String) settingsMap.get("iwCSL Fields"); // comma-separated
+																	// list of
+																	// dependent
+																	// field
+																	// names in
+																	// parent-child
+																	// order
+		String progName = (String) settingsMap.get("iwCSL Program"); // Name of
+																		// the
+																		// program
+																		// whose
+																		// Code
+																		// body
+																		// contains
+																		// the
+																		// entire
+																		// set
+																		// of
+																		// values
+																		// for
+																		// the
+																		// CS
+																		// Lists
+		String addBlank = (String) settingsMap.get("iwCSL AddBlank"); // if =
+																		// "false",
+																		// then
+																		// do
+																		// not
+																		// put
+																		// blank
+																		// values
+																		// at
+																		// top
+																		// of
+																		// the
+																		// list
+		String defaultValue = (String) settingsMap.get("Default");
+		String defaultChoices = (String) settingsMap.get("Default Choices");
+		addBlank = (((addBlank == null) || !addBlank.equalsIgnoreCase("false")) ? "true" : "false");
+
+		StringBuffer html = new StringBuffer("");
+
+		// Get the info about this field (will be null if we're Creating a new
+		// object vs. Editing an existing)
+		DomainObject domainObj = null;
+		String thisFieldValue = "";
+		if (objectId != null) {
+			domainObj = DomainObject.newInstance(context, objectId);
+			thisFieldValue = domainObj.getAttributeValue(context, thisAttrName);
+		}
+
+		// If we're in view mode, just return the field value
+		if (mode == null || !mode.equalsIgnoreCase("edit")) {
+			html.append(thisFieldValue);
+			return html.toString();
+		}
+
+		if (defaultValue == null) {
+			defaultValue = "";
+		}
+		if (defaultChoices == null) {
+			defaultChoices = "";
+		}
+
+		// Convert fields String into fieldNames ArrayList
+		// And get the index of thisFieldName in the list
+		int thisFieldIndex = 0;
+		ArrayList fieldNames = new ArrayList();
+		StringTokenizer st = new StringTokenizer(fields, ",");
+		for (int i = 0; st.hasMoreTokens(); i++) {
+			String fieldName = st.nextToken().trim();
+			fieldNames.add(fieldName);
+			if (fieldName.equals(thisFieldName))
+				thisFieldIndex = i;
+		}
+
+		// get list of default choices if exists
+		ArrayList fieldChoices = new ArrayList();
+		if (!defaultChoices.equals("")) {
+			st = new StringTokenizer(defaultChoices, ",");
+			for (int i = 0; st.hasMoreTokens(); i++) {
+				String fieldChoice = st.nextToken().trim();
+				fieldChoices.add(fieldChoice);
+			}
+		}
+
+		// If necessary, drill down through the valuesMap to get the values for
+		// this particular field
+		// (valuesMap contains all possible values for all fields in the group)
+		TreeMap valuesMap = null;
+		if (thisFieldIndex == 0) {
+			// This is the first field in the list, so it's values are at the
+			// top level of valuesMap
+			valuesMap = getCSLChoicesFromProgram(context, progName);
+		}
+		else if (objectId == null) {
+			// This is a child field (index > 0) and it's parent doesn't have a
+			// value yet, so it needs to be blank
+			valuesMap = null;
+		}
+		else {
+			// get the top-level map
+			valuesMap = getCSLChoicesFromProgram(context, progName);
+			// Drill down through the map to get the sub-map at the level of
+			// this field's parent field
+			for (int i = 0; i < thisFieldIndex; i++) {
+				// Get the value of this field's parent field
+				String parentAttrName = PropertyUtil.getSchemaProperty(context, (String) fieldNames.get(i));
+				String parentAttrValue = domainObj.getAttributeValue(context, parentAttrName);
+
+				// If the parent field has a value, get the list of choices
+				// corresponding to that value
+				if (parentAttrValue != null && !parentAttrValue.equals("")) {
+					valuesMap = (TreeMap) valuesMap.get(parentAttrValue);
+				}
+				else {
+					// But if the parent doesn't have a value, leave the list
+					// empty
+					valuesMap = null;
+					break;
+				}
+			}
+		}
+
+		// Localize the values
+		valuesMap = localizeCSLChoices(context, thisAttrName, valuesMap, languageStr);
+
+		/*
+		 * Build the HTML to look like this: <select id='attribute_Attr2'
+		 * name='attribute_Attr2' onChange="getChildChoicesAjax(new
+		 * Array('attribute_Attr1', 'attribute_Attr2', 'attribute_Attr3',
+		 * 'attribute_Attr4'), '0', 'progName', true)> <option
+		 * value=''></option> <option value='val1'>localized1</option> <option
+		 * value='val2'>localized2</option> <option
+		 * value='val3'>localized3</option> <option
+		 * value='val4'>localized4</option> </select>
+		 */
+		html.append("\n<select id='" + thisFieldName + "' name='" + thisFieldName + "'");
+
+		// Add the onChange event (unless it's the last field)
+		if (thisFieldIndex < (fieldNames.size() - 1)) {
+			html.append("\n        onChange=\"getChildChoicesAjax(new Array(");
+			for (int i = 0; i < (fieldNames.size() - 1); i++) {
+				html.append("'" + fieldNames.get(i) + "', ");
+			}
+			html.append("'" + fieldNames.get(fieldNames.size() - 1) + "'), '" + thisFieldIndex + "', '" + progName + "', " + addBlank + ")\"");
+		}
+		html.append(">\n");
+
+		// Add the <option> list
+		if (valuesMap == null)
+			html.append("  <option value=''></option>\n");
+		else {
+			if (!defaultChoices.equals("")) {
+				if (addBlank.equals("true"))
+					html.append("  <option value=''></option>\n");
+				for (int i = 0; i < fieldChoices.size(); i++) {
+					String val = (String) fieldChoices.get(i);
+					html.append("  <option value='" + val + "'>" + val + "</option>\n");
+				}
+			}
+			else {
+				if (addBlank.equals("true"))
+					html.append("  <option value=''></option>\n");
+				for (Iterator iter = valuesMap.keySet().iterator(); iter.hasNext();) {
+					String key = (String) iter.next(); // the localized value
+					String val = (String) valuesMap.get(key); // the
+																// non-localized
+																// value
+					if (defaultValue.equals(val)) {
+						// String selected =
+						// ((val.equals(thisFieldValue))?"selected":"");
+						html.append("  <option value='" + val + "' selected>" + key + "</option>\n");
+					}
+					else {
+						String selected = ((val.equals(thisFieldValue)) ? "selected" : "");
+						html.append("  <option value='" + val + "' " + selected + ">" + key + "</option>\n");
+					}
+				}
+			}
+		}
+		html.append("</select>\n");
+
+		// This is how emxForm communicates the Field Label to JavaScript (so it
+		// can be referenced in validation functions)
+		// But when using programHTMLOutput it isn't done by emxForm, so we have
+		// to do it here (if we want to use emx validation methods)
+		html.append("<script language='JavaScript'> try { document.forms['editDataForm']['" + thisFieldName + "'].fieldLabel='" + thisFieldLabel
+				+ "'; } catch(e) {}</script>");
+
+		return html.toString();
+	}
+
+	/**
+	 * Gets the attribute choices.
+	 * 
+	 * @param context
+	 *            the context
+	 * @param args
+	 *            the args
+	 * 
+	 * @return the attribute choices
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static Object getCSLAttributeChoicesAsList(Context context, String[] args) throws Exception {
+
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// HashMap paramMap = (HashMap) programMap.get("paramMap");
+		HashMap fieldMap = (HashMap) programMap.get("fieldMap");
+		HashMap settingsMap = (HashMap) fieldMap.get("settings"); // IMPORTANT:
+																	// The form
+																	// field
+																	// must be
+																	// configured
+																	// with
+																	// these
+																	// settings
+		// String languageStr = (String) paramMap.get("languageStr");
+		String listProgramName = (String) settingsMap.get("iwCSL Program");
+		// String thisFieldName = (String) settingsMap.get("iwCSL fieldName");
+		// String attrName = PropertyUtil.getSchemaProperty(thisFieldName);
+		int numTabs = Integer.parseInt((String) settingsMap.get("numberParents"));
+
+		StringList choicesList = new StringList();
+		// StringList choicesLocalizedList = new StringList();
+
+		choicesList = getAttributeCSLChoicesFromProgram(context, listProgramName, numTabs);
+
+		StringList choicesNoDupesList = new StringList();
+		for (int i = 0; i < choicesList.size(); i++) {
+			String choice = (String) choicesList.get(i);
+			Boolean duplicate = false;
+			for (int j = 0; j < choicesNoDupesList.size(); j++) {
+				String choice2 = (String) choicesNoDupesList.get(j);
+				if (choice.equals(choice2)) {
+					duplicate = true;
+				}
+			}
+			if (!duplicate)
+				choicesNoDupesList.add(choice);
+		}
+		choicesNoDupesList.sort();
+		// StringList slRangeDisplayValues =
+		// UINavigatorUtil.getAttrRangeI18NStringList(attrName,
+		// choicesNoDupesList, context.getLocale().toString());
+
+		return choicesNoDupesList;
+	}
+
+	/**
+	 * format a username into firstname lastname (username).
+	 * 
+	 * @param context
+	 *            the context
+	 * @param userName
+	 *            - userName to be formatted
+	 * 
+	 * @return String - formatted user name
+	 * 
+	 * @throws Exception
+	 *             the exception
+	 */
+	public static String formatUserName(Context context, String userName) throws Exception {
+		String fullName = userName;
+		String tlFullName = "";
+
+		try {
+			tlFullName = PersonUtil.getFullName(context, userName);
+		}
+		catch (Exception ex) {
+			tlFullName = userName;
+		}
+
+		// if (tlFullName.indexOf(',') >= 0)
+		// {
+		// // String firstName = tlFullName.substring(0,
+		// tlFullName.indexOf(','));
+		// // String lastName = tlFullName.substring(tlFullName.indexOf(" ") +
+		// 1);
+		// fullName = tlFullName + " (" + userName + ")";
+		// }
+		// else
+		// {
+		fullName = tlFullName + " (" + userName + ")";
+		// }
+
+		return fullName;
+	}
+
+}
+

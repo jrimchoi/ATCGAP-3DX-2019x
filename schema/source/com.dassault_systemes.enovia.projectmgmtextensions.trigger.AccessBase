@@ -1,0 +1,147 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.projectmgmtextensions.Helper;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEConstants;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEException;
+import com.dassault_systemes.enovia.projectmgmtextensions.PMEUtil;
+import com.dassault_systemes.enovia.projectmgmtextensions.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.program.ProgramCentralConstants;
+import com.matrixone.apps.program.Task;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object. This argument is
+	 *            ignored, only provided for allowing it to be called from UI
+	 *            components.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 */
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+	
+	/**
+	 * This method checks if relationship type is present in the properties file and Task's parent is LSA Specific 
+	 * Project Space sub type and Task is in complete state.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param String
+	 *            object id of Task object
+	 * @return boolean
+	 * 			  a boolean value
+	 * @throws LPIException
+	 *             if the operation fails
+	 */
+	public int checkForLSASpecificConditionsOnTaskConnectDisconnect(Context context, String[] args) throws PMEException {
+		try {
+			String objectId = args[0];	
+			String currentState = args[1];
+			String relType = args[2];
+			String triggerType = args[3];
+			
+			if (!(Helper.isNullOrEmpty(objectId) || Helper.isNullOrEmpty(currentState) || Helper.isNullOrEmpty(relType) || Helper.isNullOrEmpty(triggerType))) {
+				StringBuilder propertyKey = new StringBuilder();
+				propertyKey.append("ProjectMgmtExtensions.type_TaskManagement.state_").append(currentState);
+				if (PMEConstants.TRIGGER_TYPE_CONNECT.equalsIgnoreCase(triggerType)) {
+					propertyKey.append(".PreventConnectionsFor");
+				} else {
+					propertyKey.append(".PreventDisConnectionsFor");
+				}
+				
+				String relNames = DomainConstants.EMPTY_STRING;
+				try {
+					relNames = Helper.getProperty(context, propertyKey.toString());
+				}
+				catch(Exception ex) {
+					return 0;
+				}
+				
+				if (!Helper.isNullOrEmpty(relNames)) {
+					StringList symbolicRelNames = FrameworkUtil.split(relNames, PMEConstants.COMMA);
+					StringList actualRelNames = new StringList();
+					for (Object object : symbolicRelNames) {
+						String symbolicRelName = (String) object;
+						if (!Helper.isNullOrEmpty(symbolicRelName)) {
+							actualRelNames.add(PropertyUtil.getSchemaProperty(context, symbolicRelName));
+						}
+					}
+					
+					if (actualRelNames.contains(relType) && PMEUtil.isTaskParentLSASpecificProjectSpaceSubtype(context, objectId) && ProgramCentralConstants.STATE_PROJECT_TASK_COMPLETE.equals(currentState)) {
+						Helper.mqlError(context, Helper.StringResource.PME, "PME.ErrorMessage.UserNotAuthorised");
+						return 1;
+					}
+				}
+			}
+		}
+		catch(Exception ex) {
+			throw new PMEException(ex);
+		}
+		return 0;
+	}
+	
+	/**
+	 * This method checks if Task's parent is LSA Specific Project Space sub type present in properties file and 
+	 * Task has deliverables associated, then type change should not be allowed.
+	 * 
+	 * @param context
+	 *            the user context object for the current session
+	 * @param String
+	 *            object id of Task object
+	 * @return boolean
+	 * 			  a boolean value
+	 * @throws LPIException
+	 *             if the operation fails
+	 */
+	public int checkForLSASpecificConditionsOnTaskTypeChange(Context context, String[] args) throws PMEException {
+		try {
+			String taskId = args[0];	
+			if (!Helper.isNullOrEmpty(taskId) && PMEUtil.isTaskParentLSASpecificProjectSpaceSubtype(context, taskId)) {
+				Task task = new Task(taskId);
+				MapList deliverables = task.getDeliverables(context, Helper.stringList(DomainConstants.SELECT_ID), null);
+				if(!Helper.isNullOrEmpty(deliverables)) {
+					String taskName = DomainConstants.EMPTY_STRING;
+					
+					List<Map<?,?>> lsTaskInfo = QueryUtil.getInfo(context, new String[]{taskId}, Helper.stringList(DomainConstants.SELECT_NAME));
+					if(!Helper.isNullOrEmpty(lsTaskInfo)) {
+						Map taskInfo = lsTaskInfo.get(0);
+						if(!Helper.isNullOrEmpty(taskInfo)) {
+							taskName = (String) taskInfo.get(DomainConstants.SELECT_NAME);
+						}
+					}
+					
+					String errorMsg = MessageUtil.getMessage(context, null, "PME.ErrorMessage.TaskTypeChangeDeliverablesConnected",
+							new String[] { taskName }, null, context.getLocale(), Helper.StringResource.PME.toString());
+					Helper.mqlError(context, errorMsg);
+					return 1;
+				}
+			}
+		}
+		catch(Exception ex) {
+			throw new PMEException(ex);
+		}
+		return 0;
+	}
+}
+

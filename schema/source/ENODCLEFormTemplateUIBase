@@ -1,0 +1,1779 @@
+import java.io.Serializable;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import matrix.db.AccessConstants;
+import matrix.db.AttributeType;
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.RelationshipType;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.dassault_systemes.enovia.dcl.service.EFormService;
+import com.dassault_systemes.enovia.dcl.service.impl.NotificationUtil;
+import com.dassault_systemes.enovia.documentcommon.DCConstants;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalService;
+import com.dassault_systemes.enovia.questionnaire.ConfigureApprovalServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionService;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl;
+import com.dassault_systemes.enovia.questionnaire.QuestionServiceImpl.Question;
+import com.dassault_systemes.enovia.questionnaire.QuestionUtil;
+import com.dassault_systemes.enovia.questionnaire.QuestionnaireConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.AccessUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.framework.ui.UICache;
+import com.matrixone.apps.framework.ui.UIComponent;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+public class ${CLASSNAME} {
+
+	/**
+	 * This method is used to get list of All eForm Templates
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return MapList of active eForm Templates
+	 * @throws DCLException
+	 *             if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllEFormTemplates(Context context, String args[]) throws DCLException {
+		try {
+			String strPolicyEForm = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			StringBuilder sbWhere = new StringBuilder().append(DomainConstants.SELECT_POLICY).append("==\'").append(strPolicyEForm).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_REVISION).append("==last");
+			MapList mlEFormTemplate = eFormService.getAllEFormTemplate(context, sbWhere.toString());
+			return mlEFormTemplate;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * This method is used to get list of active eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args 
+	 * @return MapList of active eForm Templates
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */		 
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getActiveEFormTemplates(Context context, String args[])throws DCLException
+	{
+		try {
+				String strPolicyEForm = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+				String strActiveState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyEForm, DCLConstants.SYMBOLIC_STATE_ACTIVE);
+				EFormService eFormService = DCLServiceUtil.getEFormService(context);
+				StringBuilder sbWhere=new StringBuilder().append(DomainConstants.SELECT_CURRENT).append("==\'").append(strActiveState).append("\'");
+				sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_REVISION).append("==last");
+				MapList mlEFormTemplate= eFormService.getAllEFormTemplate(context, sbWhere.toString());
+				return mlEFormTemplate;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+       }
+	/**
+	 * This method is used to get list of inactive eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args 
+	 * @return MapList of inactive eForm Templates
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getInactiveEFormTemplates(Context context, String args[])throws DCLException
+	{
+		try {
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strInactiveState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname, DCLConstants.SYMBOLIC_STATE_INACTIVE);
+		        EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			StringBuilder sbWhere=new StringBuilder().append(DomainConstants.SELECT_CURRENT).append("==\'").append(strInactiveState).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_REVISION).append("==last");
+			MapList mlEFormTemplate = eFormService.getAllEFormTemplate(context, sbWhere.toString());
+			return mlEFormTemplate;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+	 * This method is to delete eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args emxTableRowIds of eForm Templates
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> deleteEFormTemplates(Context context,String args[])throws DCLException
+	{	
+                try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			EFormService eFormService= DCLServiceUtil.getEFormService(context);
+			Map<String,String> mReturnMap= new HashMap<String, String>();
+			StringBuilder sbJavascript = new StringBuilder();
+			StringBuilder sbMessage=new StringBuilder();
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			List<String> slEFormTemplatesId= new StringList();
+			List<String> slEFormTemplatesRowId= new StringList();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String streFormObjectId=tr.getObjectId();
+				slEFormTemplatesId.add(streFormObjectId);
+				slEFormTemplatesRowId.add(strRowId);
+				
+			}
+			Map<String,List<String>> mInvalideFormTemplate = eFormService.deleteEFormTemplate(context, slEFormTemplatesId);
+			List<String> slInvalideFormTemplateActiveState = mInvalideFormTemplate.get(DCLConstants.ACTIVE);
+			List<String> slInvalideFormTemplateEFormConnected = mInvalideFormTemplate.get(DCLConstants.EFORM_CONNECTED);
+			List<String> slValidIdsDeleted = mInvalideFormTemplate.get(DCLConstants.ACTIONS_SUCCESS);
+			
+			
+			if(slInvalideFormTemplateActiveState.size()>0)
+			{
+				 sbMessage.append(MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.eFormTemplateInActiveOrObsoleteState",
+						new String[] {slInvalideFormTemplateActiveState.toString()}, null, context.getLocale(),
+						 DCLConstants.DCL_STRING_RESOURCE));
+				 sbMessage.append("\\n");
+				
+			}
+			if(slInvalideFormTemplateEFormConnected.size()>0)
+			{
+				sbMessage.append(MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.Msg.eFormTemplateConnectedToeForm",
+						new String[] {slInvalideFormTemplateEFormConnected.toString()}, null, context.getLocale(),
+						 DCLConstants.DCL_STRING_RESOURCE));
+				sbMessage.append("\\n");
+				
+			}
+			if(!UIUtil.isNullOrEmpty(sbMessage.toString()))
+				sbJavascript.append("alert(\"").append(sbMessage).append("\");\n");
+			if(slValidIdsDeleted!=null && slValidIdsDeleted.size()>0)
+			{
+				sbJavascript.append("this.parent.location.href=this.parent.location.href;");
+			}
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,sbJavascript.toString());
+			return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	
+	
+	}
+	/**
+	 * This method is to active and inactive  eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args emxTableRowIds of eForm Templates
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> activeInactiveEFormTemplate(Context context,String args[])throws DCLException
+	{
+			try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			Map<String,String> mReturnMap= new HashMap<String, String>();
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			List<String> slEFormTemplatesId= new StringList();
+
+			if(strTableRowIds==null)
+			{
+				String [] arrEFormTemplateId = (String[]) programMap.get(DCConstants.OBJECTID);
+				slEFormTemplatesId.add(arrEFormTemplateId[0]);
+				eFormService.activeInactiveEFormTemplate(context,slEFormTemplatesId);
+				String str=" var frame=findFrame(getTopWindow(),\"detailsDisplay\");";
+				str+="frame.document.location.href=frame.document.location.href;";
+				mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, str);
+
+			}
+			else
+			{
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strDocObjectId=tr.getObjectId();
+				slEFormTemplatesId.add(strDocObjectId);
+				
+			}
+			eFormService.activeInactiveEFormTemplate(context, slEFormTemplatesId);
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,"this.parent.emxEditableTable.refreshStructure();");
+			}
+			return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	 	/**
+		 * This method changes the EForms state from Preliminary to complete
+		 * @param context the ENOVIA <code>Context</code> object.
+		 * @param args
+	         * @return Map with String returns the HTML code and calls the javascript function.
+		 * @throws DCLException  if operation fails
+		 * @exclude
+		 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> changeEFormsStateToCompleteState(Context context,String args[])throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			Map<String,String> mReturnMap= new HashMap<String, String>();
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			List<String> slEFormId= new StringList();
+			StringBuilder sbJavascript=new StringBuilder();
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			if(strTableRowIds==null)
+			{
+				String strObjectId[] = (String[]) programMap.get(DCLConstants.OBJECTID);
+				slEFormId.add(strObjectId[0]);
+				StringList sListInValidEForm = eFormService.completeEForms(context, slEFormId);
+				sbJavascript.append(" var contentFrame = findFrame(getTopWindow(),\"content\");\n");
+				sbJavascript.append("contentFrame.document.location.href=contentFrame.document.location.href;");
+			}
+			else
+			{
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strDocObjectId=tr.getObjectId();
+				slEFormId.add(strDocObjectId);
+			}
+			StringList sListInValidEForm=eFormService.completeEForms(context, slEFormId);
+			if(sListInValidEForm.size()>0)
+			{
+				String strMessage=MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.CannotComplete",
+							new String[] {sListInValidEForm.toString()}, null, context.getLocale(),
+							 DCLConstants.DCL_STRING_RESOURCE);
+				sbJavascript.append("alert(\""+strMessage+"\");");
+			}
+			sbJavascript.append("this.parent.location.href=this.parent.location.href;");
+			}
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,sbJavascript.toString());
+			return mReturnMap;
+		
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * This method is to delete eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	
+	public Map<String,String> deleteEForm(Context context,String args[])throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			Map<String,String> mReturnMap= new HashMap<String, String>();
+			String strTableRowIds[] =  (String[])programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			List<String> slEFormId= new StringList();
+			StringBuilder sbEFormRowId=new StringBuilder();
+			for(String strRowIds:strTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strDocObjectId=tr.getObjectId();
+				slEFormId.add(strDocObjectId);
+				sbEFormRowId.append(strRowId).append(";");
+			}
+			String[] strArreForm = new String[slEFormId.size()];
+			((StringList)slEFormId).copyInto(strArreForm);
+			StringList sListInValidEForm=eFormService.deleteEForms(context, strArreForm);
+			
+			StringBuilder sbJavascript=new StringBuilder();
+			if(sListInValidEForm.size()>0)
+			{
+				String strMessage=MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.CannotDeleteEForm",
+							new String[] {sListInValidEForm.toString()}, null, context.getLocale(),
+							 DCLConstants.DCL_STRING_RESOURCE);
+				sbJavascript.append("alert(\""+strMessage+"\");");
+			}
+			sbJavascript.append("this.parent.location.href=this.parent.location.href;");
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,sbJavascript.toString());
+			return mReturnMap;
+			
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * This method update EForm Owner
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public void updateEFormOwnership(Context context,String args[])throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			Map<?,?> paramMap = (Map<?,?> )programMap.get(DCLConstants.PARAMMAP);
+			String streFormId=(String)paramMap.get(DCConstants.OBJECTID);
+			String strOwnerName = (String) paramMap.get(DCLConstants.NEW_VALUE);//value
+			DomainObject dObj = DomainObject.newInstance(context,streFormId);
+			eFormService.changeEFormOwner(context,dObj,strOwnerName);
+		    String strSubjectKey = "enoDocumentControl.Notification.eFormOwnerChange.Subject";
+            String strMsgKey = "enoDocumentControl.Notification.eFormOwnerChange.Body"; 
+			new NotificationUtil().sendNotficationToUser(context, streFormId, strOwnerName, strSubjectKey, strMsgKey,null);
+			
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+    /**
+	 * This method check the access to create EForm
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * returns true if user has access to create EForm
+	 * 		   false if user does not have access to create EForm
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	public boolean canCreateEFormFromEFormTemplate(Context context,String args[])throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+			String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+			String strPolicyFormalChange=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_FORMAL_CHANGE);
+			String strPolicyFastTrackChange = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_FASTTRACK_CHANGE);
+			String strPolicyStateInWork = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange, DCLConstants.SYMBOLIC_STATE_IN_WORK);
+			String strPolicyStateReview = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange, DCLConstants.SYMBOLIC_STATE_IN_REVIEW);
+			String strPolicyStatePropose = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyFormalChange, DCLConstants.SYMBOLIC_STATE_PROPOSE);
+			String strPolicyStatePrepare = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY, strPolicyFormalChange, DCLConstants.SYMBOLIC_STATE_PREPARE);
+                        String strPolicyChangeRequest=PropertyUtil.getSchemaProperty(context,QuestionnaireConstants.SYMBOLIC_POLICY_CHANGE_REQUEST);		
+                        String strPolicyStateEvaluate = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY, strPolicyChangeRequest, QuestionnaireConstants.SYMBOLIC_STATE_EVALUATE);	
+                        String strPolicyStateApprove = PropertyUtil.getSchemaProperty(context,DomainConstants.SELECT_POLICY, strPolicyFormalChange, DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			StringList slObjectSelect =new StringList();
+			slObjectSelect.add(DomainConstants.SELECT_CURRENT);
+			slObjectSelect.add(DomainConstants.SELECT_POLICY);
+			Map mCOInfo = new HashMap();
+			String strCurrentState=DomainObject.EMPTY_STRING;
+			String strPolicy = DomainObject.EMPTY_STRING;
+			String strDclAction = (String) programMap.get(DCLConstants.DCL_ACTION);//value
+			if(UIUtil.isNotNullAndNotEmpty(strObjectId))
+			{
+				mCOInfo = DCLUtil.getInfo(context, strObjectId, slObjectSelect);
+				 strCurrentState =(String) mCOInfo.get(DomainConstants.SELECT_CURRENT);
+				strPolicy = (String) mCOInfo.get(DomainConstants.SELECT_POLICY);
+				
+			}
+			if ((!UIUtil.isNullOrEmpty(strDclAction) && strDclAction.equalsIgnoreCase("COEForms"))
+					&& (((strPolicy.equals(strPolicyFastTrackChange) || strPolicy.equals(strPolicyFormalChange))
+							&& (strPolicyStateInWork.equals(strCurrentState) || strPolicyStatePrepare.equals(strCurrentState)
+							|| strPolicyStatePropose.equals(strCurrentState) ||
+ strPolicyStateReview.equals(strCurrentState))) || (strPolicy
+							.equals(strPolicyChangeRequest) && strPolicyStateEvaluate
+							.equals(strCurrentState))))
+				return true;
+			return false;
+			
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * get All state eForms
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return MapList of EForms
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAllEForms(Context context, String args[])throws DCLException
+	{
+		String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+		MapList mlEFormTemplate = new MapList();
+		try {
+				EFormService eFormService = DCLServiceUtil.getEFormService(context);
+				StringBuilder sbWhere=new StringBuilder().append(DomainConstants.SELECT_POLICY).append("==\'").append(strPolicyname).append("\'");
+				sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+				mlEFormTemplate = eFormService.getAllEFormTemplate(context, sbWhere.toString());
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+		return mlEFormTemplate;
+	}
+	/**
+	 * Check the modify accessand state of eForm 
+	 * @param context
+	 * @param args
+	 * @return true if user has access to modify EForm
+	 * 		   false if user does not have modify to create EForm
+	 * @throws DCLException if operation fails
+	 */
+	//public List<Boolean> checkEditAccesEForm(Context context,String args[])throws DCLException   //updated in 18x not in 17x
+	public StringList checkEditAccesEForm(Context context,String args[])throws DCLException   
+	{
+		try {
+			StringList list = new StringList();
+			//List<Boolean> list = new ArrayList<Boolean>();
+			Map<?,?> paramMap = (Map<?,?>)JPO.unpackArgs(args);
+			MapList mobjectList = (MapList)paramMap.get(DCConstants.OBJECTLIST);
+			Map<?,?> columnMap = (Map<?,?>)paramMap.get(DCLConstants.COLUMN_MAP);
+			String strColName=(String)columnMap.get(DomainConstants.SELECT_NAME);
+			boolean boolAssigneeCheck=false;
+			String strEFormPolicy=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_EFORM);
+			String strEFormTemplatePolicy=PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			
+			StringList strStateComplete = new StringList(PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strEFormPolicy, DCLConstants.SYMBOLIC_STATE_COMPLETE));
+			strStateComplete.add(PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strEFormTemplatePolicy, DCLConstants.SYMBOLIC_STATE_ACTIVE));
+			strStateComplete.add(PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strEFormTemplatePolicy, DCLConstants.SYMBOLIC_STATE_OBSOLETE));
+			//String strStateComplete = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strEFormPolicy, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			for(Object mObjectMap:mobjectList)
+			{
+				Map<String,String> ObjectMap=(Map<String,String>)mObjectMap;
+				String strState=DomainObject.EMPTY_STRING;
+				String strObjectId=ObjectMap.get(DomainConstants.SELECT_ID);
+				strState=ObjectMap.get(DomainConstants.SELECT_CURRENT);
+				
+				ArrayList<String> alPerson=new ArrayList<String>();
+				alPerson.add(context.getUser().toString());
+				ArrayList<String> alAccess=new ArrayList<String>();
+				alAccess.add("read");
+				ArrayList<String> alNoPersonAccess=AccessUtil.hasAccess(context, strObjectId, alPerson,alAccess);
+				
+				if(strColName.equals("Assignee"))
+				{
+					boolAssigneeCheck=!alNoPersonAccess.contains(context.getUser().toString()) && 
+							DomainObject.newInstance(context,strObjectId).checkAccess(context, (short)AccessConstants.cChangeOwner)&&!strStateComplete.contains(strState);
+					list.add(String.valueOf(boolAssigneeCheck));
+					continue;
+				}
+				if(alNoPersonAccess.contains(context.getUser().toString()))
+					list.add(String.valueOf(false));
+				else if(DomainObject.newInstance(context,strObjectId).checkAccess(context, (short)AccessConstants.cModify)&&!strStateComplete.contains(strState))
+					list.add(String.valueOf(true));
+				else
+					list.add(String.valueOf(false));
+			}
+			return list;
+		}  catch (Exception e) {
+		throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * This method is used to get list of Preliminary state eForm 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args 
+	 * @return MapList of Preliminary state eForm 
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */		 
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getPreliminaryEForm(Context context, String args[])throws DCLException
+	{
+	
+		try {
+			String strPolicyEForm = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+			String strPreliminaryState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyEForm, DCLConstants.SYMBOLIC_STATE_PRELIMINARY);
+			String strInWorkState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyEForm, DCLConstants.SYMBOLIC_STATE_IN_WORK);
+				EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			StringBuilder sbWhere=new StringBuilder().append("(").append(DomainConstants.SELECT_CURRENT).append("==\'").append(strPreliminaryState).append("\'");
+			sbWhere.append(" || ").append(DomainConstants.SELECT_CURRENT).append("==\'").append(strInWorkState).append("\')");
+				sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+			MapList mlEFormTemplate = eFormService.getAllEFormTemplate(context, sbWhere.toString());
+			return mlEFormTemplate;
+		} catch (Exception e) {
+			throw new DCLException();
+		}
+
+	}
+	/**
+	 * This method is used to get list of complete eForm Templates
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args 
+	 * @return MapList of inactive eForm Templates
+	 * @throws DCLException if operation fails
+	 * @exclude
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getCompleteEForm(Context context, String args[])throws DCLException
+	{
+		
+		try {
+		String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+		String strActiveStateName = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+	      EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			StringBuilder sbWhere=new StringBuilder().append(DomainConstants.SELECT_CURRENT).append("==\'").append(strActiveStateName).append("\'");
+			sbWhere.append("&&").append(DomainConstants.SELECT_OWNER).append("==\'").append(context.getUser()).append("\'");
+			MapList mlEFormTemplate = eFormService.getAllEFormTemplate(context, sbWhere.toString());
+			return mlEFormTemplate;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Get the list of  attributes to be added on th eForm Template  
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return MapList of Attributes
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getAttributeList(Context context, String args[])throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strTypeFilter =null;
+			String strNameMatches=DomainConstants.QUERY_WILDCARD;
+			String strDoFilter      = (String)programMap.get(DCLConstants.DCL_ACTION);
+			if(UIUtil.isNotNullAndNotEmpty(strDoFilter) ) {
+				strNameMatches   = (String)programMap.get(DCLConstants.ATTRIBUTE_NAME_MATCHES);
+				strTypeFilter    = (String)programMap.get(DCLConstants.ATTRIBUTE_TYPE);
+			}
+			
+			String strObjectId=(String) programMap.get(DCConstants.OBJECTID);
+			List<Map> mlAddedRelatedAttributes=getEFormAddedAttributes(context,strObjectId);
+			MapList mlRelatedAttributes = new MapList();
+
+			String strAllAttrData = DCLUtil.mqlCommand(context, "list attribute $1 where $2 select $3 $4 $5 dump $6 recordsep $7", true,strNameMatches,"owner==\"\"","name","type","hidden","@","|").trim();
+
+			String strDueDate =PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strTaskRequirement =PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_TaskRequirement);
+			List<String> slAllAttrRows = FrameworkUtil.split(strAllAttrData, "|");
+		
+			for(String row :slAllAttrRows)
+			{
+				StringList strAttrTokens = FrameworkUtil.split(row, DCLConstants.ATTRIBUTE_INFO_SEPARATOR);
+				if (strAttrTokens.size() != 3) { continue;}  // @ or | in attributes descr }
+				String strName = (String)strAttrTokens.get(0);
+				String strType = (String)strAttrTokens.get(1);
+				String strHidden = (String)strAttrTokens.get(2);
+				
+				if(strName.contains("/"))
+					continue;
+				
+				if(strName.equals(strDueDate))
+					continue;
+				if(strName.equals(strTaskRequirement))
+					continue;
+				
+				// Skip hidden attributes
+				if (strHidden.equalsIgnoreCase(DCLConstants.TRUE)) 
+					continue;
+				
+				if (UIUtil.isNotNullAndNotEmpty(strTypeFilter)&& !strTypeFilter.equals(DomainConstants.QUERY_WILDCARD) &&
+						!strTypeFilter.toUpperCase().trim().equals(strType.toUpperCase().trim()) ) 
+					continue;
+				Map mAttribute = new HashMap();
+				mAttribute.put(DomainConstants.SELECT_ID, strName);
+				mlRelatedAttributes.add(mAttribute);
+
+			}
+			MapList mTempAttr=new MapList();
+			mTempAttr.addAll(mlRelatedAttributes);
+			for(Object mAttribute:mTempAttr)
+			{
+				Map mAttr=(Map) mAttribute;
+				if(	mlAddedRelatedAttributes.contains(mAttr))
+					mlRelatedAttributes.remove(mAttr);
+			}
+			
+			return mlRelatedAttributes;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	private List<Map> getEFormAddedAttributes(Context context, String strObjectId)throws DCLException
+	{
+		try {
+		List<Map> mlRelatedAttributes=new MapList();
+		String result = DCLUtil.mqlCommand(context,"print bus $1 select attribute $2 dump $3",true,strObjectId,"interface.attribute",",");
+		if (UIUtil.isNotNullAndNotEmpty(result)) {
+			List<String> slAttributesName=FrameworkUtil.split(result.trim(),DCLConstants.COMMA);
+			for(String strAttributeName:slAttributesName ){
+				HashMap objectMap = new HashMap();
+				if (strAttributeName != null && !strAttributeName.trim().equals(DomainConstants.EMPTY_STRING)&&!strAttributeName.trim().equals("null")) {
+					objectMap.put(DomainConstants.SELECT_ID, strAttributeName.trim());
+					mlRelatedAttributes.add(objectMap);
+				}
+			}
+		} 
+		return mlRelatedAttributes;
+	} catch (Exception ex) {
+		throw new DCLException(ex.getLocalizedMessage());
+	}
+	}
+	/**
+	 * GIve the list of eForms attribute that are added on  eForm
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return MapList of attribiutes information
+	 * @throws DCLException if Operation fails 
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getEFormAttributes(Context context,String[] args) throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			String strObjectId = (String) programMap.get(DCConstants.OBJECTID); 
+
+			MapList mlReturnList = new MapList();
+
+			String strResult=DCLUtil.mqlCommand(context, "print bus  $1 select $2 dump $3",false,strObjectId,"interface.attribute",DCLConstants.COMMA);
+
+			if (UIUtil.isNotNullAndNotEmpty(strResult)) {
+				mlReturnList = new MapList();
+				List<String> sListAttribute=FrameworkUtil.split(strResult, DCLConstants.COMMA) ;
+				for(String attrName :sListAttribute)
+				{
+					Map objectMap = new HashMap();
+					if (UIUtil.isNotNullAndNotEmpty(attrName)) {
+						objectMap.put(DomainConstants.SELECT_ID, attrName.trim());
+						mlReturnList.add(objectMap);
+					}
+
+				}
+			} 
+			return mlReturnList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * add attributes on eForm 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if Operation fails 
+	 */
+	public Map<String,String> addEFormAttributes(Context context,String[] args) throws DCLException
+	{
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map mReturnMap=new HashMap();
+		
+			String[] strObjectId = (String[]) programMap.get(DCConstants.OBJECTID); 
+			String[] strEmxTableRowIds=(String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID); 
+			if(null!=strEmxTableRowIds)
+			{
+				List<String> slAttrId=new StringList();
+				for(String strRowIds:strEmxTableRowIds)
+				{
+					String strRowId=strRowIds;
+					TableRowId tr=new TableRowId(strRowId);
+					String strQuesId=tr.getObjectId();
+					slAttrId.add(strQuesId);
+	
+				}
+				EFormService eFormService = DCLServiceUtil.getEFormService(context);
+				eFormService.addEFormAttributes(context,strObjectId[0],slAttrId);
+			}
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, "getTopWindow().opener.location.href=getTopWindow().opener.location.href;\ngetTopWindow().close();");
+			return mReturnMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * remove attribute from eForm 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return  Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if Operation fails 
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map<String,String> removeInterfaceAttributes(Context context,String[] args) throws DCLException
+	{
+		try
+		{
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map mReturnMap=new HashMap();
+			String[] strObjectId = (String[]) programMap.get(DCConstants.OBJECTID); 
+			String[] strEmxTableRowIds=(String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID); 
+			List<String> slAttrId=new StringList();
+			for(String strRowIds:strEmxTableRowIds)
+			{
+				String strRowId=strRowIds;
+				TableRowId tr=new TableRowId(strRowId);
+				String strQuesId=tr.getObjectId();
+				slAttrId.add(strQuesId);
+
+			}
+			EFormService eFormService = DCLServiceUtil.getEFormService(context);
+			eFormService.removeInterfaceAttributes(context,strObjectId[0],slAttrId);
+			
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, "this.parent.location.href=this.parent.location.href;");
+			return mReturnMap;  
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Filter the attributes on the basis of Name matches 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if operation fails
+	 */
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map filterAttributes (Context context,String[] args) throws DCLException
+	{
+		try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			Map mReturnMap= new HashMap();
+			String[] strDoFilter      = (String[])programMap.get(DCLConstants.DCL_ACTION);
+			String[] strParentOID          = (String[])programMap.get(DCConstants.OBJECTID);
+			String[] strnameMatches = (String[])programMap.get(DCLConstants.ATTRIBUTE_NAME_MATCHES);
+			String[] strTypeFilter = (String[])programMap.get(DCLConstants.ATTRIBUTE_TYPE);
+			String[] sTableName = (String[])programMap.get(DCLConstants.TABLE);
+			String[] sTableFilter = (String[])programMap.get(DCLConstants.FILTER);
+			StringBuilder sbJavascript =new StringBuilder();
+			
+			sbJavascript.append("parent.resetParameter(\"dclAction\",\""+XSSUtil.encodeForJavaScript(context,strDoFilter[0])+"\");\n");
+			sbJavascript.append("parent.resetParameter(\"DCLAttributeNameMatches\",\""+XSSUtil.encodeForJavaScript(context,strnameMatches[0])+"\");\n");
+			if(strTypeFilter!=null){
+			sbJavascript.append("parent.resetParameter(\"filter\",\""+XSSUtil.encodeForJavaScript(context,sTableFilter[0])+"\");\n");
+			sbJavascript.append("parent.resetParameter(\"DCLAttributeType\",\""+XSSUtil.encodeForJavaScript(context,strTypeFilter[0])+"\");\n");
+			}
+			if(strParentOID!=null)
+				sbJavascript.append("parent.resetParameter(\"parentOID\",\""+XSSUtil.encodeForJavaScript(context,strParentOID[0])+"\");\n");
+			sbJavascript.append("parent.resetParameter(\"submitLabel\",\"emxFramework.Common.Done\");\n");
+			sbJavascript.append("parent.resetParameter(\"cancelLabel\",\"emxFramework.Common.Cancel\");\n");
+			sbJavascript.append("parent.refreshSBTable(\""+XSSUtil.encodeForJavaScript(context,sTableName[0])+"\",\"Name\",\"ascending\");\n");
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT,sbJavascript.toString());
+			return mReturnMap;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Column type program to display attribute names
+	 * @param context  the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return String list of attributes name
+	 * @throws DCLException if operation fails
+	 */
+	public List<String> getAttributeName(Context context, String[] args)
+			throws DCLException {
+		
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map paramList = (Map) programMap.get(DCConstants.PARAMLIST);
+			String strReportFormat = (String) paramList.get(DCConstants.REPORTFORMAT);
+			Map map;
+			String strLanguageStr = ((String) ((Map) programMap.get(DCConstants.PARAMLIST)).get(DCLConstants.LANGUAGE_STR));
+			for(Object objMap:mlObjList)
+			{
+				map = (Map) objMap;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				StringBuilder sbI18nAttributeName = new StringBuilder();
+				String strAttrName= EnoviaResourceBundle.getAttributeI18NString(context,
+						att.getName(), strLanguageStr);
+				if (UIUtil.isNullOrEmpty(strReportFormat) && UIUtil.isNotNullAndNotEmpty(strAttrName))
+				{
+				sbI18nAttributeName.append("<img align=\"top\" SRC=\"images/iconSmallAttribute.gif\"></img><span class='object'>");
+					sbI18nAttributeName.append(strAttrName);
+				sbI18nAttributeName.append("</span>");
+				}
+				else
+					sbI18nAttributeName.append(strAttrName);
+				((StringList)slColumnValues).addElement(sbI18nAttributeName.toString());
+			}
+			return slColumnValues;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	
+	}
+	/**
+	 * Column type program to display attribute type
+	 * @param context  the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return String list of attributes type
+	 * @throws DCLException if operation fails
+	 */
+	public List<String> getAttributeType(Context context, String[] args)
+			throws DCLException {
+		
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map map;
+			String strLanguageStr = ((String) ((Map) programMap.get(DCConstants.PARAMLIST)).get(DCLConstants.LANGUAGE_STR));
+			for(Object objMap:mlObjList)
+			{
+				map = (Map) objMap;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				att.open(context);
+				String strI18nAttributeType = EnoviaResourceBundle.getAttributeTypeI18NString(context,att.getName(),strLanguageStr);
+				((StringList)slColumnValues).addElement(strI18nAttributeType);
+				att.close(context);
+			}
+			return slColumnValues;
+		} catch (Exception ex) {
+			
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+		
+	}
+	/**
+	 * Column type program to display attribute description
+	 * @param context  the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return Stringlist of attributes description
+	 * @throws DCLException if operation fails
+	 */
+	public List<String> getAttributeDescription(Context context, String[] args)
+			throws DCLException {
+		
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map map;
+			for(Object objMap:mlObjList)
+			{
+				map = (Map) objMap;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				att.open(context);
+				((StringList)slColumnValues).addElement(att.getDescription());
+				att.close(context);
+			}
+			return slColumnValues;
+		} catch (Exception ex) {
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Column type program to display attribute value
+	 * @param context  the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return String list of attributes value
+	 * @throws DCLException if operation fails
+	 */
+	public List<String> getAttributeDefaultValue(Context context, String[] args)
+			throws DCLException {
+	
+		try {
+			List<String> slColumnValues = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjList = (MapList) programMap.get(DCConstants.OBJECTLIST);
+			Map map;
+			for(Object objMap:mlObjList)
+			{
+				map = (Map) objMap;
+				AttributeType att = new AttributeType((String) map.get(DomainConstants.SELECT_ID));
+				att.open(context);
+				((StringList)slColumnValues).addElement(att.getDefaultValue());
+				att.close(context);
+			}
+			return slColumnValues;
+		} catch (Exception ex) {
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+		
+	}
+	/**
+	 * get the data type of attributes type
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if Operation fails
+	 */
+	public Map<String,List<String>> getAttributeTypes(Context context, String[] args)throws DCLException
+	{
+		try
+		{
+
+			Map<String,List<String>> rangeMap  = new HashMap();
+			String strFrameworkI18NResourceBundle  = DCLConstants.FRAMEWORK_STRING_RESOURCE;
+			
+			String strAttrTypeFilterBoolean    =  EnoviaResourceBundle.getProperty(context, strFrameworkI18NResourceBundle, context.getLocale(),"emxFramework.Attribute.Type.boolean") ;
+			String strAttrTypeFilterTimestamp  =  EnoviaResourceBundle.getProperty(context, strFrameworkI18NResourceBundle, context.getLocale(),"emxFramework.Attribute.Type.timestamp") ;
+			String strAttrTypeFilterInteger    =  EnoviaResourceBundle.getProperty(context, strFrameworkI18NResourceBundle, context.getLocale(),"emxFramework.Attribute.Type.integer") ;
+			String strAttrTypeFilterReal       =  EnoviaResourceBundle.getProperty(context, strFrameworkI18NResourceBundle, context.getLocale(),"emxFramework.Attribute.Type.real") ;
+			String strAttrTypeFilterString     =  EnoviaResourceBundle.getProperty(context, strFrameworkI18NResourceBundle, context.getLocale(),"emxFramework.Attribute.Type.string") ;
+			String strAll                      =  EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),"emxComponents.Common.All") ;
+	
+			List<String> slFieldChoices         = new StringList();
+			List<String> slFieldDisplayChoices  = new StringList();
+			slFieldChoices.add(DomainConstants.QUERY_WILDCARD);
+			slFieldChoices.add(DCLConstants.ATTRIBUTE_TYPE_BOOLEAN);
+			slFieldChoices.add(DCLConstants.TIMESTAMP);
+			slFieldChoices.add(DCLConstants.ATTRIBUTE_TYPE_INTEGER);
+			slFieldChoices.add(DCLConstants.ATTRIBUTE_TYPE_REAL);
+			slFieldChoices.add(DCLConstants.ATTRIBUTE_TYPE_STRING);
+
+			slFieldDisplayChoices.add(strAll);
+			slFieldDisplayChoices.add(strAttrTypeFilterBoolean);
+			slFieldDisplayChoices.add(strAttrTypeFilterTimestamp);
+			slFieldDisplayChoices.add(strAttrTypeFilterInteger);
+			slFieldDisplayChoices.add(strAttrTypeFilterReal);
+			slFieldDisplayChoices.add(strAttrTypeFilterString);
+
+			rangeMap.put(DCLConstants.FIELD_CHOICES, slFieldChoices);
+			rangeMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, slFieldDisplayChoices);
+			return rangeMap;
+		}
+		catch(Exception ex)
+		{
+			throw new DCLException(ex.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Revise the eForm Template 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return  Map with String returns the HTML code and calls the javascript function.
+	 * @throws DCLException if Operation fails
+	 */
+	public Map reviseEForm (Context context, String[] args)throws DCLException
+	{
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			Map mReturn =new HashMap();
+			String[] strObjectId= (String[]) programMap.get(DCConstants.OBJECTID);
+			DomainObject domObj=DomainObject.newInstance(context,strObjectId[0]);
+			EFormService eFormService= DCLServiceUtil.getEFormService(context);
+			String strLastRevisionId=eFormService.reviseEForm(context,domObj);
+			String str=" var frame=findFrame(getTopWindow(),\"detailsDisplay\");";
+			str+="frame.document.location.href=\"../common/emxTree.jsp?&objectId="+XSSUtil.encodeForJavaScript(context,strLastRevisionId)+"\";";
+			mReturn.put(DCLConstants.ACTION_JAVASCRIPT, str  );
+			return mReturn;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+		
+	}
+	/**
+	 * Method to check the access to revise 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return true if in active state and the lates revision else false
+	 * @throws DCLException if Operation fails
+	 */
+	public boolean canReviseEForm(Context context, String[] args)throws DCLException
+	{
+		try {
+			Map programMap = (Map)JPO.unpackArgs(args);
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strActiveState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname, DCLConstants.SYMBOLIC_STATE_ACTIVE);
+			String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+			List<String> slSelects=new StringList();
+			slSelects.add(DomainConstants.SELECT_REVISION);
+			slSelects.add(DomainConstants.SELECT_CURRENT);
+			slSelects.add("last.revision");
+			Map mEFormtemplateInfo =DCLUtil.getInfo(context, strObjectId,slSelects);
+			String strCurrentRevision =mEFormtemplateInfo.get(DomainConstants.SELECT_REVISION).toString();
+			String strLastRevision =mEFormtemplateInfo.get("last.revision").toString();
+			String strState =mEFormtemplateInfo.get(DomainConstants.SELECT_CURRENT).toString();
+			if(strCurrentRevision.equals(strLastRevision)&&strState.equals(strActiveState))
+				return true;
+			else
+				return false;
+
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method to create eForm from eForm Template
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @throws DCLException if operation fails
+	 */
+	public void createEFormTemplateFromEForm(Context context, String[] args) throws DCLException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map requestMap=(Map) programMap.get(DCLConstants.REQUESTMAP);
+			Map paramMap=(Map) programMap.get(DCLConstants.PARAMMAP);
+			String streFormId=(String) requestMap.get("eFormOID");
+			String strNewObjectId=(String) paramMap.get(DCLConstants.NEW_OBJECTID);
+			String strObjectId =(String) requestMap.get(DCConstants.OBJECTID);
+			ConfigureApprovalService confgApprovalService = new ConfigureApprovalServiceImpl();
+			confgApprovalService.connectEFormToEFormTemplate(context, strObjectId, streFormId, strNewObjectId);
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * SHow eForm status depending on the due date of eForm
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return List of status on the basis of object
+	 * @throws DCLException if Operation fails
+	 */
+	public List<String> showEFormDueDateStatus(Context context, String[] args) throws DCLException {
+		try {
+			String strPolicyname = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+			String strAttrDueDate = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_attribute_DueDate);
+			String strStateComplete = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicyname, DCLConstants.SYMBOLIC_STATE_COMPLETE);
+			List<String> slDueDateStatus = new StringList();
+			Map<?,?> programMap = (Map<?,?>)JPO.unpackArgs(args);
+			   SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			List<Map> mobjectList = (MapList)programMap.get(DCConstants.OBJECTLIST);
+			for(Map mEForm:mobjectList)
+			{
+				String strDueDate = (String)mEForm.get(DomainObject.getAttributeSelect(strAttrDueDate));
+				String strCurrentState = (String) mEForm.get(DomainConstants.SELECT_CURRENT);
+				StringBuilder sb=new StringBuilder();   
+				if(strStateComplete.equals(strCurrentState))
+				{
+					sb.append("<img border=\"0\" src=\"../common/images/iconActionComplete.gif\"></img>");
+					slDueDateStatus.add(sb.toString());
+				}
+				else if(UIUtil.isNotNullAndNotEmpty(strDueDate))
+				{
+					Date todayDate = new Date();
+	                 String strCD = sdf.format(todayDate);
+	                 SimpleDateFormat sdf1 = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat());  
+	                 java.util.Date d1 = sdf1.parse(strCD);  
+	                 java.util.Date d2 = sdf1.parse(strDueDate);  
+					DCLUtil.cleanTime(d1);
+					DCLUtil.cleanTime(d2);
+	                 Long timeStatus1 = d1.getTime() - d2.getTime();
+	                 Long timeStatus2 = d2.getTime() - d1.getTime();
+	                 int iDifference1 = (int)(timeStatus1/(1000*60*60*24));
+	                 int iDifference2 = (int)(timeStatus2/(1000*60*60*24));
+
+					if (iDifference2 >=0&& iDifference2<=5 )  
+	                 {  
+	                	 sb.append("<img border=\"0\" src=\"../common/images/iconStatusYellow.gif\" ></img>");
+	                	 slDueDateStatus.add(sb.toString());
+	                 }  
+	                 else if (iDifference2<0 )   
+	                 {  
+	                	 sb.append("<img border=\"0\" src=\"../common/images/iconStatusRed.gif\" ></img>");
+	                	 slDueDateStatus.add(sb.toString());
+	                 } 
+	                 else if(iDifference2>5)
+	                 {  
+	                	 sb.append("<img border=\"0\" src=\"../common/images/iconStatusGreen.gif\"></img>");
+	                	 slDueDateStatus.add(sb.toString());
+	                 }      
+				}
+				else
+					slDueDateStatus.add(DomainConstants.EMPTY_STRING);
+                 
+			}
+			return slDueDateStatus;
+			
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	
+	}
+	/**
+	 * Get list of all revision of eForm Templates 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return MapList of eFormTemplate
+	 * @throws DCLException if operation fails
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getEFormAllRevisions(Context context, String[] args) throws DCLException
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>)JPO.unpackArgs(args);
+			String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+	         	DomainObject dobj = DomainObject.newInstance(context,strObjectId);
+			StringList sList = new StringList();
+			sList.addElement(DomainConstants.SELECT_ID);
+			sList.addElement(DomainConstants.SELECT_NAME);
+			sList.addElement(DomainConstants.SELECT_REVISION);
+			sList.addElement(DomainConstants.SELECT_ORIGINATED);
+		    MapList revisionsList = dobj.getRevisionsInfo(context,sList, new StringList(0));
+			return revisionsList;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	/**
+	 * Hide AttributeExtension command once the eForms are created from eForm template
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return true and false
+	 * @throws Exception if operation fails
+	 */
+	public boolean hideAttributeExtension(Context context, String[] args) throws Exception 
+	{
+		Map<?,?> programMap = (Map<?,?>)JPO.unpackArgs(args);
+		String strObjectId= (String) programMap.get(DCConstants.OBJECTID);
+		String strRelEFormTemplate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE);
+
+		List<String> slSelects=new StringList();
+		slSelects.add(DomainConstants.SELECT_REVISION);
+		slSelects.add("last.revision");
+		slSelects.add("to["+strRelEFormTemplate+"].from.id");
+		Map mEFormtemplateInfo =DCLUtil.getInfo(context, strObjectId,slSelects);
+		String strCurrentRevision =mEFormtemplateInfo.get(DomainConstants.SELECT_REVISION).toString();
+		String strLastRevision =mEFormtemplateInfo.get("last.revision").toString();
+		Object oEFormRef = mEFormtemplateInfo.get("to["+strRelEFormTemplate+"].from.id");
+		if(oEFormRef!=null||!strCurrentRevision.equals(strLastRevision))
+			return false;
+		else 
+			return true;
+
+	}
+	/**
+	 * Get the name of EFormTemplate from which eForm was created 
+	 * @param context the ENOVIA <code>Context</code> object.
+	 * @param args
+	 * @return
+	 * @throws DCLException  if operation fails
+	 */
+	public  String getEFormTemplateFormEForm(Context context, String[] args) throws DCLException 
+	{
+		try {
+			Map<?,?> programMap = (Map<?,?>)JPO.unpackArgs(args);
+			Map<?,?> paramMap=(Map<?, ?>) programMap.get(DCLConstants.PARAMMAP);
+ 			String strObjectId= (String) paramMap.get(DCConstants.OBJECTID);
+			String strRelEFormTemplate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE);
+			StringList slSelects =new StringList();
+			slSelects.add( "from["+strRelEFormTemplate+"].to.name");
+			slSelects.add( "from["+strRelEFormTemplate+"].to.revision");
+			Map<String,String> mEForm=DCLUtil.getInfo(context, strObjectId, slSelects);
+			String strName=mEForm.get("from["+strRelEFormTemplate+"].to.name");
+			String strRev=mEForm.get("from["+strRelEFormTemplate+"].to.revision");
+			return strName+" rev "+strRev;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		
+	}
+
+ @com.matrixone.apps.framework.ui.ProgramCallable
+		public List<Map> getTemplateRelatedQuestions(Context context,String args[])throws Exception {
+			try {
+				QuestionService questionService= new QuestionServiceImpl();
+				Map<?,?> programMap = (Map<?,?>) JPO.unpackArgs(args);
+				String strObjectId= (String) programMap.get(QuestionnaireConstants.OBJECTID);
+				String strExpandLevel=(String)programMap.get("expandLevel");
+				strExpandLevel = UIUtil.isNotNullAndNotEmpty(strExpandLevel)?strExpandLevel:"1";
+				List<Map> lRelatedQuestionsMap =questionService.getQuestionRelatedObjects(context, strObjectId, "Question", (short)1, "", "");
+			questionService.sortMapListOnSequenceOrder(context, (MapList) lRelatedQuestionsMap);
+				return lRelatedQuestionsMap;
+			} catch (Exception e) {
+				throw new Exception();
+			}
+		}
+		@com.matrixone.apps.framework.ui.ConnectionProgramCallable
+		public Map createQuestionsAndSaveInPage(Context context, String args[]) throws Exception {
+
+			try {
+				Map<String, Object> mReturn = new HashMap<String, Object>();
+				Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+				Map<?, ?> paramMap = (Map<?, ?>) programMap.get(QuestionnaireConstants.PARAMMAP);
+
+				Object changeRowObj = programMap.get("contextData");
+				MapList chgRowsMapList = com.matrixone.apps.framework.ui.UITableIndented.getChangedRowsMapFromElement(context, changeRowObj);
+
+			String strObjectId = (String) programMap.get(QuestionnaireConstants.OBJECTID);
+			DomainObject dobj = DomainObject.newInstance(context, strObjectId);
+			if (!dobj.isKindOf(context, PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_EFORM))) {
+				String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE, context.getLocale(),
+						"enoQuestionnaire.Alert.Msg.CannotCreateSubQuestion");
+				throw new Exception(strMessage);
+			}
+
+				String strParentObject = strObjectId;
+				if (UIUtil.isNullOrEmpty(strParentObject))
+					strParentObject = (String) paramMap.get(QuestionnaireConstants.OBJECTID);
+
+				QuestionService questionService = new QuestionServiceImpl();
+				List<Question> lQuestionObj = new ArrayList<Question>();
+				for (Object mObjMap : chgRowsMapList) {
+					Map<?, ?> mNewObj = (Map<?, ?>) mObjMap;
+					String strRowId = (String) mNewObj.get("rowId");
+					Map mColumnMap = (Map) mNewObj.get("columns");
+					String strQuestionDescription = (String) mColumnMap.get("Description");
+				String strQuestionComment = (String) mColumnMap.get("Comment");
+					String strName = (String) mColumnMap.get("Name");
+					String ResponseRangeType = (String) mColumnMap.get("ResponseRangeType");
+					String ResponseRangeValues = (String) mColumnMap.get("ResponseRangeValues");
+				if (!ResponseRangeType.equals("Textbox") && !ResponseRangeType.equals("TextArea") && UIUtil.isNullOrEmpty(ResponseRangeValues)) {
+					String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+							context.getLocale(), "enoQuestionnaire.Alert.Msg.RangeValueRequired");
+					throw new Exception(strMessage);
+				}
+					if (UIUtil.isNullOrEmpty(strObjectId)) {
+						StringList sl = FrameworkUtil.split(strRowId, DCLConstants.COMMA);
+						if (sl.size() < 2)
+							strObjectId = (String) paramMap.get(QuestionnaireConstants.OBJECTID);
+						else {
+							String strMessage = EnoviaResourceBundle.getProperty(context, QuestionnaireConstants.QUESTION_STRING_RESOURCE,
+									context.getLocale(), "enoQuestionnaire.Alert.Msg.WrongQuestionPosition");
+							throw new Exception(strMessage);
+						}
+					}
+					com.dassault_systemes.enovia.questionnaire.TableRowId rowId = new com.dassault_systemes.enovia.questionnaire.TableRowId("", "", strObjectId, strRowId);
+					QuestionServiceImpl questionServiceImpl = new QuestionServiceImpl();
+					if (ResponseRangeType.equals("Textbox") || ResponseRangeType.equals("TextArea"))
+					{
+						ResponseRangeValues = DomainConstants.EMPTY_STRING;
+					}
+					Question question = questionServiceImpl.new Question(rowId, strQuestionDescription, strName, 
+							strQuestionComment, "Descriptive", ResponseRangeType, ResponseRangeValues);
+					lQuestionObj.add(question);
+				}
+				List<Question> lQuestion = questionService.createQuestionForEForm(context, lQuestionObj);
+				Map<?, ?> mNewObj = (Map<?, ?>) chgRowsMapList.get(0);
+				Map mColumnMap = (Map) mNewObj.get("columns");
+				String desc=mColumnMap.get("Description").toString();
+				
+				mColumnMap.remove("Description");
+				mColumnMap.put("Description",XSSUtil.encodeForHTML(context, desc));
+				
+				MapList mlChangedRows = new MapList();
+				for (Question question : lQuestion) {
+					mReturn = new HashMap<String, Object>();
+					mReturn.put("rowId", question.getRowId().getLevel());
+					mReturn.put("oid", question.getRowId().getObjectId());
+					mReturn.put("pid", question.getRowId().getParentObjectId());
+					mReturn.put("markup", "new");
+					mReturn.put("columns", mColumnMap);
+					mReturn.put("relid", question.getRowId().getRelationshipId());
+					mlChangedRows.add(mReturn);
+				}
+
+				Map<String, Serializable> mReturnMap = new HashMap<String, Serializable>();
+				mReturnMap.put(DCLConstants.ACTION, "success");
+				mReturnMap.put("changedRows", mlChangedRows);
+				return mReturnMap;
+
+			}
+			catch (Exception e) {
+				Map<String, Serializable> mReturn = new HashMap<String, Serializable>();
+				mReturn.put(DCLConstants.ACTION, QuestionnaireConstants.ERROR);
+				mReturn.put("Message", e.getMessage());
+				return mReturn;
+			}
+
+		}
+
+
+
+	public MapList renderForm(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strAttrQuestionRangeType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_TYPE);
+			String strAttrQuestionRangeValue = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_VALUES);
+			String strAttrQuestionSubmit = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_COMMENT);
+			QuestionService questionService = new QuestionServiceImpl();
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			String strObjectId = (String) requestMap.get(QuestionnaireConstants.OBJECTID);
+			String strAction = (String) programMap.get(QuestionnaireConstants.QUESTION_MODE);
+			String mode = (String) requestMap.get(DCLConstants.MODE);
+			String eFormTemplateId = strObjectId;
+			if (UIUtil.isNullOrEmpty(strObjectId)) {
+				strObjectId = (String) requestMap.get(QuestionnaireConstants.OBJECTID);
+
+			}
+			eFormTemplateId = DomainObject.newInstance(context, strObjectId).getInfo(context, "from["+PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE)+"].to.id");
+			List<Map> mListRelatedQuestions = questionService.getQuestionRelatedObjects(context, eFormTemplateId, "Question", (short) 1, DomainConstants.EMPTY_STRING, DomainConstants.EMPTY_STRING);
+			questionService.sortMapListOnSequenceOrder(context, (MapList) mListRelatedQuestions);
+			Map<String, Map<String, String>> mQuesIdResponse = new HashMap<String, Map<String, String>>();
+			ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+			mQuesIdResponse = configureApprovalService.getEFormConfigureConnectedQuestions(context, strObjectId);
+
+
+
+			MapList customerAttFields = new MapList();
+			HashMap fieldMap = new HashMap<>();
+			fieldMap.put(DCLConstants.EXPRESSION_BUSINESSOBJECT, "empty");
+			fieldMap.put(UICache.LABEL, "Name");
+			fieldMap.put(UICache.NAME, "Name");
+			fieldMap.put(DCLConstants.EXPRESSION_BUSINESSOBJECT, DomainConstants.SELECT_NAME);
+			UIComponent.modifySetting(fieldMap, "Editable", DCLConstants.FALSE);
+			customerAttFields.add(fieldMap);
+			for (Map mQues : mListRelatedQuestions) {
+				fieldMap = new HashMap<>();
+				String strQuesDescription = (String) mQues.get(DomainConstants.SELECT_DESCRIPTION);
+				String strQuesName = (String) mQues.get(DomainConstants.SELECT_NAME);
+				String strQuesId = (String) mQues.get(DomainObject.SELECT_ID);
+				String strQuesRelId = (String) mQues.get(DomainRelationship.SELECT_ID);
+				String strQuesInputType = (String) mQues.get(DomainObject.getAttributeSelect(strAttrQuestionRangeType));
+				String strQuesInputRange = (String) mQues.get(DomainObject.getAttributeSelect(strAttrQuestionRangeValue));
+
+
+				List<String> slQuestionInputRangeValues = FrameworkUtil.split(strQuesInputRange, DCLConstants.COMMA);
+				StringList slQuestionRangeVlaues = new StringList();
+				if (strQuesInputType.equals("Combobox"))
+					slQuestionRangeVlaues.add(" ");
+				for (String rangeValue : slQuestionInputRangeValues) {
+					slQuestionRangeVlaues.add(rangeValue.trim());
+				}
+				fieldMap.put(DCLConstants.EXPRESSION_BUSINESSOBJECT, "empty");
+				// fieldMap.put("isMultiVal", "true");
+				fieldMap.put(UICache.LABEL, strQuesDescription);
+				fieldMap.put(UICache.NAME, strQuesId + "$" + strQuesRelId);
+				fieldMap.put(DCLConstants.FIELD_CHOICES, slQuestionRangeVlaues);
+				fieldMap.put(DCLConstants.FIELD_DISPLAY_CHOICES, slQuestionRangeVlaues);
+				fieldMap.put("field_display_value", slQuestionRangeVlaues);
+				fieldMap.put("field_value", slQuestionRangeVlaues);
+
+				UIComponent.modifySetting(fieldMap, "Editable", "true");
+				UIComponent.modifySetting(fieldMap, DCLConstants.SETTING_INPUT_TYPE, strQuesInputType.toLowerCase());
+				UIComponent.modifySetting(fieldMap, "Remove Range Blank", "true");
+				UIComponent.modifySetting(fieldMap, DCLConstants.SETTING_FIELD_TYPE, "program");
+				UIComponent.modifySetting(fieldMap, "program", "ENODCLEFormTemplateUI");
+
+				UIComponent.modifySetting(fieldMap, "Sort Direction", "dessfcending");
+
+				if ("Edit".equalsIgnoreCase(mode))
+					UIComponent.modifySetting(fieldMap, "function", "getDefaultValue");
+				else if (UIUtil.isNullOrEmpty(mode) || "view".equalsIgnoreCase(mode))
+					UIComponent.modifySetting(fieldMap, "function", "getDefaultValue1");
+
+				if (mQuesIdResponse.containsKey(strQuesId)) {
+					Map mRelResponse = mQuesIdResponse.get(strQuesId);
+					String connId = (String) mRelResponse.get(DomainRelationship.SELECT_ID);
+					DomainRelationship drCOQuestionnaire = new DomainRelationship(connId);
+					String value = drCOQuestionnaire.getAttributeValue(context, strAttrQuestionSubmit);
+					if (UIUtil.isNotNullAndNotEmpty(value))
+						UIComponent.modifySetting(fieldMap, "Default1", value);
+				}
+				customerAttFields.add(fieldMap);
+			}
+			return customerAttFields;
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getDefaultValue(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		Map fieldMap = (Map) programMap.get(DCLConstants.FIELD_MAP);
+		Map settingsMap = (Map) fieldMap.get("settings");
+		String defaultValue = (String) settingsMap.get("Default1");
+		String inputType = (String) settingsMap.get(DCLConstants.SETTING_INPUT_TYPE);
+		if (UIUtil.isNullOrEmpty(defaultValue))
+			defaultValue = DomainConstants.EMPTY_STRING;
+		StringList slQuestionRangeVlaues = new StringList();
+		if (defaultValue.contains(DCLConstants.COMMA) && !inputType.equals("checkbox"))
+ {
+			List<String> slQuestionInputRangeValues = FrameworkUtil.split(defaultValue, DCLConstants.COMMA);
+			for (String rangeValue : slQuestionInputRangeValues) {
+				slQuestionRangeVlaues.add(rangeValue.trim());
+			}
+			slQuestionRangeVlaues = FrameworkUtil.split(defaultValue, DCLConstants.COMMA);
+		}
+
+		else if (UIUtil.isNotNullAndNotEmpty(defaultValue))
+			slQuestionRangeVlaues.add(defaultValue.trim());
+		return slQuestionRangeVlaues;
+
+	}
+
+	public String getDefaultValue1(Context context, String args[]) throws Exception {
+		Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+		Map fieldMap = (Map) programMap.get(DCLConstants.FIELD_MAP);
+		Map settingsMap = (Map) fieldMap.get("settings");
+		String defaultValue = (String) settingsMap.get("Default1");
+		String inputType = (String) settingsMap.get(DCLConstants.SETTING_INPUT_TYPE);
+		if (UIUtil.isNullOrEmpty(defaultValue))
+			defaultValue = DomainConstants.EMPTY_STRING;
+		defaultValue = defaultValue.replace(DCLConstants.COMMA, " | ");
+		return defaultValue;
+
+	}
+		@com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String saveEFormQuestionnaireForm(Context context, String args[]) throws Exception {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strRelChangeOrderQuestionnaire = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_RELATIONSHIP_RELATED_ITEM_QUESTIONNAIRE);
+			String strAttrQuestionSubmit = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_COMMENT);
+			String strObjectId[] = (String[]) programMap.get(QuestionnaireConstants.OBJECTID);
+			QuestionService questionService = new QuestionServiceImpl();
+			String eFormTemplateId = DomainObject.newInstance(context, strObjectId[0]).getInfo(context, "from["+PropertyUtil.getSchemaProperty(context,DCLConstants.SYMBOLIC_RELATIONSHIP_EFORM_TEMPLATE)+"].to.id");
+			List<Map> mListRelatedQuestions = questionService.getQuestionRelatedObjects(context, eFormTemplateId, "Question", (short) 1,  DomainConstants.EMPTY_STRING,  DomainConstants.EMPTY_STRING);
+			MapList customerAttFields = new MapList();
+			HashMap fieldMap = new HashMap<>();
+			for (Map mQues : mListRelatedQuestions) {
+
+				String stName = (String) mQues.get(DomainConstants.SELECT_ID);
+				String strQuesId = (String) mQues.get(DomainObject.SELECT_ID);
+				String strQuesRelId = (String) mQues.get(DomainRelationship.SELECT_ID);
+
+				String[] value = (String[]) programMap.get(strQuesId + "$" + strQuesRelId);
+				Map<String, Map<String, String>> mQuesIdResponse = new HashMap<String, Map<String, String>>();
+				ConfigureApprovalService configureApprovalService = new ConfigureApprovalServiceImpl();
+				mQuesIdResponse = configureApprovalService.getEFormConfigureConnectedQuestions(context, strObjectId[0]);
+				String v = DomainConstants.EMPTY_STRING;
+				if (value != null) {
+
+					for (int i = 0; i < value.length; i++) {
+						v += value[i].trim();
+						if (i < value.length - 1)
+							v += DCLConstants.COMMA;
+					}
+				}
+				if (mQuesIdResponse.containsKey(strQuesId)) {
+					Map mRelResponse = mQuesIdResponse.get(strQuesId);
+					String connId = (String) mRelResponse.get(DomainRelationship.SELECT_ID);
+					DomainRelationship drCOQuestionnaire = new DomainRelationship(connId);
+					if (UIUtil.isNotNullAndNotEmpty(v))
+						drCOQuestionnaire.setAttributeValue(context, strAttrQuestionSubmit, v);
+					else
+						DomainRelationship.disconnect(context, connId);
+				}
+				else if (value != null && UIUtil.isNotNullAndNotEmpty(value[0])) {
+
+					String cmd = "add connection $1 $2 $3 $4 $5 select $6 dump $7";
+					String connId = QuestionUtil.mqlCommand(context, cmd, true, strRelChangeOrderQuestionnaire, "from", strObjectId[0], "torel",
+							strQuesRelId, DomainConstants.SELECT_ID, DCLConstants.PIPE_SEPARATOR);
+					DomainRelationship drCOQuestionnaire = new DomainRelationship(connId);
+					drCOQuestionnaire.setAttributeValue(context, strAttrQuestionSubmit, v);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new Exception(e.getLocalizedMessage());
+		}
+		return DomainConstants.EMPTY_STRING;
+	}
+
+
+	public void updateOrganizationOfEFormTemplate(Context context, String args[]) throws FrameworkException {
+		try {
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strObjectId = (String) paramMap.get(DCLConstants.OBJECTID);
+			String strNewValue = (String) paramMap.get("New Value");
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			DCLUtil.mqlCommand(context, "mod bus $1 organization $2", true, strObjectId, strNewValue);
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	@com.matrixone.apps.framework.ui.PreProcessCallable
+	public void checkEditAccessOnEForm(Context context, String args[]) throws FrameworkException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			Map requestMap = (Map) programMap.get(DCLConstants.REQUESTMAP);
+			Map<?, ?> formMap = (Map<?, ?>) programMap.get(DCLConstants.FORM_MAP);
+			MapList formFieldList = (MapList) formMap.get(DCLConstants.FIELDS);
+			String strObjectId = (String) requestMap.get(DCLConstants.PARENTOID);
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			String strOwner = dObj.getInfo(context, DomainObject.SELECT_OWNER);
+			String strCurrent = dObj.getInfo(context, DomainObject.SELECT_CURRENT);
+			String strPolicy = dObj.getInfo(context, DomainObject.SELECT_POLICY);
+			String StrEFormTemplatePolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strPolicyStateInactive = PropertyUtil.getSchemaProperty(context, DCConstants.POLICY, StrEFormTemplatePolicy,
+					DCLConstants.SYMBOLIC_STATE_INACTIVE);
+			String StrEForm = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM);
+			if (!(strOwner.equals(context.getUser()) && strCurrent.equals(strPolicyStateInactive) && strPolicy.equals(StrEFormTemplatePolicy))) {
+				for (Object map : formFieldList) {
+					Map fieldMap = (Map) map;
+					String strFieldName = (String) fieldMap.get(DomainObject.SELECT_NAME);
+					if (strFieldName.equals("Responsible Organization") || strFieldName.equals("Responsible Role")) {
+						Map settingMap = (Map) fieldMap.get("settings");
+						settingMap.put("Editable", DCLConstants.FALSE);
+					}
+				}
+			}
+			if (strPolicy.equals(StrEForm)) {
+				for (Object map : formFieldList) {
+					Map fieldMap = (Map) map;
+					String strFieldName = (String) fieldMap.get(DomainObject.SELECT_NAME);
+					if (strFieldName.equals("eForm Requirement")) {
+						Map settingMap = (Map) fieldMap.get("settings");
+						settingMap.put("Editable", DCLConstants.FALSE);
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+
+		}
+	}
+	public StringList getResponsibleOrgRange(Context context, String args[]) throws DCLException {
+		StringList slOrgList = new StringList();
+		try {
+
+			String strOrgType = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Organization);
+			StringList slBusSelects = new StringList(DomainObject.SELECT_ID);
+			slBusSelects.add(DomainObject.SELECT_NAME);
+
+			MapList TraineeDocumentList = new MapList();
+			String strCheckState = "==";
+
+			StringBuilder sbWhere = new StringBuilder(); // "current==const'Active'";
+			sbWhere.append(DomainObject.SELECT_CURRENT);
+			sbWhere.append(strCheckState);
+			sbWhere.append("const\"");
+			sbWhere.append("Active");
+			sbWhere.append("\"");
+
+			List<Map> findObjectMapList = DomainObject.findObjects(context, strOrgType, DomainConstants.QUERY_WILDCARD,
+					DomainConstants.QUERY_WILDCARD, DomainConstants.QUERY_WILDCARD,null, sbWhere.toString(), true,
+					slBusSelects);
+			for (Map mp : findObjectMapList) {
+				slOrgList.add((String)mp.get(DomainObject.SELECT_NAME));
+				
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slOrgList;
+	}
+
+	public StringList getRoleForOrg(Context context, String args[]) throws DCLException {
+		StringList slOrgList = new StringList();
+		try {
+
+			String strRole = MqlUtil.mqlCommand(context, "list role $1", true, "*");
+			List<String> slRoles = FrameworkUtil.split(strRole, System.getProperty("line.separator"));
+			for (String str : slRoles) {
+				if (UIUtil.isNotNullAndNotEmpty(str))
+				slOrgList.add(str);
+			}
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+		return slOrgList;
+	}
+
+		@com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String updateResponsibleRoleOfEFormTemplate(Context context, String args[]) throws FrameworkException {
+		try {
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strObjectId[] = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String strNewValue[] = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID_ACTUAL);
+			String[] strfieldName = (String[]) programMap.get(DCLConstants.FIELD_NAME);
+			String[] strfieldNameDisplay = (String[]) programMap.get(DCLConstants.FIELD_NAME_DISPLAY);
+			String[] strfieldNameActual = (String[]) programMap.get(DCLConstants.FIELD_NAME_ACTUAL);
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId[0]);
+			StringList slRole = FrameworkUtil.split(strNewValue[0], DCLConstants.PIPE_SEPARATOR);
+			return QuestionUtil.encodeFunctionForJavaScript(context, false, "getResponsibleRoleOnTable", (String) slRole.get(0),
+					strfieldNameDisplay[0], strfieldNameActual[0]);
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.questionnaire.ExecuteCallable
+	public String getResponsibleRoleOfEFormTemplate(Context context, String args[]) throws FrameworkException {
+		try {
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+			Map paramMap = (Map) programMap.get(DCLConstants.PARAMMAP);
+			String strObjectId[] = (String[]) programMap.get(DCLConstants.OBJECTID);
+			String strNewValue[] = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID_ACTUAL);
+			String[] strTableIds = (String[]) programMap.get(DCLConstants.EMX_TABLE_ROW_ID);
+			String[] strColumnSel = (String[]) programMap.get(DCLConstants.COLUMN_SELECT);
+			StringList slRole = FrameworkUtil.split(strNewValue[0], DCLConstants.PIPE_SEPARATOR);
+			return QuestionUtil.encodeFunctionForJavaScript(context, false, "getResponsibleRoleOnForm", (String) slRole.get(0));
+		}
+		catch (Exception e) {
+			throw new FrameworkException(e);
+		}
+	}
+
+	public void promoteLastRevisionToObsolete(Context context, String args[]) throws DCLException {
+		try {
+			String strEFormTemplatePolicy = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_EFORM_TEMPLATE);
+			String strObjectId = (String) args[0];
+
+			copyQuestionToNewRevision(context, strObjectId);
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	private void connectLatestRevisionToQuestionsOnChangeTemplate(Context context, String strObjectId) throws DCLException {
+		try {
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			BusinessObject newRev = dObj.getNextRevision(context);
+			DomainObject newRevObj = DomainObject.newInstance(context, newRev);
+			QuestionService questionService = new QuestionServiceImpl();
+			QuestionUtil.ensureNotEmpty(strObjectId, "Object id is null");
+			String strTypeQuestion = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Question);
+			String strRelQues = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_relationship_Question);
+			String strAttrQuestionResponse = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RESPONSE);
+			StringList slObjectSelects = new StringList();
+			slObjectSelects.add(DomainConstants.SELECT_ID);
+			slObjectSelects.add(DomainConstants.SELECT_NAME);
+			slObjectSelects.add(DomainConstants.SELECT_TYPE);
+
+			StringList slRelSelects = new StringList();
+			slRelSelects.add(DomainRelationship.SELECT_ID);
+
+			List<Map> mlRelatedObjects = DomainObject.newInstance(context, strObjectId).getRelatedObjects(context, strRelQues, // String
+																																// relPattern
+					strTypeQuestion, // String typePattern
+					slObjectSelects, // List<String> objectSelects,
+					slRelSelects, // List<String> relationShipselect,
+					true, // boolean getTo,
+					false, // boolean getFrom,
+					(short) 1, // short recurseToLevel,
+					null, // String objectWhere,
+					null, // String relationshipWhere,
+					0); // int limit
+
+			for (Map mp : mlRelatedObjects) {
+				String strQuestionResponseVal = DomainRelationship.getAttributeValue(context, (String) mp.get(DCLConstants.ID_CONNECTION),
+						strAttrQuestionResponse);
+				String[] strQuestionsIds = { (String) mp.get(DomainConstants.SELECT_ID) };
+				Map mRelIds = DomainRelationship.connect(context, newRevObj, new RelationshipType(strRelQues), false, strQuestionsIds);
+				for (Iterator iterator = mRelIds.keySet().iterator(); iterator.hasNext();) {
+					Object objKey = (Object) iterator.next();
+					String strRelId = (String) mRelIds.get(objKey);
+					DomainRelationship drQuestion = DomainRelationship.newInstance(context, strRelId);
+					if (UIUtil.isNotNullAndNotEmpty(strQuestionResponseVal))
+						drQuestion.setAttributeValue(context, strAttrQuestionResponse, strQuestionResponseVal);
+					DomainRelationship.disconnect(context, (String) mp.get(DCLConstants.ID_CONNECTION));
+			}
+
+		}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	private void copyQuestionToNewRevision(Context context, String strObjectId) throws DCLException {
+		try {
+			String strAttrSequenceOrder = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_SEQUENCE_ORDER);
+			String attributeQuestionCategory = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_CATEGORY);
+			String attributeQuestionText = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_COMMENT);
+			String strAttrQuestionRangeType = PropertyUtil.getSchemaProperty(context, QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_TYPE);
+			String strAttrQuestionRangeValue = PropertyUtil.getSchemaProperty(context,
+					QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_QUESTION_RANGE_VALUES);
+
+			DomainObject dObj = DomainObject.newInstance(context, strObjectId);
+			BusinessObject newRev = dObj.getNextRevision(context);
+			DomainObject newRevObj = DomainObject.newInstance(context, newRev);
+			QuestionService questionService = new QuestionServiceImpl();
+			List<Map> questionOnLastRev = questionService.getQuestionRelatedObjects(context, strObjectId, "Question", (short) 1, DomainConstants.EMPTY_STRING,DomainConstants.EMPTY_STRING);
+			for (Map mp : questionOnLastRev) {
+				Map attrMap = new HashMap();
+				attrMap.put(attributeQuestionCategory, (String) mp.get(DomainObject.getAttributeSelect(attributeQuestionCategory)));
+				attrMap.put(attributeQuestionText, (String) mp.get(DomainObject.getAttributeSelect(attributeQuestionText)));
+				attrMap.put(strAttrQuestionRangeType, (String) mp.get(DomainObject.getAttributeSelect(strAttrQuestionRangeType)));
+				attrMap.put(strAttrQuestionRangeValue, (String) mp.get(DomainObject.getAttributeSelect(strAttrQuestionRangeValue)));
+				
+			String strNewObjectId = FrameworkUtil.autoName(context, DomainSymbolicConstants.SYMBOLIC_type_Question,
+					DomainSymbolicConstants.SYMBOLIC_policy_Question);
+			DomainObject dobjObject = DomainObject.newInstance(context, strNewObjectId);
+				dobjObject.setAttributeValues(context, attrMap);
+				dobjObject.setDescription(context, (String) mp.get(DomainObject.SELECT_DESCRIPTION));
+				DomainRelationship doRel = DomainRelationship.connect(context, newRevObj, "Question", dobjObject);
+				doRel.setAttributeValue(context, strAttrSequenceOrder,
+ (String) mp.get(DomainRelationship.getAttributeSelect(strAttrSequenceOrder)));
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	@com.dassault_systemes.enovia.documentcommon.ExecuteCallable
+	public Map getTemplateDetails(Context context, String[] args) throws DCLException {
+		try {
+
+			Map<String, String> mpReturn = new HashMap<String, String>();
+			Map hmParamMap = (Map) JPO.unpackArgs(args);
+			String[] strTemplate = (String[]) hmParamMap.get("templateOID");
+			String strTemplateOID = strTemplate[0];
+
+			String strOrg = DomainConstants.EMPTY_STRING;
+			String strRole = DomainConstants.EMPTY_STRING;
+			String strTaskRequirement = DomainConstants.EMPTY_STRING;
+			String strAttrResponsibleRole="attribute["
+										+PropertyUtil.getSchemaProperty(context,QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_RESPONSIBLE_ROLE)
+										+"]";
+			
+			String strAttrTaskRequirementSelect="attribute["
+												+PropertyUtil.getSchemaProperty(context,QuestionnaireConstants.SYMBOLIC_ATTRIBUTE_TASK_REQUIREMENT)
+												+"]";
+			
+			if (UIUtil.isNotNullAndNotEmpty(strTemplateOID)) {
+
+				StringList slSelect = new StringList();
+
+				slSelect.add(strAttrResponsibleRole);
+				slSelect.add(DomainConstants.SELECT_ORGANIZATION);
+				slSelect.add(strAttrTaskRequirementSelect);
+
+				Map<String, String> mTempInfo = DCLUtil.getInfo(context, strTemplateOID, slSelect);
+
+				strRole = mTempInfo.get(strAttrResponsibleRole);
+				strOrg = mTempInfo.get(DomainConstants.SELECT_ORGANIZATION);
+				strTaskRequirement=mTempInfo.get(strAttrTaskRequirementSelect);
+			}
+
+			StringBuffer sBuff = new StringBuffer();
+			sBuff.append(strRole).append(DCLConstants.PIPE_SEPARATOR);
+			sBuff.append(strOrg).append(DCLConstants.PIPE_SEPARATOR);
+			sBuff.append(strTaskRequirement).append(DCLConstants.PIPE_SEPARATOR);
+			
+			mpReturn.put(DCLConstants.ACTION_AJAX, sBuff.toString());
+			return mpReturn;
+		}
+		catch (Exception e) {
+			throw new DCLException();
+		}
+	}
+
+}
+

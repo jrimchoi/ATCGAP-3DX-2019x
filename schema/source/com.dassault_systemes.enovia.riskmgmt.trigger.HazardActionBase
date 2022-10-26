@@ -1,0 +1,157 @@
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.BusinessObject;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.Hazard;
+import com.dassault_systemes.enovia.riskmgmt.Hazard.HazardProcess;
+import com.dassault_systemes.enovia.riskmgmt.HazardTemplate;
+import com.dassault_systemes.enovia.riskmgmt.QueryUtil;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws RiskMgmtException {
+		super();
+	}
+
+	/**
+	 * Send notification to new Hazard Owner on change ownership
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public void sendChangeOwnerNotification(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String strHazardId = args[0];
+			String strNewOwner = args[1];
+			String strPreviousOwner = context.getUser();
+			String strHazardName = DomainConstants.EMPTY_STRING;
+			String strState = DomainConstants.EMPTY_STRING;
+			String strComments = DomainConstants.EMPTY_STRING;
+			String strPolicy = DomainConstants.EMPTY_STRING;
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId) && !RiskMgmtUtil.isNullOrEmpty(strNewOwner) && !RiskMgmtUtil.isNullOrEmpty(strPreviousOwner)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strHazardId }, RiskMgmtUtil.stringList(
+						DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT, DomainConstants.SELECT_POLICY,
+						DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_COMMENTS)));
+				if (!RiskMgmtUtil.isNullOrEmpty(returnMap)) {
+					for (Object obj : returnMap) {
+						Map requestMap = (Map) obj;
+						strHazardName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+						strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+						strPolicy = (String) requestMap.get(DomainConstants.SELECT_POLICY);
+						strComments = (String) requestMap.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_COMMENTS));
+					}
+					strState = RiskMgmtUtil.getStateI18NString(context, strPolicy, strState);
+					String strSubject = MessageUtil.getMessage(context, null, "RiskMgmt.Hazard.ChangeOwnerNotification.Subject", null, null,
+							context.getLocale(), RISK_MGMT_STRING_RESOURCE);
+					String strMessage = MessageUtil.getMessage(context, null, "RiskMgmt.Hazard.ChangeOwnerNotification.Message", new String[] {
+							strHazardName, strNewOwner, strPreviousOwner, strState, strComments }, null, context.getLocale(),
+							RISK_MGMT_STRING_RESOURCE);
+					MailUtil.sendNotification(context, RiskMgmtUtil.stringList(strNewOwner), null, null, strSubject, null, null, strMessage, null,
+							null, RiskMgmtUtil.stringList(strHazardId), null);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Sets the required Process.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public void setProcess(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String strHazardId = args[0];
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardId)
+					&& (RiskMgmtUtil.getTypeKindOf(context, DomainObject.newInstance(context, strHazardId), SYMBOLIC_TYPE_HAZARD))
+							.containsValue(Boolean.TRUE)) {
+				Hazard hazard = new Hazard(strHazardId);
+				String strRiskReductionNeeded = hazard.getAttributeValue(context, SYM_ATTR_RISK_REDUCTION_NEEDED.get(context));
+				String strHazardProcess = hazard.getProcess(context);
+				if (RANGE_NO.equalsIgnoreCase(strRiskReductionNeeded) && !HazardProcess.COMPLETION.toString().equals(strHazardProcess)) {
+					hazard.setProcess(context, HazardProcess.COMPLETION);
+				}
+				else if ((RANGE_UNDEFINED.equalsIgnoreCase(strRiskReductionNeeded) || RANGE_YES.equalsIgnoreCase(strRiskReductionNeeded))
+						&& !HazardProcess.EVALUATION.toString().equals(strHazardProcess)) {
+					hazard.setProcess(context, HazardProcess.EVALUATION);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+	/**
+	 * Copies hazards from hazard template to new template created.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	public void copyConnectedHazards(Context context, String[] args) throws RiskMgmtException {
+		try {
+			String strHazardTemplateId = args[0];
+			String strNewHazardTemplateId = args[1];
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardTemplateId) && !RiskMgmtUtil.isNullOrEmpty(strNewHazardTemplateId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(strHazardTemplateId);
+				HazardTemplate newHazardTemplate = new HazardTemplate(strNewHazardTemplateId);
+				List<Map<?, ?>> relHazardList = hazardTemplate.getHazards(context, new StringList(DomainObject.SELECT_ID), new StringList(
+						DomainRelationship.SELECT_ID), DomainConstants.EMPTY_STRING);
+				if (!RiskMgmtUtil.isNullOrEmpty(relHazardList)) {
+					for (Map<?, ?> map : relHazardList) {
+						String hazardId = (String) map.get(DomainObject.SELECT_ID);
+						if (!RiskMgmtUtil.isNullOrEmpty(hazardId)) {
+							Hazard hazard = new Hazard(hazardId);
+							String name = DomainObject.getAutoGeneratedName(context, SYM_TYPE_HAZARD.toString(), "");
+							BusinessObject businessObject = hazard.cloneObject(context, name);
+							Hazard clonedObj = new Hazard(businessObject.getObjectId(context));
+							QueryUtil.connectObjects(context, newHazardTemplate, SYM_REL_TEMPLATE_HAZARDS.toString(), clonedObj, null);
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+}
+

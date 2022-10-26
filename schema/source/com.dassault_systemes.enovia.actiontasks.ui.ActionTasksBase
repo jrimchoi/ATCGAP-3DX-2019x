@@ -1,0 +1,462 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+
+import com.dassault_systemes.enovia.actiontasks.ActionTasks;
+import com.dassault_systemes.enovia.actiontasks.ActionTasksException;
+import com.dassault_systemes.enovia.actiontasks.EmxTableRowId;
+import com.dassault_systemes.enovia.actiontasks.Helper;
+import com.dassault_systemes.enovia.actiontasks.QueryUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * UI Service JPO for managing Action Tasks related UI
+ * 
+ * @author V8L
+ * 
+ */
+public class ${CLASSNAME} {
+
+	private final static ActionTasks ACTIONTASKS = ActionTasks.getInstance();
+
+	/**
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws ActionTasksException
+	 *             if the operation fails
+	 * @since 10.0.0.0
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws ActionTasksException {
+		super();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getTableACTSummary(Context context, String[] args) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+			List<Map<?, ?>> mListACT = ACTIONTASKS.getAllActionTask(context,
+					DomainObject.newInstance(context, sObjectId),
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT,
+							DomainObject.SELECT_TYPE,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_SCHEDULED_COMPLETION_DATE),
+							DomainObject.SELECT_OWNER,
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_INSTRUCTIONS),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_DUEDATE_OFFSET),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_TITLE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ACTUAL_COMPLETION_DATE),
+							DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ALLOW_DELEGATION)),
+					Helper.stringList(DomainRelationship.SELECT_NAME, DomainRelationship.SELECT_ID), null);
+			MapList mListACTList = new MapList(mListACT);
+			return mListACTList;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public Map<?, ?> createActionTasks(Context context, String[] args) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<?, ?> RequestValuesMap = (Map<?, ?>) programMap.get("RequestValuesMap");
+			String sObjectId = (String) programMap.get("objectId");
+			String emxTableRowId[] = (String[]) RequestValuesMap.get("emxTableRowId");
+			if (!Helper.isNullOrEmpty(emxTableRowId)) {
+				List<EmxTableRowId> parentIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+				EmxTableRowId rowId = parentIds.get(0);
+				sObjectId = rowId.getParentObjectId();
+			}
+			String timeZone = (String) programMap.get("timeZone");
+			String[] strTitle = (String[]) RequestValuesMap.get("Title");
+			String[] strDueDate = (String[]) RequestValuesMap.get("DueDate");
+			String[] strInstructions = (String[]) RequestValuesMap.get("Instructions");
+			String[] strOptionsSelect = (String[]) RequestValuesMap.get("OptionsSelect");
+			String[] strAssigneeOID = (String[]) RequestValuesMap.get("AssigneeOID");
+			List<String> personList = FrameworkUtil.split(strAssigneeOID[0], "|");
+			List<String> strOptionsSelectList = new ArrayList<>();
+			if (strOptionsSelect != null) {
+				strOptionsSelectList = Arrays.asList(strOptionsSelect);
+			}
+			List<DomainObject> assigneeList = new ArrayList<>();
+			for (String person : personList) {
+				assigneeList.add(DomainObject.newInstance(context, person));
+			}
+
+			Map<ActionTasks.ActionTasksAttributeName, String> actionTaskAttrMap = new HashMap<>();
+			actionTaskAttrMap.put(ActionTasks.ActionTasksAttributeName.ATTRIBUTE_TITLE, strTitle[0]);
+			if (!Helper.isNullOrEmpty(strDueDate) && !Helper.isNullOrEmpty(strDueDate[0])) {
+				String userDate = getDateinEmatrixFormat(context, strDueDate[0], timeZone);
+				actionTaskAttrMap.put(ActionTasks.ActionTasksAttributeName.ATTRIBUTE_SCHEDULED_COMPLETION_DATE,
+						userDate);
+			}
+			actionTaskAttrMap.put(ActionTasks.ActionTasksAttributeName.ATTRIBUTE_INSTRUCTIONS, strInstructions[0]);
+			if (strOptionsSelectList.contains("Allow Delegation")) {
+				actionTaskAttrMap.put(ActionTasks.ActionTasksAttributeName.ATTRIBUTE_ALLOW_DELEGATION, "True");
+			}
+			String routeId = ACTIONTASKS.addActionTask(context, DomainObject.newInstance(context, sObjectId),
+					actionTaskAttrMap, assigneeList);
+			returnMap.put("id", routeId);
+			return returnMap;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	private String getDateinEmatrixFormat(Context context, String date, String timeZone) throws Exception {
+		SimpleDateFormat MATRIX_DATE_FORMAT = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+		double dClientTimeOffset = (new Double(timeZone)).doubleValue();
+		Date userDate = eMatrixDateFormat.getJavaDate(date);
+		Calendar c = Calendar.getInstance();
+		c.setTime(userDate);
+		c.set(Calendar.HOUR_OF_DAY, 23);
+		c.set(Calendar.MINUTE, 59);
+		c.set(Calendar.SECOND, 59);
+		c.set(Calendar.MILLISECOND, 999);
+		userDate = c.getTime();
+
+		String strUserDate = MATRIX_DATE_FORMAT.format(userDate);
+		strUserDate = eMatrixDateFormat.getFormattedInputDate(context, date, dClientTimeOffset, context.getLocale());
+		return strUserDate;
+	}
+
+	public Map<?, ?> getRangeFormACTActionTaskCreateFieldAllowDelegation(Context context, String args[])
+			throws ActionTasksException {
+		Map<String, StringList> rangeMap = new HashMap<String, StringList>();
+		try {
+			StringList sListActualChoices = new StringList("Allow Delegation");
+			StringList sListDisplayChoices = new StringList(
+					Helper.getI18NString(context, "ActionTasks.Table.ACTSummary.Column.AllowDelegation.Label"));
+			rangeMap.put("field_choices", sListActualChoices);
+			rangeMap.put("field_display_choices", sListDisplayChoices);
+			return rangeMap;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.actiontasks.ExecuteCallable
+	public String actionCreateActionTasks(Context context, String args[]) throws ActionTasksException {
+		try {
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshTableACTSummary");
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public String actionCommandACTDeleteSummary(Context context, String args[]) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			List<String> asctionTaskIDs = new ArrayList<String>(emxTableRowId.length);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				asctionTaskIDs.add(rowId.getObjectId());
+			}
+
+			ACTIONTASKS.deleteActionTask(context, asctionTaskIDs);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshTableACTSummary");
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.actiontasks.ExecuteCallable
+	public String actionCommandACTBlockSummary(Context context, String args[]) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			List<String> asctionTaskIDs = new ArrayList<String>(emxTableRowId.length);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				asctionTaskIDs.add(rowId.getObjectId());
+			}
+			ACTIONTASKS.setBlockingActionTask(context, asctionTaskIDs);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshTableACTSummary");
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	@com.dassault_systemes.enovia.actiontasks.ExecuteCallable
+	public String actionCommandACTUnblockSummary(Context context, String args[]) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			List<String> asctionTaskIDs = new ArrayList<String>(emxTableRowId.length);
+			List<EmxTableRowId> emxTableRowIds = EmxTableRowId.getTableRowIds(emxTableRowId);
+			for (EmxTableRowId rowId : emxTableRowIds) {
+				asctionTaskIDs.add(rowId.getObjectId());
+			}
+			ACTIONTASKS.setUnBlockingActionTask(context, asctionTaskIDs);
+			return Helper.encodeFunctionForJavaScript(context, Boolean.FALSE, "refreshTableACTSummary");
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public Vector showStatusGif(Context context, String[] args) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			MapList objList = (MapList) programMap.get("objectList");
+			ArrayList<String> columnVals = new ArrayList<String>(objList.size());
+			Iterator objListItr = objList.iterator();
+			String str1 = "<div class=\"route-graphical\"><div class=\"";
+			String str2 = "\"><span class=\"badge\" style=\"margin: auto; position: static;\" title=\"";
+			String str3 = "\"></span></div></div>";
+			while (objListItr.hasNext()) {
+				Map<?, ?> m = (Map<?, ?>) objListItr.next();
+				int status = ACTIONTASKS.getActionTaskDueDateStatus(context,
+						DomainObject.newInstance(context, (String) m.get(DomainObject.SELECT_ID)));
+				switch (status) {
+				case 0: {
+					List<Map<?, ?>> atMap = QueryUtil.getInfo(context,
+							new String[] { (String) m.get(DomainObject.SELECT_ID) },
+							Helper.stringList(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_COMMENTS)));
+					String strComments = Helper.getI18NString(context,
+							"ActionTasks.Table.ACTSummary.Column.Status.Complete1") + "&#10;"
+							+ Helper.getI18NString(context, "ActionTasks.Table.ACTSummary.Column.Status.Complete2")
+							+ atMap.get(0).get(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_COMMENTS))
+									.toString();
+					columnVals
+							.add((new StringBuffer()).append(str1 + "approved" + str2 + strComments + str3).toString());
+					break;
+				}
+				case 1: {
+					String strComments = Helper.getI18NString(context,
+							"ActionTasks.Table.ACTSummary.Column.Status.NotComplete");
+					columnVals.add((new StringBuffer()).append(str1 + "approaching-due" + str2 + strComments + str3)
+							.toString());
+					break;
+				}
+				case 2: {
+					String strComments = Helper.getI18NString(context,
+							"ActionTasks.Table.ACTSummary.Column.Status.Overdue");
+					columnVals
+							.add((new StringBuffer()).append(str1 + "past-due" + str2 + strComments + str3).toString());
+					break;
+				}
+				case 3: {
+					String strComments = Helper.getI18NString(context,
+							"ActionTasks.Table.ACTSummary.Column.Status.NoDueDate");
+					columnVals
+							.add((new StringBuffer()).append(str1 + "past-due" + str2 + strComments + str3).toString());
+					break;
+				}
+				case 4: {
+					List<Map<?, ?>> atMap = QueryUtil.getInfo(context,
+							new String[] { (String) m.get(DomainObject.SELECT_ID) },
+							Helper.stringList(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_COMMENTS)));
+					String strComments = Helper.getI18NString(context,
+							"ActionTasks.Table.ACTSummary.Column.Status.Reject") + "&#10;"
+							+ Helper.getI18NString(context, "ActionTasks.Table.ACTSummary.Column.Status.Complete2")
+							+ atMap.get(0).get(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_COMMENTS))
+									.toString();
+					columnVals
+							.add((new StringBuffer()).append(str1 + "rejected" + str2 + strComments + str3).toString());
+					break;
+				}
+				}
+			}
+			return new Vector<String>(columnVals);
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public boolean checkAccess(Context context, String[] args) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+			return ACTIONTASKS.checkActionAccess(context, DomainObject.newInstance(context, sObjectId));
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public boolean checkCreateAccess(Context context, String[] args) throws ActionTasksException {
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+			return ACTIONTASKS.checkCreateAccess(context, DomainObject.newInstance(context, sObjectId));
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public Boolean setAssignee(Context context, String[] args) throws ActionTasksException {
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			HashMap<?, ?> paramMap = (HashMap<?, ?>) programMap.get("paramMap");
+			String objectId = (String) paramMap.get("objectId");
+			String newPersonName = (String) paramMap.get("New Value");
+			List<Map<?, ?>> personMap = QueryUtil.findObjects(context, "Person",
+					(new StringBuffer()).append("(name==\"").append(newPersonName).append("\")").toString(),
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_ID));
+			String personID = (String) personMap.get(0).get(DomainObject.SELECT_ID);
+			ACTIONTASKS.updateAssignee(context, DomainObject.newInstance(context, objectId),
+					DomainObject.newInstance(context, personID));
+			return true;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public List<Map<?, ?>> dynamicTableACTSummaryolumnAssignee(Context context, String[] args)
+			throws ActionTasksException {
+		try {
+			List<Map<?, ?>> retunColumnList = new ArrayList<>();
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			Map<?, ?> requestMap = (Map<?, ?>) programMap.get("requestMap");
+			String strId = (String) requestMap.get("objectId");
+			Map<Object, Object> columnMap = new HashMap<Object, Object>();
+			Map<String, String> settings = new HashMap<String, String>();
+			columnMap.put("name", "Assignee");
+			columnMap.put("label", "emxComponents.TaskSummary.Assignee");
+			String portal = (String) requestMap.get("portal");
+			boolean isPQCInstalled = FrameworkUtil.isSuiteRegistered(context, "appVersionPQC", false, null, null);
+			if (isPQCInstalled && null != portal && portal.equalsIgnoreCase(
+					PropertyUtil.getSchemaProperty(context, "portal_PQCComplaintPropertiesEventPortal"))) {
+				columnMap.put("range", new StringBuffer().append(
+						"../common/emxFullSearch.jsp?field=TYPES=type_Person:CURRENT=policy_Person.state_Active:PQC_COMPLAINT_RELATED_ASSIGNEE=")
+						.append(strId)
+						.append("&table=AEFPersonChooserDetails&selection=single&submitURL=../common/AEFSearchUtil.jsp&showInitialResults=true")
+						.toString());
+			} else {
+				columnMap.put("range",
+						"../common/emxFullSearch.jsp?field=TYPES=type_Person:CURRENT=policy_Person.state_Active&table=AEFPersonChooserDetails&selection=single&submitURL=../common/AEFSearchUtil.jsp");
+			}
+			settings.put("Column Type", "program");
+			settings.put("Editable", "true");
+			settings.put("Popup Size", "Large");
+			settings.put("Registered Suite", "Components");
+			settings.put("Required", "true");
+			settings.put("Show Clear Button", "true");
+			settings.put("Update Function", "setAssignee");
+			settings.put("Update Program", "com.dassault_systemes.enovia.actiontasks.ui.ActionTasks");
+			settings.put("Width", "200");
+			settings.put("format", "user");
+			settings.put("function", "showRouteTaskAssignee");
+			settings.put("program", "emxInboxTask");
+			settings.put("Edit Access Function", "accessForTableACTSummaryColumnAll");
+			settings.put("Edit Access Program", "com.dassault_systemes.enovia.actiontasks.ui.ActionTasks");
+			columnMap.put("settings", settings);
+			retunColumnList.add(columnMap);
+			return new MapList(retunColumnList);
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public static Boolean accessTableACTSummaryColumnBlockUnBlock(Context context, String[] args)
+			throws ActionTasksException {
+		try {
+			HashMap<?, ?> programMap = (HashMap<?, ?>) JPO.unpackArgs(args);
+			String sObjectId = (String) programMap.get("objectId");
+			String stateName = getBlockingStateName(context, DomainObject.newInstance(context, sObjectId));
+			if (null == stateName)
+				return false;
+			return true;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	private static String getBlockingStateName(Context context, DomainObject domObj) throws ActionTasksException {
+		try {
+			Map<String, String> objMap = domObj.getInfo(context,
+					Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_TYPE, DomainObject.SELECT_POLICY));
+			String strType = objMap.get(DomainObject.SELECT_TYPE);
+			String strPolicy = objMap.get(DomainObject.SELECT_POLICY);
+			String selType = FrameworkUtil.getAliasForAdmin(context, "Type", strType, true);
+			String selPolicy = FrameworkUtil.getAliasForAdmin(context, "Policy", strPolicy, true);
+			String propertyFileKey = Helper.getProperty(context, "ENOActionTasks.Routes.BlockingState");
+			propertyFileKey = propertyFileKey.trim();
+			List<String> list1 = FrameworkUtil.split(propertyFileKey, ",");
+			for (String key : list1) {
+				List<String> list2 = FrameworkUtil.split(key, "|");
+				if (list2.get(0).toString().equalsIgnoreCase(selType)) {
+					List<String> list3 = FrameworkUtil.split(list2.get(1), "@");
+					if (list3.get(0).toString().equalsIgnoreCase(selPolicy)) {
+						return list3.get(1);
+					}
+				}
+			}
+			return null;
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	/**
+	 * Access progam to restrict or enable access for the cells in Action Task
+	 * Summary table
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ActionTasksException
+	 */
+	public static StringList accessForTableACTSummaryColumnAll(Context context, String[] args)
+			throws ActionTasksException {
+		try {
+			Map<?, ?> inputMap = (Map<?, ?>) JPO.unpackArgs(args);
+			MapList objectMap = (MapList) inputMap.get("objectList");
+			ArrayList<String> returnStringList = new ArrayList<String>(objectMap.size());
+			for (Object object : objectMap) {
+				Map<?, ?> curObjectMap = (Map<?, ?>) object;
+				String strCurrent = (String) curObjectMap.get(DomainConstants.SELECT_CURRENT);
+				String ITCompleteStateName = FrameworkUtil.lookupStateName(context, DomainObject.TYPE_INBOX_TASK,
+						"state_Complete");
+				if (strCurrent.equalsIgnoreCase(ITCompleteStateName)) {
+					returnStringList.add(Boolean.valueOf(false).toString());
+				} else {
+					returnStringList.add(Boolean.valueOf(true).toString());
+				}
+			}
+			return new StringList(returnStringList);
+		} catch (Exception e) {
+			throw new ActionTasksException(e);
+		}
+	}
+
+	public HashMap preProcessSetPhysicalid(Context context, String[] args) throws Exception {
+		HashMap<String, String> objectMap = new HashMap<>();
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("paramMap");
+		String contextID = (String) requestMap.get("objectId");
+		DomainObject domObj = DomainObject.newInstance(context, contextID);
+		String physicalid = domObj.getInfo(context, "physicalid");
+		objectMap.put("physicalid", physicalid);
+		return objectMap;
+	}
+}
+

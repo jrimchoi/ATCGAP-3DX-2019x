@@ -1,0 +1,96 @@
+var params = proc.declareParameters([{name:"PRD",  type:"NavigationSet"}, 
+                                     {name:"PRCS", type:"NavigationSet"},
+                                     {name:"PROD_SYS",  type:"NavigationSet"},
+                                     {name:"WK_PL",  type:"NavigationSet"},{name:"SEL_WK_PL", type:"NavigationSet"},
+                                     {name:"RSC",  type:"NavigationSet"}],
+                                     [{name:"ConfigurationsVal", type:"Configurations"}]);
+
+var ExpandPrimitives     = Java.type("com.dassault_systemes.completion.service.ExpandPrimitives");
+var NavigationPrimitives = Java.type("com.dassault_systemes.completion.service.NavigationPrimitives");
+var CompletionServicesConstants = Java.type("com.dassault_systemes.completion.service.CompletionServicesConstants");
+var FilterServices = Java.type("com.dassault_systemes.completion.service.FilterServices");
+var DebugTimer = Java.type("com.dassault_systemes.completionServices.base.DebugTimer");
+var System = Java.type("java.lang.System");
+var navSets = [PRD, PRCS, WK_PL];
+
+mql.startTransaction(false);
+
+CompletionProcedure.runFunction (ConfigurationsVal, navSets, function(context, outputData) {
+
+	var UC2CompletionID = "UC2";
+
+	var UserDefCompletionStop = System.getenv().get("UserDefCompletionStop");
+	var completionID="";
+	var primitiveName="";
+	if (UserDefCompletionStop != null)
+	{
+		var UserDefCompletionStopTab = UserDefCompletionStop.split("|");
+		completionID = UserDefCompletionStopTab[0];
+		primitiveName = UserDefCompletionStopTab[1];
+	}
+
+	while (true)
+	{
+
+		///////////////////////////////////////
+		// 1- Expand all Selected Operation 
+		///////////////////////////////////////
+		var expandOperationTimer = new DebugTimer(context, 0, "Expand all Selected Operation", true);
+		var resExpandOperation = ExpandPrimitives.expandSystem(context, SEL_WK_PL, 0);
+		WK_PL = WK_PL.merge(resExpandOperation);
+		expandOperationTimer.complete();
+		if (completionID.equalsIgnoreCase(UC2CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandSystemPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 2- Retrieves implemented processes for all selected Operation and Children.
+		///////////////////////////////////////
+		var retreiveProcessTimer = new DebugTimer(context, 0, "Retrieves implemented processes for all selected Operation and Children", true);
+		var selectedOperationandChildren = SEL_WK_PL.merge(resExpandOperation);
+		var navMode = [false, true];
+		var resProcess = NavigationPrimitives.navigateFromSystemToProcess(context, selectedOperationandChildren, navMode);
+		retreiveProcessTimer.complete();
+		if (completionID.equalsIgnoreCase(UC2CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionSystemProcessPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 3- Expand All Processes retrieved from previous step
+		///////////////////////////////////////
+		var expandProcessTimer = new DebugTimer(context, 0, "Expand All Processes retrieved from previous step", true);
+		var resExpandProcess = ExpandPrimitives.expandProcess(context, resProcess, 0);
+		expandProcessTimer.complete();
+		PRCS = PRCS.merge(resProcess);
+		PRCS = PRCS.merge(resExpandProcess);
+		if (completionID.equalsIgnoreCase(UC2CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.ExpandProcessPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 4- Process to Product Completion : from what we got from previous step
+		///////////////////////////////////////
+		var retreiveProductTimer = new DebugTimer(context, 0, "Process to Product Completion : from what we got from previous step", true);
+		var RetreivedProcessAndChildren = resProcess.merge(resExpandProcess);
+		var navMode2 = [false, false,true];
+		var resProduct = NavigationPrimitives.navigateFromProcessToProduct(context, RetreivedProcessAndChildren, navMode2);
+		retreiveProductTimer.complete();
+		PRD = PRD.merge(resProduct);
+		if (completionID.equalsIgnoreCase(UC2CompletionID) && primitiveName.equalsIgnoreCase(CompletionServicesConstants.SmartCompletionProcessProductPrimitiveName)) break;
+
+		///////////////////////////////////////
+		// 5- Expand Products 
+		///////////////////////////////////////
+		var expandProductTimer = new DebugTimer(context, 0, "Expand Products", true);
+		var resExpandProduct = ExpandPrimitives.expandProduct(context, resProduct, 0);
+		if (resExpandProduct != null)
+			PRD = PRD.merge(resExpandProduct);
+		expandProductTimer.complete();
+		break;
+	}
+
+	///////////////////////////////////////
+	// 6- Open(PRD,PRCS,PROD_SYS,WK_PL,RSC)
+	///////////////////////////////////////
+	outputData.add("Product", PRD);
+	outputData.add("Process", PRCS);
+	outputData.add("System", PROD_SYS);
+	outputData.add("WorkPlan", WK_PL);
+	outputData.add("Resource", RSC);
+});
+mql.abortTransaction();
+

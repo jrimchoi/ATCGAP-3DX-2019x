@@ -1,0 +1,87 @@
+
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.ChangeBlockService;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+public class ${CLASSNAME} {
+	/**
+	 *  This is a trigger program for disconnect of Change Block relationship 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args ObjectId of Document 
+	 * @return 0 if current state is Preliminary,Review
+	 * @throws Exception if Operation Fails
+	 * @exclude
+	 */
+	public int  disconnectChangeBlock(Context context, String[] args) throws DCLException
+	{
+		try {
+			String strObjectId = args[0];
+			String strRestrictionStates = EnoviaResourceBundle.getProperty(context,"enoDocumentControl.ChangeBlock.ModifyRestrictionStates");
+			if(!UIUtil.isNullOrEmpty(strRestrictionStates)){
+				StringList slStateList = FrameworkUtil.split(strRestrictionStates, DCLConstants.COMMA);
+				for(int j=0;j<slStateList.size();j++)
+				{
+					String strResult = (String) slStateList.get(j);
+					StringList slResult = FrameworkUtil.split(strResult, ".");
+					String strSymbPolicyName = (String) slResult.get(0);
+					String strSymbStateName = (String) slResult.get(1);
+					String strStateName = DCLUtil.getStateName(context,strSymbPolicyName, strSymbStateName);
+					String strMessage = MessageUtil.getMessage(context, null, "enoDocumentControl.Alert.DisconnectChangeBlock",new String[] {strStateName}, null, context.getLocale(),DCLConstants.DCL_STRING_RESOURCE);
+					if(PolicyUtil.checkState(context,strObjectId,strStateName,2))
+					{		
+						throw new DCLException(strMessage);
+					}
+
+				}
+			}
+			return 0;
+		} catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	/**
+	 * Method to transfer Change Blocks to latest revision of file when CONTROLLED DOCUMENT reaches in "Released" state
+	 * And delete the previous file versions 
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param args 
+	 * @return void
+	 * @throws DCLException 
+	 */
+	public void transferChangeBlocks(Context context, String[] args) throws DCLException
+	{
+		try{
+			String strdeleteFilesFlag = EnoviaResourceBundle.getProperty(context,"enoDocumentControl.CONTROLLEDDOCUMENTS.DeleteOldFileVersions");
+			if("true".equalsIgnoreCase(strdeleteFilesFlag)){
+				String objectId = args[0];
+				StringList sListId=new StringList();
+				StringList sListName=new StringList();
+				ChangeBlockService changeblock=DCLServiceUtil.getChangeBlockService(context);
+				Map<String,String> dataMap=changeblock.transferChangeBlocksToLatestVersions(context, objectId);	
+				for(String key:dataMap.keySet())
+				{
+					sListId.add(key);
+					sListName.add(dataMap.get(key));
+				}
+				ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+				documentService.deleteVersions(context, sListName, sListId);
+			}
+		}catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+}
+

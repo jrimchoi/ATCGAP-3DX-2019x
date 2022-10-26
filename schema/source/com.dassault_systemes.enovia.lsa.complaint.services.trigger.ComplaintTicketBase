@@ -1,0 +1,1009 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.AccessConstants;
+import matrix.db.Context;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ReviewRoute.RouteCompletionAction;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintInvestigationService;
+import com.dassault_systemes.enovia.lsa.complaint.services.ReturnFulfillmentService;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.TicketUtil;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintTicketService;
+import com.dassault_systemes.enovia.lsa.ticket.services.EventService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+		super();
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private ComplaintTicketService getComplaintTicketService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintTicketService complaintTicketService = (ComplaintTicketService) component.getService(ComplaintTicketService.class);
+			return complaintTicketService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private ComplaintProductEvaluationService getComplaintProductEvaluationService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintProductEvaluationService complaintProductEvaluationService = (ComplaintProductEvaluationService) component
+					.getService(ComplaintProductEvaluationService.class);
+			return complaintProductEvaluationService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintTicketService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintTicketService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private ReviewRouteService getReviewRouteService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			ReviewRouteService reviewRouteService = (ReviewRouteService) component.getService(ReviewRouteService.class);
+			return reviewRouteService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets EventService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return EventService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+	private EventService getEventService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			EventService eventService = (EventService) component.getService(EventService.class);
+			return eventService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Gets ComplaintInvestigationService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object
+	 * @return ComplaintInvestigationService implementation reference
+	 * @throws ComplaintException
+	 *             if operation fails
+	 */
+
+	private ComplaintInvestigationService getComplaintInvestigationService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.COLS_CORE_COMPONENT);
+			ComplaintInvestigationService complaintInvestigationService = (ComplaintInvestigationService) component
+					.getService(ComplaintInvestigationService.class);
+			return complaintInvestigationService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	private static ReturnFulfillmentService getreturnFulfillmentService(Context context) throws ComplaintException {
+		try {
+			Component LSAPQCCore = ComponentFactory.getInstance(context, TicketConstants.COLS_CORE_COMPONENT);
+			ReturnFulfillmentService service = (ReturnFulfillmentService) LSAPQCCore.getService(ReturnFulfillmentService.class);
+			return service;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Checks for promotion to Review :if Complaint Ticket Object have a primary
+	 * event and all events must have atleast one product/model attached to
+	 * them. checks for promotion to Close: if all associated events with the
+	 * Complaint Ticket Object are confirmed.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkEventDetails(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strNextState = args[2];
+			String strType = args[3];
+			String TYPE_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.TYPE, strType);
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if ((null != TYPE_SYMBOLIC) && (null != POLICY_SYMBOLIC)) {
+				EventService eventService = getEventService(context);
+				List<Map<?, ?>> mlEvents = eventService.getEvents(context, DomainObject.newInstance(context, strComplaintTicketId));
+				if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))) {
+					StringList slPrimaryEvent = new StringList();
+					for (Object object : mlEvents) {
+						Map<?, ?> eventMap = (Map<?, ?>) object;
+						String strEventId = (String) eventMap.get(DomainObject.SELECT_ID);
+						slPrimaryEvent.add(eventService.isPrimaryEvent(context, DomainObject.newInstance(context, strEventId)));
+						if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strEventId),
+								TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_EVENT_PRODUCT, "from") == 0) {
+							throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+									"PQC.ComplaintTicket.PromoteToInProcess.ProductNotAttached.Error"));
+						}
+					}
+					if ((mlEvents.size() == 0) || !slPrimaryEvent.contains("TRUE")) {
+						Helper.mqlError(context, Helper.StringResource.COLS, "PQC.Complaint.PromoteToInProcess.PrimaryEventNotAttached.Error");
+						return 1;
+					}
+				}
+				if ((TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_COMPLAINT))
+						&& (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC,
+								TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED)))) {
+					for (Object object : mlEvents) {
+						Map<?, ?> eventMap = (Map<?, ?>) object;
+						StringBuffer sbKey = new StringBuffer("attribute[").append(
+								PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_EVENT_CONFIRMED)).append("]");
+						String strEventConfirmed = (String) eventMap.get(sbKey.toString());
+						if (strEventConfirmed.equalsIgnoreCase("False")) {
+							throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+									"PQC.ComplaintTicket.PromoteToClose.EventNotConfirmed.Error"));
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Creates Route On Complaint Ticket Object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void createRouteOnComplaintTicket(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String strType = args[3];
+			String strOwner = args[4];
+			String TYPE_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.TYPE, strType);
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			String strEnableReview = new String();
+			if ((null != TYPE_SYMBOLIC)) {
+				if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_COMPLAINT)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.Complaint.EnableReviewProcess");
+				}
+				else if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.ESR.EnableReviewProcess");
+				}
+				else if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_INQUIRY)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.Inquiry.EnableReviewProcess");
+				}
+			}
+
+			if (strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+					&& TicketConstants.TRUE.equalsIgnoreCase(strEnableReview)) {
+				DomainObject doObjComplaint = DomainObject.newInstance(context, strComplaintTicketId);
+				ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+				List<Map<?, ?>> mlAssignees = complaintTicketService.getAssignees(context, doObjComplaint);
+				String strApproverId = DomainConstants.EMPTY_STRING;
+				String strApproverName = DomainConstants.EMPTY_STRING;
+				String strAttributeValue = DomainConstants.EMPTY_STRING;
+				ArrayList<Map<String, String>> routeMemberIdList = new ArrayList<Map<String, String>>();
+				for (Map<?, ?> mapAssignees : mlAssignees) {
+					strAttributeValue = (String) mapAssignees.get(DomainRelationship.getAttributeSelect(PropertyUtil.getSchemaProperty(context,
+							TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_TEAM_ROLE)));
+					if (TicketConstants.APPROVER.equalsIgnoreCase(strAttributeValue)) {
+						Map<String, String> membersMap = new HashMap<String, String>();
+						strApproverId = (String) mapAssignees.get(DomainConstants.SELECT_ID);
+						strApproverName = (String) mapAssignees.get(DomainConstants.SELECT_NAME);
+						membersMap.put(DomainConstants.SELECT_NAME, strApproverName);
+						membersMap.put(DomainConstants.SELECT_ID, strApproverId);
+						routeMemberIdList.add(membersMap);
+					}
+				}
+
+				Helper.runWithUser(context, strOwner, new Helper.Callable() {
+					@Override
+					public Object run(Context context, Object... args) throws ComplaintException {
+						final DomainObject DOOBJCOMPLAINT = (DomainObject) args[0];
+						final ArrayList<Map<String, String>> ROUTEMEMBERIDLIST = (ArrayList<Map<String, String>>) args[1];
+						try {
+							ReviewRouteService reviewRouteService = getReviewRouteService(context);
+							return reviewRouteService.createReviewRoute(context, DOOBJCOMPLAINT, DomainConstants.EMPTY_STRING,
+									DomainConstants.EMPTY_STRING, ROUTEMEMBERIDLIST,
+									TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS, RouteCompletionAction.NOTIFY_ROUTE_OWNER);
+						}
+						catch (final Exception e) {
+							throw new ComplaintException(e);
+						}
+					}
+				}, doObjComplaint, routeMemberIdList);
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Set Closed date on Complaint Ticket Object when promoted to Closed state.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void setClosedDateOnComplaintTicket(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+					Map<String, String> attributeMap = new HashMap<String, String>();
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_CLOSED_DATE),
+							TicketUtil.getFormattedTodaysInputDate(context));
+					Helper.runWithSuperUser(context, new Helper.Callable() {
+						@Override
+						public Object run(Context context, Object... args) throws ComplaintException {
+							try {
+								String strComplaintTicketId = (String) args[0];
+								Map<String, String> attributeMap = (Map<String, String>) args[1];
+								TicketUtil.setAttributeValues(context, strComplaintTicketId, attributeMap);
+								return null;
+							}
+							catch (Exception exception) {
+								throw new ComplaintException(exception);
+							}
+						}
+					}, strComplaintTicketId, attributeMap);
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Send notification to Complaint ticket Object Owner when it is
+	 * Closed/Invalidated/Reopened
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void sendNotificationToComplaintTicketOwner(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String strComplaintTicketOwner = args[3];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))
+						|| strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC,
+								TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))
+						|| strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC,
+								TicketConstants.SYMBOLIC_POLICY_STATE_CREATE))) {
+					String strSubject = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Subject.ComplaintTicketPromoted",
+							new String[] { strCurrentState }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+					String strMessage = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Message.ComplaintTicketPromoted",
+							new String[] { strCurrentState }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+					MailUtil.sendNotification(context, Helper.stringList(strComplaintTicketOwner), null, null, strSubject, null, null, strMessage,
+							null, null, Helper.stringList(strComplaintTicketId), null);
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Send notification to Complaint Ticket Owner upon deletion
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void sendNotificationOnDelete(Context context, String[] args) throws ComplaintException {
+		try {
+			if (args == null || args.length < 3) {
+				throw (new IllegalArgumentException());
+			}
+
+			String strComplaintTicketId = args[0];
+			String strComplaintOwner = args[1];
+			String strComplaintName = args[2];
+
+			Helper.ensureNotEmpty(strComplaintTicketId, "strComplaintTicketId");
+			Helper.ensureNotEmpty(strComplaintOwner, "strComplaintOwner");
+			Helper.ensureNotEmpty(strComplaintName, "strComplaintName");
+
+			String strSubject = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Subject.DeleteComplaintTicket", null, null,
+					context.getLocale(), Helper.StringResource.COLS.toString());
+			String strMessage = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Message.DeleteComplaintTicket",
+					new String[] { strComplaintName }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+			MailUtil.sendNotification(context, Helper.stringList(strComplaintOwner), null, null, strSubject, null, null, strMessage, null, null,
+					Helper.stringList(strComplaintTicketId), null);
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Send notification to new Complaint Ticket Owner when Ownership of the
+	 * Complaint Ticket is transfered.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void sendNotificationToNewOwner(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strComplaintOwner = args[1];
+			String strComplaintName = args[2];
+
+			if (!Helper.isNullOrEmpty(strComplaintTicketId) && !Helper.isNullOrEmpty(strComplaintOwner)) {
+				String strSubject = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Subject.ChangeOwner", null, null, context.getLocale(),
+						Helper.StringResource.COLS.toString());
+				String strMessage = MessageUtil.getMessage(context, null, "PQC.ComplaintTicket.Message.ChangeOwner",
+						new String[] { strComplaintName }, null, context.getLocale(), Helper.StringResource.COLS.toString());
+				MailUtil.sendNotification(context, Helper.stringList(strComplaintOwner), null, null, strSubject, null, null, strMessage, null, null,
+						Helper.stringList(strComplaintTicketId), null);
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Add or remove Approvers on Route.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void addOrRemoveApprovers(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPersonId = args[1];
+			String strAttributeValue = args[2];
+			String strOldAttributeValue = args[3];
+			DomainObject doObjComplaintTicket = DomainObject.newInstance(context, strComplaintTicketId);
+			Helper.runWithSuperUser(context, new Helper.Callable() {
+				@Override
+				public Object run(Context context, Object... args) throws ComplaintException {
+					try {
+						DomainObject doObjComplaintTicket = (DomainObject) args[0];
+						String strPersonId = (String) args[1];
+						String strAttributeValue = (String) args[2];
+						String strOldAttributeValue = (String) args[3];
+						ComplaintTicketService complaintTicketService = getComplaintTicketService(context);
+						if (TicketConstants.APPROVER.equalsIgnoreCase(strAttributeValue)) {
+							complaintTicketService.addApproversOnRoute(context, doObjComplaintTicket, strPersonId);
+						}
+						else if (!Helper.isNullOrEmpty(strOldAttributeValue)) {
+							complaintTicketService.removeApproversFromRoute(context, doObjComplaintTicket, strPersonId);
+						}
+						return null;
+					}
+					catch (Exception exception) {
+						throw new ComplaintException(exception);
+					}
+				}
+			}, doObjComplaintTicket, strPersonId, strAttributeValue, strOldAttributeValue);
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Checks for Multiple Complaints added to a action task route.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 */
+	public int addActionTaskRouteCheck(Context context, String[] args) throws ComplaintException {
+		final String SYMBOLIC_BUSINESS_INTERFACE = "interface_ACTActionTaskInterface";
+		final String BUSINESS_INTERFACE = PropertyUtil.getSchemaProperty(context, SYMBOLIC_BUSINESS_INTERFACE);
+		try {
+			StringBuffer strBusWhere = new StringBuffer();
+			strBusWhere.append("interface ").append("==\"").append(BUSINESS_INTERFACE).append("\"");
+			String routeID = args[0];
+			DomainObject routeDO = DomainObject.newInstance(context, routeID);
+			String interfaceVal = routeDO.getInfo(context, "interface");
+			if (!(interfaceVal == null || interfaceVal.trim().equalsIgnoreCase(""))) {
+				List<Map<?, ?>> mapList = QueryUtil.getRelatedObjects(context, routeDO, DomainSymbolicConstants.SYMBOLIC_relationship_ObjectRoute,
+						TicketConstants.SYMBOLIC_TYPE_COMPLAINT, Helper.stringList(DomainConstants.SELECT_ID),
+						Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), true, false, (short) 1, new String(), new String());
+				if (!mapList.isEmpty()) {
+					Helper.mqlError(context, Helper.StringResource.COLS, "PQC.Complaint.Connect.Relationship.ObjectRoute.Create.Error");
+				}
+			}
+			return 0;
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Checks for promotion to close: if Complaint Ticket has associated
+	 * Investigation completed.Checks for promotion to Invalid: if Complaint
+	 * Ticket has associated Investigation not Completed.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 */
+//TODO
+	public int checkForComplaintInvestigationCompletion(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strNextState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			StringBuilder sbObjectWhere = new StringBuilder();
+			sbObjectWhere.append(DomainConstants.SELECT_TYPE).append("==\"").append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION)
+					.append("\"");
+			if (null != POLICY_SYMBOLIC) {
+//				ComplaintInvestigationService complaintInvestigation = getComplaintInvestigationService(context);
+//				List<Map<?, ?>> mpInvestigation = complaintInvestigation.getComplaintInvestigationFromComplaint(context,
+//						DomainObject.newInstance(context, strComplaintTicketId),
+//						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_CURRENT),
+//						Helper.stringList(DomainConstants.SELECT_RELATIONSHIP_ID), sbObjectWhere.toString(), null);
+				
+				ComplaintProductEvaluationService complaintProductEvaluationService = getComplaintProductEvaluationService(context);
+				List<Map<?, ?>> mpInvestigation = complaintProductEvaluationService.getComplaintAssociatedProductEvaluations(context, DomainObject.newInstance(context, strComplaintTicketId), sbObjectWhere.toString());
+				if (!mpInvestigation.isEmpty()) {
+					String strInvestigationState = (String) mpInvestigation.get(0).get(DomainConstants.SELECT_CURRENT);
+					if (strNextState
+							.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+						if (!strInvestigationState.equalsIgnoreCase(TicketUtil.getStateName(context,
+								TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION, TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE))) {
+							Helper.mqlError(context, Helper.StringResource.COLS, "PQC.ComplaintTicket.PromoteToClose.InvestigationNotCompleted.Error");
+							return 1;
+						}
+					}
+					if (strNextState.equalsIgnoreCase(TicketUtil
+							.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))) {
+						if (strInvestigationState.equalsIgnoreCase(TicketUtil.getStateName(context,
+								TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION, TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE))) {
+							Helper.mqlError(context, Helper.StringResource.COLS, "PQC.ComplaintTicket.PromoteToInvalid.InvestigationCompleted.Error");
+							return 1;
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Set Invalidated date on Complaint Ticket when promoted to Invalid state.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public void setInvalidatedDateOnComplaintTicket(Context context, String[] args) throws ComplaintException {
+		try {
+
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strCurrentState
+						.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))) {
+					Map<String, String> attributeMap = new HashMap<String, String>();
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_COMPLAINT_INVALIDATED_DATE),
+							TicketUtil.getFormattedTodaysInputDate(context));
+					Helper.runWithSuperUser(context, new Helper.Callable() {
+						@Override
+						public Object run(Context context, Object... args) throws ComplaintException {
+							try {
+								String strComplaintTicketId = (String) args[0];
+								Map<String, String> attributeMap = (Map<String, String>) args[1];
+								TicketUtil.setAttributeValues(context, strComplaintTicketId, attributeMap);
+								return null;
+							}
+							catch (Exception exception) {
+								throw new ComplaintException(exception);
+							}
+						}
+					}, strComplaintTicketId, attributeMap);
+				}
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	/**
+	 * Demotes all Complaint Investigations associated with the Complaint Ticket
+	 * to "In Process" state whenever complaint Ticket is Reopened.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 */
+	public void demoteComplaintInvestigationsToInProcess(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CREATE))) {
+					StringBuffer sbRelPattern = new StringBuffer();
+					sbRelPattern.append(TicketConstants.SYMBOLIC_RELATIONSHIP_COMPLAINT_INVESTIGATION);
+					StringBuffer sbTypePattern = new StringBuffer();
+					sbTypePattern.append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION);
+					StringBuffer sbObjectWhere = new StringBuffer();
+					sbObjectWhere.append(DomainConstants.SELECT_TYPE).append("==\"").append(TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_FULFILLMENT)
+							.append("\"");
+					List<Map<?, ?>> mapRelatedItems = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strComplaintTicketId),
+							sbRelPattern.toString(), sbTypePattern.toString(),
+							Helper.stringList(DomainObject.SELECT_ID, DomainObject.SELECT_CURRENT), Helper.stringList(DomainRelationship.SELECT_ID),
+							Boolean.FALSE, Boolean.TRUE, (short) 0, sbObjectWhere.toString(), null);
+					// DomainObject dmo = DomainObject.newInstance(context,
+					// strComplaintTicketId);
+					// dmo.getRela
+					String[] arrComplaintInvIds = new String[mapRelatedItems.size()];
+					int i = 0;
+					for (Object obj : mapRelatedItems) {
+						Map<?, ?> mapRelItem = (Map) obj;
+						String strRelItemCurrentState = (String) mapRelItem.get(DomainObject.SELECT_CURRENT);
+						if (!strRelItemCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context,
+								TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION, TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))) {
+							arrComplaintInvIds[i] = (String) mapRelItem.get(DomainObject.SELECT_ID);
+							i++;
+						}
+					}
+					if (i > 0) {
+						TicketUtil.setState(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION,
+								TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS, arrComplaintInvIds);
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Clears the value of Closed date, Reason For Closure, Customer closure
+	 * Date attributes from Complaint Ticket, on Reopening it.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws ComplaintException
+	 */
+	public void clearComplaintTicketCloseAttributes(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CREATE))) {
+					Map<String, String> attributeMap = new HashMap<String, String>();
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_CLOSED_DATE),
+							DomainConstants.EMPTY_STRING);
+					attributeMap.put(PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_ATTRIBUTE_REASON_FOR_CLOSURE),
+							DomainConstants.EMPTY_STRING);
+					TicketUtil.setAttributeValues(context, strComplaintTicketId, attributeMap);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Blocks Demotion of Complaint ticket objects.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 */
+	public int blockComplaintTicketDemote(Context context, String[] args) throws ComplaintException {
+		try {
+			Helper.mqlError(context, Helper.StringResource.COLS, "PQC.ComplaintTicket.BlockDemoteMessage");
+			return 1;
+
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	/**
+	 * Blocks conversion of Assignee to Approver if Review Process setting in
+	 * properties file is disabled.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 */
+	public int blocksAssigneeConversionToApprover(Context context, String[] args) throws ComplaintException {
+		try {
+			String strAttributeValue = args[0];
+			String strType = args[1];
+			String TYPE_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.TYPE, strType);
+			String strEnableReview = new String();
+			if ((null != TYPE_SYMBOLIC)) {
+				if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_COMPLAINT)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.Complaint.EnableReviewProcess");
+				}
+				else if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.ESR.EnableReviewProcess");
+				}
+				else if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_INQUIRY)) {
+					strEnableReview = Helper.getProperty(context, "PQCComplaint.Inquiry.EnableReviewProcess");
+				}
+				else if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_NCR)) {
+					strEnableReview = Helper.getProperty(context, "LQINCR.NCR.EnableReviewProcess");
+				}
+			}
+			if (TicketConstants.APPROVER.equalsIgnoreCase(strAttributeValue) && !TicketConstants.TRUE.equalsIgnoreCase(strEnableReview)) {
+				String strErrorMessage = Helper.getI18NString(context, Helper.StringResource.COLS, "PQC.Common.Assignee.ChangeToApprover.Error");
+				MqlUtil.mqlCommand(context, "notice $1", strErrorMessage);
+				return 1;
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * Checks if at least one contact is associated with Complaint Ticket Object
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws ComplaintException
+	 *             if operation fails.
+	 */
+	public int checkForAssociatedContacts(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strNextState = args[2];
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))) {
+					if (Helper.countConnectionsWithRel(context, DomainObject.newInstance(context, strComplaintTicketId),
+							TicketConstants.SYMBOLIC_RELATIONSHIP_CONTACT, "from") == 0) {
+						Helper.mqlError(context, Helper.StringResource.COLS, "PQC.ComplaintTicket.NoContactAssociatedError");
+						return 1;
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	/**
+	 * This will set the primary & secondary ownership on the complaint object
+	 * while creation based on the security context
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws ComplaintException
+	 */
+	public int SetComplaintTicketHandlingUnit(Context context, String[] args) throws ComplaintException {
+		try {
+			return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public int checkForConnectedRouteState(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintId = args[0];
+			Helper.ensureNotNull(strComplaintId, "Complaint id");
+			String strType = args[1];
+			Helper.ensureNotNull(strType, "type");
+			String strCurrentState = args[2];
+			Helper.ensureNotNull(strCurrentState, "Current State");
+			String strNextState = args[3];
+			Helper.ensureNotNull(strNextState, "Next State");
+			String strTargetCurrentState = PropertyUtil.getSchemaProperty(context, "policy",
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD),
+					TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS);
+			String strTargetNextState = PropertyUtil.getSchemaProperty(context, "policy",
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD),
+					TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+			String strInvalidState = PropertyUtil.getSchemaProperty(context, "policy",
+					PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD),
+					TicketConstants.SYMBOLIC_POLICY_STATE_INVALID);
+			if (strTargetCurrentState.equalsIgnoreCase(strCurrentState)
+					&& (strTargetNextState.equalsIgnoreCase(strNextState) || strInvalidState.equalsIgnoreCase(strNextState))) {
+				final String STR_TYPE_COMPLAINT = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT);
+				final String STR_TYPE_ESR = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST);
+			        DomainObject doObjComplaint = DomainObject.newInstance(context, strComplaintId);
+
+				ReviewRouteService reviewRouteService = getReviewRouteService(context);
+				Map<?, ?> mapRoute = reviewRouteService.getCurrentReviewRoute(context, doObjComplaint,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID));
+
+				if (!mapRoute.isEmpty()) {
+					if (STR_TYPE_COMPLAINT.equalsIgnoreCase(strType)) {
+						throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+								"PQC.ComplaintTicket.PromoteComplaintTicket.ConnectedRouteNotComplete"));
+					}
+					else if (STR_TYPE_ESR.equalsIgnoreCase(strType)) {
+						throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+								"PQC.ComplaintTicket.PromoteESR.ConnectedRouteNotComplete"));
+					}
+					else {
+						throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+								"PQC.ComplaintTicket.PromoteInquiry.ConnectedRouteNotComplete"));
+					}
+				}
+				else
+					return 0;
+			}
+			else
+				return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public int checkForReturnAndFulfillmentCompletion(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strNextState = args[2];
+			String strType = args[3];
+			String TYPE_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.TYPE, strType);
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			if (null != POLICY_SYMBOLIC) {
+				ReturnFulfillmentService returnFulfillmentService = getreturnFulfillmentService(context);
+				DomainObject doObjComplaintTicket = DomainObject.newInstance(context, strComplaintTicketId);
+
+				String strStateComplete = TicketUtil.getStateName(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_RETURN,
+						TicketConstants.SYMBOLIC_POLICY_STATE_COMPLETE);
+				StringBuilder sbWhere = new StringBuilder();
+				String strPropertyKey = DomainConstants.EMPTY_STRING;
+
+				if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED))) {
+					sbWhere.append(DomainConstants.SELECT_CURRENT).append("!=").append(strStateComplete);
+					strPropertyKey = "PQC.ComplaintTicket.PromoteToClose.ReturnsAndFulfillmentsNotCompleted.Error";
+					if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST)) {
+						strPropertyKey = "PQC.ESR.PromoteToClose.ReturnsAndFulfillmentsNotCompleted.Error";
+					}
+				}
+
+				if (strNextState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC, TicketConstants.SYMBOLIC_POLICY_STATE_INVALID))) {
+					sbWhere.append(DomainConstants.SELECT_CURRENT).append("==").append(strStateComplete);
+					strPropertyKey = "PQC.ComplaintTicket.PromoteToInvalid.ReturnsAndFulfillmentsCompleted.Error";
+					if (TYPE_SYMBOLIC.equalsIgnoreCase(TicketConstants.SYMBOLIC_TYPE_EQUIPMENT_SERVICE_REQUEST)) {
+						strPropertyKey = "PQC.ESR.PromoteToInvalid.ReturnsAndFulfillmentsCompleted.Error";
+					}
+				}
+				List<Map<?, ?>> mlReturns = returnFulfillmentService.getReturns(context, doObjComplaintTicket,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), sbWhere.toString(), null);
+				List<Map<?, ?>> mlFulfillments = returnFulfillmentService.getFulfillments(context, doObjComplaintTicket,
+						Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), sbWhere.toString(), null);
+				if (!mlReturns.isEmpty() || !mlFulfillments.isEmpty()) {
+					Helper.mqlError(context, Helper.StringResource.COLS, strPropertyKey);
+					return 1;
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	public int checkDesiredUserForPromotion(Context context, String[] args) throws ComplaintException {
+		String strOwner = args[0];
+		Helper.ensureNotNull(strOwner, "Owner");
+		Helper.ensureNotEmpty(strOwner, "Owner");
+		String strNextState = args[1];
+		Helper.ensureNotNull(strNextState, "Next State");
+		Helper.ensureNotEmpty(strNextState, "Next State");
+		String objectID = args[2];
+		Helper.ensureNotNull(objectID, "objectID");
+		Helper.ensureNotEmpty(objectID, "objectID");
+		final String STRPOLICY = PropertyUtil.getSchemaProperty(context, TicketConstants.SYMBOLIC_POLICY_COMPLAINT_RECORD);
+		final String STRTARGETSTATENAME = PropertyUtil.getSchemaProperty(context, "policy", STRPOLICY, TicketConstants.SYMBOLIC_POLICY_STATE_CLOSED);
+		boolean isOwner = false;
+		try {
+			if (STRTARGETSTATENAME.equalsIgnoreCase(strNextState)) {
+				String StrContextUser = context.getUser();
+				boolean isQualityManager = Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_QUALITY_MANAGER);
+				boolean isComplaintInvestigator = Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_COMPLAINT_INVESTIGATOR);
+				boolean isVPLMProjectLeader = Helper.hasRoles(context, TicketConstants.SYMBOLIC_ROLE_VPLMProjectLeader);
+				if (strOwner.equalsIgnoreCase(StrContextUser))
+					isOwner = true;
+				if ((isOwner && isComplaintInvestigator) || isQualityManager || isVPLMProjectLeader)
+					return 0;
+				else {
+					Helper.mqlError(context, Helper.StringResource.COLS, "PQC.ComplaintTicket.PromoteToInProcess.NoAccess.Error");
+					return 1;
+				}
+			}
+			else
+				return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public void createAndConnectComplaintInvestigation(Context context, String[] args) throws ComplaintException {
+		try {
+			String strComplaintTicketId = args[0];
+			String strPolicy = args[1];
+			String strCurrentState = args[2];
+			String strType = args[3];
+			Helper.ensureNotEmpty("strComplaintTicketId", "strComplaintTicketId");
+			String TYPE_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.TYPE, strType);
+			String POLICY_SYMBOLIC = TicketUtil.getAliasForAdmin(context, TicketConstants.POLICY, strPolicy);
+			DomainObject doComlaint = DomainObject.newInstance(context, strComplaintTicketId);
+			if (null != POLICY_SYMBOLIC && null != TYPE_SYMBOLIC) {
+				if ((strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC,
+						TicketConstants.SYMBOLIC_POLICY_STATE_INPROCESS))
+						|| strCurrentState.equalsIgnoreCase(TicketUtil.getStateName(context, POLICY_SYMBOLIC,
+								TicketConstants.SYMBOLIC_POLICY_STATE_REVIEW))) && doComlaint.checkAccess(context, (short)AccessConstants.cModify)) {
+
+					ComplaintProductEvaluationService complaintProductEvaluationService = getComplaintProductEvaluationService(context);
+
+					String strProductEvaluationId = Helper.autoName(context, TicketConstants.SYMBOLIC_TYPE_COMPLAINT_PRODUCT_EVALUATION,
+							TicketConstants.SYMBOLIC_POLICY_COMPLAINT_PRODUCT_EVALUATION);
+					Helper.ensureNotEmpty("strProductEvaluationId", "strProductEvaluationId");
+					complaintProductEvaluationService.addProductEvaluationsToComplaint(context, new String[] { strComplaintTicketId },
+							strProductEvaluationId);
+				}
+
+			}
+		}
+		catch (Exception exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+}
+

@@ -1,0 +1,115 @@
+var params = proc.declareParameters(["PackageName", "ProcUsageContexts"], ["label", "select"]);
+
+mql.startTransaction(false);
+var context = mql.getContext();
+
+var EnoviaResourceBundle = Java.type("com.matrixone.apps.domain.util.EnoviaResourceBundle");
+var resource = "emxCompletionServicesStringResource";
+var locale = context.getSession().getLocale();
+
+var cmd = "list pack";
+cmd += params.addVar(PackageName);
+
+var isjavascriptprogramWhereClause = "member.property[isjavascriptprogram].value=='TRUE'";
+
+cmd += " where" + params.addVar(isjavascriptprogramWhereClause);
+
+var ProcUsageContextsSelectable = "member.property[ProcUsageContexts].value";
+cmd += " select" + params.addVar(ProcUsageContextsSelectable);
+
+if (select)
+{
+	var selectParsed = JSON.parse(select);
+	cmd += params.addVars(selectParsed);
+}
+
+cmd += " json";
+
+var sortedResult = new Object();
+var result = new Object();
+var globalError = null;
+ 
+var mqlResult = mql.execute(label, cmd, params, mql.RETURN_RESULT|mql.SILENT);
+mql.abortTransaction();
+if (mqlResult.success) {
+	var parsedResult = JSON.parse(mqlResult.result);
+	for (var i = 0; i < parsedResult.length; i++)
+	{
+		var pack = parsedResult[i];
+		var selectData = pack.selectdata;
+		var keys = Object.keys(selectData);
+		for(var j = 0; j < keys.length; j+=1)
+		{
+			var currentKey = keys[j];
+			var fisrtIndexOfOpenSquareBracket = currentKey.indexOf("[");
+			var firstIndexOfCloseSquareBracket = currentKey.indexOf("]");
+			var completionName = currentKey.substring(fisrtIndexOfOpenSquareBracket+1,firstIndexOfCloseSquareBracket);
+			var propertyName = "";
+			if(currentKey.contains("property"))
+			{
+				propertyName = currentKey.substring(currentKey.indexOf("[",fisrtIndexOfOpenSquareBracket+1)+1,currentKey.indexOf("]",firstIndexOfCloseSquareBracket+1));
+			}else{
+				propertyName = currentKey.substring(currentKey.indexOf(".",firstIndexOfCloseSquareBracket+1)+1,currentKey.length());	
+			}
+			var currentValue = selectData[currentKey];
+		
+			var attributes;
+			if(sortedResult.hasOwnProperty(completionName))
+			{
+				attributes = sortedResult[completionName];
+			}
+			else {
+				attributes = new Object();
+			}
+			
+			var attrValue = "";
+			if(propertyName.equalsIgnoreCase("ProcDisplayName") || propertyName.equalsIgnoreCase("ProcShortDescription"))
+				attrValue = EnoviaResourceBundle.getProperty(context,resource,locale,currentValue);
+			
+			if(!attrValue.isEmpty())
+			{
+				attributes[propertyName] = attrValue;
+			}else{
+				attributes[propertyName] = currentValue;
+			}
+			sortedResult[completionName] = attributes;
+		}
+	}
+	
+	var completionNames = Object.keys(sortedResult);
+	for(var k = 0; k < completionNames.length; k+=1)
+	{
+		var completionName = completionNames[k];
+		var attributes = sortedResult[completionName];
+		var attributeKeys = Object.keys(attributes);
+		var currentProcUsageContext = attributes[attributeKeys[0]];
+		var currentProcUsageContextTab = currentProcUsageContext.split("|");
+		var containsProcUsageContext = false;
+		for (var l = 0; l < currentProcUsageContextTab.length; l++)
+		{
+			if(currentProcUsageContextTab[l].equalsIgnoreCase(ProcUsageContexts))
+			{
+				containsProcUsageContext = true;
+				break;
+			}
+		}
+		if(!containsProcUsageContext) continue;
+		delete attributes["ProcUsageContexts"];
+		result[completionName] = attributes;
+	}
+}    
+else {
+	globalError = {
+		errorcode: "OPERATION_ERROR",
+		errormsg: mqlResult.error
+	};
+}
+
+if (null == globalError) {
+    proc.write(label, JSON.stringify(result), globalError, "json");
+}
+else {
+    proc.write(label, null, JSON.stringify(globalError));
+}
+mql.abortTransaction();
+

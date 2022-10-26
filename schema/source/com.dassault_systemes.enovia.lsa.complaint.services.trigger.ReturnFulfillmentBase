@@ -1,0 +1,244 @@
+
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.Helper.LSALicense;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.complaint.services.ComplaintException;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.ticket.TicketConstants;
+import com.dassault_systemes.enovia.lsa.ticket.services.ComplaintProductEvaluationService;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} {
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws ComplaintException {
+		super();
+	}
+
+	private ComplaintProductEvaluationService getComplaintInvestigationService(Context context) throws ComplaintException {
+		try {
+			Component component = ComponentFactory.getInstance(context, TicketConstants.TICKET_CORE_COMPONENT);
+			ComplaintProductEvaluationService complaintInvestigationService = (ComplaintProductEvaluationService) component
+					.getService(ComplaintProductEvaluationService.class);
+			return complaintInvestigationService;
+		}
+		catch (ComponentException exception) {
+			throw new ComplaintException(exception);
+		}
+	}
+
+	public int checkAttributeProductToBeReturnedPolicyComplaintProductReturnStateInProcessPromoteCheck(Context context, String[] args)
+			throws ComplaintException {
+		final String ATTRIBUTE_COMPLAINTPRODUCTTOBERETURNED = PropertyUtil.getSchemaProperty(context, "attribute_ComplaintProductToBeReturned");
+		final String ATTRIBUTE_COMPLAINTPRODUCTRECEIVEDDATE = PropertyUtil.getSchemaProperty(context, "attribute_ComplaintProductReceivedDate");
+		final String ATTRIBUTE_COMPLAINTPRODUCTRMANUMBER = PropertyUtil.getSchemaProperty(context, "attribute_ComplaintProductRMANumber");
+		final String ATTRIBUTE_COMPLAINTPRODUCTNOTRETURNEDRATIONALE = PropertyUtil.getSchemaProperty(context,
+				"attribute_ComplaintProductNotReturnedRationale");
+
+		try {
+			pqcLicenceCheck(context, args);
+			String fromObjectId = args[0];
+			Map<?, ?> infoMap = DomainObject.newInstance(context, fromObjectId).getInfo(
+					context,
+					Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTTOBERETURNED),
+							DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTRECEIVEDDATE),
+							DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTRMANUMBER),
+							DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTNOTRETURNEDRATIONALE)));
+			String prodToBeReturnedAttrVal = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTTOBERETURNED));
+			String prodRMANumberVal = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTRMANUMBER));
+			String prodNotReturnedRationaleAttrVal = (String) infoMap.get(DomainObject
+					.getAttributeSelect(ATTRIBUTE_COMPLAINTPRODUCTNOTRETURNEDRATIONALE));
+			if (prodToBeReturnedAttrVal == null || "".equals(prodToBeReturnedAttrVal)) {
+				throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+						"PQC.ReturnFulfillment.Attrribute.ProductToBeRetuned.Trigger.ErrorMessage"));
+			}
+			if (prodToBeReturnedAttrVal.equalsIgnoreCase("Yes")) {
+
+				if (prodRMANumberVal == null || "".equals(prodRMANumberVal)) {
+					throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+							"PQC.ReturnFulfillment.Attrribute.RMANumber.Trigger.ErrorMessage"));
+				}
+			}
+			if (prodToBeReturnedAttrVal.equalsIgnoreCase("No")) {
+				if (prodNotReturnedRationaleAttrVal == null || "".equals(prodNotReturnedRationaleAttrVal)) {
+					throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+							"PQC.ReturnFulfillment.Attrribute.NotReturnedRationale.Trigger.ErrorMessage"));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	public int checkAttributeReturnDispositionPolicyComplaintProductReturnStateInProcessPromoteCheck(Context context, String[] args)
+			throws ComplaintException {
+		final String ATTRIBUTE_RETURNDISPOSITION = PropertyUtil.getSchemaProperty(context, "attribute_ReturnDisposition");
+		final String ATTRIBUTE_RETURNNOTEVALUATEDJUSTIFICATION = PropertyUtil.getSchemaProperty(context, "attribute_ReturnNotEvaluatedJustification");
+		try {
+			pqcLicenceCheck(context, args);
+			String fromObjectId = args[0];
+			Map<?, ?> infoMap = DomainObject.newInstance(context, fromObjectId).getInfo(
+					context,
+					Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_RETURNDISPOSITION),
+							DomainObject.getAttributeSelect(ATTRIBUTE_RETURNNOTEVALUATEDJUSTIFICATION)));
+			String returnDispositionAttrVal = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_RETURNDISPOSITION));
+			String returnNotEvalJustAttrVal = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_RETURNNOTEVALUATEDJUSTIFICATION));
+			if (returnDispositionAttrVal.equalsIgnoreCase("Returned But Not Evaluated")) {
+				if (returnNotEvalJustAttrVal == null || "".equals(returnNotEvalJustAttrVal)) {
+					throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+							"PQC.ReturnFulfillment.Attrribute.NotEvaluatedJustification.Trigger.ErrorMessage"));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	public int checkAttributePolicyComplaintProductFulfillmentStateInProcessPromoteCheck(Context context, String[] args) throws ComplaintException {
+		final String ATTRIBUTE_FULFILLMENTTYPE = PropertyUtil.getSchemaProperty(context, "attribute_FulfillmentType");
+		final String ATTRIBUTE_SENDDATE = PropertyUtil.getSchemaProperty(context, "attribute_SendDate");
+
+		try {
+			pqcLicenceCheck(context, args);
+			String fromObjectId = args[0];
+			Map<?, ?> infoMap = DomainObject.newInstance(context, fromObjectId).getInfo(
+					context,
+					Helper.stringList(DomainObject.getAttributeSelect(ATTRIBUTE_FULFILLMENTTYPE), DomainObject.SELECT_DESCRIPTION,
+							DomainObject.getAttributeSelect(ATTRIBUTE_SENDDATE)));
+			String fulfillmentType = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_FULFILLMENTTYPE));
+			String strDesc = (String) infoMap.get(DomainObject.SELECT_DESCRIPTION);
+			String sendDateAttrVal = (String) infoMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_SENDDATE));
+			if (fulfillmentType == null || "".equals(fulfillmentType)) {
+				throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+						"PQC.ReturnFulfillment.Attribute.FulfillmentType.Trigger.ErrorMessage"));
+			}
+			else if (strDesc == null || "".equals(strDesc)) {
+				throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+						"PQC.ReturnFulfillment.Attribute.FulfillmenDatails.Trigger.ErrorMessage"));
+			}
+			if (sendDateAttrVal == null || "".equals(sendDateAttrVal)) {
+				throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+						"PQC.ReturnFulfillment.Attribute.SendDate.Trigger.ErrorMessage"));
+			}
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	public int addHistoryRelationshipReturnFulfillmentDeleteAction(Context context, String[] args) throws ComplaintException {
+		try {
+			String fromId = args[0];
+			String toId = args[1];
+			Map<?, ?> map = DomainObject.newInstance(context, toId).getInfo(context,
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_TYPE));
+			StringBuilder strCustHistory = new StringBuilder();
+			strCustHistory.append(map.get(DomainObject.SELECT_TYPE).toString()).append(" ");
+			strCustHistory.append(map.get(DomainObject.SELECT_NAME).toString());
+			strCustHistory.append(" - object deleted");
+			MqlUtil.mqlCommand(context, "modify bus $1 add history delete comment $2", false, fromId, strCustHistory.toString());
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+		return 0;
+	}
+
+	public int pqcLicenceCheck(Context context, String[] args) throws ComplaintException {
+		try {
+
+			Helper.isLicenseAssigned(context, LSALicense.LSA);
+			return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public int deleteReturnFulfilment(Context context, String[] args) throws ComplaintException {
+		try {
+			final String TYPE_COMPLAINTPRODUCTRETURN = PropertyUtil.getSchemaProperty(context, "type_ComplaintProductReturn");
+			String objectId = args[0];
+			pqcLicenceCheck(context, args);
+			Map<String, String> infoMap = DomainObject.newInstance(context, objectId).getInfo(
+					context,
+					Helper.stringList(DomainObject.SELECT_NAME, DomainObject.SELECT_CURRENT, DomainObject.SELECT_TYPE,
+							"to[Complaint Product Return].from.current", "to[Complaint Product Fulfillment].from.current"));
+			String rfName = infoMap.get(DomainObject.SELECT_NAME);
+			String rfState = infoMap.get(DomainObject.SELECT_CURRENT);
+			String rfType = infoMap.get(DomainObject.SELECT_TYPE);
+			if (rfState.equalsIgnoreCase("in process")) {
+				String cptState = new String();
+				if (rfType.equalsIgnoreCase(TYPE_COMPLAINTPRODUCTRETURN)) {
+					cptState = infoMap.get("to[Complaint Product Return].from.current");
+				}
+				else {
+					cptState = infoMap.get("to[Complaint Product Fulfillment].from.current");
+				}
+				if (cptState.equalsIgnoreCase("closed") || cptState.equalsIgnoreCase("invalid")) {
+					throw new Exception(new StringBuilder()
+							.append(Helper.getI18NString(context, Helper.StringResource.COLS,
+									"PQC.ReturnFulfillment.DeleteValidation.Trigger.ErrorMessage")).append(" ").append(cptState).toString());
+				}
+			}
+			else {
+				throw new Exception(rfName
+						+ Helper.getI18NString(context, Helper.StringResource.COLS, "PQC.ReturnFulfillment.Delete.Trigger.ErrorMessage"));
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+
+	public int disableReturnFulfillmentCreate(Context context, String[] args) throws ComplaintException {
+		try {
+			String sObjectId = args[0];
+			pqcLicenceCheck(context, args);
+			List<Map<?, ?>> compMap = QueryUtil.getInfo(context, new String[] { sObjectId }, Helper.stringList(DomainObject.SELECT_CURRENT));
+			if (compMap.get(0).get(DomainObject.SELECT_CURRENT).toString().equalsIgnoreCase("In Process")) {
+				ComplaintProductEvaluationService complaintInvestigationService = getComplaintInvestigationService(context);
+
+				List<Map<?, ?>> mlCI = complaintInvestigationService.getComplaintAssociatedProductEvaluations(context,
+						DomainObject.newInstance(context, sObjectId), "current!=Complete");
+
+				if (mlCI.size() > 0) {
+					return 0;
+				}
+				else {
+					throw new ComplaintException(Helper.getI18NString(context, Helper.StringResource.COLS,
+							"PQC.ReturnFulfillment.Create.Trigger.ErrorMessage"));
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new ComplaintException(e);
+		}
+	}
+}
+

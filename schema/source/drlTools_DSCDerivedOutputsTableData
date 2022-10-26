@@ -1,0 +1,109 @@
+/*
+**  DSCDerivedOutputsTableData
+**
+**  Copyright Dassault Systemes, 1992-2007.
+**  All Rights Reserved.
+**  This program contains proprietary and trade secret information of Dassault Systemes and its 
+**  subsidiaries, Copyright notice is precautionary only
+**  and does not evidence any actual or intended publication of such program
+**	
+**  This  is a JPO which act as a data source for rendering data in to a custom table .
+**	Using this JPO program  developer can  create their own column definitions and can return
+**	tabledata in a  CustomMapList  which stores each row of table as Map objects.
+*/
+import com.designrule.drv6tools.jpointeraction.drDocumentActions;
+import com.matrixone.MCADIntegration.server.MCADServerResourceBundle;
+import com.matrixone.MCADIntegration.server.beans.MCADMxUtil;
+import com.matrixone.MCADIntegration.server.cache.IEFGlobalCache;
+import com.matrixone.MCADIntegration.utils.MCADUrlUtil;
+import com.matrixone.MCADIntegration.utils.MCADUtil;
+import com.matrixone.apps.common.util.ComponentsUtil;
+import com.matrixone.apps.domain.util.MapList;
+import java.util.HashMap;
+import java.util.Vector;
+import matrix.db.Context;
+import matrix.db.JPO;
+
+ 
+public class ${CLASSNAME} extends ${CLASS:DSCDerivedOutputsTableDataBase}
+{	
+
+    /**
+	   * Constructor.
+	   *
+	   * @param context the eMatrix <code>Context</code> object
+	   * @param args holds no arguments
+	   * @throws Exception if the operation fails
+	   * @since Sourcing V6R2008-2
+	   */
+	public ${CLASSNAME} (Context context, String[] args) throws Exception
+	{
+	  super(context, args);
+	}	
+
+	@Override
+    public Object getActionLinks(Context context, String[] args) throws Exception
+	{
+		Vector columnCellContentList	= new Vector();
+		StringBuffer htmlBuffer			= new StringBuffer();
+		HashMap paramMap				= (HashMap)JPO.unpackArgs(args);  
+
+                //drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+                drDocumentActions drDocActions = new drDocumentActions(context, paramMap);
+                //drV6Tools//
+            
+		paramMap.put("displayCheckout", "true");
+		paramMap.put("displayViewer", "true");
+                               
+		MapList relBusObjPageList	= (MapList)paramMap.get("objectList");
+		integrationNameGCOTable		= (HashMap)paramMap.get("GCOTable");
+                            
+		serverResourceBundle		= new MCADServerResourceBundle(localeLanguage);
+		cache						= new IEFGlobalCache();
+		util						= new MCADMxUtil(context, serverResourceBundle, cache);
+		
+		for(int i =0 ; i<relBusObjPageList.size(); i++)
+		{
+			String fileName = null;
+			
+			try
+			{
+				HashMap objDetails		= (HashMap)relBusObjPageList.get(i);
+				String objectId			= (String)objDetails.get("id");
+		
+			   // String integrationName	= util.getIntegrationName(objectId);
+				htmlBuffer				= new StringBuffer();
+				fileName					= (String) objDetails.get("FileName");
+
+			   String format			= (String)objDetails.get("format");
+			   String hexfileName		= MCADUrlUtil.hexEncode(fileName);
+  			   String checkoutHref		= "../iefdesigncenter/DSCComponentCheckoutWrapper.jsp?"+ "objectId=" + objectId + "&amp;action=download" + "&amp;format=" + format + "&amp;fileName=" + hexfileName + "&amp;refresh=false&amp;";
+
+			   String checkoutToolTip	= serverResourceBundle.getString("mcadIntegration.Server.AltText.Download");
+			   checkoutHref				= "javascript:openWindow('"+ checkoutHref + "')";
+			   //drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+			   drDocActions.setupForObject(objDetails);
+			   
+			   if(drDocActions.isShowDownload()) {
+					htmlBuffer.append(getFeatureIconContent(checkoutHref, "../../common/images/iconActionDownload.gif", checkoutToolTip));
+			   }
+			   if(drDocActions.isShowActivity()) {
+					drDocActions.addActivityHTML(objDetails, htmlBuffer);
+			   }
+                    
+			   if (drDocActions.isShowViewer() ) {
+			   //drV6Tools    
+					htmlBuffer.append(getViewerURL(context, objectId, format, fileName));
+			   }
+ 
+					
+			}
+			catch(Exception e) 
+			{
+			}
+			columnCellContentList.add(htmlBuffer.toString());
+		}
+		return columnCellContentList;
+	}
+}
+

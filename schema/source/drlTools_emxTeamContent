@@ -1,0 +1,461 @@
+/*
+ *  emxTeamContent.java
+ *
+ * Copyright (c) 1992-2012 Dassault Systemes.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+import com.designrule.drv6tools.jpointeraction.drDocumentActions;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.common.VCDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.*;
+import java.util.*;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * @version AEF Rossini - Copyright (c) 2002, MatrixOne, Inc.
+ */
+public class ${CLASSNAME} extends ${CLASS:emxTeamContentBase}
+{
+
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @since AEF Rossini
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+      super(context, args);
+    }
+
+
+    // Designer Central
+    private HashMap getViewerURLInfo(Context context, String objectId, String fileName) throws Exception
+    {
+      HashMap viewerInfoMap = new HashMap();;
+      DomainObject obj = DomainObject.newInstance(context, objectId);
+      MapList associatedFileList = obj.getAllFormatFiles(context);
+      for (int i = 0; i < associatedFileList.size(); i++)
+      {
+    	  Map associatedFile = (Map)associatedFileList.get(i);
+    	  if (fileName.equals((String)associatedFile.get("filename")))
+    	  {
+    		  viewerInfoMap.put("fileName", fileName);
+    		  viewerInfoMap.put("format", associatedFile.get("format"));
+    		  viewerInfoMap.put("id", objectId);
+    		  break;
+    	  }
+      }
+      return viewerInfoMap;
+    }
+
+  // Designer Central
+
+
+  /**
+   * getContentActions - This method will be called to get the Actions that
+   *                     can be performed on the Content
+   *                     This is called in the Actions Column of the Table
+   * @param context the eMatrix <code>Context</code> object
+   * @param args holds the following input arguments:
+   *        0 - objectList MapList
+   * @return Object of type Vector
+   * @throws Exception if the operation fails
+   * @since V10 Patch1
+   */
+  public Vector getContentActions(Context context, String[] args)
+    throws Exception
+  {
+     Vector vActions = new Vector();
+     try
+     {
+		// Start MSF
+		String msfRequestData = "";
+		// End MSF
+        HashMap programMap = (HashMap) JPO.unpackArgs(args);
+
+		//drV6Tools - Document Actions providing greater control on the UI actions to be displayed//
+        drDocumentActions drDocActions = new drDocumentActions(context, programMap);
+        //drV6Tools//
+
+        MapList objectList = (MapList)programMap.get("objectList");
+        Map paramList = (Map)programMap.get("paramList");
+        String uiType = (String)paramList.get("uiType");
+        String customSortColumns = (String)paramList.get("customSortColumns");
+        String customSortDirections = (String)paramList.get("customSortDirections");
+        String table = (String)paramList.get("table");
+		// Start MSF
+		String msfFileFormatDetails = "";
+		boolean isAdded = false;
+		// End MSF
+        if(objectList == null || objectList.size() <= 0) {
+            return vActions;
+        }
+        boolean isprinterFriendly = false;
+        if (paramList.get("reportFormat") != null)
+        {
+            isprinterFriendly = true;
+
+        }
+
+        //boolean isprinterFriendly = false;
+        Locale locale = context.getSession().getLocale();
+        String sTipDownload = EnoviaResourceBundle.getProperty(context,  "emxTeamCentralStringResource", locale, "emxTeamCentral.ContentSummary.ToolTipDownload");
+        String sTipSubscription = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", locale, "emxTeamCentral.ContentSummary.ToolTipSubscription");
+        String sTipCheckout = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", locale, "emxTeamCentral.ContentSummary.ToolTipCheckout");
+        String sTipCheckin = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", locale, "emxTeamCentral.ContentSummary.ToolTipCheckin");
+        String sTipAddFiles = EnoviaResourceBundle.getProperty(context, "emxTeamCentralStringResource", locale, "emxTeamCentral.ContentSummary.ToolTipAddFiles");
+
+        StringList 	selectTypeStmts = new StringList(20);
+			        selectTypeStmts.add(DomainConstants.SELECT_ID);
+			        selectTypeStmts.add(DomainConstants.SELECT_TYPE);
+			        selectTypeStmts.add(CommonDocument.SELECT_SUSPEND_VERSIONING);
+			        selectTypeStmts.add(CommonDocument.SELECT_HAS_CHECKOUT_ACCESS);
+			        selectTypeStmts.add(CommonDocument.SELECT_HAS_CHECKIN_ACCESS);
+			        selectTypeStmts.add(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION);
+			        selectTypeStmts.add(CommonDocument.SELECT_FILE_NAME);
+			        selectTypeStmts.add(CommonDocument.SELECT_FILE_FORMAT);
+			        selectTypeStmts.add(CommonDocument.SELECT_MOVE_FILES_TO_VERSION);
+			        selectTypeStmts.add(CommonDocument.SELECT_IS_KIND_OF_VC_DOCUMENT);
+			        selectTypeStmts.add("vcfile");
+			        selectTypeStmts.add("vcmodule");
+			        selectTypeStmts.add(CommonDocument.SELECT_ACTIVE_FILE_LOCKED);
+			        selectTypeStmts.add(CommonDocument.SELECT_ACTIVE_FILE_LOCKER);
+			        selectTypeStmts.add(CommonDocument.SELECT_HAS_TOCONNECT_ACCESS);
+			        selectTypeStmts.add(CommonDocument.SELECT_ACTIVE_FILE_VERSION_ID);
+			        selectTypeStmts.add(CommonDocument.SELECT_OWNER);
+			        selectTypeStmts.add(CommonDocument.SELECT_LOCKED);
+			        selectTypeStmts.add(CommonDocument.SELECT_LOCKER);
+			        selectTypeStmts.add(CommonDocument.SELECT_ACTIVE_FILE_VERSION);
+
+
+
+        //Getting all the content ids
+        String oidsArray[] = new String[objectList.size()];
+        for (int i = 0; i < objectList.size(); i++) {
+        	oidsArray[i] = (String)((Map)objectList.get(i)).get("id");
+        }
+
+        MapList objList = DomainObject.getInfo(context, oidsArray, selectTypeStmts);
+        Iterator objectListItr = objList.iterator();
+        
+        while(objectListItr.hasNext()){
+		  // Start MSF
+		  msfFileFormatDetails = "";
+		  // End MSF
+          Map contentObjectMap = (Map)objectListItr.next();
+          Map lockCheckinStatusMap = CommonDocument.getLockAndCheckinIconStatus(context, contentObjectMap);
+          boolean isAnyFileLockedByContext = (boolean)lockCheckinStatusMap.get("isAnyFileLockedByContext");
+          boolean isContextDocumentOwner= (boolean)lockCheckinStatusMap.get("isContextDocumentOwner");
+          
+		  drDocActions.setupForObject(contentObjectMap);
+
+		  // Start MSF
+          StringList activeVersionIDList = (StringList) contentObjectMap.get(CommonDocument.SELECT_ACTIVE_FILE_VERSION_ID);
+		  // End MSF
+          StringList fileList = (StringList) contentObjectMap.get(CommonDocument.SELECT_FILE_NAME);
+		  // Start MSF
+          StringList activeVersionFileList = (StringList) contentObjectMap.get(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION);
+		  // End MSF
+          StringList fileFormatList = (StringList) contentObjectMap.get(CommonDocument.SELECT_FILE_FORMAT);
+          StringList tempfileList  = new StringList();
+		  // Start MSF
+		  isAdded = false;
+		  int nbActiveVersionFileList = 0;
+		  if (activeVersionFileList != null)
+			  nbActiveVersionFileList = activeVersionFileList.size();
+		  // End MSF
+          for(int ii =0; ii< fileFormatList.size(); ii++){
+          	String format = (String)fileFormatList.get(ii);
+          	if(!DomainObject.FORMAT_MX_MEDIUM_IMAGE.equalsIgnoreCase(format)){
+				// Start MSF
+				String temFileName = (String)fileList.get(ii);
+			    // End MSF
+          		tempfileList.add(fileList.get(ii));
+			    // Start MSF
+				if(nbActiveVersionFileList > ii)
+				{
+					if(!msfFileFormatDetails.isEmpty())
+						msfFileFormatDetails += ", ";
+
+					msfFileFormatDetails += "{FileName: '" + XSSUtil.encodeForJavaScript(context, (String)activeVersionFileList.get(ii)) + 
+						"', Format: '" + XSSUtil.encodeForJavaScript(context, format) + 
+						"', VersionId: '" + XSSUtil.encodeForJavaScript(context, (String)activeVersionIDList.get(ii)) + "'}";
+				}
+			    // End MSF
+          	}
+          }
+		  // Start MSF
+		  msfFileFormatDetails = "MSFFileFormatDetails:[" + msfFileFormatDetails + "]";
+		  // End MSF
+          fileList = tempfileList;
+          int fileCount = 0;
+          String vcInterface = "";
+          boolean vcDocument = false;
+          boolean vcFile = false;
+          String docType = "";
+          String activeFileVersionID = "";
+          String sFileName = "";
+          String newURL = "&#160;";
+          String docLocker = "";
+
+          try{
+              docLocker = (String)contentObjectMap.get(CommonDocument.SELECT_ACTIVE_FILE_LOCKER);
+              if(docLocker==null)
+                  docLocker = (String)contentObjectMap.get(CommonDocument.SELECT_LOCKER);
+              }catch(ClassCastException ex){
+                  docLocker = ((StringList)contentObjectMap.get(CommonDocument.SELECT_ACTIVE_FILE_LOCKER)).elementAt(0).toString();
+                  if(docLocker==null)
+                      docLocker = ((StringList)contentObjectMap.get(CommonDocument.SELECT_LOCKER)).elementAt(0).toString();
+              }
+
+          boolean moveFilesToVersion = (Boolean.valueOf((String) contentObjectMap.get(CommonDocument.SELECT_MOVE_FILES_TO_VERSION))).booleanValue();
+          String documentId = (String)contentObjectMap.get(DomainConstants.SELECT_ID);
+          String strFileFormat  = null;
+          DomainObject docObject = DomainObject.newInstance(context,documentId);
+          strFileFormat = CommonDocument.getFileFormat(context,docObject);
+
+          //   For getting the count of files
+          HashMap filemap = new HashMap();
+          filemap.put(CommonDocument.SELECT_MOVE_FILES_TO_VERSION, contentObjectMap.get(CommonDocument.SELECT_MOVE_FILES_TO_VERSION));
+          filemap.put(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION, contentObjectMap.get(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION));
+          filemap.put(CommonDocument.SELECT_FILE_NAME, fileList);
+          fileCount = CommonDocument.getFileCount(context,filemap);
+          contentObjectMap.put("fileCount",String.valueOf(fileCount));// Integer.toString(fileCount));
+
+          vcInterface = (String)contentObjectMap.get(CommonDocument.SELECT_IS_KIND_OF_VC_DOCUMENT);
+                vcDocument = "TRUE".equalsIgnoreCase(vcInterface)?true:false;
+
+          
+          docType    = (String)contentObjectMap.get(DomainConstants.SELECT_TYPE);
+          String parentType = CommonDocument.getParentType(context, docType);
+          if (CommonDocument.TYPE_DOCUMENTS.equals(parentType))
+          {
+		          if(drDocActions.isShowActivity()) {
+                      StringBuffer strBuf = new StringBuffer();
+                      drDocActions.addActivityHTML(contentObjectMap, strBuf);
+                      newURL = strBuf.toString();
+                  }
+	        	  //Can View
+		          if(drDocActions.isShowViewer() && CommonDocument.canView(context, contentObjectMap)){
+		
+		              Object fileObj = contentObjectMap.get(CommonDocument.SELECT_FILE_NAMES_OF_ACTIVE_VERSION);
+		              if (fileObj instanceof String) {
+		                  sFileName = (String)fileObj;
+		              } else if(fileObj instanceof StringList) {
+		                  sFileName = ((StringList)fileObj).elementAt(0).toString();
+		              }
+	
+		              if (moveFilesToVersion){
+		                      Object obj = contentObjectMap.get(CommonDocument.SELECT_ACTIVE_FILE_VERSION_ID);
+		                      if (obj instanceof String) {
+		                          activeFileVersionID = (String)obj;
+		                      } else if(obj instanceof StringList) {
+		                          activeFileVersionID = ((StringList)obj).elementAt(0).toString();
+		                }
+		                     // get the format that the Active version object contains the file
+		                  HashMap viewerURLMap = getViewerURLInfo(context, activeFileVersionID, sFileName);
+		                  if (!viewerURLMap.isEmpty()){
+		                          //XSSOK
+		                          newURL += ${CLASS:drlTools_emxCommonFileUI}.getViewerURL(context,
+		                                              activeFileVersionID, (String)viewerURLMap.get("format"), sFileName);
+		                     }
+		                  } else { // Designer Central Changes
+		                     //XSSOK
+		                     newURL += ${CLASS:drlTools_emxCommonFileUI}.getViewerURL(context, documentId, strFileFormat, sFileName);
+		                  }
+	
+		          }
+		          //Can Download
+		          if(drDocActions.isShowDownload() && CommonDocument.canDownload(context, contentObjectMap)){
+	
+	              	newURL+="<a href=\"javascript:callCheckout('"+XSSUtil.encodeForJavaScript(context, documentId)+"','download','','','"+XSSUtil.encodeForJavaScript(context, customSortColumns)+"','"+XSSUtil.encodeForJavaScript(context, uiType)+"','"+XSSUtil.encodeForJavaScript(context, table)+"');\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionDownload.gif\" alt=\""+sTipDownload+ "\" title=\""+sTipDownload+"\"></img></a>";
+	
+		        	  // Changes for CLC start here..
+		        	  //Show Download Icon for ClearCase Linked Objects
+	                  //DomainObject ccLinkedObject  = DomainObject.newInstance(context, documentId);
+		        	  String linkAttrName = PropertyUtil.getSchemaProperty(context,"attribute_MxCCIsObjectLinked");
+		        	  String isObjLinked = null;
+		        	  if(linkAttrName!=null && !linkAttrName.equals(""))
+		        	  {
+		        		  isObjLinked = docObject.getAttributeValue(context,linkAttrName);
+		        	  }
+	
+		        	  if(isObjLinked!=null && !isObjLinked.equals(""))
+		        	  {
+		        		  if(isObjLinked.equalsIgnoreCase("True"))
+		        		  {
+		        			  //show download icon for Linked Objects
+		        			  newURL+="<a href=\"../servlet/MxCCCS/MxCCCommandsServlet.java?commandName=downloadallfiles&objectId="+XSSUtil.encodeForURL(context, documentId)+"\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionDownload.gif\" alt=\""+sTipDownload+"\" title=\""+sTipDownload+"\"></img></a>";
+		        		  }
+	
+		        	  }
+		          }
+		          //show subscription link
+		          if (drDocActions.isShowSubscribe()) {
+					  StringBuffer strBuf = new StringBuffer(1256);
+					  strBuf.append("../components/emxSubscriptionDialog.jsp?objectId=");
+					  strBuf.append(XSSUtil.encodeForJavaScript(context, documentId));
+					  newURL+="<a href=\"javascript:showModalDialog('" +strBuf.toString()+ "','575','575')\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconSmallSubscription.gif\" alt=\""+sTipSubscription+"\" title=\""+sTipSubscription+"\"></img></a>";
+				  }
+	
+		          // Can Checkout
+		          if(drDocActions.isShowCheckOut() && CommonDocument.canCheckout(context, contentObjectMap)){
+		        	  newURL+="<a href=\"javascript:callCheckout('"+XSSUtil.encodeForJavaScript(context, documentId)+"','checkout','','','"+XSSUtil.encodeForJavaScript(context, customSortColumns)+"','"+XSSUtil.encodeForJavaScript(context, customSortDirections)+"', '"+XSSUtil.encodeForJavaScript(context, uiType)+"', '"+XSSUtil.encodeForJavaScript(context, table)+"');\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionCheckOut.gif\" alt=\""+sTipCheckout+ "\" title=\""+sTipCheckout+"\"></img></a>";
+		          }
+	          // Can Checkin
+			  
+
+
+	          if(drDocActions.isShowCheckIn() && CommonDocument.canCheckin(context, contentObjectMap) || VCDocument.canVCCheckin(context, contentObjectMap)){
+
+
+				  // MSF
+				  msfRequestData = "{RequestType: 'CheckIn', DocumentID: '" + documentId + "', " + msfFileFormatDetails + "}";
+				  // MSF
+	        	  vcFile =(Boolean.valueOf((String) contentObjectMap.get("vcfile"))).booleanValue();
+	
+	    		  StringBuffer checkIn = new StringBuffer(1256);
+				  if (isAnyFileLockedByContext) {
+	    		  if (!vcDocument)
+	    		  {
+	    			  	  checkIn.append("'../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, documentId));
+	                      checkIn.append("&amp;folderId=");
+	                      checkIn.append("null");
+	                      checkIn.append("&amp;customSortColumns="); //Added for Bug #371651 starts
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, customSortColumns));
+	                      checkIn.append("&amp;customSortDirections=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, customSortDirections));
+	                      checkIn.append("&amp;uiType=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, uiType));
+	                      checkIn.append("&amp;table=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, table));                 //Added for Bug #371651 ends
+	                      checkIn.append("&amp;showFormat=true&amp;showComments=required&amp;objectAction=update&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true&amp;updateTreeLabel=false','730','450'");
+	                      newURL+="<a href=\"javascript:processModalDialog(" + msfRequestData + "," + checkIn.toString()+");\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""+sTipCheckin+"\" title=\""+sTipCheckin+"\"></img></a>";
+	    		  } else {
+	    			  if(vcFile){
+
+	    				  checkIn.append("'../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, documentId));
+	                      checkIn.append("&amp;folderId=");
+	                      checkIn.append("null");
+	                      checkIn.append("&amp;customSortColumns=");         //Added for Bug #371651 starts
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, customSortColumns));
+	                      checkIn.append("&amp;customSortDirections=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, customSortDirections));
+	                      checkIn.append("&amp;uiType=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, uiType));
+	                      checkIn.append("&amp;table=");
+	                      checkIn.append(XSSUtil.encodeForJavaScript(context, table));                 //Added for Bug #371651 ends
+	                      checkIn.append("&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=false&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true','730','450'");
+	                      newURL+="<a href=\"javascript:processModalDialog(" + msfRequestData + "," + checkIn.toString()+");\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""+sTipCheckin+"\" title=\""+sTipCheckin+"\"></img></a>";
+	    			  } else {
+						  checkIn.append("'../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+						  checkIn.append(XSSUtil.encodeForJavaScript(context, documentId));
+						  checkIn.append("&amp;folderId=");
+						  checkIn.append("null");
+						  checkIn.append("&amp;customSortColumns=");     //Added for Bug #371651 starts
+						  checkIn.append(XSSUtil.encodeForJavaScript(context, customSortColumns));
+						  checkIn.append("&amp;customSortDirections=");
+						  checkIn.append(XSSUtil.encodeForJavaScript(context, customSortDirections));
+						  checkIn.append("&amp;uiType=");
+						  checkIn.append(XSSUtil.encodeForJavaScript(context, uiType));
+						  checkIn.append("&amp;table=");
+						  checkIn.append(XSSUtil.encodeForJavaScript(context, table));                 //Added for Bug #371651 ends
+						  checkIn.append("&amp;override=false&amp;showFormat=false&amp;showComments=required&amp;objectAction=checkinVCFile&amp;allowFileNameChange=true&amp;noOfFiles=1&amp;JPOName=emxVCDocument&amp;methodName=checkinUpdate&amp;refreshTableContent=true','730','450'");
+						  newURL+="<a href=\"javascript:processModalDialog(" + msfRequestData + "," + checkIn.toString()+");\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionCheckIn.gif\" alt=\""+sTipCheckin+"\" title=\""+sTipCheckin+"\"></img></a>";
+	                     }
+	    		  }
+				}
+	    		  if ((fileCount<=1 && !vcDocument))
+
+
+	    		  {
+						if (isContextDocumentOwner || isAnyFileLockedByContext) {
+
+
+
+
+
+
+
+
+	            		  StringBuffer strngBuf = new StringBuffer(1256);
+	                      strngBuf.append("'../teamcentral/emxTeamUnlockDocument.jsp?docId=");
+	                      strngBuf.append(XSSUtil.encodeForJavaScript(context, documentId));
+	                      strngBuf.append("&amp;customSortColumns=");
+	                      strngBuf.append(XSSUtil.encodeForJavaScript(context, customSortColumns));
+	                      strngBuf.append("&amp;customSortDirections=");
+	                      strngBuf.append(XSSUtil.encodeForJavaScript(context, customSortDirections));
+	                      strngBuf.append("&amp;uiType=");
+	                      strngBuf.append(XSSUtil.encodeForJavaScript(context, uiType));
+	                      strngBuf.append("&amp;table=");
+	                      strngBuf.append(XSSUtil.encodeForJavaScript(context, table));
+	                      strngBuf.append("'");// Modified for Bug #371651 ends
+	                      newURL+="<a href=\"javascript:submitWithCSRF("+strngBuf.toString()+", findFrame(getTopWindow(),'hiddenFrame'));\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionUnlock.gif\" alt=\""+docLocker+"\" title=\""+docLocker+"\"></img></a>";
+
+
+
+
+					}
+	                    
+	    		  }
+	          }
+	          // Can Add Files
+	          if(drDocActions.isShowAddFiles() && CommonDocument.canAddFiles(context, contentObjectMap)){
+				  // MSF
+				  msfRequestData = "{RequestType: 'AddFiles', DocumentID: '" + documentId + "'}";
+				  // MSF
+	    		  StringBuffer canAddFiles = new StringBuffer(1256);
+		    		  canAddFiles.append("'../components/emxCommonDocumentPreCheckin.jsp?objectId=");
+		    		  canAddFiles.append(XSSUtil.encodeForJavaScript(context, documentId));
+		    		  canAddFiles.append("&amp;folderId=");
+		    		  canAddFiles.append("null");
+		    		  canAddFiles.append("&amp;customSortColumns=");       //Added for Bug #371651 starts
+		    		  canAddFiles.append(XSSUtil.encodeForJavaScript(context, customSortColumns));
+		    		  canAddFiles.append("&amp;customSortDirections=");
+		    		  canAddFiles.append(XSSUtil.encodeForJavaScript(context, customSortDirections));
+		    		  canAddFiles.append("&amp;uiType=");
+		    		  canAddFiles.append(XSSUtil.encodeForJavaScript(context, uiType));
+		    		  canAddFiles.append("&amp;table=");
+		    		  canAddFiles.append(XSSUtil.encodeForJavaScript(context, table));                   //Added for Bug #371651 ends
+		    		  canAddFiles.append("&amp;showFormat=true&amp;showDescription=required&amp;objectAction=checkin&amp;showTitle=true&amp;JPOName=emxTeamDocumentBase&amp;appDir=teamcentral&amp;appProcessPage=emxTeamPostCheckinProcess.jsp&amp;refreshTableContent=true&amp;updateTreeLabel=false','730','450'");
+	                    newURL+="<a href=\"javascript:processModalDialog(" + msfRequestData + "," + canAddFiles.toString()+");\"><img style=\"border:0; padding: 2px;\" src=\"../common/images/iconActionAppend.gif\" alt=\""+sTipAddFiles+"\" title=\""+sTipAddFiles+"\"></img></a>";
+	    	  
+	          }
+          }
+		  
+          if(drDocActions.isUsingPowerBy() && drDocActions.isShowActivity()) {
+        	  StringBuffer strBuf = new StringBuffer();
+              drDocActions.addActivityHTML(contentObjectMap, strBuf);
+              newURL = strBuf.toString();
+          } 
+
+          vActions.add(newURL);
+    } 
+    } catch(Exception ex){
+		ex.printStackTrace();
+      throw ex;
+    }
+    finally{
+     return vActions;
+    }
+  }
+
+   
+}
+
+
+

@@ -1,0 +1,457 @@
+
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Vector;
+
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainSymbolicConstants;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.XSSUtil;
+import com.matrixone.apps.framework.ui.ProgramCallable;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectItr;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.List;
+import matrix.util.StringList;
+
+  
+
+public class ${CLASSNAME} {
+		
+		private static final String sRelRouteTask = PropertyUtil.getSchemaProperty("relationship_RouteTask");
+		private static String routeIdSelectStr="from["+sRelRouteTask+"].to.id";
+	    private static String routeNameSelectStr ="from["+sRelRouteTask+"].to.name";
+	    
+	    private static final String sRelWorkflowTask = PropertyUtil.getSchemaProperty("relationship_WorkflowTask");
+	    private static final String workflowIdSelectStr = "to["+sRelWorkflowTask+"].from.id";
+	    private static final String workflowNameSelectStr = "to["+sRelWorkflowTask+"].from.name";
+	    
+	    private static final String sTypeWorkflowTask = PropertyUtil.getSchemaProperty("type_WorkflowTask");
+		
+		/**
+	     * showRoute - Retrives the Tasks parent objects
+	     * Inbox Task - Route
+	     * Workflow Task - Workflow
+	     * Task - Project Space
+	     *
+	     * @param context the eMatrix <code>Context</code> object
+	     * @param args holds the following input arguments:
+	     *        0 - objectList MapList
+	     * @returns Object of type Vector
+	     * @throws Exception if the operation fails
+	     * @since AEF Rossini
+	     * @grade 0
+	     */
+	    public Vector showRoute(Context context, String[] args) throws Exception
+	    {
+	        try
+	        {
+	            HashMap programMap = (HashMap) JPO.unpackArgs(args);
+	            HashMap paramMap = (HashMap) programMap.get("paramList");
+	            MapList objectList = (MapList)programMap.get("objectList");
+
+	            Map objectMap = null;
+	            Vector showRoute = new Vector();
+	            String statusImageString = "";
+	            String sRouteString = "";
+	            boolean isPrinterFriendly = false;
+	            String strPrinterFriendly = (String)paramMap.get("reportFormat");
+	            String languageStr = (String)paramMap.get("languageStr");
+
+	            String sAccDenied = EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource",new Locale(languageStr),"emxComponents.Common.AccessDenied");
+
+	            if (strPrinterFriendly != null )
+	            {
+	                isPrinterFriendly = true;
+	            }
+
+	            int objectListSize = 0 ;
+	            if(objectList != null)
+	            {
+	                objectListSize = objectList.size();
+	            }
+	            for(int i=0; i< objectListSize; i++)
+	            {
+	                statusImageString = "";
+	                sRouteString = "";
+	                try
+	                {
+	                    objectMap = (HashMap) objectList.get(i);
+	                }
+	                catch(ClassCastException cce)
+	                {
+	                    objectMap = (Hashtable) objectList.get(i);
+	                }
+
+	                String sTypeName = (String) objectMap.get(DomainObject.SELECT_TYPE);
+	                String sObjectId = "";
+	                String sObjectName = "";
+
+	                if (PropertyUtil.getSchemaProperty(context,"type_InboxTask").equalsIgnoreCase(sTypeName))
+	                {
+	                    sObjectId   =(String)objectMap.get(routeIdSelectStr);
+	                    sObjectName = (String)objectMap.get(routeNameSelectStr);
+	                }
+	                else if (PropertyUtil.getSchemaProperty(context,"type_Task").equalsIgnoreCase(sTypeName))
+	                {
+	                    //Bug 318463. Commented below two lines and added 2 new lines to read id and name from main list.
+	                    sObjectId   =(String)objectMap.get("Context Object Id");
+	                    sObjectName = (String)objectMap.get("Context Object Name");
+	                }
+	                else if (sTypeWorkflowTask.equalsIgnoreCase(sTypeName))
+	                {
+	                    sObjectId   =(String)objectMap.get(workflowIdSelectStr);
+	                    sObjectName = (String)objectMap.get(workflowNameSelectStr);
+	                }
+
+	                //Bug 318325. If object id and Name are null don't show context object.
+	                if(sObjectId != null && sObjectName != null )
+	                {
+	                    String sRouteNextUrl = "./emxIndentedTable.jsp?table=RouteConnectedObject&relationship=relationship_ObjectRoute&expandProgram=com.dassault_systemes.enovia.actiontasks.ui.ENORouteTaskContent:getRouteConnectedObject&StringResourceFileId=emxComponentsStringResource&sortColumnName=Name&SuiteDirectory=components&emxSuiteDirectory=components&header=emxComponents.Menu.Content&HelpMarker=emxhelproutecontent&sortDirection=ascending&selection=multiple&jsTreeID=null&suiteKey=Components&objectId=" + XSSUtil.encodeForJavaScript(context, sObjectId);
+	                    //String sRouteUrl  = "javascript:showNonModalDialog('" + sRouteNextUrl + "',800,575)";
+	                    // Changed for bug 346533
+	                    String sRouteUrl  = XSSUtil.encodeForHTML(context, "javascript:emxTableColumnLinkClick('" + sRouteNextUrl + "','800','575',false,'popup','')");
+
+
+	                    if(!isPrinterFriendly)
+	                    {
+	                        // Added for the 341122
+	                    	DomainObject domObj = DomainObject.newInstance(context, sObjectId);
+	                		String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type", domObj.getInfo(context, DomainConstants.SELECT_TYPE), true);
+	                		String typeIcon;
+	                		try
+	                		{
+	                			typeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + strTypeSymName);
+	                		}catch(FrameworkException e){
+	                			typeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon.defaultType");
+	                		}
+	                		String tipMessage = EnoviaResourceBundle.getProperty(context, "emxActionTasksStringResource", context.getLocale(),
+	            					"ENOActionTasks.MyTasks.Expansion.ToolTip");
+	                    	StringBuilder sbLink = new StringBuilder();
+	                		sbLink.append("<img src = \"images/").append(typeIcon).append("\"").append(" title=\"").append(tipMessage).append("\"").append("/>&#160;");
+	                        sRouteString = "<a  href=\""+sRouteUrl+"\">"+sbLink+"</a>&#160;";
+	                    }
+	                    else
+	                    {
+	                        sRouteString = sObjectName;
+	                    }
+	                    showRoute.add(sRouteString);
+	                }
+	                else
+	                {
+	                    showRoute.add(sAccDenied);
+	                }
+	            }
+
+	            return showRoute;
+	        }
+	        catch (Exception ex)
+	        {
+	        	throw new Exception(ex.getMessage());
+	        }
+	    }
+	    
+	    @ProgramCallable
+	    public MapList getRouteConnectedObject(Context context, String[] args) throws Exception{
+
+	    	try {				
+
+	    		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+	    		String objectId    = (String) programMap.get("objectId");
+	    		MapList mapRelatedObject = new MapList();
+	    		List<String> sListSelects = new StringList();
+
+	    		StringList selectBusStmts    = new StringList();
+	    		selectBusStmts.add(DomainConstants.SELECT_ID);
+	    		selectBusStmts.add(DomainConstants.SELECT_TYPE);
+	    		selectBusStmts.add(DomainConstants.SELECT_NAME);
+	    		selectBusStmts.add(DomainConstants.SELECT_REVISION);
+	    		selectBusStmts.add(DomainConstants.SELECT_OWNER);
+
+	    		DomainObject dom = DomainObject.newInstance(context,objectId);
+	    		String sType = dom.getInfo(context, "type");        
+
+	    		String strTypeAllowed = EnoviaResourceBundle.getProperty(context,"ENOActionTasks.MyTasks.Expansion");
+	    		StringList typeAllowedKeyPair = FrameworkUtil.split(strTypeAllowed, ",");
+
+	    		String programName = DomainConstants.EMPTY_STRING;
+	    		String functionName = DomainConstants.EMPTY_STRING;
+
+	    		for(int i =0; i< typeAllowedKeyPair.size() ;i++){
+	    			String strTypeKey =  typeAllowedKeyPair.get(i).toString();
+	    			StringList strkeyValue = FrameworkUtil.split(strTypeKey, ":");
+	    			String strKey = strkeyValue.get(0).toString().trim();
+	    			String sKeyName = PropertyUtil.getSchemaProperty(context, strKey);
+	    			String strAllDirection = strkeyValue.get(1).toString().trim();
+	    			String strAllRelValue = strkeyValue.get(2).toString().trim();
+
+	    			if(sType.equalsIgnoreCase(sKeyName)){
+	    				StringList strDirectionList=FrameworkUtil.split(strAllDirection, "|");
+	    				StringList strRelValueList=FrameworkUtil.split(strAllRelValue, "|");
+
+	    				for(int j=0; j< strRelValueList.size();j++){
+	    					String strDirValue = strDirectionList.get(j).toString().trim();
+	    					String strRelValue = strRelValueList.get(j).toString().trim();
+	    					if(strDirValue.equalsIgnoreCase("from")){
+	    						strRelValue = PropertyUtil.getSchemaProperty(context, strRelValue);
+	    						sListSelects.add("from[" + strRelValue + "].to.id");
+	    					}else if(strDirValue.equalsIgnoreCase("to")){
+	    						strRelValue = PropertyUtil.getSchemaProperty(context, strRelValue);
+	    						sListSelects.add("to[" + strRelValue + "].from.id");
+	    					}else if(strDirValue.equalsIgnoreCase("program")){
+	    						programName = strRelValue;
+	    					} else if(strDirValue.equalsIgnoreCase("function")){
+	    						functionName = strRelValue;
+	    					}
+	    				}
+	    			}
+	    		}
+
+	    		if(!programName.isEmpty() && !functionName.isEmpty()){
+	    			args=JPO.packArgs(programMap);
+	    			mapRelatedObject = JPO.invoke(context, programName, args, functionName, args, MapList.class);
+	    		}
+	    		else{
+	    			BusinessObjectWithSelectList strObjectList = BusinessObject.getSelectBusinessObjectData(context, new String []{objectId}, (StringList) sListSelects);
+		    		List<String> slObjectId = new List<>();
+		    		for (BusinessObjectWithSelectItr itr = new BusinessObjectWithSelectItr(strObjectList); itr.next();) {
+		    			BusinessObjectWithSelect bows = itr.obj();
+		    			for(int j=0; j< sListSelects.size(); j++){
+		    				StringList sList=bows.getSelectDataList(sListSelects.getElement(j).toString().trim());
+		    				if(sList!=null)
+		    					slObjectId.addAll(sList);
+		    			}
+
+		    			for(int k=0; k<slObjectId.size();k++){
+		    				StringList slselect=new StringList();
+		    				slselect.add(DomainConstants.SELECT_OWNER);	        		
+		    				DomainObject domObj = DomainObject.newInstance(context, slObjectId.get(k).toString());
+		    				Map mp=domObj.getInfo(context, slselect);
+		    				Map map =new HashMap();
+		    				map.put(DomainConstants.SELECT_ID, slObjectId.get(k));
+		    				map.put(DomainConstants.SELECT_OWNER, mp.get(DomainConstants.SELECT_OWNER).toString());
+		    				mapRelatedObject.add(map);
+		    			}
+		    		}
+	    		}
+	    		return mapRelatedObject;
+	    	} catch (Exception e) {
+	    		throw new Exception(e.getMessage());
+	    	}	
+	    }
+	    
+	
+	    public static Boolean checkContextAccess(Context context,String[] args){
+	    	try{
+	    		String strAccess = EnoviaResourceBundle.getProperty(context, "ENOActionTasks.MyTasks.ShowExpandColumn");
+	    		if(strAccess.equalsIgnoreCase("true")){
+	    			return true;
+	    		}else{
+	    			return false;
+	    		}
+	    	}catch(Exception ex){
+	    		return false;
+	    	}    	
+	    	
+	    	
+	    }	
+	    
+	    public static Boolean checkContextColumnAccess(Context context,String[] args){
+	    	try{
+	    		String strAccess = EnoviaResourceBundle.getProperty(context, "ENOActionTasks.MyTasks.ShowExpandColumn");
+	    		if(strAccess.equalsIgnoreCase("true")){
+	    			return false;
+	    		}else{
+	    			return true;
+	    		}
+	    	}catch(Exception ex){
+	    		return true;
+	    	}    	
+	    	
+	    	
+	    }	
+	    
+		/**
+		 * This method will return complete name of the Person object with link on
+		 * the name and Icon of Person
+		 * @param context the ENOVIA <code>Context</code> object
+		 * @param args holds no value
+		 * @return Vector containing complete names of the owner
+		 * @throws FrameworkException if the operation fails
+		 * @exclude
+		 */
+		public List<String> getOwnerLink(Context context, String[] args) 
+				throws FrameworkException {
+			// Unpacking the args
+			Map programMap;
+			try {
+				programMap = (Map) JPO.unpackArgs(args);
+
+				// Gets the objectList from args
+				MapList mlObjectList = (MapList) programMap.get("objectList");
+				Map paramList = (Map) programMap.get("paramList");
+				String strReportFormat = (String) paramList.get("reportFormat");
+				List<String> lLinks = new StringList();
+				// Getting the bus ids for objects in the table
+				for (Object object : mlObjectList) {
+					Map map = (Map) object;
+					String strName = (String) map.get(CommonDocument.SELECT_OWNER);
+					if(UIUtil.isNotNullAndNotEmpty(strName)){
+						String strPerson = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Person);
+						String strOwnerBus = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 $5", true, strPerson, strName, "-", "id", "dump");
+						if(UIUtil.isNotNullAndNotEmpty(strOwnerBus)){						
+							String strOwnerId = PersonUtil.getPersonObjectID(context, strName);
+							strName = PersonUtil.getFullName(context, strName);
+							if (UIUtil.isNullOrEmpty(strReportFormat)&&UIUtil.isNotNullAndNotEmpty(strName)) {
+								strName = getObjectLink(context, strOwnerId, strName);
+							}
+						}
+					}
+					lLinks.add(strName);
+				}
+
+				return lLinks;
+			} catch (Exception ex) {
+				throw new FrameworkException(ex.getMessage());
+			}
+		}
+
+		/**
+	 * Method to form object link to open property page in popup
+	 * @param context the ENOVIA <code>Context</code> object
+	 * @param strId id of object
+	 * @param strDisplayText text to be displayed as a link
+	 * @return hyperlink to open the objects property page
+	 * @throws FrameworkException if operation fails
+	 */
+	public static String getObjectLink(Context context, String strId, String strDisplayText) throws FrameworkException {
+		DomainObject domObj = DomainObject.newInstance(context, strId);
+		String strTypeSymName = FrameworkUtil.getAliasForAdmin(context, "type", domObj.getInfo(context, DomainConstants.SELECT_TYPE), true);
+		String typeIcon;
+		try
+		{
+			typeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon." + strTypeSymName);
+		}catch(FrameworkException e){
+			typeIcon = EnoviaResourceBundle.getProperty(context,"emxFramework.smallIcon.defaultType");
+		}
+		
+		StringBuilder sbLink = new StringBuilder();
+		sbLink.append("<img src = \"images/").append(typeIcon).append("\"/>&#160;");
+		sbLink.append("<a href=\"JavaScript:showNonModalDialog('emxTree.jsp?objectId=");
+		sbLink.append(XSSUtil.encodeForJavaScript(context, strId));
+		sbLink.append("', '930', '650', 'true')\" >");
+		sbLink.append(strDisplayText);
+		sbLink.append("</a>");
+		return sbLink.toString();
+	}
+
+	/**
+	 * Returns HTML link to open organization properties in popup
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            hold program map with object id
+	 * @return HTML link to open organization properties in popup
+	 * @throws Exception 
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	public List<String> getOrganizationLink(Context context, String[] args) throws Exception {
+		try {
+			List<String> lLinks = new StringList();
+			Map programMap = (Map) JPO.unpackArgs(args);
+			MapList mlObjectList = (MapList) programMap.get("objectList");
+			Map paramList = (Map) programMap.get("paramList");
+			String strReportFormat = (String) paramList.get("reportFormat");
+			String strPFMode = (String) paramList.get("PFmode");
+
+			StringList slSelects = new StringList(3);
+			slSelects.add(DomainConstants.SELECT_NAME);
+			slSelects.add(DomainConstants.SELECT_ORGANIZATION);
+			slSelects.add(DomainConstants.SELECT_TYPE);
+
+			for (Object object : mlObjectList) {
+				Map<?, ?> objectMap = (Map<?, ?>)object;
+				StringBuilder sbLink = new StringBuilder();
+				DomainObject domObj = DomainObject.newInstance(context, (String) objectMap.get("id"));
+				Map mpInfo = domObj.getInfo(context, slSelects);
+				String strOrgName = (String) mpInfo.get(DomainConstants.SELECT_ORGANIZATION);
+				if(UIUtil.isNotNullAndNotEmpty(strOrgName)){
+					if (!UIUtil.isNullOrEmpty(strReportFormat)) {
+						sbLink.append(strOrgName);
+					}
+					if ((Boolean.TRUE.toString()).equalsIgnoreCase(strPFMode)) {
+						String strType = FrameworkUtil.getAliasForAdmin(context,DomainConstants.SELECT_TYPE, (String) mpInfo.get(DomainConstants.SELECT_TYPE), true);
+						String typeIcon = EnoviaResourceBundle.getProperty(context, "emxFramework.smallIcon." + strType);
+						sbLink.append("<img border=\"0\" src=\"images/").append(XSSUtil.encodeForHTMLAttribute(context, typeIcon)).append("\">");
+						sbLink.append(strOrgName);
+					}
+					else {
+						sbLink.append(getObjectLink(context, getOrganizationId(context, strOrgName), strOrgName));
+					}
+				}
+				lLinks.add(sbLink.toString());
+			}
+
+			return lLinks;
+		}
+		catch (Exception e) {
+			throw new Exception(e);
+		}
+	}
+
+    /**
+     * Returns object id of the organization
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param strName
+	 *            name of the organization
+     * @return object id of the organization
+     * @throws FrameworkException 
+	 * @throws DCLException
+	 *             if operation fails
+     */
+    private String getOrganizationId(Context context, String strName) throws FrameworkException {
+   	 String strTypeOrganization = PropertyUtil.getSchemaProperty(context, DomainSymbolicConstants.SYMBOLIC_type_Organization);
+   	 return getObjectIdFromTNR(context, strTypeOrganization, strName,  DomainConstants.QUERY_WILDCARD);
+    }
+
+    /**
+     * Method is used to get the Organization object id using it's name
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param strNewOrgValue
+	 *            name of organization
+     * @throws FrameworkException 
+	 * @throws DCLException
+	 *             if operation fails
+     * @exclude
+     */
+	private String getObjectIdFromTNR(Context context, String strType, String strName, String strRevision) throws FrameworkException {
+        String strResult = MqlUtil.mqlCommand(context, "temp query bus $1 $2 $3 select $4 dump $5", false,strType,strName,strRevision,"id","|");
+        StringList slList = FrameworkUtil.split(strResult, "|");
+        return (String) slList.get(3);
+    }
+
+}
+
+

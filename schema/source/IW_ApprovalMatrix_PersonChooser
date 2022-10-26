@@ -1,0 +1,1085 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+import java.util.HashMap;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.StringTokenizer;
+
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.db.MQLCommand;
+import matrix.db.Query;
+import matrix.db.Set;
+import matrix.util.MatrixException;
+import matrix.util.SelectList;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.FrameworkException;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.SetUtil;
+
+@Deprecated
+public class ${CLASSNAME} {
+	/* Symbolic names */
+	private static final String		ATTRIBUTE_LAST_NAME				= PropertyUtil.getSchemaProperty("attribute_LastName");
+
+	private static final String		ATTRIBUTE_FIRST_NAME			= PropertyUtil.getSchemaProperty("attribute_FirstName");
+
+	private static final String		POLICY_PERSON					= PropertyUtil.getSchemaProperty("policy_Person");
+
+	private static final String		STATE_ACTIVE					= PropertyUtil.getSchemaProperty(null, "policy", POLICY_PERSON, "state_Active");
+	private static final String		TYPE_PERSON						= PropertyUtil.getSchemaProperty("type_Person");
+
+	/* Delimiter used throughout Person Chooser function */
+	public static final String		DELIMITER						= "|";
+
+	/* Default query limit just in case one isn't passed */
+	private static final short		QUERY_LIMIT						= 1000;
+
+	/* Range value of the 'Approval User' attribute */
+	public static final String		ROLE							= "Role";
+
+	/* Range value of the 'Approval User' attribute */
+	public static final String		GROUP							= "Group";
+
+	/* Unique key for map from iw_ApprovalMatrixDialog.jsp */
+	private static final String		ROLE_OR_GROUP					= "role_or_group";
+
+	/* Unique key for map from iw_ApprovalMatrixDialog.jsp */
+	private static final String		ROLE_OR_GROUP_NAME				= "role_or_group_name";
+
+	/* Used to create unique key and display */
+	private static final String		SEPARATOR						= ":";
+
+	/* Used for query values */
+	private static final String		WILDCARD						= "*";
+
+	/*
+	 * Object returned when determining if a group or role will display the
+	 * person chooser icon
+	 */
+	private static final Boolean	TRUE							= Boolean.valueOf(true);
+
+	/*
+	 * Object returned when determining if a group or role will display the
+	 * person chooser icon
+	 */
+	private static final Boolean	FALSE							= Boolean.valueOf(false);
+
+	/*
+	 * Flag to indicate that the one-time read and process of the config file is
+	 * complete
+	 */
+	private static boolean			readConfigFile					= false;
+
+	/*
+	 * Flag to indicate that the threshold setting and check is in use; actually
+	 * configured in the IW_ApprovalMatrix_StaticVariable class.
+	 */
+	private static boolean			employChooserThreshold			= false;
+
+	/* Threshold threshold value */
+	private static int				chooserThreshold				= 0;
+
+	/*
+	 * Table caches the role and group config settings and roles and groups
+	 * associated with the threshold check.
+	 */
+	private static Hashtable		roleGroupChooserTable			= new Hashtable();
+
+	/*
+	 * Table caches the roles and groups that cause an exception when attempting
+	 * to query the database using a 'matchlist'. Per TheLink, MQL statements
+	 * are limited to ~15KB. In some cases, the roles/groups have an excessive
+	 * number of Persons. (i.e. Employee)
+	 */
+	private static StringList		requiresUseOfMatrixSets			= new StringList();
+
+	// For member list functionality - added on 31 st Dec 2009 , Defect
+	// 26410,26411
+	protected static final String	DEFAULT							= "Default";
+	protected static final String	ADD_EXISTING					= "AddExisting";
+	protected static final String	ALL								= "All";
+	protected static final String	SELECTED						= "Selected";
+	/** relationship "Assigned Member". */
+	public static final String		RELATIONSHIP_ASSIGNED_MEMBER	= PropertyUtil.getSchemaProperty("relationship_AssignedMember");
+
+	/**
+	 * Contructor ensures that we are conected to eMatrix.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            not used in constructor
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws Exception {
+	}
+
+	/**
+	 * Default method that eMatrix calls when invoking this JPO. This method
+	 * should not be used.
+	 * 
+	 * @param context
+	 *            ematrix context
+	 * @param args
+	 *            not used in mxMain
+	 * @return 1 - this should not be called
+	 * @throws Exception
+	 *             - Contents are handled by eMatrix kernel
+	 */
+	public int mxMain(Context context, String[] args) throws Exception {
+		// throw new
+		// Exception("Must specify method on IW_ApprovalMatrix_PersonChooser invocation.");
+		throw new Exception(Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.NoPersonChooserMethod"));
+	}
+
+	/**
+	 * July, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method encapsulates the query that includes a 'matchlist' in the
+	 * query. The 'matchlist' strategy offers the best performance, but is
+	 * limited by the length of the 'where' clause that is ultimately generated.
+	 * The length of the 'where' clause is limited to ~15KB.
+	 * 
+	 * @param context
+	 * @param whereClause
+	 * @param delimitedUsersList
+	 * @param queryUserName
+	 * @param shortLimit
+	 * @return
+	 * @throws NumberFormatException
+	 * @throws FrameworkException
+	 */
+	private static MapList queryPersonUsingMatchList(Context context, String whereClause, StringList delimitedUsersList, String queryUserName,
+			short shortLimit) throws NumberFormatException, FrameworkException {
+		if (delimitedUsersList != null && delimitedUsersList.size() > 0) {
+			String delimitedUsers = convertStringListToDelimitedString(delimitedUsersList, DELIMITER);
+			whereClause += "&& name matchlist \"" + delimitedUsers + "\" \"" + DELIMITER + "\" ";
+		}
+
+		SelectList objSelects = new SelectList();
+		objSelects.addId();
+
+		MapList foundObjects = DomainObject.findObjects(context, "Person" // Type
+																			// pattern
+				, queryUserName // Name pattern
+				, "-" // Revision pattern
+				, WILDCARD // Owner pattern
+				, WILDCARD // Vault Pattern
+				, whereClause // Where Expression
+				, null // Query name
+				, true // Expand type
+				, objSelects // Selects
+				, shortLimit);
+		return foundObjects;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method processes the information provided by the Person Chooser web
+	 * form. Two of the values, though, 'roleOrGroups' and 'roleOrGroupNames'
+	 * are passed via the original link on the Approval Matrix route create
+	 * page.<br>
+	 * The key to this query is the 'where' clause. It includes a 'name'
+	 * matchlist that limits the result set to those names, only.<br>
+	 * <br>
+	 * July, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method was updated due to a problem discovered when an excessively
+	 * long (>15KB) 'where' clause 'matchlist' value is created. A two-prong
+	 * approach is now utilized. Because the 'matchlist' strategy offers better
+	 * performance, that method is tried first. If an error is caught, then the
+	 * method that uses Matrix sets is executed. (The code is set-up to cache
+	 * the roles/groups that cause the matchlist method to fail; in those cases,
+	 * the Matrix Sets method will be used for that particular role/group from
+	 * that point forward.)<br>
+	 * 
+	 * @param context
+	 * @param args
+	 *            packed web form data
+	 * @return ids of Person objects that meet the query requirements.
+	 * @throws Exception
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public static MapList tablePeopleChooserQueryResults(Context context, String[] args) throws Exception {
+
+		// Get Parameters from web form
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		String roleOrGroups = (String) paramMap.get(ROLE_OR_GROUP);
+		String roleOrGroupNames = (String) paramMap.get(ROLE_OR_GROUP_NAME);
+		String user_name = (String) paramMap.get("user_name");
+		String last_name = (String) paramMap.get("last_name");
+		String first_name = (String) paramMap.get("first_name");
+		String limit = (String) paramMap.get("queryLimit");
+		String sScope = (String) paramMap.get("scope");
+		String sObjectId = (String) paramMap.get("objectId");
+
+		if (sScope == null || sScope.trim().length() == 0)
+			sScope = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION;
+
+		/*
+		 * Create the 'where' clause.
+		 */
+		// Only the 'Active' users, please
+		String whereClause = " current ~= " + "\"" + STATE_ACTIVE + "\" ";
+
+		/*
+		 * Based on the role and group information passed, we need to find all
+		 * of the active users in those roles. We will use this as a component
+		 * of the 'where' clause for the subsequent 'Person' query.
+		 */
+		StringList delimitedUsersList = null;
+
+		if (roleOrGroups.equals(ROLE)) {
+			delimitedUsersList = ${CLASS:IW_ApprovalMatrix}.getUsersForRole(context, roleOrGroupNames, sScope, sObjectId, "");
+		}
+		else if (roleOrGroups.equals(GROUP)) {
+			delimitedUsersList = ${CLASS:IW_ApprovalMatrix}.getUsersForGroup(context, roleOrGroupNames, sScope, sObjectId, "");
+		}
+
+		// Process 'user_name'
+		String queryUserName = "*";
+
+		if (user_name != null && user_name.trim().length() > 0) {
+			queryUserName = user_name;
+		}
+
+		// Process 'last_name'
+		if (last_name != null && last_name.trim().length() > 0 && !last_name.trim().equals(WILDCARD)) {
+			whereClause += "&& attribute[" + ATTRIBUTE_LAST_NAME + "] ~~ \"" + last_name + "\" ";
+		}
+
+		// Process 'first_name'
+		if (first_name != null && first_name.trim().length() > 0 && !first_name.trim().equals(WILDCARD)) {
+			whereClause += "&& attribute[" + ATTRIBUTE_FIRST_NAME + "] ~~ \"" + first_name + "\" ";
+		}
+
+		/*
+		 * 'where' clause complete.
+		 */
+
+		// Process Query Limit
+		short shortLimit = QUERY_LIMIT;
+		if (limit != null && limit.length() > 0) {
+			shortLimit = new Short(limit).shortValue();
+		}
+
+		MapList foundObjects = new MapList();
+
+		try {
+			if (requiresUseOfMatrixSets.contains(roleOrGroupNames)) {
+				foundObjects = queryPersonUsingMatrixSets(context, whereClause, delimitedUsersList, queryUserName, shortLimit);
+			}
+			else {
+				foundObjects = queryPersonUsingMatchList(context, whereClause, delimitedUsersList, queryUserName, shortLimit);
+			}
+		}
+		catch (Exception e) {
+			requiresUseOfMatrixSets.add(roleOrGroupNames);
+			foundObjects = queryPersonUsingMatrixSets(context, whereClause, delimitedUsersList, queryUserName, shortLimit);
+		}
+
+		return foundObjects;
+	}
+
+	/**
+	 * July, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method encapsulates the code that uses Matrix 'sets' and a query to
+	 * determine the appropriate Person objects. This method is used when the
+	 * 'matchlist' where clause method will not work due to the length of the
+	 * resultant matchlist.<br>
+	 * From a performance standpoint, this is slower than the matchlist
+	 * strategy, but, it is able to handle a large data set. <br>
+	 * 
+	 * @param context
+	 * @param whereClause
+	 * @param delimitedUsersList
+	 * @param queryUserName
+	 * @param shortLimit
+	 * @return
+	 * @throws Exception
+	 * @throws MatrixException
+	 */
+	private static MapList queryPersonUsingMatrixSets(Context context, String whereClause, StringList delimitedUsersList, String queryUserName,
+			short shortLimit) throws Exception, MatrixException {
+		SelectList objSelects = new SelectList();
+		objSelects.addId();
+
+		/*
+		 * Had to introduce this nex Context object due to the fact that this
+		 * code is running in a 'read' transaction boundary. Attempts to provide
+		 * a workaround to create a 'write' transaction didn't work.
+		 */
+		Context con = new Context(context.getSession().getHost());
+		con.setUser(context.getUser());
+		con.setPassword(context.getPassword());
+		con.connect();
+
+		// Need to create a Matrix 'Set' from the provided list of users
+		if (delimitedUsersList != null && delimitedUsersList.size() > 0) {
+			createSetFromNameList(con, delimitedUsersList);
+		}
+		else {
+			createSetFromNameList(con, new StringList());
+		}
+
+		// Now that the Set of users has been established, we need to create
+		// and evaluate a query. The result is placed in yet another Matrix Set
+		evaluateQuery(con, queryUserName, whereClause, shortLimit);
+
+		// Now that the results are available, we need to select against the
+		// result set
+		// and place the object ids into a MapList.
+		Set set = new Set(createSetNameResult(con));
+		BusinessObjectWithSelectList bowsList = set.select(con, objSelects);
+		BusinessObjectWithSelect bows = null;
+		HashMap hm = null;
+		MapList foundObjects = new MapList();
+
+		if (bowsList != null && bowsList.size() > 0) {
+			ListIterator itr = bowsList.listIterator();
+			while (itr.hasNext()) {
+				bows = (BusinessObjectWithSelect) itr.next();
+				hm = new HashMap(1);
+				hm.put("id", bows.getSelectData("id"));
+				foundObjects.add(hm);
+			}
+		}
+
+		con.disconnect();
+
+		return foundObjects;
+	}
+
+	public static void main(String[] args) throws MatrixException, Exception {
+		// Establish connection to the RMI
+		Context context = new Context("");
+		context.resetContext("Test Everything", "", "");
+
+		// String[] arg = {};
+
+		// StringList list = (StringList) getOrganizations(context, arg);
+		// Get Parameters from web form
+		// HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		HashMap paramMap = new HashMap();
+		paramMap.put(ROLE_OR_GROUP, ROLE);
+		paramMap.put(ROLE_OR_GROUP_NAME, "Employee");
+		paramMap.put("user_name", "*John*");
+		paramMap.put("last_name", "*");
+		paramMap.put("first_name", "*");
+		paramMap.put("queryLimit", "100");
+		paramMap.put("scope", ${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION);
+
+		// String[] argq = JPO.packArgs(paramMap);
+
+		// ${CLASSNAME} iwam = new
+		// ${CLASSNAME}(context, arg);
+		// MapList ml =
+		// ${CLASSNAME}.tablePeopleChooserQueryResults(context,
+		// argq);
+		// ml =
+		// ${CLASSNAME}.tablePeopleChooserQueryResults(context,
+		// argq);
+
+	}
+
+	/*
+	 * NOT USED! - Future development.
+	 */
+	public static Object getOrganizations(Context context, String[] args) throws Exception {
+		// HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		// HashMap requestMap = (HashMap) programMap.get("requestMap");
+		// HashMap paramMap = (HashMap) programMap.get("paramMap");
+		// String objectId = (String) requestMap.get("objectId");
+		// String relId = (String) paramMap.get("relId");
+		// String languageStr = (String) requestMap.get("languageStr");
+		// initialize the return variable
+		StringList fieldRangeValues = new StringList();
+		// define and add selects if required
+		// Process the information to obtain the range values and add
+		// them to fieldRangeValues
+		// com.matrixone.apps.common.Person person =
+		// com.matrixone.apps.common.Person.getPerson(context);
+		// com.matrixone.apps.common.Company contextComp =
+		// person.getCompany(context);
+		// String contextCompanyName = contextComp.getInfo(context,
+		// DomainObject.SELECT_NAME);
+		// String contextCompanyId = contextComp.getInfo(context,
+		// DomainObject.SELECT_ID);
+
+		StringList objectSelect = new StringList(2);
+		objectSelect.add(DomainObject.SELECT_NAME);
+		objectSelect.add(DomainObject.SELECT_ID);
+
+		MapList companyList = com.matrixone.apps.common.Company.getCompanies(context, DomainObject.QUERY_WILDCARD, objectSelect, null);
+		Map companyMap;
+
+		Iterator itr = companyList.iterator();
+
+		while (itr.hasNext()) {
+			companyMap = (Map) itr.next();
+			fieldRangeValues.add((String) companyMap.get(DomainObject.SELECT_NAME));
+		}
+
+		return fieldRangeValues;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method processes the information provided by the link from the
+	 * Approval Matrix creation page. At some point, we may attempt to
+	 * accomodate more than one role or group. The code, at this point, though,
+	 * has not been developed in this fashion throughout.
+	 * 
+	 * @param context
+	 * @param args
+	 *            HashMap containing role/ group information
+	 * @return Display value for web form
+	 * @throws Exception
+	 */
+	public static Object getRoleOrGroupFromRequest(Context context, String[] args) throws Exception {
+		HashMap programMap = (HashMap) JPO.unpackArgs(args);
+		HashMap requestMap = (HashMap) programMap.get("requestMap");
+		// String languageStr = (String) requestMap.get("languageStr");
+
+		// initialize the return variable
+		StringList fieldRangeValues = new StringList();
+
+		// define and add selects if required
+		// Process the information to obtain the range values and add
+		// them to fieldRangeValues
+		String roleOrGroup = (String) requestMap.get(ROLE_OR_GROUP);
+		String roleOrGroupName = (String) requestMap.get(ROLE_OR_GROUP_NAME);
+
+		if (roleOrGroup == null || roleOrGroup.trim().length() == 0 || roleOrGroupName == null || roleOrGroupName.trim().length() == 0) {
+			// i18nNow i18nnow = new i18nNow();
+			String contentLabel = Helper.getI18NString(context, Helper.StringResource.LSA,
+					"emxFramework.ApprovalMatrix.ErrorMsg.RoleOrGroupNotSpecified");
+			String errMsg = "getRoleOrGroupFromRequest: " + contentLabel;
+
+			throw new Exception(errMsg);
+		}
+
+		fieldRangeValues.add(roleOrGroup + ": " + roleOrGroupName);
+
+		return fieldRangeValues;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method determines if the person chooser link should be offered.
+	 * There are two criteria, currently, to determine if the chooser should be
+	 * offered:<br>
+	 * 1) Roles and groups may be specified in the
+	 * <code>IW_ApprovalMatrix_StaticVariables</code> class. Any role or group
+	 * listed there will automatically offer the chooser;<br>
+	 * 2) A threshold value may be specified in the
+	 * <code>IW_ApprovalMatrix_StaticVariables</code> class. Any role or group
+	 * that has user #'s in excess of the threshold value will automatically be
+	 * offered the chooser.
+	 * 
+	 * @param context
+	 * @param args
+	 *            Hashtable of key/values provided by the Approval Matrix
+	 *            display JSP
+	 * @return Boolean indicating if the chooser should be offered.
+	 * @throws Exception
+	 */
+	public static Object showPersonChooser(Context context, String[] args) throws Exception {
+		Boolean flag = Boolean.valueOf(false);
+
+		Hashtable table = (Hashtable) JPO.unpackArgs(args);
+		StringList roleOrGroupList = (StringList) table.get(ROLE_OR_GROUP);
+		StringList roleOrGroupNameList = (StringList) table.get(ROLE_OR_GROUP_NAME);
+
+		// Check to see if the lists are the same length. If not, throw an
+		// error.
+		if (roleOrGroupList == null || roleOrGroupNameList == null || roleOrGroupList.size() != roleOrGroupNameList.size()) {
+			// String errMsg =
+			// "showPersonChooser: Error: role/group declaration error.";
+			// throw new Exception(errMsg);
+			throw new Exception("showPersonChooser: "
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + " "
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.RoleGroupDeclaration"));
+		}
+
+		// Iterate through the list of role/groups and role/group names
+		Iterator iterator = roleOrGroupList.iterator();
+		Iterator iterator2 = roleOrGroupNameList.iterator();
+
+		while (iterator.hasNext()) {
+			String roleOrGroup = (String) iterator.next();
+			String roleOrGroupName = (String) iterator2.next();
+
+			// Check to see if this particular role/group requires a people
+			// chooser
+			if (requiresPeopleChooser(context, roleOrGroup, roleOrGroupName)) {
+				flag = Boolean.valueOf(true);
+				break;
+			}
+		}
+
+		return flag;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method does a one-time read of the values from the
+	 * <code>IW_ApprovalMatrix_StaticVariables</code> class. The delimited
+	 * strings are processed and placed in the cache:
+	 * <code>roleGroupChooserTable</code>. The threshold value is processed,
+	 * initializing some static variables used by other methods.
+	 * 
+	 * @param context
+	 * @return
+	 * @throws Exception
+	 */
+	private static synchronized boolean readPeopleChooserProperties(Context context) throws Exception {
+		boolean flag = false;
+
+		// Read information from the properties file
+		String delimitedRoles = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ApprovalMatrix_UsePeopleChooser_Role;
+		String delimitedGroups = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ApprovalMatrix_UsePeopleChooser_Group;
+		int thresholdValue = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ApprovalMatrix_UsePeopleChooser_CountThreshold;
+
+		// Process the list and insert into the static set
+		// Process Roles
+		String roleOrGroupSymbolic = null;
+		String roleOrGroup = null;
+
+		// Quick try/catch, just in case the role/group entries are malformed.
+		try {
+
+			if (delimitedRoles != null && delimitedRoles.trim().length() > 0) {
+				StringTokenizer tokenizer = new StringTokenizer(delimitedRoles, DELIMITER);
+
+				while (tokenizer.hasMoreTokens()) {
+					roleOrGroupSymbolic = tokenizer.nextToken().trim();
+					roleOrGroup = PropertyUtil.getSchemaProperty(context, roleOrGroupSymbolic);
+
+					// Check to see if any value was returned.
+					if (roleOrGroup == null || roleOrGroup.trim().length() == 0) {
+						// String errMsg =
+						// "getRoleOrGroupFromRequest: Error: Role, " +
+						// roleOrGroupSymbolic + " is not properly mapped.";
+						// throw new Exception(errMsg);
+						throw new Exception("getRoleOrGroupFromRequest: "
+								+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + " "
+								+ roleOrGroupSymbolic + ": "
+								+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.RoleNotMapped"));
+					}
+
+					roleGroupChooserTable.put(ROLE + SEPARATOR + roleOrGroup, TRUE);
+				}
+			}
+
+			// Process Groups
+			if (delimitedGroups != null && delimitedGroups.trim().length() > 0) {
+				StringTokenizer tokenizer = new StringTokenizer(delimitedGroups, DELIMITER);
+
+				while (tokenizer.hasMoreTokens()) {
+					roleOrGroupSymbolic = tokenizer.nextToken().trim();
+					roleOrGroup = PropertyUtil.getSchemaProperty(context, roleOrGroupSymbolic);
+
+					// Check to see if any value was returned.
+					if (roleOrGroup == null || roleOrGroup.trim().length() == 0) {
+
+						// String errMsg =
+						// "getRoleOrGroupFromRequest: Error: Group, " +
+						// roleOrGroupSymbolic + " is not properly mapped.";
+						throw new Exception("getRoleOrGroupFromRequest: "
+								+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + " "
+								+ roleOrGroupSymbolic + ": "
+								+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.GroupNotMapped"));
+
+					}
+
+					roleGroupChooserTable.put(GROUP + SEPARATOR + roleOrGroup, TRUE);
+				}
+			}
+
+			// Process the threshold setting
+			if (thresholdValue > 0) {
+				chooserThreshold = thresholdValue;
+
+				if (chooserThreshold > 0) {
+					employChooserThreshold = true;
+				}
+			}
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+			String errMsg = "getRoleOrGroupFromRequest: "
+					+ Helper.getI18NString(context, Helper.StringResource.LSA, "emxFramework.ApprovalMatrix.ErrorMsg.Error") + e.toString();
+			throw new Exception(errMsg);
+		}
+
+		return flag;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method initiates the read of the
+	 * <code>IW_ApprovalMatrix_StaticVariables</code> class and manages the
+	 * 'cache'. If the cache contains the key, then the value is returned. If
+	 * the key doesn't exist, then the code looks to see if the 'threshold'
+	 * function is in use:<br>
+	 * <br>
+	 * TRUE> We hit the database to determine how many users are associated with
+	 * a particular role or group. If that number exceeds the threshold, then
+	 * the cache is updated with 'TRUE', otherwise, 'FALSE'.<br>
+	 * <br>
+	 * FALSE> We automatically update the cache with 'FALSE'.
+	 * 
+	 * @param context
+	 * @param roleOrGroup
+	 *            value expected 'Role' or 'Group'
+	 * @param roleOrGroupName
+	 *            name of role or group
+	 * @return true if chooser is required
+	 * @throws Exception
+	 */
+	private static boolean requiresPeopleChooser(Context context, String roleOrGroup, String roleOrGroupName) throws Exception {
+		boolean flag = false;
+
+		if (!readConfigFile) {
+			readPeopleChooserProperties(context);
+			// One-time read of property file is complete
+			readConfigFile = true;
+		}
+
+		// Create unique 'key' for this role or group
+		String roleOrGroupKey = roleOrGroup + SEPARATOR + roleOrGroupName;
+
+		if (roleOrGroupKey != null && roleOrGroupKey.trim().length() > 0) {
+			// Check to see if the static role/group set contains this key
+			if (roleGroupChooserTable.containsKey(roleOrGroupKey)) {
+				Boolean value = (Boolean) roleGroupChooserTable.get(roleOrGroupKey);
+
+				if (value.booleanValue()) {
+					flag = true;
+				}
+			}
+			// Need to do a threshold check on the respective role or group
+			else {
+				// Only process if the threshold is established
+				if (employChooserThreshold) {
+					StringList userList = null;
+
+					if (roleOrGroupKey.startsWith(ROLE)) {
+						userList = ${CLASS:IW_ApprovalMatrix}.getUsersForRole(context, roleOrGroupName,
+								${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION, "", "");
+					}
+					else {
+						userList = ${CLASS:IW_ApprovalMatrix}.getUsersForGroup(context, roleOrGroupName,
+								${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION, "", "");
+					}
+
+					// If length of userList is >= the threshold value, then
+					// place in the table
+					// and set the value to 'true'.
+					if (userList.size() >= chooserThreshold) {
+						roleGroupChooserTable.put(roleOrGroupKey, TRUE);
+						flag = true;
+					}
+					else {
+						roleGroupChooserTable.put(roleOrGroupKey, FALSE);
+						flag = false;
+					}
+				} // End if (employChooserThreshold)
+				else {
+					roleGroupChooserTable.put(roleOrGroupKey, FALSE);
+					flag = false;
+				}
+			}
+		}
+		return flag;
+	}
+
+	/**
+	 * April, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method converts a StringList to a delimited string. The 'where'
+	 * clause matchlist requires a delimited string.
+	 * 
+	 * @param list
+	 * @param delimiter
+	 * @return
+	 */
+	private static String convertStringListToDelimitedString(StringList list, String delimiter) {
+		StringBuffer sb = new StringBuffer();
+		String result = "";
+
+		if (list != null && list.size() > 0) {
+			ListIterator listIterator = list.listIterator();
+			while (listIterator.hasNext()) {
+				sb.append(listIterator.next());
+				sb.append(delimiter);
+			}
+			result = sb.substring(0, sb.length() - 1).toString(); // Trim the
+																	// last
+																	// delimiter
+		}
+		return result;
+	}
+
+	/**
+	 * July, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method creates a Matrix Query named '.finder' and executes the query
+	 * against a known, pre-established Matrix Set. The results of the query are
+	 * also evaluated into a Matrix Set. '.finder' is the default query that is
+	 * used by the thick client application.
+	 * 
+	 * @param context
+	 * @param queryUserName
+	 * @param whereClause
+	 * @param shortLimit
+	 */
+	private static void evaluateQuery(Context context, String queryUserName, String whereClause, short shortLimit) {
+
+		Query query = new Query();
+		SelectList objSelects = new SelectList();
+		objSelects.addId();
+
+		// Create the Matrix Query, using the appropriate parameters.
+		try {
+			query.open(context);
+			query.setName(".finder");
+			query.setBusinessObjectType(TYPE_PERSON);
+			query.setBusinessObjectName(queryUserName);
+			query.setBusinessObjectRevision("-");
+			query.setVaultPattern(WILDCARD);
+			query.setOwnerPattern(WILDCARD);
+			query.setWhereExpression(whereClause);
+			query.setSearchFormat("");
+			query.setSearchText("");
+			query.setExpandType(true);
+			query.setObjectLimit(shortLimit);
+			query.update(context);
+			query.close(context);
+		}
+		catch (MatrixException mex) {
+			mex.printStackTrace();
+		}
+
+		// Evaluate the query over the named set into a named set.
+		try {
+			MQLCommand command = new MQLCommand();
+			command.open(context);
+			command.executeCommand(context, "evaluate query $1 over set $2 into set $3", ".finder", createSetName(context),
+					createSetNameResult(context));
+			command.close(context);
+		}
+		catch (MatrixException mex) {
+			mex.printStackTrace();
+		}
+	}
+
+	/**
+	 * July, 2006<br>
+	 * D. Ames<br>
+	 * <br>
+	 * This method processes a StringList of Matrix admin person names. The
+	 * PersonUtil is then utilized to obtain the id of the Matrix bus Person
+	 * object for each admin person. The ids are then passed and a Matrix Set of
+	 * bus Person objects is created.
+	 * 
+	 * @param context
+	 * @param nameList
+	 * @throws Exception
+	 */
+	private static void createSetFromNameList(Context context, StringList nameList) throws Exception {
+
+		ListIterator iterator = nameList.listIterator();
+		String name = null;
+		String id = null;
+		StringList personIds = new StringList(nameList.size());
+
+		while (iterator.hasNext()) {
+			name = (String) iterator.next();
+			try {
+				id = PersonUtil.getPersonObjectID(context, name);
+				personIds.add(id);
+			}
+			catch (Exception e) {
+				// TODO: handle exception
+			}
+		}
+
+		// Check for existance of set.
+		if (SetUtil.exists(context, createSetName(context))) {
+			SetUtil.delete(context, createSetName(context), false);
+		}
+		SetUtil.create(context, createSetName(context), personIds);
+
+	}
+
+	private static String createSetName(Context context) {
+		return context.getUser() + "_PersonChooser";
+	}
+
+	private static String createSetNameResult(Context context) {
+		return context.getUser() + "_PersonChooser_Result";
+	}
+
+	/**
+	 * Gets the Result for Persons Search
+	 * 
+	 * @param context
+	 *            The Matrix Context.
+	 * @param args
+	 *            holds input arguments.
+	 * @return maplist of Persons
+	 * @throws Exception
+	 *             If the operation fails.
+	 * @since SpecificationCentral 10.0.0.0
+	 */
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public MapList getMemberListPeopleSearchResult(Context context, String[] args) throws Exception {
+		if (args.length == 0)
+			throw new IllegalArgumentException();
+		HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+		MapList mapList = new MapList();
+		com.matrixone.apps.common.Company company = null;
+
+		// Retrieve search criteria
+		String UserName = (String) paramMap.get("UserName");
+		String FirstName = (String) paramMap.get("FirstName");
+		String LastName = (String) paramMap.get("LastName");
+		String companyName = (String) paramMap.get("Company");
+		String sQueryLimit = (String) paramMap.get("queryLimit");
+		String vaultOption = (String) paramMap.get("vaultOption");
+		String selectedVault = (String) paramMap.get("vaultName");
+		String srcDestRelName = (String) paramMap.get("srcDestRelName");
+		if (srcDestRelName != null && (!srcDestRelName.equals("")) && (!srcDestRelName.equalsIgnoreCase("null"))) {
+			srcDestRelName = PropertyUtil.getSchemaProperty(context, srcDestRelName);
+		}
+		String objectId = (String) paramMap.get("objectId");
+		String strMode = (String) paramMap.get("searchmode");
+
+		if (UserName == null || "".equals(UserName))
+			UserName = DomainObject.QUERY_WILDCARD;
+		if (FirstName == null || "".equals(FirstName))
+			FirstName = DomainObject.QUERY_WILDCARD;
+		if (LastName == null || "".equals(LastName))
+			LastName = DomainObject.QUERY_WILDCARD;
+
+		// Added by suresh to fix defect 26410,26411
+		String busWhere = "(current == Active)";
+		// End of fix
+		if (UserName != null && UserName.trim().length() != 0 && !UserName.trim().equals(DomainObject.QUERY_WILDCARD)) {
+			if (busWhere.length() > 0) {
+				busWhere += " && ";
+			}
+			if (UserName.indexOf(DomainObject.QUERY_WILDCARD) == -1 && UserName.indexOf("?") == -1) {
+				busWhere += "(name == \"" + UserName + "\")";
+			}
+			else {
+				busWhere += "(name ~= \"" + UserName + "\")";
+			}
+		}
+
+		if (ADD_EXISTING.equalsIgnoreCase(strMode) && objectId != null) {
+			if (busWhere.length() > 0) {
+				busWhere += " && ";
+			}
+			busWhere += "(!to[" + srcDestRelName + "].from.id ~~ \"" + objectId + "\")";
+			busWhere += " && ";
+			// Commented by suresh to fix defect 26410,26411
+			// busWhere += "(current == Active)";
+			// End of Defect fix 26410,26411
+			if (RELATIONSHIP_ASSIGNED_MEMBER.equals(srcDestRelName)) {
+				busWhere += " && ";
+				busWhere += "( ( to[" + DomainObject.RELATIONSHIP_MEMBER + "].attribute[" + DomainObject.ATTRIBUTE_PROJECT_ROLE
+						+ "] ~~ \"*role_SpecificationOfficeManager*\" ) && (to[" + DomainObject.RELATIONSHIP_MEMBER + "].from.type == "
+						+ DomainObject.TYPE_COMPANY + ") )";
+			}
+		}
+
+		if (FirstName != null && FirstName.trim().length() != 0 && !FirstName.trim().equals(DomainObject.QUERY_WILDCARD)) {
+			if (busWhere.length() > 0) {
+				busWhere += " && ";
+			}
+			if (FirstName.indexOf(DomainObject.QUERY_WILDCARD) == -1 && FirstName.indexOf("?") == -1) {
+				busWhere += "(attribute[" + ATTRIBUTE_FIRST_NAME + "] == \"" + FirstName + "\")";
+			}
+			else {
+				busWhere += "(attribute[" + ATTRIBUTE_FIRST_NAME + "] ~= \"" + FirstName + "\")";
+			}
+		}
+
+		if (LastName != null && LastName.trim().length() != 0 && !LastName.trim().equals(DomainObject.QUERY_WILDCARD)) {
+			if (busWhere.length() > 0) {
+				busWhere += " && ";
+			}
+			if (LastName.indexOf(DomainObject.QUERY_WILDCARD) == -1 && LastName.indexOf("?") == -1) {
+				busWhere += "(attribute[" + ATTRIBUTE_LAST_NAME + "] == \"" + LastName + "\")";
+			}
+			else {
+				busWhere += "(attribute[" + ATTRIBUTE_LAST_NAME + "] ~= \"" + LastName + "\")";
+			}
+		}
+		String strVaults = "";
+		StringList objectSelects = new StringList(1);
+		objectSelects.addElement(DomainObject.SELECT_ID);
+		if (companyName == null || companyName.trim().length() == 0) {
+			com.matrixone.apps.common.Person person = com.matrixone.apps.common.Person.getPerson(context);
+			company = person.getCompany(context);
+		}
+		else {
+			company = (com.matrixone.apps.common.Company) DomainObject.newInstance(context, DomainConstants.TYPE_COMPANY);// ,
+																															// SpecificationCentralCommon.SPECIFICATION);
+			company.setId(companyName);
+		}
+
+		if (vaultOption == null) {
+			com.matrixone.apps.common.Person person = com.matrixone.apps.common.Person.getPerson(context);
+			strVaults = person.getVault();
+		}
+		else {
+			if (vaultOption.equals(ALL)) {
+				strVaults = DomainObject.QUERY_WILDCARD;
+			}
+			else if (vaultOption.equals(DEFAULT)) {
+				com.matrixone.apps.common.Person person = com.matrixone.apps.common.Person.getPerson(context);
+				strVaults = person.getVault();
+			}
+			else if (vaultOption.equals(SELECTED)) {
+				strVaults = selectedVault;
+			}
+		}
+
+		if (strVaults.indexOf(DomainObject.QUERY_WILDCARD) == -1) {
+			if (busWhere.length() > 0) {
+				busWhere += " && ";
+			}
+			busWhere += "(vault == \"" + strVaults + "\")";
+		}
+
+		mapList = getGlobalSearchRelObjects(context, company.getId(), DomainObject.RELATIONSHIP_MEMBER, TYPE_PERSON, busWhere, sQueryLimit, "|", "@");
+
+		return mapList;
+	}
+
+	/**
+	 * Gets the MapList containing related objects according to the search
+	 * criteria.
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds input arguments.
+	 * @return a MapList containing search result.
+	 * @throws Exception
+	 *             if the operation fails.
+	 * @since SpecificationCentral 10.0.0.0
+	 */
+	protected MapList getGlobalSearchRelObjects(matrix.db.Context context, String objectId, String relName, String typeName, String busWhere,
+			String sQueryLimit, String fieldSep, String recordSep) throws Exception {
+
+		// String strResult =
+		// MqlUtil.mqlCommand(context,"expand bus $1 from relationship $2 type $3 select bus id where $4 dump $5 recordsep $6 terse limit $7",
+		// objectId,relName,typeName,busWhere,fieldSep,recordSep,sQueryLimit);
+
+		String strResult = MqlUtil.mqlCommand(context,
+				"expand bus $1 from relationship $2 type $3 select bus $4 where $5 dump $6 recordsep $7 terse limit $8", objectId, relName, typeName,
+				"id", busWhere, fieldSep, recordSep, sQueryLimit);
+		java.util.List resultList = FrameworkUtil.split(strResult, fieldSep, recordSep);
+
+		Iterator itr = resultList.iterator();
+		StringList resultMap = null;
+		HashMap hashMap = null;
+		MapList mapList = new MapList();
+		while (itr.hasNext()) {
+			resultMap = (StringList) itr.next();
+			if (resultMap.size() > 0) {
+				hashMap = new HashMap();
+				hashMap.put(DomainObject.KEY_LEVEL, resultMap.elementAt(0));
+				hashMap.put(DomainObject.SELECT_ID, resultMap.elementAt(4));
+				mapList.add(hashMap);
+			}
+		}
+		return mapList;
+	}
+
+	/**
+	 * includeAMAssignees - This Method is used to include Assignee who have
+	 * amRole. emxFullSearch includeOID
+	 * 
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds the input arguments:
+	 * @return StringList
+	 * @throws Exception
+	 *             if the operation fails
+	 * @since V6R2012
+	 */
+	@com.matrixone.apps.framework.ui.IncludeOIDProgramCallable
+	public StringList includeAMAssignees(Context context, String[] args) throws MatrixException {
+		StringList personList = new StringList();
+		try {
+			Map programMap = (HashMap) JPO.unpackArgs(args);
+
+			HashMap paramMap = (HashMap) JPO.unpackArgs(args);
+			String roleOrGroups = (String) paramMap.get(ROLE_OR_GROUP);
+			String roleOrGroupNames = (String) paramMap.get(ROLE_OR_GROUP_NAME);
+			String limit = (String) paramMap.get("queryLimit");
+			String sScope = (String) paramMap.get("scope");
+			String sObjectId = (String) paramMap.get("objectId");
+
+			if (sScope == null || sScope.trim().length() == 0) {
+				sScope = ${CLASS:IW_ApprovalMatrix_StaticVariables}.ROUTE_SCOPE_ORGANIZATION;
+			}
+			// select object id instead of object name
+			String sSelect = DomainConstants.SELECT_ID;
+			if (roleOrGroups.equals(ROLE)) {
+				personList = ${CLASS:IW_ApprovalMatrix}.getUsersForRole(context, roleOrGroupNames, sScope, sObjectId, sSelect);
+			}
+			else if (roleOrGroups.equals(GROUP)) {
+				personList = ${CLASS:IW_ApprovalMatrix}.getUsersForGroup(context, roleOrGroupNames, sScope, sObjectId, sSelect);
+			}
+
+			return personList;
+		}
+		catch (Exception ex) {
+			throw new MatrixException(ex);
+		}
+	}
+}
+

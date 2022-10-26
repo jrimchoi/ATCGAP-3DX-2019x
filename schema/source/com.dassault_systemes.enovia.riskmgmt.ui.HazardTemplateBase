@@ -1,0 +1,77 @@
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.riskmgmt.HazardTemplate;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtConstants;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtException;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtSymNames;
+import com.dassault_systemes.enovia.riskmgmt.RiskMgmtUtil;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.MapList;
+
+public class ${CLASSNAME} implements RiskMgmtSymNames, DomainConstants {
+
+	public ${CLASSNAME}(Context context, String[] args) {
+		super();
+	}
+
+	@com.matrixone.apps.framework.ui.ProgramCallable
+	public List<Map<?, ?>> getTableRiskMgmtHazardTemplateHazardsSummaryData(Context context, String[] args) throws RiskMgmtException {
+		List<Map<?, ?>> returnData = new MapList();
+		try {
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardTemplateId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardTemplateId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(strHazardTemplateId);
+				returnData = hazardTemplate.getHazards(context, new StringList(DomainObject.SELECT_ID), new StringList(DomainRelationship.SELECT_ID),
+						DomainConstants.EMPTY_STRING);
+			}
+			return returnData;
+		}
+		catch (Exception exp) {
+			throw new RiskMgmtException(exp);
+		}
+
+	}
+
+	/**
+	 * To create Hazard.
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return Map containing Hazard object Id.
+	 * @throws RiskMgmtException
+	 *             if operation fails.
+	 */
+	@com.matrixone.apps.framework.ui.CreateProcessCallable
+	public Map<?, ?> createHazard(Context context, String[] args) throws RiskMgmtException {
+		try {
+			Map<String, String> returnMap = new HashMap<String, String>();
+			Map<?, ?> programMap = (Map<?, ?>) JPO.unpackArgs(args);
+			String strHazardTemplateId = (String) programMap.get(RiskMgmtConstants.PARENT_OID);
+			if (!RiskMgmtUtil.isNullOrEmpty(strHazardTemplateId)) {
+				HazardTemplate hazardTemplate = new HazardTemplate(strHazardTemplateId);
+				String hazardId = hazardTemplate.createHazard(context);
+				if (!RiskMgmtUtil.isNullOrEmpty(hazardId)) {
+					returnMap.put(DomainConstants.SELECT_ID, hazardId);
+				}
+			}
+			return returnMap;
+		}
+		catch (Exception e) {
+			throw new RiskMgmtException(e);
+		}
+	}
+
+}
+

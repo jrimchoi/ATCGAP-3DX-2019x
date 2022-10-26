@@ -1,0 +1,968 @@
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+
+import com.dassault_systemes.enovia.controlledprinting.service.ControlledPrintingService;
+import com.dassault_systemes.enovia.controlledprinting.service.impl.ControlledPrintingServiceImpl;
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.dcl.service.impl.LSAUIForm;
+import com.dassault_systemes.enovia.pdfrendering.services.PDFRenderingConstants;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.MyOutputStream;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.domain.util.eMatrixDateFormat;
+import com.matrixone.apps.domain.util.mxFtp;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.BusinessObjectWithSelectItr;
+import matrix.db.BusinessObjectWithSelectList;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} {
+
+	static final protected Object	_lock	= new Object();
+
+	public List<Map> getConnectedCO(Context context, String strDocId) throws DCLException {
+		try {
+			ControlledDocumentService documentService = DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> lCO = documentService.getConnectedCO(context, strDocId, true, true);
+			return lCO;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public StringList getChangeInformationForFooterText(Context context, String[] args) throws DCLException {
+		try {
+			String strChangeInformationLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Label.ChangeInformation");
+			StringBuilder sbLink = new StringBuilder(strChangeInformationLabel).append(": ");
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for (Object objMap : objectList) {
+				Map mObjectMap = (Map) objMap;
+				String strDocId = (String) mObjectMap.get(DomainConstants.SELECT_ID);
+				String strChangeOrder = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CHANGE_ORDER);
+				List<Map> connectedCOList = getConnectedCO(context, strDocId);
+				Iterator<?> itrMap = connectedCOList.iterator();
+				while (itrMap.hasNext()) {
+					Map mapCO = (Map) itrMap.next();
+					String strCOId = (String) mapCO.get(DomainObject.SELECT_ID);
+					DomainObject dobj = DomainObject.newInstance(context, strCOId);
+					if (dobj.isKindOf(context, strChangeOrder)) {
+						String strCOName = (String) mapCO.get(DomainObject.SELECT_NAME);
+						String strTOName = (String) mapCO.get(DomainRelationship.SELECT_TO_NAME);
+						sbLink.append(strCOName);
+						sbLink.append(" -> ");
+						sbLink.append(strTOName);
+						if (itrMap.hasNext())
+							sbLink.append(" , ");
+					}
+				}
+			}
+			return new StringList(sbLink.toString());
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getEffectivityOptionForDocument(Context context, String[] args) throws DCLException {
+		try {
+			String strEffectivityOptionLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Label.EffectivityOption");
+			StringBuilder sbEffectivityOption = new StringBuilder(strEffectivityOptionLabel).append(": ");
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for (Object objMap : objectList) {
+				Map mObjectMap = (Map) objMap;
+				String strDocId = (String) mObjectMap.get(DomainConstants.SELECT_ID);
+				String strAttributeEffectivityOption = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVITY_OPTION);
+				List<Map> connectedCOList = getConnectedCO(context, strDocId);
+				Iterator<?> itrMap = connectedCOList.iterator();
+				while (itrMap.hasNext()) {
+					Map mapCO = (Map) itrMap.next();
+					String strCOId = (String) mapCO.get(DomainObject.SELECT_ID);
+					DomainObject dobj = DomainObject.newInstance(context, strCOId);
+					sbEffectivityOption.append(dobj.getAttributeValue(context, strAttributeEffectivityOption));
+					if (itrMap.hasNext())
+						sbEffectivityOption.append("\n");
+				}
+			}
+			return new StringList(sbEffectivityOption.toString());
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public StringList getFooterText(Context context, String args[]) throws DCLException {
+		try {
+			String strApproversLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Label.Approvers");
+			StringBuilder sbFooterText = new StringBuilder();
+			StringList fnameList = new StringList();
+			StringList lnameList = new StringList();
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for (Object objMap : objectList) {
+				Map mObjectMap = (Map) objMap;
+				String strDocId = (String) mObjectMap.get(DomainConstants.SELECT_ID);
+				DomainObject dobj = DomainObject.newInstance(context, strDocId);
+
+				String[] oids = new String[] { strDocId };
+				StringList busSelectionList = new StringList(2);
+				busSelectionList
+						.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+				busSelectionList
+						.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+				busSelectionList.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].id");
+				busSelectionList.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].name");
+				busSelectionList.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.name");
+				busSelectionList.add("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.attribute["
+						+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+
+				BusinessObjectWithSelectList busWithSelectionList = BusinessObject.getSelectBusinessObjectData(context, oids, busSelectionList);
+				BusinessObjectWithSelect busWithSelect = busWithSelectionList.getElement(0);
+				String approverFirstName = busWithSelect
+						.getSelectData("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+				String approverLastName = busWithSelect
+						.getSelectData("to[Change Affected Item].from.from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+
+				if (UIUtil.isNotNullAndNotEmpty(approverFirstName)) {
+					fnameList = FrameworkUtil.split(approverFirstName, "\7");
+				}
+				if (UIUtil.isNotNullAndNotEmpty(approverLastName)) {
+					lnameList = FrameworkUtil.split(approverLastName, "\7");
+				}
+				sbFooterText.append(strApproversLabel).append(": ");
+				for (int i = 0; i < fnameList.size(); i++) {
+					sbFooterText.append(fnameList.get(i).toString()).append(" ").append(lnameList.get(i).toString());
+					if (i != fnameList.size() - 1) {
+						sbFooterText.append(DCLConstants.COMMA);
+					}
+				}
+			}
+			return new StringList(sbFooterText.toString());
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public StringList getEffectiveDateForPDF(Context context, String[] args) throws DCLException {
+		try {
+			String strEffectiveDateLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Label.EffectiveDate");
+			StringBuilder sbEffectiveDate = new StringBuilder(strEffectiveDateLabel).append(": ");
+			Map programMap = JPO.unpackArgs(args);
+			MapList objectList = (MapList) programMap.get(DCLConstants.OBJECTLIST);
+			for (Object objMap : objectList) {
+				Map mObjectMap = (Map) objMap;
+				String strDocId = (String) mObjectMap.get(DomainConstants.SELECT_ID);
+				String strAttributeEffectiveDate = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_EFFECTIVEDATE);
+				DomainObject dobj = DomainObject.newInstance(context, strDocId);
+				String strEffectiveDate = dobj.getInfo(context, DomainObject.getAttributeSelect(strAttributeEffectiveDate));
+				if (!DCLUtil.isNullOrEmpty(strEffectiveDate))
+					strEffectiveDate = strEffectiveDate.substring(0, strEffectiveDate.indexOf(" "));
+				sbEffectiveDate.append(strEffectiveDate);
+			}
+			return new StringList(sbEffectiveDate.toString());
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+//
+//	public String addApproverTableHTMLFile(Context context, String args[]) throws DCLException {
+//		try {
+//
+//			String File_Name = "ApproverTable.html";
+//			Map programMap = JPO.unpackArgs(args);
+//			String current = (String) programMap.get("current");
+//			if (!current.equals(DCLUtil
+//					.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_APPROVED))
+//					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+//							DCLConstants.SYMBOLIC_STATE_RELEASED))
+//					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+//							DCLConstants.SYMBOLIC_STATE_OBSOLETE))
+//					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+//							DCLConstants.SYMBOLIC_STATE_SUPERSEDED)))
+//				return DomainConstants.EMPTY_STRING;
+//			String objectId = (String) programMap.get("downloadObjectId");
+//			String controlledCopy = (String) programMap.get("ControlledCopy");
+//			if ("true".equalsIgnoreCase(controlledCopy)) {
+//				objectId = (String) programMap.get("ControlledPrintDownloadObjectId");
+//			}
+//			mxFtp mxFtp = (mxFtp) programMap.get("mxFtp");
+//			Map propertyMap = (Map) programMap.get("propertyMap");
+//			String outputTempDir = (String) programMap.get("outputDir");
+//		
+//			mxFtp.create(File_Name);
+//			String strApproversLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+//					"enoDocumentControl.Label.Approvers");
+//			String strApprovedOnLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+//					"enoDocumentControl.states.ApprovedOn");
+//			String strTaskLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+//					"enoDocumentControl.states.Task");
+//			String strResponsibleRoleLabel = EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+//					"emxComponents.TaskDetails.ResponsibleRole");
+//			boolean addResponsibleRoleColumn = false;
+//			try {
+//				if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA")))
+//					if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.ResponsibleRoleForSignatureMeaning.Preserve")))
+//						addResponsibleRoleColumn = true;
+//			}
+//			catch (Exception e) {
+//			}
+//			// String strTaskTitleLabel =
+//			// EnoviaResourceBundle.getProperty(context,
+//			// DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+//			// "enoDocumentControl.Label.Title");
+//			StringBuilder sbTable = new StringBuilder();
+//			sbTable.append("<!DOCTYPE html>");
+//			sbTable.append("<html>");
+//			sbTable.append("<body>");
+//
+//			sbTable.append("<table style=\"width:100%\" border=\"1\">");
+//			sbTable.append("	<tr>");
+//			sbTable.append("		<th>").append(strApproversLabel).append("</td>");
+//			if (addResponsibleRoleColumn)
+//				sbTable.append("		<th>").append(strResponsibleRoleLabel).append("</td>");
+//			sbTable.append("		<th>").append(strApprovedOnLabel).append("</td>");
+//			sbTable.append("		<th>").append(strTaskLabel).append("</td>");
+//			sbTable.append("	</tr>");
+//			Map dateSortedMap = getApproversData(context, objectId);
+//			Set keySet = dateSortedMap.keySet();
+//			ArrayList sortedDateList = new ArrayList();
+//			sortedDateList.addAll(keySet);
+//			for (int i = 0; i < sortedDateList.size(); i++) {
+//				Date date = (Date) sortedDateList.get(i);
+//				String[] data = (String[]) dateSortedMap.get(date);
+//				String strApproversLastName = data[0];
+//				String strApproversFirstName = data[1];
+//				String strTaskName = data[2];
+//				String strTaskTitle = data[3];
+//				String strApprovedOn = date.toString();
+//				sbTable.append("	<tr>");
+//				sbTable.append("		<td>").append(strApproversLastName).append(" ").append(strApproversFirstName).append("</td>");
+//				if (addResponsibleRoleColumn) {
+//					String strResponsibleRole = data[4];
+//					if (UIUtil.isNotNullAndNotEmpty(strResponsibleRole) && strResponsibleRole.contains("role_"))
+//						strResponsibleRole = PropertyUtil.getSchemaProperty(context, strResponsibleRole);
+//					sbTable.append("		<td>").append(strResponsibleRole).append("</td>");
+//				}
+//				sbTable.append("		<td>").append(strApprovedOn).append("</td>");
+//				// sbTable.append(" <td>").append(strTaskName).append("</td>");
+//				sbTable.append("		<td>").append(strTaskTitle).append("</td>");
+//				sbTable.append("	</tr>");
+//			}
+//			sbTable.append("</table>");
+//			sbTable.append("</body>");
+//			sbTable.append("</html>");
+//			if (mxFtp.exists(File_Name)) {
+//				BufferedOutputStream buf = new BufferedOutputStream(new MyOutputStream(mxFtp));
+//				buf.write(sbTable.toString().getBytes());
+//				buf.flush();
+//				buf.close();
+//			}
+//			StringBuilder sbInput = new StringBuilder();
+//			sbInput.append("<JOB:DOCINPUT FILENAME=\"");
+//			sbInput.append(File_Name);
+//			sbInput.append("\" FOLDER=\"");
+//            String remoteAdlibOutputFolder = (String)propertyMap.get("RemoteAdlibOutputFolder");
+//
+//            if(!remoteAdlibOutputFolder.endsWith("\\") && !remoteAdlibOutputFolder.endsWith("/") && !outputTempDir.startsWith("\\") && !outputTempDir.startsWith("/")) {
+//                            
+//                            if(remoteAdlibOutputFolder.indexOf("/") != -1)
+//                                            remoteAdlibOutputFolder = remoteAdlibOutputFolder + "/";
+//                            else
+//                                            remoteAdlibOutputFolder = remoteAdlibOutputFolder + "\\";
+//            }
+//
+//            sbInput.append(remoteAdlibOutputFolder);
+//            sbInput.append(outputTempDir);
+//
+//			sbInput.append("\"/>\n");
+//
+//			return sbInput.toString();
+//		}
+//		catch (Exception e) {
+//			throw new DCLException(e.getLocalizedMessage());
+//		}
+//	}
+//	
+	
+public MapList getCAApprovers(Context context, String args[]) throws DCLException {
+		try {
+			Map programMap = JPO.unpackArgs(args);
+			String objectId = (String) programMap.get("objectId");
+			DomainObject object = DomainObject.newInstance(context, objectId);
+			String current = (String) object.getInfo(context, DomainConstants.SELECT_CURRENT);
+			if (!current.equals(DCLUtil
+					.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_APPROVED))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_RELEASED))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_OBSOLETE))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_SUPERSEDED)))
+				return new MapList();
+			
+					ControlledDocumentService CdService=DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> listOfCOMaps=	CdService.getConnectedCO(context, objectId, true, true);
+			List<Map> listOfTask=new MapList();
+			List<String> slChangeActioId=new StringList();
+			for(Map mapOfCO:listOfCOMaps){
+				String strChangeType = (String) mapOfCO.get(DomainObject.SELECT_TYPE);
+				String strChangeID = (String) mapOfCO.get(DomainObject.SELECT_ID);
+				if("Change Action".equalsIgnoreCase(strChangeType) && !slChangeActioId.contains(strChangeID)) {
+					slChangeActioId.add(strChangeID);
+				}
+			}
+			List<String> sListSelects = new StringList();
+			sListSelects.add("from[Object Route].to.to[Route Task].from.id");
+			sListSelects.add("from[Object Route].to.to[Route Task].from.attribute["
+					+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+			List<String> sltaskId=new StringList();
+			StringList sltaskdate=new StringList();
+			BusinessObjectWithSelectList bToList = BusinessObject.getSelectBusinessObjectData(context, slChangeActioId.toArray(new String[slChangeActioId.size()]), (StringList) sListSelects);
+			for (BusinessObjectWithSelectItr itr1 = new BusinessObjectWithSelectItr(bToList); itr1.next();) {
+				BusinessObjectWithSelect bowsTo = itr1.obj();
+				 sltaskId.addAll(bowsTo.getSelectDataList("from[Object Route].to.to[Route Task].from.id"));	
+				 sltaskdate.addAll(bowsTo.getSelectDataList("from[Object Route].to.to[Route Task].from.attribute["
+						+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]"));
+				
+			}
+			
+			Map dateSortedMap = new TreeMap();
+			for (int i = 0; i < sltaskId.size(); i++) {
+
+				Date date = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat()).parse(sltaskdate.get(i).toString());
+				dateSortedMap.put(date, sltaskId.get(i));
+			}
+			
+			for(Iterator itr=dateSortedMap.keySet().iterator();itr.hasNext();)
+			{
+				Date key =(Date)itr.next();
+				String id=(String)dateSortedMap.get(key);
+				Map mTask=new HashMap();
+				mTask.put(DomainConstants.SELECT_ID,id);
+				listOfTask.add(mTask);
+			}
+			
+			return (MapList) listOfTask;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	public boolean showResponsibleRowColumn(Context context, String args[]) throws DCLException {
+		boolean addResponsibleRoleColumn = false;
+		try {
+			if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA")))
+				if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.ResponsibleRoleForSignatureMeaning.Preserve")))
+					addResponsibleRoleColumn = true;
+		}
+		catch (Exception e) {
+		}
+		return addResponsibleRoleColumn;
+	}
+	public String addApproverTableHTMLFile(Context context, String args[]) throws DCLException {
+		try {
+
+			String File_Name = "ApproverTable.rtf";
+			Map programMap = JPO.unpackArgs(args);
+			String current = (String) programMap.get("current");
+			if (!current.equals(DCLUtil
+					.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS, DCLConstants.SYMBOLIC_STATE_APPROVED))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_RELEASED))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_OBSOLETE))
+					&& !current.equals(DCLUtil.getStateName(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS,
+							DCLConstants.SYMBOLIC_STATE_SUPERSEDED)))
+				return DomainConstants.EMPTY_STRING;
+			String objectId = (String) programMap.get("objectId");
+			String controlledCopy = (String) programMap.get("ControlledCopy");
+			if ("true".equalsIgnoreCase(controlledCopy)) {
+							objectId = (String) programMap.get("ControlledPrintDownloadObjectId");
+			}
+			String inputDirectory=(String) programMap.get(PDFRenderingConstants.INPUT_DIRECTORY);
+			File htmlFile=new File(inputDirectory+File.separator+File_Name);
+			htmlFile.createNewFile();
+			String strApproversLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Label.Approvers");
+			String strApprovedOnLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.states.ApprovedOn");
+			String strTaskLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.states.Task");
+			String strResponsibleRoleLabel = EnoviaResourceBundle.getProperty(context, "emxComponentsStringResource", context.getLocale(),
+					"emxComponents.TaskDetails.ResponsibleRole");
+			boolean addResponsibleRoleColumn = false;
+			try {
+				if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.EnableFDA")))
+					if ("true".equalsIgnoreCase(EnoviaResourceBundle.getProperty(context, "emxFramework.Routes.ResponsibleRoleForSignatureMeaning.Preserve")))
+						addResponsibleRoleColumn = true;
+			}
+			catch (Exception e) {
+			}
+			// String strTaskTitleLabel =
+			// EnoviaResourceBundle.getProperty(context,
+			// DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+			// "enoDocumentControl.Label.Title");
+			StringBuilder sbTable = new StringBuilder();
+			sbTable.append("<!DOCTYPE html>");
+			sbTable.append("<html>");
+			sbTable.append("<body>");
+
+			sbTable.append("<table style=\"width:100%\" border=\"1\">");
+			sbTable.append("	<tr>");
+			sbTable.append("		<th>").append(strApproversLabel).append("</td>");
+			if (addResponsibleRoleColumn)
+				sbTable.append("		<th>").append(strResponsibleRoleLabel).append("</td>");
+			sbTable.append("		<th>").append(strApprovedOnLabel).append("</td>");
+			sbTable.append("		<th>").append(strTaskLabel).append("</td>");
+			sbTable.append("	</tr>");
+			Map dateSortedMap = getApproversData(context, objectId);
+			Set keySet = dateSortedMap.keySet();
+			ArrayList sortedDateList = new ArrayList();
+			sortedDateList.addAll(keySet);
+			for (int i = 0; i < sortedDateList.size(); i++) {
+				Date date = (Date) sortedDateList.get(i);
+				String[] data = (String[]) dateSortedMap.get(date);
+				String strApproversLastName = data[0];
+				String strApproversFirstName = data[1];
+				String strTaskName = data[2];
+				String strTaskTitle = data[3];
+				String strApprovedOn = date.toString();
+				sbTable.append("	<tr>");
+				sbTable.append("		<td>").append(strApproversLastName).append(" ").append(strApproversFirstName).append("</td>");
+				if (addResponsibleRoleColumn) {
+					String strResponsibleRole = data[4];
+					if (UIUtil.isNotNullAndNotEmpty(strResponsibleRole) && strResponsibleRole.contains("role_"))
+						strResponsibleRole = PropertyUtil.getSchemaProperty(context, strResponsibleRole);
+					sbTable.append("		<td>").append(strResponsibleRole).append("</td>");
+				}
+				sbTable.append("		<td>").append(strApprovedOn).append("</td>");
+				// sbTable.append(" <td>").append(strTaskName).append("</td>");
+				sbTable.append("		<td>").append(strTaskTitle).append("</td>");
+				sbTable.append("	</tr>");
+			}
+			sbTable.append("</table>");
+			sbTable.append("</body>");
+			sbTable.append("</html>");
+			if (htmlFile.exists()) {
+				FileOutputStream fout=new FileOutputStream(htmlFile);  
+				BufferedOutputStream buf = new BufferedOutputStream(fout);
+				buf.write(sbTable.toString().getBytes());
+				buf.flush();
+				buf.close();
+			}
+		         if(!inputDirectory.endsWith("\\") && !inputDirectory.endsWith("/") && !inputDirectory.startsWith("\\") && !inputDirectory.startsWith("/")) {
+                            
+          if(inputDirectory.indexOf("/") != -1)
+        	  inputDirectory = inputDirectory + "/";
+                            else
+        	  inputDirectory = inputDirectory + "\\";
+            }
+
+			return inputDirectory+File.separator+File_Name;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	private Map getApproversData(Context context, String objectId) throws DCLException {
+		try {
+			final String STR_TYPE_CHANGE_ACTION = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CA);
+			StringList busSelectionList = new StringList();
+			StringList fnameList = new StringList();
+			StringList lnameList = new StringList();
+			StringList approvedOnList = new StringList();
+			StringList respRoleList = new StringList();
+			StringList taskNameList = new StringList();
+			StringList taskIdList = new StringList();
+			StringList taskTitleList = new StringList();
+			ControlledDocumentService CdService=DCLServiceUtil.getControlledDocumentService(context);
+			List<Map> listOfCOMaps=	CdService.getConnectedCO(context, objectId, true, true);
+			for(Map mapOfCO:listOfCOMaps){
+				String strChangeType = (String) mapOfCO.get(DomainObject.SELECT_TYPE);
+				if(STR_TYPE_CHANGE_ACTION.equalsIgnoreCase(strChangeType)) {
+					objectId=(String)mapOfCO.get(DomainObject.SELECT_ID);
+					busSelectionList
+							.add("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+					busSelectionList
+							.add("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.name");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.attribute[Title]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.attribute["
+							+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.name");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.id");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.attribute[Title]");
+					busSelectionList.add("from[Object Route].to.to[Route Task].from.attribute["
+							+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+					MapList ml = DomainObject.getInfo(context, new String[] { objectId }, busSelectionList);
+					respRoleList = DomainObject.newInstance(context, objectId).getInfoList(context,
+							"from[Object Route].to.to[Route Task].from.attribute[" + DomainConstants.ATTRIBUTE_ROUTE_TASK_USER
+									+ "]");
+					if (null == respRoleList || respRoleList.size() == 0)
+						respRoleList = DomainObject.newInstance(context, objectId).getInfoList(context,
+								"from[Object Route].to.to[Route Task].from.attribute["
+										+ DomainConstants.ATTRIBUTE_ROUTE_TASK_USER + "]");
+					Map map = (Map) ml.get(0);
+					String strApproversLastName = (String) map
+							.get("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+					String strApproversFirstName = (String) map
+							.get("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+					String strApprovedOn = (String) map.get("from[Object Route].to.to[Route Task].from.attribute["
+							+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+					String strTaskName = (String) map.get("from[Object Route].to.to[Route Task].from.name");
+					String strTaskId= (String) map.get("from[Object Route].to.to[Route Task].from.id");
+					String strTaskTitle = (String) map.get("from[Object Route].to.to[Route Task].from.attribute[Title]");
+					String strImpApproversLastName = (String) map
+							.get("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[Last Name]");
+					String strImplApproversFirstName = (String) map
+							.get("from[Object Route].to.to[Route Task].from.from[Project Task].to.attribute[First Name]");
+					String strImplApprovedOn = (String) map.get("from[Object Route].to.to[Route Task].from.attribute["
+							+ DomainConstants.ATTRIBUTE_ACTUAL_COMPLETION_DATE + "]");
+					String strImplTaskName = (String) map.get("from[Object Route].to.to[Route Task].from.name");
+					String strImplTaskTitle = (String) map.get("from[Object Route].to.to[Route Task].from.attribute[Title]");
+					String strImplTaskId = (String) map.get("to[Implemented Item].from.from[Object Route].to.to[Route Task].from.id");
+					if (UIUtil.isNotNullAndNotEmpty(strApproversLastName))
+						fnameList = FrameworkUtil.split(strApproversLastName, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImpApproversLastName))
+						fnameList = FrameworkUtil.split(strImpApproversLastName, "\7");
+		
+					if (UIUtil.isNotNullAndNotEmpty(strApproversFirstName))
+						lnameList = FrameworkUtil.split(strApproversFirstName, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImplApproversFirstName))
+						lnameList = FrameworkUtil.split(strImplApproversFirstName, "\7");
+		
+					if (UIUtil.isNotNullAndNotEmpty(strApprovedOn))
+						approvedOnList = FrameworkUtil.split(strApprovedOn, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImplApprovedOn))
+						approvedOnList = FrameworkUtil.split(strImplApprovedOn, "\7");
+		
+					if (UIUtil.isNotNullAndNotEmpty(strTaskName))
+						taskNameList = FrameworkUtil.split(strTaskName, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImplTaskName))
+						taskNameList = FrameworkUtil.split(strImplTaskName, "\7");
+		
+					if (UIUtil.isNotNullAndNotEmpty(strTaskTitle))
+						taskTitleList = FrameworkUtil.split(strTaskTitle, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImplTaskTitle))
+						taskTitleList = FrameworkUtil.split(strImplTaskTitle, "\7");
+					
+					
+					if (UIUtil.isNotNullAndNotEmpty(strTaskId))
+						taskIdList = FrameworkUtil.split(strTaskId, "\7");
+					else if (UIUtil.isNotNullAndNotEmpty(strImplTaskId))
+						taskIdList = FrameworkUtil.split(strImplTaskId, "\7");
+					
+				}
+			}
+			Map dateSortedMap = new TreeMap();
+			for (int i = 0; i < fnameList.size(); i++) {
+
+				Date date = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat()).parse(approvedOnList.get(i).toString());
+				dateSortedMap.put(date, new String[] { lnameList.get(i).toString(), fnameList.get(i).toString(), taskNameList.get(i).toString(),
+						taskTitleList.get(i).toString(), respRoleList.size() > i ? respRoleList.get(i).toString() : "" ,taskIdList.get(i).toString()});
+			}
+
+			return dateSortedMap;
+
+		}
+
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+	public String getOverlayForPDF(Context context, String args[]) throws DCLException {
+		try {
+			StringBuilder sbOverlayTags = new StringBuilder();
+			String headerOverlayFile = "HeaderOverlay.html";
+			String footerOverlayFile = "FooterOverlay.html";
+			Map programMap = JPO.unpackArgs(args);
+			Object ccOriginal = programMap.get("ControlledPrintOriginal");
+			if (null != ccOriginal && "true".equalsIgnoreCase((String) ccOriginal))
+				return DomainConstants.EMPTY_STRING;
+			Object oDocId = programMap.get("downloadObjectId");
+			String objectId = "";
+			if (oDocId instanceof String) {
+				objectId = (String) programMap.get("downloadObjectId");
+			}
+			else {
+				String[] strDocIdArray = (String[]) programMap.get("downloadObjectId");
+				if (strDocIdArray != null && strDocIdArray.length > 0)
+					objectId = strDocIdArray[0];
+			}
+			boolean bControlledCopy = false;
+			String controlledCopy = (String) programMap.get("ControlledCopy");
+			if ("true".equalsIgnoreCase(controlledCopy)) {
+				objectId = (String) programMap.get("ControlledPrintDownloadObjectId");
+				bControlledCopy = true;
+			}
+			mxFtp mxFtp = (mxFtp) programMap.get("mxFtp");
+			Map propertyMap = (Map) programMap.get("propertyMap");
+			String outputTempDir = (String) programMap.get("outputDir");
+
+			StringList objectSelects = new StringList(DomainConstants.SELECT_TYPE);
+			objectSelects.add(DomainConstants.SELECT_NAME);
+			objectSelects.add(DomainConstants.SELECT_CURRENT);
+			objectSelects.add(DomainConstants.SELECT_ORGANIZATION);
+			Map<String, String> objectMap = DomainObject.newInstance(context, objectId).getInfo(context, objectSelects);
+			String type = objectMap.get(DomainConstants.SELECT_TYPE).replaceAll(" ", "");
+			if(bControlledCopy)
+				type = PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_TYPE_CONTROLLED_PRINT).replaceAll(" ", "");
+			String strHeaderProperty = new StringBuilder("enoDocumentControl.").append(type.replaceAll(" ", ""))
+					.append(".").append(objectMap.get(DomainConstants.SELECT_CURRENT).replaceAll(" ", "")).append(".")
+					.append(objectMap.get(DomainConstants.SELECT_ORGANIZATION).replaceAll(" ", "")).append(".PDFHeaderOverlay").toString();
+			String strHeaderForm = "";
+			try {
+				strHeaderForm = EnoviaResourceBundle.getProperty(context, strHeaderProperty);
+			}
+			catch (Exception e) {
+				if (DCLUtil.isNullOrEmpty(strHeaderForm)) {
+					strHeaderProperty = new StringBuilder("enoDocumentControl.")
+							.append(type.replaceAll(" ", "")).append(".")
+							.append(objectMap.get(DomainConstants.SELECT_CURRENT).replaceAll(" ", "")).append(".").append("Default.PDFHeaderOverlay")
+							.toString();
+					try {
+						strHeaderForm = EnoviaResourceBundle.getProperty(context, strHeaderProperty);
+					}
+					catch (Exception ex) {
+
+					}
+				}
+			}
+			if (UIUtil.isNotNullAndNotEmpty(strHeaderForm)) {
+				if (!UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+					sbOverlayTags.append("<JOB:OVERLAYS ENABLED=\"Yes\" >\n");
+				MapList headerValues = new LSAUIForm().evaluateForm(context, objectId, strHeaderForm, context.getLocale().toString());
+				sbOverlayTags.append(createHTMLForOverlay(context, headerValues, mxFtp, propertyMap, outputTempDir, headerOverlayFile, "TopLeft"));
+			}
+
+			String strFooterProperty = new StringBuilder("enoDocumentControl.").append(type.replaceAll(" ", ""))
+					.append(".").append(objectMap.get(DomainConstants.SELECT_CURRENT).replaceAll(" ", "")).append(".")
+					.append(objectMap.get(DomainConstants.SELECT_ORGANIZATION).replaceAll(" ", "")).append(".PDFFooterOverlay").toString();
+			String strFooterForm = "";
+			try {
+				strFooterForm = EnoviaResourceBundle.getProperty(context, strFooterProperty);
+			}
+			catch (Exception e) {
+			
+				if(DCLUtil.isNullOrEmpty(strFooterForm)){
+					strFooterProperty = new StringBuilder("enoDocumentControl.").append(type.replaceAll(" ", ""))
+							.append(".").append(objectMap.get(DomainConstants.SELECT_CURRENT).replaceAll(" ", "")).append(".")
+							.append("Default.PDFFooterOverlay").toString();
+					try{
+					strFooterForm = EnoviaResourceBundle.getProperty(context, strFooterProperty);
+					}catch(Exception ex){
+						
+					}
+				}
+			}
+			
+			if (UIUtil.isNotNullAndNotEmpty(strFooterForm)) {
+				if (!UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+					sbOverlayTags.append("<JOB:OVERLAYS ENABLED=\"Yes\" >\n");
+				MapList footerValues = new LSAUIForm().evaluateForm(context, objectId, strFooterForm, context.getLocale().toString());
+				sbOverlayTags
+.append(createHTMLForOverlay(context, footerValues, mxFtp, propertyMap, outputTempDir, footerOverlayFile, "BottomLeft"));
+			}
+			if (UIUtil.isNotNullAndNotEmpty(sbOverlayTags.toString()))
+				sbOverlayTags.append("</JOB:OVERLAYS>\n");
+			return sbOverlayTags.toString();
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	private String createHTMLForOverlay(Context context, MapList formValues, mxFtp mxFtp, Map propertyMap, String outputTempDir, String fileName,
+			String alignment)
+			throws Exception {
+
+		List<Map> leftValues = new MapList();
+		List<Map> centerValues = new MapList();
+		List<Map> rightValues = new MapList();
+		for (Object objField : formValues) {
+			Map mpField = (Map) objField;
+			String groupName = (String) ((Map) mpField.get("Settings")).get("Group Name");
+			switch (groupName) {
+			case "Left":
+				leftValues.add(mpField);
+				break;
+			case "Center":
+				centerValues.add(mpField);
+				break;
+			case "Right":
+				rightValues.add(mpField);
+				break;
+			default:
+				break;
+			}
+		}
+
+		int maxSize = leftValues.size() > centerValues.size() ? (leftValues.size() > rightValues.size() ? leftValues.size() : rightValues.size())
+				: (centerValues.size() > rightValues.size() ? centerValues.size() : rightValues.size());
+
+		StringBuilder sbTable = new StringBuilder();
+		sbTable.append("<!DOCTYPE html>");
+		sbTable.append("<html>");
+		sbTable.append("<body>");
+
+		sbTable.append("<table border=\"0\" style=\"width:100%;opacity:0.8;\"  cellspacing=\"0\" >");
+		String value = "";
+		String align = "left";
+		for (int i = 0; i < maxSize; i++) {
+			sbTable.append("<tr>");
+			if (leftValues.size() > i) {
+				value = getFieldDisplayValue(context, leftValues.get(i));
+				align = UIUtil.isNotNullAndNotEmpty((String) ((Map) leftValues.get(i).get("Settings")).get("Group Name"))
+						? (String) ((Map) leftValues.get(i).get("Settings")).get("Alignment") : "left";
+			}
+			else {
+				value = "&nbsp;";
+				align = "left";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:33%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			if (centerValues.size() > i) {
+				value = getFieldDisplayValue(context, centerValues.get(i));
+				align = UIUtil.isNotNullAndNotEmpty((String) ((Map) centerValues.get(i).get("Settings")).get("Group Name"))
+						? (String) ((Map) centerValues.get(i).get("Settings")).get("Alignment") : "left";
+			}
+			else {
+				value = "&nbsp;";
+				align = "center";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:34%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			if (rightValues.size() > i) {
+				value = getFieldDisplayValue(context, rightValues.get(i));
+				align = UIUtil.isNotNullAndNotEmpty((String) ((Map) rightValues.get(i).get("Settings")).get("Group Name"))
+						? (String) ((Map) rightValues.get(i).get("Settings")).get("Alignment") : "left";
+			}
+			else {
+				value = "&nbsp;.";
+				align = "right";
+			}
+			sbTable.append("<td align=\"").append(align).append("\" style=\"width:33%;\" >");
+			sbTable.append(value);
+			sbTable.append("</td>");
+			sbTable.append("</tr>");
+		}
+
+		sbTable.append("</table>");
+		sbTable.append("</body>");
+		sbTable.append("</html>");
+		mxFtp.create(fileName);
+		if (mxFtp.exists(fileName)) {
+			BufferedOutputStream buf = new BufferedOutputStream(new MyOutputStream(mxFtp));
+			buf.write(sbTable.toString().getBytes());
+			buf.flush();
+			buf.close();
+		}
+		StringBuilder sbInput = new StringBuilder();
+		sbInput.append("<JOB:OVERLAY ENABLED=\"Yes\" PATH=\"");
+		sbInput.append(propertyMap.get("RemoteAdlibOutputFolder") + outputTempDir);
+		sbInput.append("\\");
+		sbInput.append(fileName);
+		sbInput.append("\" ALIGNMENT=\"" + alignment + "\" HORIZONTAL=\"0\" VERTICAL=\"0\" >\n");
+		sbInput.append(
+				"<JOB:OVERLAYCROP MODE=\"CropToContentEdge\" PADDINGLEFT=\"0.25\" PADDINGRIGHT=\"0.25\" PADDINGBOTTOM=\"0.25\" PADDINGTOP=\"0.25\" />\n");
+		sbInput.append("</JOB:OVERLAY>\n");
+		return sbInput.toString();
+	}
+
+	private String getFieldDisplayValue(Context context, Map mpField) throws Exception {
+		String value = (String) (mpField.get("Value"));
+		String fieldName = (String) mpField.get("FieldName");
+		if (fieldName.equalsIgnoreCase("Name")||fieldName.equalsIgnoreCase("Title")) {
+			try{
+				Integer maxLength= Integer.parseInt(EnoviaResourceBundle.getProperty(context, "enoDocumentControl.QualitySystemDocument.PDFHeaderMaxLength"));			
+				if (value.length()>= maxLength ) {
+					value = value.substring(0,maxLength ).concat("...");
+				}
+			}catch(Exception e){				
+			}
+					
+			
+		}
+		
+		String label = (String) (mpField.get("Label"));
+		Map settings = (Map) (mpField.get("Settings"));
+		String format = null != settings.get("format") ? (String) settings.get("format") : "";
+		if ("date".equalsIgnoreCase(format)) {
+			SimpleDateFormat sdf = new SimpleDateFormat(eMatrixDateFormat.getEMatrixDateFormat(), Locale.US);
+			if (UIUtil.isNotNullAndNotEmpty(value))
+				value = new SimpleDateFormat("MMM dd, yyyy").format(sdf.parse(value));
+		}
+		value = DomainConstants.EMPTY_STRING.equalsIgnoreCase(label) || "(Untitled)".equalsIgnoreCase(label) ? value
+				: new StringBuilder(label).append(": ").append(value).toString();
+		return value;
+	}
+		/**
+	 * method to add UnControlled Copy footer to the Bottom left side of the
+	 * generated PDF
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 */
+	public StringList getUnControlledCopyLabel(Context context, String[] args) {
+		String strUnControlledCopyLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Label.UncontrolledCopyLabel");
+		return new StringList(strUnControlledCopyLabel);
+	}
+
+	/**
+	 * method to add UnControlled Copy footer to the Bottom left side of the
+	 * generated PDF
+	 *
+	 * @param context
+	 * @param args
+	 * @return
+	 */
+	public String getUnControlledCopyLabelForForm(Context context, String[] args) {
+		String strUnControlledCopyLabel = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+				"enoDocumentControl.Label.UncontrolledCopyLabel");
+		return strUnControlledCopyLabel;
+	}
+	/**
+	 * Trigger method to check if pdf generation job is in progress in order to
+	 * avoid checkout in or after approved state
+	 * 
+	 * @param context
+	 * @param args
+	 * @return
+	 * @throws DCLException
+	 */
+	public int checkIfPDFGenerationJobInProgress(Context context, String args[]) throws DCLException {
+		try {
+			String strRenderPDF = String.valueOf(DCLUtil.getRederPDFValue(context)); 
+			if (DCLConstants.FALSE.equalsIgnoreCase(strRenderPDF))
+				return 0;
+			String FROMPDFTRIGGER = PropertyUtil.getGlobalRPEValue(context, "FROMPDFTRIGGER");
+			if ("TRUE".equalsIgnoreCase(FROMPDFTRIGGER))
+				return 0;
+			String documentId = args[0];
+					DomainObject domDocument = DomainObject.newInstance(context, documentId);
+			String docState = domDocument.getInfo(context, DomainConstants.SELECT_CURRENT);
+			String state_preliminary = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,
+					PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS),
+					DCLConstants.SYMBOLIC_STATE_PRELIMINARY);
+			String state_in_work = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,
+					PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS),
+					DCLConstants.SYMBOLIC_STATE_IN_WORK);
+			String state_in_approval = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY,
+					PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_POLICY_CONTROLLED_DOCUMENTS),
+					DCLConstants.SYMBOLIC_STATE_IN_APPROVAL);
+			if (state_preliminary.equalsIgnoreCase(docState) || state_in_work.equalsIgnoreCase(docState)
+					|| state_in_approval.equalsIgnoreCase(docState))
+				return 0;
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			List<Map> mlPendingJobs = service.getRunningJobs(context, documentId);
+	
+			if (mlPendingJobs.size() > 0) {
+				MqlUtil.mqlCommand(context, "notice $1",
+						EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+								"enoControlledPrinting.Notice.PDFConversionJobRunning"));
+				return 1;
+			}
+			return 0;
+		} catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	public  MapList getDocumentApprovers(Context context,String args[]) throws Exception{
+		 try {
+			Map programMap = (Map) JPO.unpackArgs(args);
+			 String strObjectId=(String) programMap.get("downloadObjectId");
+			 if(DCLUtil.isNullOrEmpty(strObjectId)){
+				 strObjectId= (String) programMap.get("objectId");
+			 }
+			Map dateSortedMap = getApproversData(context, strObjectId);
+			Set keySet = dateSortedMap.keySet();
+			ArrayList sortedDateList = new ArrayList();
+			sortedDateList.addAll(keySet);
+			Map approverMap=new HashMap();
+			MapList mlApprovers=new MapList();
+			for (int i = 0; i < sortedDateList.size(); i++) {
+				 approverMap=new HashMap();
+				Date date = (Date) sortedDateList.get(i);
+				String[] data = (String[]) dateSortedMap.get(date);
+				String strApproversLastName = data[0];
+				String strApproversFirstName = data[1];
+				String strTaskName = data[2];
+				String strTaskTitle = data[3];
+				String strApprovedOn = date.toString();
+				
+				approverMap.put("ResponsibleRole", data[4]);
+				approverMap.put(DomainConstants.SELECT_ID, data[5]);
+				mlApprovers.add(approverMap);
+
+			}
+			return mlApprovers;
+		} catch (Exception e) {
+			throw new Exception(e);
+		}
+		
+	}
+	 public String getSummaryReprotApproversResponsibleRole(Context context, String[] args)throws Exception
+	 {
+		 Map programMap = (Map) JPO.unpackArgs(args);
+		 String strObjectId=(String) programMap.get("currentObjectId");
+		 String strResponsibleRole=(String) programMap.get("ResponsibleRole");
+		 if(UIUtil.isNotNullAndNotEmpty(strResponsibleRole))
+		 {	 
+					return strResponsibleRole;
+		}
+		 else
+			 return DomainConstants.EMPTY_STRING;
+
+	 }
+	 
+	
+}
+

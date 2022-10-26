@@ -1,0 +1,301 @@
+/*
+ * Copyright (c) 2013-2018 Dassault Systemes. All Rights Reserved This program
+ * contains proprietary and trade secret information of Dassault Systemes.
+ * Copyright notice is precautionary only and does not evidence any actual or
+ * intended publication of such program.
+ */
+
+
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.matrixone.apps.common.InboxTask;
+import com.matrixone.apps.common.Route;
+import com.matrixone.apps.domain.DomainAccess;
+import com.matrixone.apps.domain.DomainConstants;
+import com.dassault_systemes.enovia.dcl.TableRowId;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.MqlUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+import com.matrixone.apps.framework.ui.UIUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+/**
+ * UI Service JPO for managing Action Tasks related UI
+ * 
+ * @author V8L
+ * 
+ */
+public class ${CLASSNAME} {
+
+
+	/**
+	 * @param context
+	 *            the eMatrix <code>Context</code> object
+	 * @param args
+	 *            holds no arguments
+	 * @throws DCLException
+	 *             if the operation fails
+	 * @since 10.0.0.0
+	 * @grade 0
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws DCLException {
+		super();
+	}
+
+
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable 
+	public Map actionCreateActionTasks(Context context, String args[]) throws DCLException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] sObjectId = (String[]) programMap.get("objectId");
+			String[] sAssigneeOID = (String[]) programMap.get("AssigneeOID");
+			String[] sparentOID = (String[]) programMap.get("parentOID");
+			String strObjectId=DomainObject.EMPTY_STRING;
+			if(!DCLUtil.isNullOrEmpty(sparentOID)){
+				strObjectId=sparentOID[0];
+			}else{
+				strObjectId=sObjectId[0];
+			}
+
+			if(UIUtil.isNotNullAndNotEmpty(strObjectId)){
+				List<String> slAssignee=FrameworkUtil.split(sAssigneeOID[0], "|");
+				for(String strAssingee:slAssignee){
+					DomainAccess.createObjectOwnership(context, strObjectId, strAssingee, "Review", DomainAccess.COMMENT_MULTIPLE_OWNERSHIP, true,
+							true);
+				}
+			}
+
+			Map mReturnMap=new HashMap();
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "findFrameAndRefresh"));
+			return mReturnMap;
+
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+    @com.dassault_systemes.enovia.documentcommon.ExecuteCallable 
+	public Map actionCommandACTDeleteSummary(Context context, String args[]) throws DCLException {
+		try {
+			Map<?, ?> programMap = JPO.unpackArgs(args);
+			String[] emxTableRowId = (String[]) programMap.get("emxTableRowId");
+			List<String> asctionTaskIDs = new ArrayList<String>(emxTableRowId.length);
+			List<String> asctionTaskAssingee = new ArrayList<String>(emxTableRowId.length);
+			String[] objectId = (String[]) programMap.get("objectId");
+			DomainObject domObj=DomainObject.newInstance(context, objectId[0]);
+
+			for (String strRowId : emxTableRowId) {
+                TableRowId rowId=new TableRowId(strRowId);
+				asctionTaskIDs.add(rowId.getObjectId());
+				InboxTask task=new InboxTask(rowId.getObjectId());
+				asctionTaskAssingee.add(task.getTaskAssignee(context));
+			}
+
+			ContextUtil.pushContext(context, "User Agent", null, null);
+			deleteActionTask(context, asctionTaskIDs);
+			ContextUtil.popContext(context);
+			
+			List<String> currentActionTaskAssingeeList = new StringList();
+			List<Map<?,?>> mlActionTask = getAllActionTask(context, domObj, new StringList(), new StringList(), DomainObject.EMPTY_STRING);
+			for(Map mapTask:mlActionTask){
+				InboxTask task=new InboxTask((String)mapTask.get(DomainObject.SELECT_ID));
+				currentActionTaskAssingeeList.add(task.getTaskAssignee(context));
+			}
+			for(int i=0;i<asctionTaskAssingee.size();i++){
+				if(!currentActionTaskAssingeeList.contains(asctionTaskAssingee.get(i))){
+				DomainAccess.deleteObjectOwnership(context,  objectId[0], "",asctionTaskAssingee.get(i)+"_PRJ", DomainAccess.COMMENT_MULTIPLE_OWNERSHIP);
+			}
+			}	
+
+			Map mReturnMap=new HashMap();
+			mReturnMap.put(DCLConstants.ACTION_JAVASCRIPT, DCLUtil.encodeFunctionForJavaScript(context, false, "findFrameAndRefresh"));
+			return mReturnMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+	public int checkIfAllPeerReviewTasksAreComplete(Context context,String args[]) throws DCLException{
+		try{
+			if (args == null || args.length < 1) {
+				throw (new IllegalArgumentException());
+			}
+			String objectId = args[0];
+			String strPolicy=PropertyUtil.getSchemaProperty(context,DomainConstants.POLICY_ROUTE);
+			String strArchiveState = PropertyUtil.getSchemaProperty(context, DomainConstants.SELECT_POLICY, strPolicy, "state_Archive");
+
+			DomainObject dom = DomainObject.newInstance(context,objectId);
+			MapList mapRelatedObject = new MapList();
+			StringList busSelects = new StringList(2);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_CURRENT);
+
+
+			mapRelatedObject = dom.getRelatedObjects(context,
+					DomainConstants.RELATIONSHIP_OBJECT_ROUTE,
+					DomainObject.TYPE_ROUTE,
+					busSelects,
+					null,
+					false,
+					true,
+					(short) 1,
+					DomainConstants.EMPTY_STRING, // object where clause
+					DomainConstants.EMPTY_STRING, // relationship where clause
+					0);
+
+			for(int i=0; i<mapRelatedObject.size();i++){
+				Map map1 = (Map) mapRelatedObject.get(i);
+				String routeState = (String) map1.get(DomainConstants.SELECT_CURRENT);
+				if(!(routeState.equalsIgnoreCase(DomainConstants.STATE_ROUTE_COMPLETE)||routeState.equalsIgnoreCase(strArchiveState))){
+					String strMsg = EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE,
+							context.getLocale(), "enoDocumentControl.Alert.Msg.PeerReviewTaskCompletion");
+					MqlUtil.mqlCommand(context, "notice $1",strMsg);
+					return 1;
+				}
+			}
+			return 0;
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+	
+	/**
+	 * Removes the action task from the attached object.The specified action
+	 * task will be deleted from the system.The specified action task cannot be
+	 * in complete state
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param asctionTaskIDs
+	 *            list of action task object Ids which has to be removed,ids of
+	 *            InboxTask is only accepted,Null or empty is not accepted
+	 * @throws DCLException
+	 *             if operation fails,if action task is in complete sate
+	 */
+	public void deleteActionTask(Context context, List<String> asctionTaskIDs) throws DCLException {
+		DCLUtil.ensureNotNull(asctionTaskIDs, "asctionTaskIDs");
+		DCLUtil.ensureNotEmpty(asctionTaskIDs, "asctionTaskIDs");
+		try {
+
+			ContextUtil.startTransaction(context, true);
+			try {
+				for (String actionTaskId : asctionTaskIDs) {
+					DomainObject actionTaskdOmObj = DomainObject.newInstance(context, actionTaskId);
+					if (!actionTaskdOmObj.isKindOf(context, "Inbox Task"))
+						throw new DCLException("Invalid Type");
+					StringList slSelect =new StringList(DomainObject.SELECT_CURRENT);
+					slSelect.add("from[Route Task].to.id");
+					slSelect.add(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_ROUTE_NODE_ID));
+					Map<String, String> actionTskM = actionTaskdOmObj.getInfo(context,slSelect );
+					if (actionTskM.get(DomainObject.SELECT_CURRENT).equalsIgnoreCase("complete")) {
+						throw new Exception( EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE,
+								context.getLocale(),  "ActionTasks.Delete.ActionTasks.Error"));
+					}
+					actionTaskdOmObj.deleteObject(context);
+					DomainRelationship
+							.newInstance(context, (String) actionTskM.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_ROUTE_NODE_ID)))
+							.remove(context);
+					Route routeDO = new Route(actionTskM.get("from[Route Task].to.id"));
+					StringList slRouteSelect=new StringList();
+					slRouteSelect.add(DomainObject.SELECT_ID);
+					slRouteSelect.add(DomainObject.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_INSTRUCTIONS));
+					slRouteSelect.add(	DomainObject.SELECT_NAME);
+					List<Map<?, ?>> connectedActionTaskMapL = routeDO.getRouteTasks(context,slRouteSelect,
+							slRouteSelect, null, true);
+					if (connectedActionTaskMapL.size() < 1) {
+						routeDO.deleteRoute(context);
+					}
+				}
+				ContextUtil.commitTransaction(context);
+			}
+			catch (Exception e) {
+				ContextUtil.abortTransaction(context);
+				throw new DCLException(e);
+			}
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+	/**
+	 * Get List<Map<?,?>> of all action tasks related to a object
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object
+	 * @param domObj
+	 *            DomainObject for which the related action task data is
+	 *            required,Null or empty is not accepted
+	 * @param objSelects
+	 *            The selects for objects, If objSelects is null by default id
+	 *            type name revision id is returned
+	 * @param relSelects
+	 *            The selects for relationship, If relSelects is null by default
+	 *            connection id is returned
+	 * @param strWhere
+	 *            The where condition for object
+	 * @return List<Map<?,?>> of all the Action task related objects connected
+	 *         to the domObj
+	 * @throws DCLException
+	 *             if operation fails
+	 */
+	private List<Map<?, ?>> getAllActionTask(Context context, DomainObject domObj, StringList objSelects, StringList relSelects, String strWhere)
+			throws DCLException {
+		DCLUtil.ensureNotNull(domObj, "domObj");
+		final String SYMBOLIC_BUSINESS_INTERFACE = "interface_ACTActionTaskInterface";
+		final String BUSINESS_INTERFACE = PropertyUtil.getSchemaProperty(context, SYMBOLIC_BUSINESS_INTERFACE);
+		try {
+			if (objSelects == null || objSelects.isEmpty()) {
+				objSelects.add(DomainConstants.SELECT_ID);
+				objSelects.add(DomainConstants.SELECT_TYPE);
+				objSelects.add(DomainConstants.SELECT_REVISION);
+				objSelects.add(DomainConstants.SELECT_NAME);
+			}
+			if (relSelects == null || relSelects.isEmpty()) {
+				relSelects.add(DomainRelationship.SELECT_ID);
+			}
+			StringBuffer strBusWhere = new StringBuffer();
+			strBusWhere.append("interface ").append("==\"").append(BUSINESS_INTERFACE).append("\"");
+			List<Map<?, ?>> connectedRouteMapL = domObj.getRelatedObjects(context,
+					DomainObject.RELATIONSHIP_OBJECT_ROUTE,
+					DomainObject.TYPE_ROUTE,
+					objSelects,
+					relSelects, 
+					false,
+					true,
+					(short) 0,
+					strBusWhere.toString(),
+					new String(),
+					0);
+			List<Map<?, ?>> retMap = new ArrayList<Map<?, ?>>();
+			for (Map<?, ?> routeMap : connectedRouteMapL) {
+				String routeID = (String) routeMap.get(DomainObject.SELECT_ID);
+				Route route = new Route(routeID);
+				List<Map<?, ?>> connectedActionTaskMapL = route.getRouteTasks(context, objSelects, relSelects, strWhere, true);
+				retMap.addAll(connectedActionTaskMapL);
+			}
+			return retMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e);
+		}
+	}
+
+}
+

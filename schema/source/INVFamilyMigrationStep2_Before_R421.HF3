@@ -1,0 +1,365 @@
+/*
+ * INVFamilyMigration.java program to get all document type Object Ids.
+ *
+ * Copyright (c) 1992-2002 MatrixOne, Inc.
+ *
+ * All Rights Reserved.
+ * This program contains proprietary and trade secret information of
+ * MatrixOne, Inc.  Copyright notice is precautionary only and does
+ * not evidence any actual or intended publication of such program.
+ *
+ */
+
+import matrix.db.*;
+import matrix.util.*;
+import java.io.*;
+import java.util.*;
+
+import com.matrixone.MCADIntegration.server.beans.*;
+import com.matrixone.MCADIntegration.server.cache.*;
+import com.matrixone.MCADIntegration.server.*;
+
+public class ${CLASSNAME}
+{
+    private BufferedWriter writer		= null;
+	private FileWriter iefLog			= null;
+	private FileWriter iefIDsFile		= null;
+    private String documentDirectory	= "";
+
+	private final String IPART_MINOR_TYPE			= "INV Versioned iPart";
+	private final String IPART_MAJOR_TYPE			= "INV iPart";
+	private final String PART_FACTORY_MINOR_TYPE	= "INV Versioned Part Factory";
+	private final String PART_FACTORY_MAJOR_TYPE	= "INV Part Factory";
+	
+    /**
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @throws Exception if the operation fails
+     * @grade 0
+     */
+    public ${CLASSNAME} (Context context, String[] args)
+        throws Exception
+    {
+		writer = new BufferedWriter(new MatrixWriter(context));
+    }
+
+    /**
+     * This method is executed if a specific method is not specified.
+     *
+     * @param context the eMatrix <code>Context</code> object
+     * @param args holds no arguments
+     * @returns nothing
+     * @throws Exception if the operation fails
+     */
+    public int mxMain(Context context, String[] args)
+        throws Exception
+    {
+		if(!context.isConnected())
+		{
+			throw new Exception("not supported on desktop client");
+		}
+
+		try
+		{
+			validateInputArguments(args);
+		}
+		catch (IllegalArgumentException iExp)
+		{
+			writeErrorToConsole(iExp.getMessage());
+			writer.close();
+			return 0;
+		}
+
+		try
+		{
+			startIEFLog();
+			if(args[0].equalsIgnoreCase("writeId"))
+				writeIdFile(context);
+			else if(args[0].equalsIgnoreCase("migrate"))
+				migrateRelationship(context, args[2]);
+		}
+		catch (FileNotFoundException fEx)
+		{
+			writeErrorToConsole("Directory does not exist or does not have access to the directory");
+		}
+		catch (Exception ex)
+		{
+			writeErrorToConsole("Migration failed - " + ex.getMessage());
+			ex.printStackTrace();
+			context.abort();
+		}
+
+		closeIDsFile();
+		endIEFLog();
+		writer.flush();
+		writer.close();
+        return 0;
+    }
+	
+	private void migrateRelationship(Context context, String fileName) throws Exception
+	{
+		long startTime = System.currentTimeMillis();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Updating relationships...");
+		writeMessageToConsole("                Writing log files to: " + documentDirectory);
+		writeLineToConsole();
+		writer.write("Reading ID file: " + fileName + "\n");
+		
+		context.start(true);
+
+		String fileNameWithPath		= documentDirectory + fileName;
+		BufferedReader iefIDsReader = new BufferedReader(new FileReader(fileNameWithPath));
+
+        boolean gotErrors = false;
+		String line = "";
+		while((line = iefIDsReader.readLine()) != null)
+		{
+			try
+			{
+				if(line.length() <3 || line.startsWith("#"))
+					continue;
+				log("Executing: " + line);
+				runModifyMQL(context, line);
+			}
+			catch(Exception e)
+			{
+				gotErrors = true;
+				log("ERROR : " + e.getMessage());
+			}
+		}
+		
+		if(gotErrors)
+			throw new Exception("Error in Migration. Review log file for details.");
+		
+		context.commit();
+
+		writeLineToConsole();
+		writeMessageToConsole("                Relationship migration  COMPLETE");
+		writeMessageToConsole("                Time:"+ (System.currentTimeMillis() - startTime) + "ms ");
+		writeMessageToConsole("                Step 2 of Migration         :  SUCCESS");
+		writeMessageToConsole(" ");
+		writeLineToConsole();
+    }
+	
+	private void runModifyMQL(Context context, String command) throws Exception
+	{
+		MQLCommand mqlCommand = new MQLCommand();
+		boolean success = mqlCommand.executeCommand(context, command);
+		if(!success)
+			throw new Exception(mqlCommand.getError());
+	}
+	
+	private void writeIdFile(Context context) throws Exception
+	{
+		long startTime = System.currentTimeMillis();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Querying for Factory Objects...");
+		writeMessageToConsole("                Writing files to: " + documentDirectory);
+		writeLineToConsole();
+		
+		context.start(false);
+
+		createNewIDsFile();
+		getIdsCase1(context);
+		log("Query complete...");
+
+		closeIDsFile();
+		
+		context.commit();
+		
+		writeLineToConsole();
+		writeMessageToConsole("                Querying for Factory Objects  COMPLETE");
+		writeMessageToConsole("                Time:"+ (System.currentTimeMillis() - startTime) + "ms ");
+		writeMessageToConsole("                Step 1 of Migration         :  SUCCESS");
+		writeLineToConsole();
+	}
+
+	private void validateInputArguments(String[] args) throws IllegalArgumentException
+	{
+		if (args.length < 2 || (args[0].startsWith("migrate") && args.length < 3))
+			throw new IllegalArgumentException("Wrong number of arguments");
+			
+		documentDirectory = args[1];
+		// documentDirectory does not ends with "/" add it
+		String fileSeparator = java.io.File.separator;
+		if(documentDirectory != null && !documentDirectory.endsWith(fileSeparator))
+		{
+			documentDirectory = documentDirectory + fileSeparator;
+		}
+	}
+
+    /**
+     * Evalutes a temp query to get all the Family objects in the system
+     * @param context the eMatrix <code>Context</code> object
+     * @param chunksize has the no. of objects to be stored in file.
+     * @return void
+     * @exception Exception if the operation fails.
+     */
+	
+	private void getIdsCase1(Context context) throws Exception
+    {
+		Query query = new Query();
+		query.setBusinessObjectType(PART_FACTORY_MINOR_TYPE);
+		query.setBusinessObjectName("*");
+		query.setBusinessObjectRevision("*");
+		query.setWhereExpression("id == last.id");
+		
+		StringList busSelects = new StringList();
+		busSelects.add("id");
+		busSelects.add("name");
+		busSelects.add("revision");
+		busSelects.add("revisions");
+		busSelects.add("revisions.from[Instance Of].to.type");
+		busSelects.add("revisions.from[Instance Of].to.from[Finalized]");
+		busSelects.add("revisions.from[Instance Of].to.id");
+		busSelects.add("revisions.from[Instance Of].to.last.id");
+		busSelects.add("revisions.from[Instance Of].to.name");
+
+		QueryIterator resultItr = query.getIterator(context, busSelects, (short)1000);
+		while(resultItr.hasNext())
+		{
+			BusinessObjectWithSelect busWithSelect = resultItr.next();
+
+			String id 		= busWithSelect.getSelectData("id");
+			String name 	= busWithSelect.getSelectData("name");
+			String revision = busWithSelect.getSelectData("revision");
+			log("id = " + id + "; name = " + name + "; rev = " + revision);
+			
+			StringList existingInstNames = busWithSelect.getSelectDataList("revisions[" + revision + "].from[Instance Of].to.name");
+			log("Existing Instance Names: " + existingInstNames);
+			if(existingInstNames == null)
+				continue;
+				
+			StringList revisions = busWithSelect.getSelectDataList("revisions");
+			for(int i=revisions.size()-1; i>=0; i--)
+			{
+				String rev = (String) revisions.elementAt(i);
+				log("rev: " + rev);
+				if(rev.equals(revision))
+					continue;
+					
+				StringList instanceTypes 	= busWithSelect.getSelectDataList("revisions[" + rev + "].from[Instance Of].to.type");
+				StringList hasFinalizedRel 	= busWithSelect.getSelectDataList("revisions[" + rev + "].from[Instance Of].to.from[Finalized]");
+				StringList instanceIDs 		= busWithSelect.getSelectDataList("revisions[" + rev + "].from[Instance Of].to.id");
+				StringList instanceNames 	= busWithSelect.getSelectDataList("revisions[" + rev + "].from[Instance Of].to.name");
+				StringList instanceLastIds 	= busWithSelect.getSelectDataList("revisions[" + rev + "].from[Instance Of].to.last.id");
+				
+				if(instanceNames == null)
+					continue;
+					
+				log("Instance IDs: " + instanceIDs);
+				log("Instance Names: " + instanceNames);
+				log("Instance Last IDs: " + instanceLastIds);
+				for(int j=instanceNames.size()-1; j>=0; j--)
+				{
+					String instName = (String) instanceNames.elementAt(j);
+					if(!existingInstNames.contains(instName))
+					{
+						existingInstNames.addElement(instName);
+						String instType 	= (String) instanceTypes.elementAt(j);
+						String isFinalized 	= (String) hasFinalizedRel.elementAt(j);
+						String instID 		= (String) instanceIDs.elementAt(j);
+						String instLastID 	= (String) instanceLastIds.elementAt(j);
+						
+						log("Added instance - " + instName + "; type - " + instType + "; Family - " + name + "; isFinalized - " + isFinalized);
+						String connectObjId = instLastID;
+						if(instType.equals("INV iPart"))
+							connectObjId = instID;
+						else if(isFinalized.equalsIgnoreCase("True"))
+							connectObjId = instID;
+						
+						writeToIDsFile("connect bus " + id + " to " + connectObjId + " relationship 'Instance Of' IEF-IsPrimary FALSE;");
+					}
+				}
+			}
+		}
+    }
+	
+	private void startIEFLog() throws Exception
+	{
+		try
+		{
+			iefLog		= new FileWriter(documentDirectory + "invMigration_Step2.log");
+		}
+		catch(Exception e)
+		{
+			writeMessageToConsole("ERROR: Can not create log file. " + e.getMessage());
+		}
+	}
+
+	private void endIEFLog()
+	{
+		try
+		{
+			iefLog.write("\n\n");
+			iefLog.flush();
+			iefLog.close();
+		}
+		catch(Exception e)
+		{
+		}
+	}
+
+	private void log(String message)
+	{
+		try
+		{
+			iefLog.write(message + "\n");
+		}
+		catch(Exception e)
+		{
+		}
+	}
+
+	private void closeIDsFile() throws Exception
+	{
+		if(iefIDsFile != null)
+		{
+			iefIDsFile.flush();
+			iefIDsFile.close();
+			iefIDsFile = null;
+		}
+    }
+
+	private void createNewIDsFile() throws Exception
+	{
+		String fileNameWithPath = documentDirectory + "INV_MigrationIDs_Family_Step2.txt";
+		iefIDsFile				= new FileWriter(fileNameWithPath);
+		writer.write("Created file " + fileNameWithPath + "\n");
+	}
+
+	private void writeToIDsFile(String id) throws Exception
+	{
+		try
+		{
+			iefIDsFile.write(id + "\n");
+		}
+		catch(Exception e)
+		{
+			writer.write("ERROR in writeing ID " + id + "   -   " + e.getMessage() + "\n");
+		}
+	}
+
+	private void writeLineToConsole() throws Exception
+	{
+		writeMessageToConsole("=======================================================");
+	}
+
+	private void writeMessageToConsole(String message) throws Exception
+	{
+		writer.write(message + "\n");
+	}
+
+	private void writeErrorToConsole(String message) throws Exception
+	{
+		writeLineToConsole();
+		writeMessageToConsole(message);
+		writeMessageToConsole("Step 1 of Migration     : FAILED");
+		writeLineToConsole();
+		writer.flush();
+	}
+}
+

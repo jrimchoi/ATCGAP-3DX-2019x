@@ -1,0 +1,632 @@
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.dassault_systemes.enovia.lsa.Helper;
+import com.dassault_systemes.enovia.lsa.LSAException;
+import com.dassault_systemes.enovia.lsa.QueryUtil;
+import com.dassault_systemes.enovia.lsa.ReviewRoute.RouteCompletionAction;
+import com.dassault_systemes.enovia.lsa.componentframework.Component;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentException;
+import com.dassault_systemes.enovia.lsa.componentframework.ComponentFactory;
+import com.dassault_systemes.enovia.lsa.qic.QICConstants;
+import com.dassault_systemes.enovia.lsa.qic.QICException;
+import com.dassault_systemes.enovia.lsa.qic.QICUtil;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService;
+import com.dassault_systemes.enovia.lsa.qic.services.CAPARequestService.CAPARequestPolicyState;
+import com.dassault_systemes.enovia.lsa.services.PNOService;
+import com.dassault_systemes.enovia.lsa.services.ReviewRouteService;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.DomainRelationship;
+import com.matrixone.apps.domain.util.ContextUtil;
+import com.matrixone.apps.domain.util.FrameworkUtil;
+import com.matrixone.apps.domain.util.MailUtil;
+import com.matrixone.apps.domain.util.MessageUtil;
+import com.matrixone.apps.domain.util.PersonUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+
+public class ${CLASSNAME} {
+
+	/**
+	 * Constructs a new JPO object.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            This argument is ignored, only provided for allowing it to be
+	 *            called from UI components.
+	 * @throws Exception
+	 *             if the operation fails
+	 */
+	public ${CLASSNAME}(Context context, String[] args) throws QICException {
+		super();
+	}
+
+	/**
+	 * Get the PNOService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return PNOService implementation reference
+	 * @throws LSAException
+	 *             If operation fails.
+	 */
+	private static PNOService getPNOService(Context context) throws LSAException {
+		try {
+			Component component = ComponentFactory.getInstance(context, "LSACommonCoreComponent");
+			PNOService service = (PNOService) component.getService(PNOService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new LSAException(e);
+		}
+	}
+
+	/**
+	 * Get the CAPARequestService implementation reference
+	 * 
+	 * @param context
+	 *            ENOVIA Context object.
+	 * @return CAPARequestService implementation reference
+	 * @throws QICException
+	 *             If operation fails.
+	 */
+	private static CAPARequestService getCAPARequestService(Context context) throws QICException {
+		try {
+			Component LSAQICCore = ComponentFactory.getInstance(context, "LSAQICCoreComponent");
+			CAPARequestService service = (CAPARequestService) LSAQICCore.getService(CAPARequestService.class);
+			return service;
+		}
+		catch (ComponentException e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Creates Approval Route for CAPA Request.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void createApprovalRouteForCAPARequest(Context context, String[] args) throws QICException {
+		try {
+			final ReviewRouteService REVIEW_ROUTE_SERVICE = QICUtil.getReviewRouteService(context);
+			final String POLICY_CAPA_REQUEST = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST);
+			final String STATE_REVIEW = FrameworkUtil.lookupStateName(context, POLICY_CAPA_REQUEST, QICConstants.SYMBOLIC_STATE_REVIEW);
+			String strCAPARequestId = args[0];
+			String strCurrentState = args[1];
+			String strOwner = args[2];
+			String strCAPARequestName = args[3];
+			if (!Helper.isNullOrEmpty(strCurrentState) && strCurrentState.equalsIgnoreCase(STATE_REVIEW) && !Helper.isNullOrEmpty(strCAPARequestId)
+					&& !Helper.isNullOrEmpty(strOwner) && !Helper.isNullOrEmpty(strCAPARequestName)) {
+				boolean blCreateNewRoute = !ChangeRouteTasksAssignee(context, strCAPARequestId, strOwner);
+
+				if (blCreateNewRoute) {
+					Helper.runWithUser(context, strOwner, new Helper.Callable() {
+						@Override
+						public Object run(Context context, Object... args) throws QICException {
+							DomainObject dmoCAPARequest = (DomainObject) args[0];
+							try {
+								return REVIEW_ROUTE_SERVICE.createReviewRoute(context, dmoCAPARequest, DomainConstants.EMPTY_STRING,
+										DomainConstants.EMPTY_STRING, null, QICConstants.SYMBOLIC_STATE_REVIEW,
+										RouteCompletionAction.PROMOTE_CONNECTED_OBJECT);
+							}
+							catch (Exception e) {
+								throw new QICException(e);
+							}
+						}
+					}, DomainObject.newInstance(context, strCAPARequestId));
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Promotes the CAPA Request to "Not Approved".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void setCAPARequestAsNotApproved(Context context, String[] args) throws QICException {
+		final CAPARequestService CAPA_REQUEST_SERVICE = getCAPARequestService(context);
+		final Map<String, String> ATTRIBUTE_MAP = new HashMap<String, String>();
+		final String ATTRIBUTE_ROUTE_BASE_PURPOSE = PropertyUtil.getSchemaProperty(context, "attribute_RouteBasePurpose");
+		try {
+			String strInboxTaskId = args[0];
+			if (!Helper.isNullOrEmpty(strInboxTaskId)) {
+				String strRouteAction = new String();
+				String strApprovalStatus = new String();
+				DomainObject dmoInboxTask = DomainObject.newInstance(context, strInboxTaskId);
+				List<Map<?, ?>> inboxTaskInfoMap = QueryUtil.getInfo(context, new String[] { strInboxTaskId },
+						Helper.stringList(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_ROUTE_ACTION),
+								DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_APPROVAL_STATUS)));
+				for (Object obj : inboxTaskInfoMap) {
+					Map infoMap = (Map) obj;
+					strRouteAction = (String) infoMap.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_ROUTE_ACTION));
+					strApprovalStatus = (String) infoMap.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_APPROVAL_STATUS));
+				}
+				if (!Helper.isNullOrEmpty(strRouteAction) && strRouteAction.equalsIgnoreCase("Approve") && !Helper.isNullOrEmpty(strApprovalStatus)
+						&& strApprovalStatus.equalsIgnoreCase("Reject")) {
+					StringBuilder sbObjectWhere = new StringBuilder();
+					sbObjectWhere.append(DomainObject.getAttributeSelect(ATTRIBUTE_ROUTE_BASE_PURPOSE) + " == Approval");
+
+					List<Map<?, ?>> routeMap = QueryUtil.getRelatedObjects(context, dmoInboxTask, QICConstants.SYMBOLIC_relationship_RouteTask,
+							QICConstants.SYMBOLIC_type_Route, Helper.stringList(DomainConstants.SELECT_ID),
+							Helper.stringList(DomainRelationship.SELECT_ID), false, true, (short) 0, sbObjectWhere.toString(), null);
+					for (Object obj : routeMap) {
+						Map infoMap = (Map) obj;
+						String strRouteId = (String) infoMap.get(DomainConstants.SELECT_ID);
+						if (!Helper.isNullOrEmpty(strRouteId)) {
+							// TODO need to see if this where exp is required
+							StringBuilder sbRelWhere = new StringBuilder();
+							sbRelWhere.append(DomainRelationship.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_BASE_STATE));
+							sbRelWhere.append("==\"");
+							sbRelWhere.append(QICConstants.SYMBOLIC_STATE_REVIEW);
+							sbRelWhere.append("\" && ");
+							sbRelWhere.append(DomainRelationship.getAttributeSelect(DomainObject.ATTRIBUTE_ROUTE_BASE_POLICY));
+							sbRelWhere.append("==\"");
+							sbRelWhere.append(QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST);
+							sbRelWhere.append("\"");
+
+							DomainObject dmoRoute = DomainObject.newInstance(context, strRouteId);
+							List<Map<?, ?>> requestMap = QueryUtil.getRelatedObjects(context, dmoRoute,
+									QICConstants.SYMBOLIC_relationship_ObjectRoute, QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST,
+									Helper.stringList(DomainConstants.SELECT_ID), Helper.stringList(DomainRelationship.SELECT_ID), true, false,
+									(short) 1, null, null);
+							for (Object objInfo : requestMap) {
+								Map requestInfo = (Map) objInfo;
+								String strCAPARequestId = (String) requestInfo.get(DomainConstants.SELECT_ID);
+								if (!Helper.isNullOrEmpty(strCAPARequestId)) {
+									CAPA_REQUEST_SERVICE.promoteCAPARequest(context, CAPARequestPolicyState.NOTAPPROVED, ATTRIBUTE_MAP,
+											strCAPARequestId);
+								}
+							}
+						}
+					}
+				}
+			}
+
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Updates the CAPA Request primary Organization as the Organization of the
+	 * New Owner of it after Change Ownership.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void updateCAPARequestOrganization(Context context, String[] args) throws QICException {
+		final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REVIEW);
+		try {
+			final PNOService PNO_SERVICE = getPNOService(context);
+			String strCAPARequestId = args[0];
+			String strNewOwner = args[1];
+			String strCurrentState = args[2];
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strNewOwner) && !Helper.isNullOrEmpty(strCurrentState)
+					&& strCurrentState.equalsIgnoreCase(STATE_REVIEW)) {
+				DomainObject reqObj = DomainObject.newInstance(context, strCAPARequestId);
+				String reqOrganization = reqObj.getInfo(context, DomainConstants.SELECT_ORGANIZATION);
+				String personObjId = PersonUtil.getPersonObjectID(context, strNewOwner);
+				Map<?, ?> newOwnerOrgdetails = QICUtil.getPersonOrganization(context, personObjId);
+				DomainObject neworgObj = DomainObject.newInstance(context, (String) newOwnerOrgdetails.get(DomainConstants.SELECT_ID));
+				String cprnewownerOrg = (String) newOwnerOrgdetails.get(DomainConstants.SELECT_NAME);
+				if (!reqOrganization.equals(cprnewownerOrg)) {
+					PNO_SERVICE.setPrimaryOrganization(context, neworgObj, strCAPARequestId);
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Send notification to new CAPA Request Owner when Ownership of the CAPA
+	 * Request has been transfered.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void sendChangeOwnerNotification(Context context, String[] args) throws QICException {
+		final String ATTRIBUTE_CAPA_SEVERITY = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_ATTRIBUTE_CAPA_SEVERITY);
+		final String ATTRIBUTE_NOTES = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_attribute_Notes);
+		try {
+			String strCAPARequestId = args[0];
+			String strNewOwner = args[1];
+			String strPreviousOwner = context.getUser();
+			String strCAPARequestName = new String();
+			String strState = new String();
+			String strCAPASeverity = new String();
+			String strTransferNotes = new String();
+			String strDescription = new String();
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strNewOwner) && !Helper.isNullOrEmpty(strPreviousOwner)) {
+				List<Map<?, ?>> returnMap = QueryUtil.getInfo(context, new String[] { strCAPARequestId },
+						Helper.stringList(DomainConstants.SELECT_NAME, DomainConstants.SELECT_CURRENT,
+								DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_SEVERITY), DomainObject.getAttributeSelect(ATTRIBUTE_NOTES),
+								DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_COMMENTS)));
+				for (Object obj : returnMap) {
+					Map requestMap = (Map) obj;
+					strCAPARequestName = (String) requestMap.get(DomainConstants.SELECT_NAME);
+					strState = (String) requestMap.get(DomainConstants.SELECT_CURRENT);
+					strCAPASeverity = (String) requestMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_CAPA_SEVERITY));
+					strTransferNotes = (String) requestMap.get(DomainObject.getAttributeSelect(ATTRIBUTE_NOTES));
+					strDescription = (String) requestMap.get(DomainObject.getAttributeSelect(DomainConstants.ATTRIBUTE_COMMENTS));
+				}
+				String strSubject = MessageUtil.getMessage(context, null, "QIC.CAPARequest.ChangeOwnerNotification.Subject", null, null,
+						context.getLocale(), Helper.StringResource.QIC.toString());
+				String strMessage = MessageUtil.getMessage(context,
+						null, "QIC.CAPARequest.ChangeOwnerNotification.Message", new String[] { strCAPARequestName, strNewOwner, strPreviousOwner,
+								strState, strCAPASeverity, strTransferNotes, strDescription },
+						null, context.getLocale(), Helper.StringResource.QIC.toString());
+				MailUtil.sendNotification(context, Helper.stringList(strNewOwner), null, null, strSubject, null, null, strMessage, null, null,
+						Helper.stringList(strCAPARequestId), null);
+			}
+		}
+		catch (Exception exception) {
+			throw new QICException(exception);
+		}
+	}
+
+	/**
+	 * Blocks Promotion/Demotion of CAPA Request objects from LifeCycle.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 */
+	public int blockCAPARequestPromoteDemote(Context context, String[] args) throws QICException {
+		try {
+			String strFromCPRActions = context.getCustomData(QICConstants.FROM_CPR_ACTIONS);
+			if (!Helper.isNullOrEmpty(strFromCPRActions) && strFromCPRActions.equalsIgnoreCase(QICConstants.TRUE)) {
+				return 0;
+			}
+			Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARequest.BlockPromoteDemoteMessage");
+			return 1;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+
+	}
+
+	/**
+	 * Grants the Read and Show access on CAPA Requests/CAPA to the Data Source
+	 * Owner.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void grantAccessToDataSourceOwner(Context context, String[] args) throws QICException {
+		try {
+			String strCAPARequestId = args[0];
+			String strDataSourceId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && (Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPARequestId),
+					QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST, QICConstants.SYMBOLIC_TYPE_CAPA)).containsValue(Boolean.TRUE)
+					&& !Helper.isNullOrEmpty(strDataSourceId)) {
+				List<Map<?, ?>> lmDataSourceObjectInfo = QueryUtil.getInfo(context, new String[] { strDataSourceId },
+						Helper.stringList(DomainConstants.SELECT_OWNER));
+				if (lmDataSourceObjectInfo.size() > 0) {
+					Map<?, ?> mpDataSourceInfo = lmDataSourceObjectInfo.get(0);
+					String strDataSourceOwner = (String) mpDataSourceInfo.get(DomainConstants.SELECT_OWNER);
+					if (!Helper.isNullOrEmpty(strDataSourceOwner) && QICUtil.isValidPerson(context, strDataSourceOwner)) {
+						String strDataSourceOwnerId = PersonUtil.getPersonObjectID(context, strDataSourceOwner);
+						QICUtil.grantAccess(context, strCAPARequestId, strDataSourceOwnerId, sbAccesses.toString());
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Revokes the Read and Show access on CAPA Requests From the Data Source
+	 * Owner.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void revokeAccessFromDataSourceOwner(Context context, String[] args) throws QICException {
+		try {
+			String strCAPARequestId = args[0];
+			String strDataSourceId = args[1];
+			StringBuilder sbAccesses = new StringBuilder();
+			sbAccesses.append(QICConstants.ACCESS_READ);
+			sbAccesses.append(QICConstants.COMMA);
+			sbAccesses.append(QICConstants.ACCESS_SHOW);
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && (Helper.getTypeKindOf(context, DomainObject.newInstance(context, strCAPARequestId),
+					QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST, QICConstants.SYMBOLIC_TYPE_CAPA)).containsValue(Boolean.TRUE)
+					&& !Helper.isNullOrEmpty(strDataSourceId)) {
+				List<Map<?, ?>> lmDataSourceObjectInfo = QueryUtil.getInfo(context, new String[] { strDataSourceId },
+						Helper.stringList(DomainConstants.SELECT_OWNER));
+				if (lmDataSourceObjectInfo.size() > 0) {
+					Map<?, ?> mpDataSourceInfo = lmDataSourceObjectInfo.get(0);
+					String strDataSourceOwner = (String) mpDataSourceInfo.get(DomainConstants.SELECT_OWNER);
+					if (!Helper.isNullOrEmpty(strDataSourceOwner) && QICUtil.isValidPerson(context, strDataSourceOwner)) {
+						String strDataSourceOwnerId = PersonUtil.getPersonObjectID(context, strDataSourceOwner);
+						StringBuilder sbWhereExpression = new StringBuilder();
+						sbWhereExpression.append(DomainConstants.SELECT_OWNER);
+						sbWhereExpression.append(" == \"");
+						sbWhereExpression.append(strDataSourceOwner);
+						sbWhereExpression.append("\"");
+						if (!Helper.isNullOrEmpty(strDataSourceOwnerId)
+								&& (Helper.countConnectionsOnObject(context, DomainObject.newInstance(context, strCAPARequestId),
+										QICConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, QICConstants.FROM, sbWhereExpression.toString()) < 1)) {
+							QICUtil.revokeAccess(context, strCAPARequestId, strDataSourceOwnerId, sbAccesses.toString());
+						}
+					}
+				}
+			}
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Revokes the access from previous owner and Grants the Read and Show
+	 * access on CAPA Requests/CAPA to the new Data Source Owner.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int transferAccessToNewDataSourceOwner(Context context, String[] args) throws QICException {
+		final String TYPE_CAPA_REQUEST = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+		final String TYPE_CAPA = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_TYPE_CAPA);
+		try {
+			String strDataSourceId = args[0];
+			String strPreviousOwner = args[1];
+			String strNewOwner = args[2];
+			if (!Helper.isNullOrEmpty(strDataSourceId) && !Helper.isNullOrEmpty(strPreviousOwner) && !Helper.isNullOrEmpty(strNewOwner)) {
+				StringBuilder sbAccesses = new StringBuilder();
+				sbAccesses.append(QICConstants.ACCESS_READ);
+				sbAccesses.append(QICConstants.COMMA);
+				sbAccesses.append(QICConstants.ACCESS_SHOW);
+
+				StringBuilder sbTypePattern = new StringBuilder();
+				sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_CAPA_REQUEST);
+				sbTypePattern.append(QICConstants.COMMA);
+				sbTypePattern.append(QICConstants.SYMBOLIC_TYPE_CAPA);
+
+				StringBuilder sbWhereExpression = new StringBuilder();
+				sbWhereExpression.append(DomainConstants.SELECT_OWNER);
+				sbWhereExpression.append(" == \"");
+				sbWhereExpression.append(strPreviousOwner);
+				sbWhereExpression.append("\"");
+
+				List<Map<?, ?>> lmCAPARequestObjectInfo = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strDataSourceId),
+						QICConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, sbTypePattern.toString(),
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_TYPE), Helper.stringList(DomainRelationship.SELECT_ID),
+						Boolean.TRUE, Boolean.FALSE, (short) 1, null, null);
+				for (Map<?, ?> mapCAPAObjectInfo : lmCAPARequestObjectInfo) {
+					String strCAPARequestId = (String) mapCAPAObjectInfo.get(DomainConstants.SELECT_ID);
+					String strType = (String) mapCAPAObjectInfo.get(DomainConstants.SELECT_TYPE);
+					// Revoke Access from Previous Data Source Owner
+					if (QICUtil.isValidPerson(context, strPreviousOwner)) {
+						String strPreviousOwnerId = PersonUtil.getPersonObjectID(context, strPreviousOwner);
+						if (!Helper.isNullOrEmpty(strPreviousOwnerId) && !Helper.isNullOrEmpty(strCAPARequestId)
+								&& (Helper.countConnectionsOnObject(context, DomainObject.newInstance(context, strCAPARequestId),
+										QICConstants.SYMBOLIC_RELATIONSHIP_DATA_SOURCE, QICConstants.FROM, sbWhereExpression.toString()) < 2)) {
+							QICUtil.revokeAccess(context, strCAPARequestId, strPreviousOwnerId, sbAccesses.toString());
+						}
+					}
+					// Grant Access to New Data Source Owner
+					if (QICUtil.isValidPerson(context, strNewOwner)) {
+						String strNewOwnerId = PersonUtil.getPersonObjectID(context, strNewOwner);
+						if (!Helper.isNullOrEmpty(strNewOwnerId) && !Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strType)
+								&& (strType.equalsIgnoreCase(TYPE_CAPA_REQUEST) || strType.equalsIgnoreCase(TYPE_CAPA))) {
+							QICUtil.grantAccess(context, strCAPARequestId, strNewOwnerId, sbAccesses.toString());
+						}
+					}
+				}
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Changes the Route and associated Tasks Owner which are under previous
+	 * CAPA Request Reviewer's ownership to the New CAPA Request Reviewer.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public void changeRouteTasksAssignee(Context context, String[] args) throws QICException {
+		try {
+			final String STATE_REVIEW = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+					QICConstants.SYMBOLIC_STATE_REVIEW);
+			String strCAPARequestId = args[0];
+			String strCAPARequestState = args[1];
+			String strNewReviewer = args[2];
+			String strPreviousReviewer = context.getUser();
+			int count = Helper.countConnectionsWithRelWithContextUser(context, DomainObject.newInstance(context, strCAPARequestId),
+					QICConstants.SYMBOLIC_RELATIONSHIP_DUPLICATE_REQUEST, "from");
+			if (!Helper.isNullOrEmpty(strCAPARequestId) && !Helper.isNullOrEmpty(strNewReviewer) && !Helper.isNullOrEmpty(strPreviousReviewer)
+					&& !Helper.isNullOrEmpty(strCAPARequestState) && strCAPARequestState.equalsIgnoreCase(STATE_REVIEW) && (count == 0)) {
+				ChangeRouteTasksAssignee(context, strCAPARequestId, strNewReviewer);
+			}
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new QICException(e);
+		}
+	}
+
+	/**
+	 * Changes the Route and associated Tasks Owner which are under previous
+	 * CAPA Request Reviewer's ownership to the New CAPA Request
+	 * Reviewer,returns false if transfer ownership does not happen,return true
+	 * if connected route exists for the capa request. operation is performed.
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param strCAPARequestId
+	 *            Object Id of CAPA Request
+	 * @param strNewOwner
+	 *            New Reviewer of the CAPA Request
+	 * @return True - if connected route exists for the capa request,else return
+	 *         False.
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	private boolean ChangeRouteTasksAssignee(Context context, String strCAPARequestId, String strNewOwner) throws QICException {
+		try {
+			ContextUtil.startTransaction(context, true);
+			final ReviewRouteService REVIEW_ROUTE_SERVICE = QICUtil.getReviewRouteService(context);
+			final PNOService PNO_SERVICE = getPNOService(context);
+			ArrayList<String> alRouteTasksIds = new ArrayList<String>();
+			String strNewReviewerId = PersonUtil.getPersonObjectID(context, strNewOwner);
+			Map<?, ?> newOwnerOrgdetails = QICUtil.getPersonOrganization(context, strNewReviewerId);
+			DomainObject orgObj = DomainObject.newInstance(context, (String) newOwnerOrgdetails.get(DomainConstants.SELECT_ID));
+			String reviwerOrg = (String) newOwnerOrgdetails.get(DomainConstants.SELECT_NAME);
+			if (!Helper.isNullOrEmpty(strNewReviewerId)) {
+				DomainObject dmoNewReviewer = DomainObject.newInstance(context, strNewReviewerId);
+				Map<String, String> attributeMap = new HashMap<String, String>();
+				Map returnMap = REVIEW_ROUTE_SERVICE.getCurrentReviewRoute(context, DomainObject.newInstance(context, strCAPARequestId),
+						Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER, DomainConstants.SELECT_ORGANIZATION),
+						Helper.stringList(DomainRelationship.SELECT_ID));
+				if (!(null == returnMap || returnMap.isEmpty())) {
+					String strRouteId = (String) returnMap.get(DomainConstants.SELECT_ID);
+					String strRouteOwner = (String) returnMap.get(DomainConstants.SELECT_OWNER);
+					String strRouteOrg = (String) returnMap.get(DomainConstants.SELECT_ORGANIZATION);
+					if (!Helper.isNullOrEmpty(strRouteId) && !Helper.isNullOrEmpty(strRouteOwner) && !strRouteOwner.equalsIgnoreCase(strNewOwner)) {
+						StringBuilder sbWhereExpression = new StringBuilder();
+						sbWhereExpression.append(DomainConstants.SELECT_OWNER);
+						sbWhereExpression.append(" == \"");
+						sbWhereExpression.append(strRouteOwner);
+						sbWhereExpression.append("\"");
+						List<Map<?, ?>> lmRouteTasksInfo = QueryUtil.getRelatedObjects(context, DomainObject.newInstance(context, strRouteId),
+								QICConstants.SYMBOLIC_relationship_RouteTask, QICConstants.SYMBOLIC_type_InboxTask,
+								Helper.stringList(DomainConstants.SELECT_ID, DomainConstants.SELECT_OWNER),
+								Helper.stringList(DomainRelationship.SELECT_ID), Boolean.TRUE, Boolean.FALSE, (short) 1, sbWhereExpression.toString(),
+								null);
+						for (Map<?, ?> mpRouteTasks : lmRouteTasksInfo) {
+							String strRouteTaskId = (String) mpRouteTasks.get(DomainConstants.SELECT_ID);
+							if (!Helper.isNullOrEmpty(strRouteTaskId)) {
+								alRouteTasksIds.add(strRouteTaskId);
+							}
+						}
+						// Change the Route Tasks Assignees from
+						// Previous Reviewer to New Reviewer
+						if (alRouteTasksIds.size() > 0) {
+							String[] arrRouteTasksIds = alRouteTasksIds.toArray(new String[alRouteTasksIds.size()]);
+							QICUtil.delegateInboxTask(context, strNewOwner, arrRouteTasksIds);
+							PNO_SERVICE.setPrimaryOrganization(context, orgObj, alRouteTasksIds.get(0));
+						}
+						// Change the Route Owner to New Reviewer
+						PNO_SERVICE.changeAssignment(context, dmoNewReviewer, attributeMap, strRouteId);
+						if (!reviwerOrg.equalsIgnoreCase(strRouteOrg)) {
+							PNO_SERVICE.setPrimaryOrganization(context, orgObj, strRouteId);
+
+						}
+					}
+				}
+				else {
+					return false;
+				}
+			}
+			ContextUtil.commitTransaction(context);
+		}
+		catch (Exception e) {
+			ContextUtil.abortTransaction(context);
+			throw new QICException(e);
+		}
+		return true;
+	}
+
+	/**
+	 * Blocks the addition or removal of any Document to
+	 * "Requested/Not Approved/Duplicate" state CAPA Request as
+	 * "Reference Document".
+	 * 
+	 * @param context
+	 *            the ENOVIA <code>Context</code> object.
+	 * @param args
+	 *            holds input arguments.
+	 * @return int 0 - success, 1 - failure
+	 * @throws QICException
+	 *             if operation fails.
+	 */
+	public int blockReferenceDocumentAdditionOrRemoval(Context context, String[] args) throws QICException {
+		final String STATE_REQUESTED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_REQUESTED);
+		final String STATE_NOT_APPROVED = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_NOT_APPROVED);
+		final String STATE_DUPLICATE = QICUtil.getActualStateName(context, QICConstants.SYMBOLIC_POLICY_DUPLICATE_CAPA_REQUEST,
+				QICConstants.SYMBOLIC_STATE_DUPLICATE);
+		final String RELATIONSHIP_REFERENCE_DOCUMENT = PropertyUtil.getSchemaProperty(context, QICConstants.SYMBOLIC_relationship_ReferenceDocument);
+		try {
+			String strCAPARequestState = args[0];
+			String strRelType = args[1];
+			if (!Helper.isNullOrEmpty(strCAPARequestState)
+					&& (strCAPARequestState.equalsIgnoreCase(STATE_REQUESTED) || strCAPARequestState.equalsIgnoreCase(STATE_NOT_APPROVED)
+							|| strCAPARequestState.equalsIgnoreCase(STATE_DUPLICATE))
+					&& !Helper.isNullOrEmpty(strRelType) && strRelType.equalsIgnoreCase(RELATIONSHIP_REFERENCE_DOCUMENT)) {
+				Helper.mqlError(context, Helper.StringResource.QIC, "QIC.CAPARequest.BlockReferenceDocumentAdditionRemovalMessage");
+				return 1;
+			}
+			return 0;
+		}
+		catch (Exception e) {
+			throw new QICException(e);
+		}
+
+	}
+}
+

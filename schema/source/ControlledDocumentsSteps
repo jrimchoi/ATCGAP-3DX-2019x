@@ -1,0 +1,651 @@
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import matrix.db.BusinessObject;
+import matrix.db.BusinessObjectWithSelect;
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+import com.dassault_systemes.enovia.controlledprinting.ControlledPrintingUtil;
+import com.dassault_systemes.enovia.controlledprinting.service.ControlledPrintingService;
+import com.dassault_systemes.enovia.controlledprinting.service.impl.ControlledPrintingServiceImpl;
+import com.dassault_systemes.enovia.dcl.DCLConstants;
+import com.dassault_systemes.enovia.dcl.DCLException;
+import com.dassault_systemes.enovia.dcl.DCLServiceUtil;
+import com.dassault_systemes.enovia.dcl.DCLUtil;
+import com.dassault_systemes.enovia.dcl.service.ControlledDocumentService;
+import com.dassault_systemes.enovia.dcl.service.EffectivityImplementationService;
+import com.dassault_systemes.enovia.documentcommon.DCDocument;
+import com.dassault_systemes.enovia.documentcommon.DCUtil;
+import com.dassault_systemes.enovia.processsteps.services.ProcessStepsConstants;
+import com.matrixone.apps.common.CommonDocument;
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.EnoviaResourceBundle;
+import com.matrixone.apps.domain.util.MapList;
+
+
+
+import com.matrixone.apps.domain.util.PolicyUtil;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+public class ${CLASSNAME} implements ProcessStepsConstants {
+
+	public Map<String, List<Map<String,String>>> getReleaseProposedChangeDocuments(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+
+		Map programMap  					= JPO.unpackArgs(args);
+		String[] objectId    			= (String[])programMap.get("objectIds");
+		String selectAttrEffectiveDate		= "attribute[" + PropertyUtil.getSchemaProperty(context, "attribute_EffectiveDate") + "]";
+		String selectAttrEffectivityOption	= "attribute[" + PropertyUtil.getSchemaProperty(context, "attribute_EffectivityOption") + "]";
+		List<Map<String,String>> proposedChangeDataList	= new ArrayList<>();
+		DomainObject dObj 			= new DomainObject(objectId[0]);
+
+		StringList selectlist 	= new StringList(5);
+		selectlist.add("owner");
+		selectlist.add("name");
+		selectlist.add("type");
+		selectlist.add(selectAttrEffectiveDate);
+		selectlist.add(selectAttrEffectivityOption);
+
+		BusinessObjectWithSelect busWithSelect 	= BusinessObject.getSelectBusinessObjectData(context, objectId, selectlist).getElement(0);
+		Map<String,String> proposedChangeData	= new HashMap<>();
+		proposedChangeData.put(OWNER, dObj.getInfo(context, DomainConstants.SELECT_OWNER));
+		proposedChangeData.put(RELATEDACTIONID, objectId[0]);
+		proposedChangeData.put(RELATEDDATANAME, dObj.getInfo(context, DomainConstants.SELECT_NAME));
+		proposedChangeData.put("actionCommand",  "command_PROSProcessStepsPromote");
+		String strActionLabel ="PromoteDocumentToRelease";
+		proposedChangeData.put("actionLabel",  strActionLabel);
+
+		String strDate=busWithSelect.getSelectData(selectAttrEffectiveDate);
+
+		proposedChangeData.put("dueDate",  strDate);
+		String strEffectivityOption=DomainObject.EMPTY_STRING;
+		if((busWithSelect.getSelectData(selectAttrEffectivityOption)).equalsIgnoreCase(DCLConstants.EFFECTIVE_ON_DATE)){
+			strEffectivityOption=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Attribute.Range.EffectiveOnDate");
+		}
+		else if((busWithSelect.getSelectData(selectAttrEffectivityOption)).equalsIgnoreCase(DCLConstants.EFFECTIVE_BY_DATE)){
+			strEffectivityOption=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Attribute.Range.EffectiveByDate");
+		}else{
+			strEffectivityOption=EnoviaResourceBundle.getProperty(context, DCLConstants.DCL_STRING_RESOURCE, context.getLocale(),
+					"enoDocumentControl.Attribute.Range.EffectiveByPeriod ");
+		}
+		proposedChangeData.put(DATEPREFIX,strEffectivityOption);
+		proposedChangeDataList.add(proposedChangeData);
+		objectIdRelatedDataMap.put(objectId[0], proposedChangeDataList);
+
+		return objectIdRelatedDataMap;
+	}
+
+	private Map<String, List<Map<String,String>>> getChangeOrder(Context context, String objectId, Map<String,String> additionalData, boolean addCA) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+
+		try{
+
+			List<Map<String,String>> proposedChangeDataList	= new ArrayList<>();
+			DomainObject dObj 								= new DomainObject(objectId);
+
+			ControlledDocumentService service =DCLServiceUtil.getControlledDocumentService(context);
+			List mlChange						= service.getConnectedChange(context, objectId);
+			List<Map> Change=( List<Map>)mlChange.get(0);
+			String changeType ="";
+			String coObjectId="";
+			String coName	="";
+			Map mCA = Change.get(0);
+			try{
+				Map mCOorCR = Change.get(1);		
+
+				changeType = (String)mCOorCR.get("type");
+				coObjectId 	= (String)mCOorCR.get("id");
+				coName		= (String)mCOorCR.get("name");
+			}catch(Exception e)
+			{
+				changeType=(String)mCA.get("type");
+				changeType = (String)mCA.get("type");
+				coObjectId 	= (String)mCA.get("id");
+				coName		= (String)mCA.get("name");
+			}
+
+
+			boolean isCR 		= changeType.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeRequest")) ? true : false;
+			boolean isCA 		= changeType.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeAction")) ? true : false;
+
+
+
+			if(isCR && Change.size()>=3) {
+
+				Map mCO 	= Change.get(2);
+				coObjectId 	= (String)mCO.get("id");
+				coName		= (String)mCO.get("name");
+				isCR=false;
+			}
+
+			StringList selectlist 	= new StringList(5);
+			selectlist.add("owner");
+			selectlist.add("name");
+			selectlist.add("type");
+
+			BusinessObjectWithSelect busWithSelect 	= BusinessObject.getSelectBusinessObjectData(context, new String[] {objectId}, selectlist).getElement(0);
+			Map<String,String> proposedChangeData	= new HashMap<>();
+			proposedChangeData.put(OWNER, dObj.getInfo(context, DomainConstants.SELECT_OWNER));
+			proposedChangeData.put(RELATEDACTIONID, coObjectId);
+			proposedChangeData.put(RELATEDDATANAME, coName);
+			proposedChangeData.put(RELATEDVIEWID, coObjectId);
+			proposedChangeData.put(RELATEDVIEWLABEL, coName);
+			proposedChangeData.put(VALIDATIONOBJECTID, objectId);
+			proposedChangeData.put(CALLOUTLINKID, coObjectId);
+			proposedChangeData.put(CALLOUTLINKLABEL, coName);
+			proposedChangeData.put("isCR", String.valueOf(isCR));
+			proposedChangeData.put("isCA", String.valueOf(isCA));
+
+
+			if(addCA)
+				proposedChangeData.put(REFERENCE_ID, (String) mCA.get("id"));
+
+			if(additionalData != null)
+				proposedChangeData.putAll(additionalData);		
+
+			proposedChangeDataList.add(proposedChangeData);
+			objectIdRelatedDataMap.put(objectId, proposedChangeDataList);
+
+		}catch(Exception e){
+		}
+		return objectIdRelatedDataMap;
+	}
+
+	public Map<String, List<Map<String,String>>> getRelatedChangeOrder(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+		try{
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+			objectIdRelatedDataMap 	=  getChangeOrder(context, objectId[0], null, false);
+
+		}catch(Exception e){
+		}
+
+		return objectIdRelatedDataMap;	
+	}
+
+	public Map<String, List<Map<String,String>>> getRelatedChangeOrderForDependency(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+		Map programMap  					= JPO.unpackArgs(args);
+		String[] objectIds    				= (String[])programMap.get("objectIds");
+		String objectId						= objectIds[0];
+
+		try{
+
+			List<Map<String,String>> proposedChangeDataList	= new ArrayList<>();
+			DomainObject dObj 								= new DomainObject(objectId);
+
+			ControlledDocumentService service =DCLServiceUtil.getControlledDocumentService(context);
+			List mlChange						= service.getConnectedChange(context, objectId);
+			List<Map> Change=( List<Map>)mlChange.get(0);
+
+			Map mCA 	= Change.get(0);
+
+
+			Map mCOorCR=Change.get(0);
+			if(Change.size()>1)
+				mCOorCR = Change.get(1);
+
+
+			StringList selectlist 	= new StringList(5);
+			selectlist.add("owner");
+			selectlist.add("name");
+			selectlist.add("type");
+
+			BusinessObjectWithSelect busWithSelect 	= BusinessObject.getSelectBusinessObjectData(context, new String[] {objectId}, selectlist).getElement(0);
+			Map<String,String> proposedChangeData	= new HashMap<>();
+			proposedChangeData.put(OWNER, dObj.getInfo(context, DomainConstants.SELECT_OWNER));
+			/*proposedChangeData.put(RELATEDACTIONID, (String)mCOorCR.get("id"));
+			proposedChangeData.put(RELATEDDATANAME, (String)mCOorCR.get("name"));
+			proposedChangeData.put(VALIDATIONOBJECTID, objectId);*/
+
+			String changeType = (String)mCOorCR.get("type");
+			String changeState = (String)mCOorCR.get("current");
+
+			boolean isCR 		= changeType.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeRequest")) ? true : false;
+
+			boolean isCA 		= changeType.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeAction")) ? true : false;
+			String coObjectId 	= (String)mCOorCR.get("id");
+			String coName		= (String)mCOorCR.get("name");
+
+			if(isCR && Change.size()>=3) {
+
+				Map mCO 	= Change.get(2);
+				coObjectId 	= (String)mCO.get("id");
+				coName		= (String)mCO.get("name");
+			}
+
+			String crPolicy 			= PropertyUtil.getSchemaProperty(context, "policy_ChangeRequest");
+			String crCreateState  		= PropertyUtil.getSchemaProperty(context, "policy", crPolicy, "state_Create");
+			String crEvaluateState  	= PropertyUtil.getSchemaProperty(context, "policy", crPolicy, "state_Evaluate");
+			String crInProcessCOState  	= PropertyUtil.getSchemaProperty(context, "policy", crPolicy, "state_InProcessCO");
+			String strIsEnabled = EnoviaResourceBundle.getProperty(context,"enoECMProcessSteps.EnableProcessSteps");
+
+			if(!DCLUtil.isNullOrEmpty(strIsEnabled) && strIsEnabled.equalsIgnoreCase("true")) {
+
+				if(!isCR || changeState.equals(crInProcessCOState)) {
+
+					proposedChangeData.put(REFERENCE, "policy_ChangeAction_QUC_Process_Steps");
+					proposedChangeData.put(REFERENCESTEP, "2");
+					proposedChangeData.put(REFERENCESTATE, "state_InWork");
+					proposedChangeData.put(REFERENCEPREREQ, "3");				
+					proposedChangeData.put(REFERENCE_ID, (String) mCA.get("id"));
+					proposedChangeData.put(RELATEDACTIONID, coObjectId);					
+					proposedChangeData.put(RELATEDDATANAME, coName);
+
+				} else {
+
+					proposedChangeData.put(REFERENCE, "policy_ChangeRequest_Process_Steps");
+					proposedChangeData.put(REFERENCE_ID, (String) mCOorCR.get("id"));
+					proposedChangeData.put(RELATEDACTIONID, (String) mCOorCR.get("id"));
+					proposedChangeData.put(RELATEDDATANAME, (String) mCOorCR.get("name"));
+
+					if(changeState.equals(crCreateState) || changeState.equals(crEvaluateState)) {
+
+						proposedChangeData.put(REFERENCESTEP, "2");
+						proposedChangeData.put(REFERENCESTATE, "state_Evaluate");
+						proposedChangeData.put(REFERENCEPREREQ, "8");
+
+					} else {
+
+						proposedChangeData.put(REFERENCESTEP, "3");
+						proposedChangeData.put(REFERENCESTATE, "state_InReview");
+						proposedChangeData.put(REFERENCEPREREQ, "route");	
+					}					
+				}
+			}
+
+			proposedChangeDataList.add(proposedChangeData);
+			objectIdRelatedDataMap.put(objectId, proposedChangeDataList);
+
+		}catch(Exception e){
+		}
+
+		return objectIdRelatedDataMap;
+	}
+
+	public Map<String, List<Map<String,String>>> getRelatedChangeOrderForFinalApproval(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+
+		try{
+
+			Map programMap = JPO.unpackArgs(args);
+			String[] objectIds   = (String[])programMap.get("objectIds");
+			String objectId 	 = objectIds[0];
+
+			List<Map<String, String>> proposedChangeDataList = new ArrayList<>();
+			Map<String, String> proposedChangeData = new HashMap<>();
+			DomainObject dObj 								= new DomainObject(objectId);
+
+			ControlledDocumentService service = DCLServiceUtil.getControlledDocumentService(context);
+			List mlChange						= service.getConnectedChange(context, objectId);
+
+			List<Map> Change = (List<Map>) mlChange.get(0);
+			Map mCA = Change.get(0);
+
+
+
+			String	caObjectId 	= (String)mCA.get("id");
+			String caName		= (String)mCA.get("name");
+
+			if(Change.size() > 1){ //this means there is only change action in the change list....
+				Map mCOorCR 	= Change.get(1);		
+
+
+				String changeType = (String)mCOorCR.get("type");
+
+				boolean isCR 		= changeType.equals(PropertyUtil.getSchemaProperty(context, "type_ChangeRequest")) ? true : false;
+				String coObjectId 	= (String)mCOorCR.get("id");
+				String coName		= (String)mCOorCR.get("name");
+
+				if(isCR && Change.size()>=3) {
+
+					Map mCO 	= Change.get(2);
+					coObjectId 	= (String)mCO.get("id");
+					coName		= (String)mCO.get("name");
+				}
+
+				StringList selectlist = new StringList(5);
+				selectlist.add("owner");
+				selectlist.add("name");
+				selectlist.add("type");
+
+				BusinessObjectWithSelect busWithSelect 	= BusinessObject.getSelectBusinessObjectData(context, new String[] {objectId}, selectlist).getElement(0);
+				proposedChangeData.put(OWNER, dObj.getInfo(context, DomainConstants.SELECT_OWNER));
+				proposedChangeData.put(RELATEDACTIONID, coObjectId);
+				proposedChangeData.put(RELATEDDATANAME, coName);
+				proposedChangeData.put(VALIDATIONOBJECTID, objectId);
+
+				String caState = (String)mCA.get("current");
+
+				String caPolicy 		= PropertyUtil.getSchemaProperty(context, "policy_ChangeAction");
+				String caApprovedState  = PropertyUtil.getSchemaProperty(context, "policy", caPolicy, "state_Approved");
+				String strIsEnabled 	= EnoviaResourceBundle.getProperty(context,"enoECMProcessSteps.EnableProcessSteps");
+
+				if(!DCLUtil.isNullOrEmpty(strIsEnabled) && strIsEnabled.equalsIgnoreCase("true")) {
+
+					if(caState.equals(caApprovedState)) {
+
+						proposedChangeData.put(REFERENCE_ID, coObjectId);
+						proposedChangeData.put(REFERENCE, "policy_FasttrackChange_Process_Steps");
+						proposedChangeData.put(REFERENCESTEP, "3");
+						proposedChangeData.put(REFERENCESTATE, "state_InApproval");
+						proposedChangeData.put(REFERENCEPREREQ, "route");				
+					} else {
+
+						proposedChangeData.put(REFERENCE_ID, (String) mCA.get("id"));
+						proposedChangeData.put(REFERENCE, "policy_ChangeAction_QUC_Process_Steps");
+						proposedChangeData.put(REFERENCESTEP, "3");
+						proposedChangeData.put(REFERENCESTATE, "state_InApproval");
+						proposedChangeData.put(REFERENCEPREREQ, "route");				
+					}
+				}
+
+				proposedChangeData.put("actionCommand", "command_PROSProcessStepsPromote");
+				String strActionLabel = "Promote";
+				proposedChangeData.put("actionLabel", strActionLabel);
+
+			}else{
+				proposedChangeData.put(OWNER, dObj.getInfo(context, DomainConstants.SELECT_OWNER));
+				proposedChangeData.put(RELATEDACTIONID, caObjectId);
+				proposedChangeData.put(RELATEDDATANAME, caName);
+				proposedChangeData.put(VALIDATIONOBJECTID, objectId);
+				proposedChangeData.put(REFERENCE_ID, (String) mCA.get("id"));
+				proposedChangeData.put(REFERENCE, "policy_ChangeAction_QUC_Process_Steps");
+				proposedChangeData.put(REFERENCESTEP, "3");
+				proposedChangeData.put(REFERENCESTATE, "state_InApproval");
+				proposedChangeData.put(REFERENCEPREREQ, "route");	
+
+			}
+
+
+			proposedChangeDataList.add(proposedChangeData);
+			objectIdRelatedDataMap.put(objectId, proposedChangeDataList);
+
+		} catch(Exception e) {
+		}
+
+		return objectIdRelatedDataMap;
+	}
+
+
+	public Map<String, List<Map<String,String>>> getRelatedChangeOrderStartApproval(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+
+		try{
+			Map programMap = JPO.unpackArgs(args);
+			String[] objectId = (String[]) programMap.get("objectIds");
+
+			Map<String, String> additionalData = new HashMap<String,String>();
+			additionalData.put("actionCommand", "command_PROSProcessStepsPromote");
+			String strActionLabel = "Promote";
+			additionalData.put("actionLabel", strActionLabel);
+			additionalData.put(RELATEDACTIONID, null);
+			additionalData.put(RELATEDDATANAME, null);
+			additionalData.put(VALIDATIONOBJECTID, null);
+
+
+			objectIdRelatedDataMap = getChangeOrder(context, objectId[0], additionalData, true);
+			List<Map<String,String>> documentList=new MapList();
+			documentList.add(additionalData);
+			if(objectIdRelatedDataMap.size()>0){
+				Map map =new HashMap();
+				map=(Map)(objectIdRelatedDataMap.get(objectId[0])).get(0);
+				if(Boolean.valueOf((String)map.get("isCR"))){
+					additionalData.put(REFERENCE, "policy_ChangeRequest_Process_Steps");
+					additionalData.put(REFERENCESTATE, "state_InReview");
+					additionalData.put(REFERENCESTEP, "3");
+					additionalData.put(REFERENCEPREREQ, "1");
+					map.putAll(additionalData);
+				}
+			}    
+			if(objectIdRelatedDataMap.size()==0)
+				objectIdRelatedDataMap.put(objectId[0] ,documentList);
+		}
+		catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return objectIdRelatedDataMap;
+	}
+
+	public boolean checkForDocumentAttached(Context context, String[] args) throws Exception
+	{
+		Map<String, List<Map<String,String>>> objectIdRelatedDataMap = new HashMap<>();
+		try{
+			Map programMap  					= JPO.unpackArgs(args);
+			String objectId    			= (String)programMap.get("objectId");
+			List<Map<String,String>> proposedChangeDataList	= new ArrayList<>();
+			DomainObject dObj 			= new DomainObject(objectId);
+			StringList objectSelects = new StringList(3);
+			objectSelects.add(CommonDocument.SELECT_FILE_NAME);
+			objectSelects.add(CommonDocument.SELECT_FILE_FORMAT);
+			objectSelects.add(CommonDocument.SELECT_ACTIVE_FILE_VERSION_LAST_ID);
+
+			Map<?,?> mpFromObjectInfo = dObj.getInfo(context, objectSelects);
+			StringList slLastFileIds = (StringList) mpFromObjectInfo.get(CommonDocument.SELECT_ACTIVE_FILE_VERSION_LAST_ID);
+			Map previousVersionFileMap = new HashMap();
+			if(!DCLUtil.isNullOrEmpty(slLastFileIds)){
+				return true;
+			}
+			return false;
+
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+
+		}
+
+	}
+
+	public boolean checkIfChangeInitiated(Context context, String[] args) throws Exception
+	{
+
+		try{
+			Map programMap  					= JPO.unpackArgs(args);
+			String objectId    			= (String)programMap.get("objectId");
+			DomainObject dObj 			= new DomainObject(objectId);
+			ControlledDocumentService service =DCLServiceUtil.getControlledDocumentService(context);
+			List mlChange=service.getConnectedChange(context, objectId);
+			return !DCLUtil.isNullOrEmpty(mlChange);
+
+		}catch(Exception e){
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public Map<String,String> showActionsForAuthorContentView(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+		StringList objectSelects=new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_CURRENT);
+
+		Map programMap  	= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    =        (String[])programMap.get("objectIds");
+		List<Map> mlChangeInfo=DomainObject.getInfo(context, changeObjectIds, objectSelects);
+		for(Map mChange:mlChangeInfo){
+			String strId=(String)mChange.get(DomainObject.SELECT_ID);
+			if(PolicyUtil.checkState(context, strId, "Approved", PolicyUtil.LE))
+				objectIdCheckStatusMap.put(strId, String.valueOf(true));
+			else
+				objectIdCheckStatusMap.put(strId,String.valueOf(false));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+
+	public Map<String, String> showFileCheckinAction(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+		StringList objectSelects = new StringList();
+		objectSelects.add(DomainObject.SELECT_POLICY);
+		objectSelects.add(DomainObject.SELECT_ID);
+		objectSelects.add(DomainObject.SELECT_CURRENT);
+
+		/* TBD: Need to add code for checking file checkin access */
+
+		Map programMap = (Map<String, String>) JPO.unpackArgs(args);
+		String[] docIds = (String[]) programMap.get("objectIds");
+		List<Map> mlDocInfo = DomainObject.getInfo(context, docIds, objectSelects);
+
+		for (Map mDoc : mlDocInfo) {
+			String strId = (String) mDoc.get(DomainObject.SELECT_ID);
+			String strPolicy		=(String)mDoc.get(DomainObject.SELECT_POLICY);
+			String strCurrentState	=(String)mDoc.get(DomainObject.SELECT_CURRENT);
+
+			objectIdCheckStatusMap.put(strId, String.valueOf(true));
+		}
+
+		return objectIdCheckStatusMap;
+	}
+
+	public Map<String, List<Map<String, String>>> getDocumentEffectiveDate(Context context, String[] args) throws Exception {
+		Map<String, List<Map<String, String>>> objectIdRelatedDataMap = new HashMap<>();
+		List<Map<String, String>> effectivityDataList = new ArrayList<>();
+
+		Map programMap = JPO.unpackArgs(args);
+		String[] docIds = (String[]) programMap.get("objectIds");
+
+		Map<String, String> effectivityData = new HashMap<>();
+		effectivityData.put("dueDate", "08/25/2017");
+		effectivityData.put(DATEPREFIX, "Effective On Date");
+
+		effectivityDataList.add(effectivityData);
+
+		objectIdRelatedDataMap.put(docIds[0], effectivityDataList);
+
+		return objectIdRelatedDataMap;
+	}
+
+	public  Map<String,String> checkIfImplementingOrgPresent(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+			String strImplDateAttr=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_IMPLEMENTATION_DATE);
+			DomainObject dObj=DomainObject.newInstance(context, objectId[0]);
+			String strDocName=dObj.getInfo(context, DomainConstants.SELECT_NAME);
+			EffectivityImplementationService effectivityService= DCLServiceUtil.getEffectivityImplementationService(context);
+			List<Map> mlImplOrg= effectivityService.getAllImplementingOrganization(context, objectId[0]);
+			objectIdCheckStatusMap.put(objectId[0], String.valueOf(!DCLUtil.isNullOrEmpty(mlImplOrg)));
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public  Map<String,String> showTaskToAddProductsToDocuments(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+
+			HashMap programArg = new HashMap();
+			programArg.put("objectId", objectId[0]);
+			String[] progArgs = JPO.packArgs(programArg);
+			boolean show = JPO.invoke(context, "ENODCLDocumentUI", null, "showCommandGEODocumentProducts", progArgs, Boolean.class);
+			objectIdCheckStatusMap.put(objectId[0], String.valueOf(show));
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public  Map<String,String> showTaskToAddCountriesToDocuments(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+
+			HashMap programArg = new HashMap();
+			programArg.put("objectId", objectId[0]);
+			String[] progArgs = JPO.packArgs(programArg);
+			boolean show = JPO.invoke(context, "ENODCLDocumentUI", null, "showCommandGEODocumentCountry", progArgs, Boolean.class);
+			objectIdCheckStatusMap.put(objectId[0], String.valueOf(show));
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+	}
+
+
+	public  Map<String,String> checkIfTrainingisEnabled(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+			String strTrainingEnabledAttr=PropertyUtil.getSchemaProperty(context, DCLConstants.SYMBOLIC_ATTRIBUTE_TRAINING_ENABLED);
+			DomainObject dObj=DomainObject.newInstance(context, objectId[0]);
+			String strTrainingEnabled=dObj.getAttributeValue(context, strTrainingEnabledAttr);
+			objectIdCheckStatusMap.put(objectId[0], String.valueOf((DCLConstants.YES.equalsIgnoreCase(strTrainingEnabled)) ? Boolean.TRUE : Boolean.FALSE));
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+
+	public  Map<String,String> checkContexualRefCategoryWithValidationEnabled(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+			ControlledDocumentService service = DCLServiceUtil.getControlledDocumentService(context);
+			for(int i=0;i<objectId.length;i++){
+				List<Map> mlRefDocs=DCDocument.getReferenceDocuments(context,objectId[i]);
+				objectIdCheckStatusMap.put(objectId[i], String.valueOf(DCUtil.ifReferenceDocumentCategorizationEnabled(context)&& service.isReferenceDocumentValidationEnabled(context)&& !DCLUtil.isNullOrEmpty(mlRefDocs)));
+			}
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	public  Map<String,String> checkIfManualPDFEnabled(Context context, String[] args) throws Exception {
+		try{
+			Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+			Map programMap  					= JPO.unpackArgs(args);
+			String[] objectId    			= (String[])programMap.get("objectIds");
+			ControlledPrintingService service = new ControlledPrintingServiceImpl();
+			List<Map> mlFile=service.getActiveVersionDocuments(context, objectId[0], "");
+			if(mlFile.size()>0 && ControlledPrintingUtil.isRenderPDFTrue(context)&& ControlledPrintingUtil.isActivationModeManual(context) )
+			{
+				objectIdCheckStatusMap.put(objectId[0], String.valueOf(true));
+			}
+			else
+				objectIdCheckStatusMap.put(objectId[0], String.valueOf(false));
+
+			return objectIdCheckStatusMap;
+		}
+		catch (Exception e) {
+			throw new DCLException(e.getLocalizedMessage());
+		}
+
+	}
+	
+
+}
+
+

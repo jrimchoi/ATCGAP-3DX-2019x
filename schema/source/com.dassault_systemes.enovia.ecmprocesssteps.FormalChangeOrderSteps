@@ -1,0 +1,95 @@
+
+import java.util.HashMap;
+import java.util.Map;
+
+import com.matrixone.apps.domain.DomainConstants;
+import com.matrixone.apps.domain.DomainObject;
+import com.matrixone.apps.domain.util.MapList;
+import com.matrixone.apps.domain.util.PropertyUtil;
+
+import matrix.db.Context;
+import matrix.db.JPO;
+import matrix.util.StringList;
+
+public class ${CLASSNAME} extends ${CLASS:com.dassault_systemes.enovia.ecmprocesssteps.FasttrackChangeOrderSteps} {
+	
+	public Map<String,String> checkIfReviewRouteIsPresentOnState(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+		Map programMap  	= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    =        (String[])programMap.get("objectIds");
+	 return checkIfRouteIsPresentOnState(context, changeObjectIds,"state_InReview");
+	}
+	
+	public Map<String,String> checkIfApprovalRouteIsPresentOnState(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+		Map programMap  	= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    =        (String[])programMap.get("objectIds");
+	 	Map<String, String> routepresnt=checkIfRouteIsPresentOnState(context, changeObjectIds,"state_InApproval");
+		
+		for (String changeObjectId : changeObjectIds) {
+			String COState=DomainObject.newInstance(context,changeObjectId).getInfo(context, DomainObject.SELECT_CURRENT);
+			if(COState.equalsIgnoreCase("Approved"))
+				routepresnt.put(changeObjectId, String.valueOf(true));
+		}
+		return routepresnt;
+	}
+
+	public Map<String, String> checkIfRouteIsPresentOnState(Context context, String[] changeObjectIds,String strState) throws Exception {
+		String strAttrRouteCompleteAction = PropertyUtil.getSchemaProperty(context, DomainObject.SYMBOLIC_attribute_RouteCompletionAction);
+		String strAttrRouteBaseState = PropertyUtil.getSchemaProperty(context, DomainObject.SYMBOLIC_attribute_RouteBaseState);
+		Map objectIdCheckStatusMap = new HashMap<String, String>();
+
+		for (String changeObjectId : changeObjectIds) {
+			boolean showPomote = true;
+			;
+
+			DomainObject dom = DomainObject.newInstance(context, changeObjectId);
+			MapList mapRelatedObject = new MapList();
+			StringList busSelects = new StringList(2);
+			busSelects.add(DomainConstants.SELECT_ID);
+			busSelects.add(DomainConstants.SELECT_CURRENT);
+			busSelects.add(DomainObject.getAttributeSelect(strAttrRouteCompleteAction));
+			busSelects.add(DomainObject.getAttributeSelect(strAttrRouteBaseState));
+			StringList relSelect = new StringList(2);
+			relSelect.add(DomainObject.getAttributeSelect(strAttrRouteBaseState));
+
+			mapRelatedObject = dom.getRelatedObjects(context, DomainConstants.RELATIONSHIP_OBJECT_ROUTE, DomainObject.TYPE_ROUTE, busSelects, relSelect,
+					false, true, (short) 1, DomainConstants.EMPTY_STRING, // object
+																			// where
+																			// clause
+					DomainConstants.EMPTY_STRING, // relationship where clause
+					0);
+
+			for (int j = 0; j < mapRelatedObject.size(); j++) {
+				Map map1 = (Map) mapRelatedObject.get(j);
+				String routeBasePurpose = (String) map1.get(DomainObject.getAttributeSelect(strAttrRouteCompleteAction));
+				String routeBaseState = (String) map1.get(DomainObject.getAttributeSelect(strAttrRouteBaseState));
+
+				if (routeBasePurpose.equalsIgnoreCase("Promote Connected Object")&&routeBaseState.equals(strState)) {
+					showPomote = false;
+				}
+
+			}
+			objectIdCheckStatusMap.put(changeObjectId, String.valueOf(showPomote));
+		}
+
+		return objectIdCheckStatusMap;
+	}
+	
+	public Map<String,String> showDefineDescriptionAction(Context context, String[] args) throws Exception {
+
+		Map<String,String> objectIdCheckStatusMap		= new HashMap<>();
+
+		Map programMap  	= (Map<String, String>)JPO.unpackArgs(args);
+		String[] changeObjectIds    =        (String[])programMap.get("objectIds");
+		for(int i=0;i<changeObjectIds.length;i++ ){
+			DomainObject domObj= DomainObject.newInstance(context,changeObjectIds[i]);
+			objectIdCheckStatusMap.put(changeObjectIds[i],String.valueOf(domObj.getAccessMask(context).hasModifyAccess()));
+		}
+
+		return 	objectIdCheckStatusMap;
+	}
+}
+

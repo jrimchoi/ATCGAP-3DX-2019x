@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" xmlns:fo="http://www.w3.org/1999/XSL/Format" version="1.0" exclude-result-prefixes="fo">
+   <xsl:variable name="font_family">
+      Arial,SimSun,sans-serif,VL Gothic,AR PL UMing CN
+   </xsl:variable>
+   <xsl:attribute-set name="block-lang">
+      <xsl:attribute name="font-family">
+         <xsl:value-of select="$font_family" />
+      </xsl:attribute>
+   </xsl:attribute-set>
+   <xsl:attribute-set name="tbl-cell-std" use-attribute-sets="block-lang">
+    <xsl:attribute name="border">1pt solid black</xsl:attribute>
+    <xsl:attribute name="padding">2pt</xsl:attribute>
+    <xsl:attribute name="font-size">9pt</xsl:attribute>
+  </xsl:attribute-set>
+   <xsl:attribute-set name="page-break" use-attribute-sets="block-lang">
+    <xsl:attribute name="break-before">page</xsl:attribute>
+  </xsl:attribute-set>
+   <xsl:attribute-set name="block-title" use-attribute-sets="block-lang">
+    <xsl:attribute name="font-size">9pt</xsl:attribute>
+    <xsl:attribute name="font-weight">bold</xsl:attribute>
+    <xsl:attribute name="space-after">0pt</xsl:attribute>
+    <xsl:attribute name="linefeed-treatment">preserve</xsl:attribute>
+  </xsl:attribute-set>
+  <xsl:template match="/">
+    <fo:root>
+      <fo:layout-master-set>
+        <fo:simple-page-master master-name="TitlePage" page-width="8.27in" page-height="11.69in" margin-top=".4in" margin-left=".2in" margin-right=".2in">
+          <fo:region-body margin-top="1.0in" />
+          <fo:region-before extent="2.5in" />
+        </fo:simple-page-master>
+      </fo:layout-master-set>
+      <xsl:apply-templates select="Report" />
+    </fo:root>
+  </xsl:template>
+  <xsl:template match="Report">
+    <fo:page-sequence master-reference="TitlePage">
+      <fo:static-content flow-name="xsl-region-before">
+        <fo:block-container margin-left="1%" text-align="center" font-size="20pt" font-weight="bold">
+               <fo:block xsl:use-attribute-sets="block-lang">
+            <xsl:value-of select="@header" />
+          </fo:block>
+        </fo:block-container>
+      </fo:static-content>
+      <fo:flow flow-name="xsl-region-body">
+            <fo:block xsl:use-attribute-sets="block-lang">
+          <xsl:apply-templates select="Page" />
+        </fo:block>
+      </fo:flow>
+    </fo:page-sequence>
+  </xsl:template>
+  <xsl:template match="Page">
+    <fo:block xsl:use-attribute-sets="page-break">
+      <xsl:apply-templates select="Section" />
+    </fo:block>
+  </xsl:template>
+  <xsl:template match="Section">
+    <xsl:variable name="formColspan">0</xsl:variable>
+    <xsl:variable name="tableColspan">
+      <xsl:value-of select="count(Rows/Header)" />
+    </xsl:variable>
+    <fo:block-container margin-left="1%" text-align="center" font-size="20pt" font-weight="bold">
+      <fo:block>
+        <xsl:for-each select="Group">
+          <xsl:variable name="attr-count">
+            <xsl:value-of select="count(Attribute)" />
+          </xsl:variable>
+          <xsl:if test="($formColspan) &lt; ($attr-count)">
+            <xsl:variable name="(@formColspan)">
+              <xsl:value-of select="($attr-count)" />
+            </xsl:variable>
+          </xsl:if>
+        </xsl:for-each>
+      </fo:block>
+    </fo:block-container>
+    <xsl:variable name="section-type">
+      <xsl:value-of select="@type" />
+    </xsl:variable>
+    <xsl:choose>
+      <xsl:when test="contains($section-type, 'table')">
+        <xsl:call-template name="tableRender">
+          <xsl:with-param name="tableColspan" select="$tableColspan" />
+        </xsl:call-template>
+      </xsl:when>
+      <xsl:otherwise>
+        <xsl:call-template name="formRender">
+          <xsl:with-param name="formColspan" select="$formColspan" />
+        </xsl:call-template>
+      </xsl:otherwise>
+    </xsl:choose>
+  </xsl:template>
+  <xsl:template name="tableRender">
+    <xsl:param name="tableColspan" select="0" />
+    <fo:table>
+      <xsl:call-template name="tableHeader">
+        <xsl:with-param name="tableColspan" select="$tableColspan" />
+      </xsl:call-template>
+      <xsl:call-template name="tableBody" />
+    </fo:table>  
+  </xsl:template>
+  <xsl:template name="tableHeader">
+    <xsl:param name="tableColspan" select="1" />
+    <fo:table-header>
+      <fo:table-cell xsl:use-attribute-sets="tbl-cell-std" number-columns-spanned="{$tableColspan}" background-color="rgb(192,192,192)" >
+        <fo:block xsl:use-attribute-sets="block-title">
+          <xsl:value-of select="@header" />
+        </fo:block>
+      </fo:table-cell>
+    </fo:table-header>
+  </xsl:template>
+  <xsl:template name="tableBody">
+    <fo:table-body>
+      <xsl:apply-templates select="Rows" />
+    </fo:table-body>
+  </xsl:template>
+  <xsl:template match="Rows">
+    <fo:table-row>
+      <xsl:apply-templates select="Header" />
+      <xsl:apply-templates select="Value" />
+    </fo:table-row>
+  </xsl:template>
+  <xsl:template match="Header">
+    <fo:table-cell xsl:use-attribute-sets="tbl-cell-std" font-weight="bold" wrap-option="wrap" hyphenate="true" hyphenation-character="true" overflow="hidden">
+      <fo:block wrap-option="wrap" hyphenate="true" hyphenation-character="true" overflow="hidden">
+        <xsl:value-of select="." />
+      </fo:block>
+    </fo:table-cell>
+  </xsl:template>
+  <xsl:template match="Value">
+    <fo:table-cell xsl:use-attribute-sets="tbl-cell-std" >
+      <fo:block>
+        <xsl:value-of select="." />
+      </fo:block>
+    </fo:table-cell>
+  </xsl:template>
+  <xsl:template match="Group">
+    <fo:block>
+      <xsl:apply-templates select="Attribute" />
+    </fo:block>
+  </xsl:template>
+  <xsl:template name="formRender">
+    <xsl:param name="formColspan" select="1" />
+    <xsl:if test="($formColspan) &gt; (0)">
+      <fo:table>
+        <xsl:call-template name="formHeader">
+          <xsl:with-param name="formColspan" select="$formColspan" />
+        </xsl:call-template>
+        <xsl:call-template name="formBody" />
+      </fo:table>
+    </xsl:if>
+  </xsl:template>
+  <xsl:template name="formHeader">
+    <xsl:param name="formColspan" select="1" />
+    <fo:table-header>
+      <fo:table-cell xsl:use-attribute-sets="tbl-cell-std" number-columns-spanned="{$formColspan}" background-color="rgb(192,192,192)">
+        <fo:block xsl:use-attribute-sets="block-title">
+          <xsl:value-of select="@header" />
+        </fo:block>
+      </fo:table-cell>
+    </fo:table-header>
+  </xsl:template>
+  <xsl:template name="formBody">
+    <fo:table-body>
+      <xsl:apply-templates select="Group" />
+    </fo:table-body>
+  </xsl:template>
+  <xsl:template match="Group">
+    <fo:table-row>
+      <xsl:apply-templates select="Attribute" />
+    </fo:table-row>
+  </xsl:template>
+  <xsl:template match="Attribute">
+    <fo:table-cell xsl:use-attribute-sets="tbl-cell-std">
+      <fo:block>
+        <fo:inline font-weight="bold">
+          <xsl:apply-templates select="@Name" />
+               :
+            </fo:inline>
+          <fo:inline>
+            <xsl:apply-templates select="@Value" />
+          </fo:inline>
+        </fo:block>
+      </fo:table-cell>
+    </xsl:template>
+  </xsl:stylesheet>
+

@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ds:services xmlns:ds="http://www.3ds.com/enovia/e6wv2"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://www.3ds.com/enovia/e6wv2 servicesv2.xsd">
+
+    <ds:service name="documents">
+        <ds:data>
+            <ds:jpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getDocuments" returnedData="idsAndData"/>
+            <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="updateDocuments"/>
+        </ds:data>
+
+        <ds:ref-subservice name="e6w.documents.fields" includeByDefault="yes"/>        
+         
+        <ds:ref-subservice name="mydocs" referenceName="documents.mydocs" includeByDefault="never"/>
+         
+        <ds:subservice name="parentId" includeByDefault="never">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getRelatedDocuments" returnedData="idsAndData"/>
+            </ds:data>
+        </ds:subservice>
+
+        <ds:ref-subservice name="parents" referenceName="documents.parents" includeByDefault="no" description="where-used based on parentRelName + parentDirection parameters">        
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getParents" returnedData="idsAndData"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="updateParents"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:subservice name="DownloadTicket" includeByDefault="never">
+            <ds:data>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestDocumentDownloadTicket" processMultiple="true">
+                    <ds:arg arg-name="action" arg-value="download"/>
+                </ds:updatejpo>
+            </ds:data>
+            <ds:ref-subservice name="ticket-fields"/>
+        </ds:subservice>
+
+        <ds:subservice name="CheckoutTicket" includeByDefault="never">
+            <ds:data>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestDocumentDownloadTicket" processMultiple="true">
+                    <ds:arg arg-name="action" arg-value="checkout"/>
+                </ds:updatejpo>
+            </ds:data>
+            <ds:ref-subservice name="ticket-fields"/>
+        </ds:subservice>
+
+        <ds:subservice name="files" includeByDefault="yes">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getFiles" returnedData="idsAndData"/>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="updateFiles" processMultiple="true"/>
+            </ds:data>
+
+            <ds:ref-subservice name="file-fields"/>
+
+            <ds:field name="fileSize" description="The file size in bytes.">
+              <ds:selectable type="key"/>
+              <ds:fieldjpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getFileSize"/>
+            </ds:field>
+
+            <ds:subservice name="versions" includeByDefault="no">
+                <ds:data>
+                    <ds:jpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getVersions" returnedData="idsAndData"/>
+                    <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="updateVersions" />
+                </ds:data>
+                <ds:ref-subservice name="file-fields"/>
+                <ds:field name="fileSize" description="The file size in bytes.">
+                  <ds:selectable expression="format.file.size" type="bus"/>
+                  <ds:fieldjpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getVersionFileSize"/>
+                </ds:field>
+
+                <ds:subservice name="DownloadTicket" includeByDefault="never">
+                    <ds:data>
+                        <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestDownloadTicket" >
+                            <ds:arg arg-name="level" arg-value="version-level"/>
+                            <ds:arg arg-name="action" arg-value="download"/>
+                        </ds:updatejpo>
+                    </ds:data>
+                    <ds:ref-subservice name="ticket-fields"/>
+                </ds:subservice>
+            </ds:subservice>
+
+            <ds:subservice name="DownloadTicket" includeByDefault="never">
+                <ds:data>
+                    <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestDownloadTicket" processMultiple="true">
+                        <ds:arg arg-name="action" arg-value="download"/>
+                        <ds:arg arg-name="level" arg-value="file-level"/>
+                    </ds:updatejpo>
+                </ds:data>
+                <ds:ref-subservice name="ticket-fields"/>
+            </ds:subservice>
+
+            <ds:subservice name="CheckinTicket" includeByDefault="never">
+                <ds:data csrf="false">
+                    <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestCheckinTicket">
+                        <ds:arg arg-name="action" arg-value="checkin"/>
+                        <ds:arg arg-name="level" arg-value="file-level"/>
+                    </ds:updatejpo>
+                </ds:data>
+                <ds:ref-subservice name="ticket-fields"/>
+            </ds:subservice>
+
+            <ds:subservice name="CheckoutTicket" includeByDefault="never">
+                <ds:data>
+                    <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="requestDownloadTicket" processMultiple="true">
+                        <ds:arg arg-name="action" arg-value="checkout"/>
+                        <ds:arg arg-name="level" arg-value="file-level"/>
+                    </ds:updatejpo>
+                </ds:data>
+                <ds:ref-subservice name="ticket-fields"/>
+            </ds:subservice>
+
+        </ds:subservice>
+
+        <ds:ref-subservice name="sovaccess" referenceName="e6w.workspaceOwnershipAccess" includeByDefault="no">
+            <ds:data>
+                <ds:jpo classname="com.dassault_systemes.enovia.workspace.WorkspaceService" function="getSOVAccess" returnedData="idsAndData" />
+                <ds:updatejpo classname="com.dassault_systemes.enovia.workspace.WorkspaceService" function="updateSOVAccess" processMultiple="true"/>
+            </ds:data>
+        </ds:ref-subservice>
+
+        <ds:subservice name="reserve" includeByDefault="never">
+            <ds:data>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="processDocumentAction" processMultiple="false">
+                    <ds:arg arg-name="action" arg-value="reserve"/>
+                </ds:updatejpo>
+            </ds:data>
+            <ds:field name="reservedComment" description="The comments associated with the reserve command."><ds:selectable type="key"/></ds:field>
+        </ds:subservice>
+
+        <ds:subservice name="unreserve" includeByDefault="never">
+            <ds:data>
+                <ds:updatejpo classname="com.dassault_systemes.enovia.document.DocumentService" function="processDocumentAction" processMultiple="false">
+                    <ds:arg arg-name="action" arg-value="unreserve"/>
+                </ds:updatejpo>
+            </ds:data>
+        </ds:subservice>
+        <ds:subservice name="search" includeByDefault="never">
+            <ds:data>
+                <ds:indexQuery typePattern="Document" keyword="{searchStr}" limit="50"/>
+            </ds:data>
+        </ds:subservice>
+
+    </ds:service>
+
+    <ds:service name="e6w.documents.fields">        
+        <ds:field name="name" description="The name of the document object."><ds:selectable expression="name" type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="policy" description="The policy of the document object."><ds:selectable expression="policy" type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="state" description="The current state of the document object."><ds:selectable expression="current" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="stateNLS" includeByDefault="no"><ds:selectable expression="current" type="bus" format="state" readOperation="no"/></ds:field>
+        <ds:field name="policyNLS" includeByDefault="no"><ds:selectable expression="policy" type="bus" format="policy" readOperation="no"/></ds:field>
+        <ds:field name="typeNLS" includeByDefault="no"><ds:selectable expression="type" type="bus" format="type" readOperation="no"/></ds:field>
+        <ds:field name="isDocumentType" includeByDefault="no"><ds:selectable expression="type.kindof[Document]" type="bus" readOperation="no"/></ds:field>
+        <ds:field name="revision" description="The revision of the document object."><ds:selectable expression="revision" type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="title" description="The title of the document object."><ds:selectable expression="attribute[attribute_Title]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="description" description="The description of the document object."><ds:selectable expression="description" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="collabspace" description="The collaborative space of the document object."><ds:selectable expression="project" type="bus" createOperation="yes" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="originated" description="The creation date of the document object."><ds:selectable expression="originated" type="bus" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="modified" description="The last modified date of the document object."><ds:selectable expression="modified" type="bus" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="comments" description="the document checkin reason."><ds:selectable expression="attribute[Checkin Reason]" type="bus" autosave="true" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="hasDownloadAccess" description="Whether the user has download access to the document files."><ds:selectable expression="current.access[checkout]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="hasModifyAccess" description="Whether the user has modify access to the document files."><ds:selectable expression="current.access[modify,checkin]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="hasDeleteAccess" description="Whether the user has delete access to the document files."><ds:selectable expression="current.access[delete]" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="reservedby" description="Reflects the reserved by user if the document is reserved."><ds:selectable expression="reservedby" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="reservedComment" description="Reflects the reserved by comments if the document is reserved." includeByDefault="no"><ds:selectable expression="reservedcomment" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <!-- the parent fields are used to create a connection as well as retrieve the parent id when the rel info is provided. -->
+        <ds:field name="parentId" description="The parent id to link the document to during creation; dependent on parentRelName.">
+            <ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/>
+            <ds:fieldjpo classname="com.dassault_systemes.enovia.document.DocumentService" function="getParentId"/>
+        </ds:field>
+        <ds:field name="parentRelName" description="The parent relationship to link the document to during creation; dependent on parentId."><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <ds:field name="parentDirection" description="The parent direction for the relationship; dependent on parentRelName; default is 'from'."><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <!-- Used to calculate the file size in the files sub-service. -->
+        <ds:field name="fileFormats" includeByDefault="always"><ds:selectable expression="format.file.format" type="bus" format="transient" multivalue="true"/></ds:field>
+        <ds:field name="fileNames" includeByDefault="always"><ds:selectable expression="format.file.name" type="bus" format="transient" multivalue="true"/></ds:field>
+        <ds:field name="fileSizes" includeByDefault="always"><ds:selectable expression="format.file.size" type="bus" format="transient" multivalue="true"/></ds:field>
+        <ds:field name="fileIds" includeByDefault="always"><ds:selectable expression="format.file.fileid" type="bus" format="transient" multivalue="true"/></ds:field>
+        <ds:field name="image" description="The thumbnail or type icon associated to the document object."><ds:image source="primaryOrType" size="thumbnail" /></ds:field>
+        <ds:field name="imageId" description="The image holder id in case the document is associated to an Image Holder."><ds:selectable expression="to[Image Holder].from.physicalid" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="objectId" description="The object id of the document." includeByDefault="no"><ds:selectable expression="id" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <!-- can be passed in the case multiple file check-in with one receipt. -->
+        <ds:field name="receipt" description="The FCS receipt for supporting the files related data operations."><ds:selectable type="key" createOperation="yes" modifyOperation="yes" readOperation="no"/></ds:field>
+
+        <ds:field name="document-custom-fields">
+           <ds:customAttributes busTypes="Document"/>
+        </ds:field>
+        
+        <!-- reference global definitions from 6w foundation -->
+        <ds:ref-subservice name="e6w.ownerInfo" includeByDefault="yes"/>        
+        <ds:ref-subservice name="e6w.originatorInfo" includeByDefault="yes"/>
+    </ds:service>
+
+    <ds:service name="file-fields">
+        <ds:field name="title" description="the file name."><ds:selectable expression="attribute[Title]" type="bus" createOperation="required" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="comments" description="the comments associated with the file checkin operation."><ds:selectable expression="attribute[Checkin Reason]" type="bus" createOperation="yes" modifyOperation="yes" readOperation="yes"/></ds:field>
+        <ds:field name="locker" description="The locker user name if the file is locked."><ds:selectable expression="locker" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="fileType"><ds:selectable expression="attribute[File Type]" type="bus"/></ds:field>
+        <ds:field name="dimension"><ds:selectable expression="attribute[File Dimension]" type="bus"/></ds:field>
+        <ds:field name="length"><ds:selectable expression="attribute[File Duration]" type="bus"/></ds:field>
+        <ds:field name="originated" description="the originated date of the file.">
+          <ds:selectable expression="evaluate[if attribute[File Created Date] != '' then attribute[File Created Date] else originated]" attribute="File Created Date" type="bus" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/>
+        </ds:field>
+        <ds:field name="modified" description="the last modified date of the file.">
+          <ds:selectable expression="evaluate[if attribute[File Modified Date] != '' then attribute[File Modified Date] else modified]" attribute="File Modified Date" type="bus" format="utc" createOperation="no" modifyOperation="no" readOperation="yes"/>
+        </ds:field>
+        <ds:field name="receipt" description="The FCS receipt for supporting the file operation; takes precedence over the one provided with the document."><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <ds:field name="keepLocked" description="Keeps the file locked after a checkin process."><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <ds:field name="format" description="Overrde the default format for the checkin process"><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <ds:field name="store" description="Overrde the default store for the checkin process"><ds:selectable type="key" createOperation="yes" modifyOperation="no" readOperation="no"/></ds:field>
+        <ds:field name="fileObjectId" includeByDefault="no" description="The file object id."><ds:selectable expression="id" type="bus" createOperation="no" modifyOperation="no" readOperation="yes"/></ds:field>
+        <ds:field name="temp-title" includeByDefault="always"><ds:selectable expression="attribute[Title]" type="bus" format="transient"/></ds:field>
+        <ds:field name="temp-fileid" includeByDefault="always"><ds:selectable type="key" format="transient"/></ds:field>
+        <ds:field name="minorrevision.transient" includeByDefault="always"><ds:selectable type="bus" expression="minorrevision" format="transient"/>
+            <ds:sort type="integer" direction="descending" order="1" />
+        </ds:field>        
+        <ds:ref-subservice name="e6w.ownerInfo" includeByDefault="yes"/>        
+    </ds:service>
+
+    <ds:service name="ticket-fields">
+        <ds:field name="ticketURL" description="The URL to retrieve the file from the FCS serrver."><ds:selectable type="key"/></ds:field>
+        <ds:field name="ticketparamname" description="The Ticket parameter name required by the FCS server."><ds:selectable type="key"/></ds:field>
+        <ds:field name="ticket" description="The ticket paramter value required by the FCS server."><ds:selectable type="key"/></ds:field>
+        <ds:field name="fileName" description="The file name associated with the download ticket in the case one file is being downloaded."><ds:selectable type="key"/></ds:field>
+        <ds:field name="fileNames" description="The file names associated with the download ticket in the case multiple files are being downloaded."><ds:selectable type="key"/></ds:field>
+    </ds:service>
+
+    <ds:service name="documents.parents" includeByDefault="no" description="where-used based on parentRelName + parentDirection parameters">
+        <ds:data>
+            <ds:print/>
+        </ds:data>
+        <ds:ref-subservice name="object-fields"/>
+
+        <!-- rel attributes -->
+        <ds:field name="originated" includeByDefault="no"><ds:selectable expression="originated" type="rel" format="utc"/></ds:field>
+
+        <ds:field name="relOwnerName.transient" includeByDefault="always" conditionalInclude="relOwnerInfo"><ds:selectable expression="owner" type="rel" format="transient"/></ds:field>
+        <ds:subservice name="relOwnerInfo" includeByDefault="no">  
+          <ds:data>
+            <!-- Requires local invocation to be false in order to retain private jpo cache. -->
+            <ds:jpo classname="com.dassault_systemes.enovia.e6wv2.foundation.service.FoundationResource" function="getPersonInfo" localInvokation="false" returnedData="idsAndData">
+                <ds:arg arg-name="parentOwnerField" arg-value="relOwnerName.transient"/>
+                <ds:arg arg-name="relelement" arg-value="true"/>
+                <ds:arg arg-name="nameField" arg-value="name.transient"/>
+            </ds:jpo>
+          </ds:data>
+
+          <ds:field name="name.transient" includeByDefault="always"><ds:selectable expression="name" format="transient" type="bus"/></ds:field>
+          <ds:ref-subservice name="e6w.personfields"/>
+        </ds:subservice>
+
+    </ds:service>
+
+</ds:services>
+
